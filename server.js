@@ -9,6 +9,8 @@ const cron = require('node-cron');
 const fs = require('fs-extra');
 const { spawn } = require('child_process');
 const os = require('os');
+const { ensureLicenseValid, licenseMiddleware, getLicenseStatus, startLicenseWatcher } = require('./services/licenseGuard');
+const { checkForUpdates, applyUpdate } = require('./services/updateManager');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -135,6 +137,7 @@ const noCacheMiddleware = (req, res, next) => {
 };
 
 app.use('/api', noCacheMiddleware);
+app.use('/api', licenseMiddleware);
 const normalizeText = (value) => (value ?? '').toString().trim();
 const normalizePhone = (phone) => {
   if (!phone) return '';
@@ -581,6 +584,15 @@ app.post('/api/login', (req, res) => {
   return res.status(401).json({ success: false, message: 'Неверный логин или пароль.' });
 });
 
+app.get('/api/license/status', authenticateToken, async (req, res) => {
+  try {
+    const status = await ensureLicenseValid();
+    res.json(status);
+  } catch (error) {
+    res.status(403).json({ error: 'Лицензия недействительна', details: error.message, status: getLicenseStatus() });
+  }
+});
+
 app.get('/api/bot/status', authenticateToken, async (req, res) => {
   const settings = await getBotSettings();
   res.json({ status: serializeBotRuntime(), settings });
@@ -604,6 +616,29 @@ app.post('/api/bot/status', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Bot status update failed:', error);
     res.status(500).json({ error: 'Не удалось изменить состояние бота.' });
+  }
+});
+
+app.get('/api/system/update', authenticateToken, async (req, res) => {
+  try {
+    const force = req.query.force === '1' || req.query.force === 'true';
+    const info = await checkForUpdates(force);
+    res.json(info);
+  } catch (error) {
+    console.error('Update check error:', error);
+    res.status(500).json({ error: 'Не удалось проверить обновления', details: error.message });
+  }
+});
+
+app.post('/api/system/update', authenticateToken, async (req, res) => {
+  try {
+    const result = await applyUpdate();
+    await ensureBotProcessState();
+    const info = await checkForUpdates(true);
+    res.json({ ...result, info });
+  } catch (error) {
+    console.error('Update apply error:', error);
+    res.status(500).json({ error: 'Не удалось применить обновление', details: error.message });
   }
 });
 
@@ -1026,6 +1061,8 @@ process.on('SIGTERM', gracefulShutdown);
 
 const bootstrap = async () => {
   try {
+    await ensureLicenseValid(true);
+    startLicenseWatcher();
     await ensureBootstrapData();
     await seedServicesFromCost();
     await ensureBotProcessState();

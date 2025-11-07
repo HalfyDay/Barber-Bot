@@ -1,0 +1,13 @@
+# config.py
+TOKEN       = "5523625358:AAGVplQ4Qp4i-BpjBM68eXVeRmHqoPrnkqw"
+# TOKEN       = "7718371058:AAEMd1wncQiMjLxgCfHdJv3LhRJBKfT-BlE"
+
+# API_KEY     = "pat1QzCHFsEiNnMpr.4bb9b97ba5442166710bb1f6b3e7054197b040d211a39e32409a920d46256621"
+# BASE_ID     = "appyFvXd9P0p2kiOE"
+
+API_KEY     = "patDohuxagZMvybny.c05e7f2cb0849a42b3e62db5672ff9b67151257a0e7f7068991a1f903cfaecd9"
+BASE_ID     = "appb27TTiPsdlqKBF"
+
+USERS_TABLE = "Users"
+APPTS_TABLE = "Appointments"
+ADMIN_IDS = [453003638, 1605937973]

@@ -1,0 +1,126 @@
+[
+  {
+    "name": "Users",
+    "fields": [
+      {
+        "name": "TelegramID",
+        "type": "number"
+      },
+      {
+        "name": "Name",
+        "type": "singleLineText"
+      },
+      {
+        "name": "Phone",
+        "type": "singleLineText"
+      },
+      {
+        "name": "LastNameChanged",
+        "type": "singleLineText"
+      },
+      {
+        "name": "Barber",
+        "type": "multilineText"
+      }
+    ]
+  },
+  {
+    "name": "Appointments",
+    "fields": [
+      {
+        "name": "CustomerName",
+        "type": "singleLineText"
+      },
+      {
+        "name": "Phone",
+        "type": "phoneNumber"
+      },
+      {
+        "name": "Barber",
+        "type": "singleSelect"
+      },
+      {
+        "name": "Date",
+        "type": "date"
+      },
+      {
+        "name": "Time",
+        "type": "singleLineText"
+      },
+      {
+        "name": "Status",
+        "type": "singleSelect"
+      },
+      {
+        "name": "Services",
+        "type": "multipleSelects"
+      },
+      {
+        "name": "Reminder2hClientSent",
+        "type": "checkbox"
+      },
+      {
+        "name": "Reminder2hBarberSent",
+        "type": "checkbox"
+      },
+      {
+        "name": "UserID",
+        "type": "singleLineText"
+      }
+    ]
+  },
+  {
+    "name": "Schedules",
+    "fields": [
+      {
+        "name": "Barber",
+        "type": "singleLineText"
+      },
+      {
+        "name": "DayOfWeek",
+        "type": "multilineText"
+      },
+      {
+        "name": "Today",
+        "type": "checkbox"
+      },
+      {
+        "name": "Date",
+        "type": "singleLineText"
+      },
+      {
+        "name": "Week",
+        "type": "singleLineText"
+      }
+    ]
+  },
+  {
+    "name": "Cost",
+    "fields": [
+      {
+        "name": "Услуги",
+        "type": "singleLineText"
+      },
+      {
+        "name": "Тимур🐼",
+        "type": "currency"
+      },
+      {
+        "name": "Владимир😎",
+        "type": "currency"
+      },
+      {
+        "name": "Алина💖",
+        "type": "currency"
+      },
+      {
+        "name": "Алексей🦐",
+        "type": "currency"
+      },
+      {
+        "name": "Длительность",
+        "type": "singleLineText"
+      }
+    ]
+  }
+]

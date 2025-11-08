@@ -4,22 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Barber Bot CRM</title>
-    <!-- Ïîäêëþ÷àåì React, Babel è Tailwind CSS -->
+    <!-- ÐŸÐ¾Ð´ÐºÐ»ÑŽÑ‡Ð°ÐµÐ¼ React, ReactDOM Ð¸ Tailwind CSS -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Îñíîâíîé øðèôò -->
+    <!-- ÐžÑÐ½Ð¾Ð²Ð½Ð¾Ð¹ ÑˆÑ€Ð¸Ñ„Ñ‚ -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Ïîäêëþ÷àåì ñòèëè ïàíåëè -->
+    <!-- ÐŸÐ¾Ð´ÐºÐ»ÑŽÑ‡Ð°ÐµÐ¼ ÑÑ‚Ð¸Ð»Ð¸ Ð¿Ð°Ð½ÐµÐ»Ð¸ -->
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="bg-gray-900">
-    <!-- Êîíòåéíåð, â êîòîðûé ìîíòèðóåòñÿ React-ïðèëîæåíèå -->
+    <!-- ÐšÐ¾Ð½Ñ‚ÐµÐ¹Ð½ÐµÑ€, Ð² ÐºÐ¾Ñ‚Ð¾Ñ€Ñ‹Ð¹ Ð¼Ð¾Ð½Ñ‚Ð¸Ñ€ÑƒÐµÑ‚ÑÑ React-Ð¿Ñ€Ð¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ -->
     <div id="root"></div>
 
     <script>window.__BARBER_API_BASE__ = 'http://localhost:3000/api';</script>
-    <!-- Îñíîâíîé ñêðèïò èíòåðôåéñà -->
-    <script type="text/babel" src="script.js"></script>
+    <!-- Ð¡Ð¾Ð±Ñ€Ð°Ð½Ð½Ñ‹Ð¹ Ñ„Ñ€Ð¾Ð½Ñ‚ÐµÐ½Ð´-Ð±Ð°Ð½Ð´Ð» -->
+    <script src="script.bundle.js" defer></script>
 </body>
 </html>

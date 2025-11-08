@@ -1,12 +1,9 @@
 const fs = require('fs');
 const path = require('path');
-
 const fetch = globalThis.fetch || ((...args) => import('node-fetch').then(({ default: nodeFetch }) => nodeFetch(...args)));
-
 const LICENSE_SOURCE = process.env.LICENSE_SOURCE || 'https://raw.githubusercontent.com/HalfyDay/Barber-Bot/main/licenses.json';
 const LICENSE_REFRESH_SECONDS = Number(process.env.LICENSE_REFRESH_SECONDS || 3600);
 const LOCAL_LICENSE_FILE = path.join(__dirname, '..', 'data', 'licenses.json');
-
 let cachedStatus = {
   valid: false,
   message: 'Лицензия не проверена',
@@ -14,7 +11,6 @@ let cachedStatus = {
   lastChecked: null,
 };
 let inflightCheck = null;
-
 const readLocalLicenses = () => {
   if (!fs.existsSync(LOCAL_LICENSE_FILE)) return null;
   try {
@@ -25,7 +21,6 @@ const readLocalLicenses = () => {
     return null;
   }
 };
-
 const fetchRemoteLicenses = async () => {
   try {
     const response = await fetch(`${LICENSE_SOURCE}?${Date.now()}`, {
@@ -39,9 +34,7 @@ const fetchRemoteLicenses = async () => {
     return readLocalLicenses();
   }
 };
-
 const normalizeKey = (value = '') => value.toString().trim();
-
 const validateLicenseRecord = (record, key) => {
   if (!record) {
     throw new Error('Лицензия не найдена');
@@ -54,7 +47,6 @@ const validateLicenseRecord = (record, key) => {
   }
   return record;
 };
-
 const ensureLicenseValid = async (force = false) => {
   const licenseKey = normalizeKey(process.env.BARBER_LICENSE_KEY);
   if (!licenseKey) {
@@ -66,13 +58,11 @@ const ensureLicenseValid = async (force = false) => {
     };
     throw new Error(cachedStatus.message);
   }
-
   const isCacheFresh = cachedStatus.lastChecked && Date.now() - new Date(cachedStatus.lastChecked).getTime() < LICENSE_REFRESH_SECONDS * 1000;
   if (!force && isCacheFresh && cachedStatus.valid) {
     return cachedStatus;
   }
   if (!force && inflightCheck) return inflightCheck;
-
   inflightCheck = (async () => {
     const licenses = await fetchRemoteLicenses();
     if (!licenses || !licenses.length) {
@@ -88,7 +78,6 @@ const ensureLicenseValid = async (force = false) => {
     };
     return cachedStatus;
   })();
-
   try {
     return await inflightCheck;
   } catch (error) {
@@ -103,9 +92,7 @@ const ensureLicenseValid = async (force = false) => {
     inflightCheck = null;
   }
 };
-
 const getLicenseStatus = () => cachedStatus;
-
 const licenseMiddleware = async (req, res, next) => {
   if (req.path === '/license/status') {
     try {
@@ -123,13 +110,11 @@ const licenseMiddleware = async (req, res, next) => {
     res.status(403).json({ error: 'Лицензия недействительна', details: error.message, status: getLicenseStatus() });
   }
 };
-
 const startLicenseWatcher = () => {
   setInterval(() => {
     ensureLicenseValid().catch((error) => console.warn('Проверка лицензии не удалась:', error.message));
   }, Math.max(60, LICENSE_REFRESH_SECONDS) * 1000);
 };
-
 module.exports = {
   ensureLicenseValid,
   getLicenseStatus,

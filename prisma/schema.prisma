@@ -43,13 +43,13 @@ model Schedules {
   @@map("Schedules")
 }
 model Cost {
-  id                  String    @id
-  Uslugi               String?    @map("Услуги")
-  Timur                Float?    @map("Тимур🐼")
-  Vladimir             Float?    @map("Владимир😎")
-  Alina                Float?    @map("Алина💖")
-  Aleksey              Float?    @map("Алексей🦐")
-  Dlitelnost           String?    @map("Длительность")
+  id          String  @id
+  Uslugi      String? @map("Услуги")
+  Timur       Float?  @map("Тимур")
+  Vladimir    Float?  @map("Владимир")
+  Alina       Float?  @map("Алина")
+  Aleksey     Float?  @map("Алексей")
+  Dlitelnost  String? @map("Длительность")
 
   @@map("Cost")
 }

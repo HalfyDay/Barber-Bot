@@ -1,5 +1,5 @@
-const { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } = React;
-const { createPortal } = ReactDOM;
+﻿const { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, Fragment } = React;
+const { createPortal, createRoot } = ReactDOM;
 
 const DEFAULT_API_BASE_URL = 'http://192.168.1.55:3000/api';
 const API_BASE_URL = window.__BARBER_API_BASE__ || DEFAULT_API_BASE_URL;
@@ -63,6 +63,9 @@ const RATING_MIN = 3;
 const RATING_MAX = 5;
 const RATING_STEP = 0.5;
 const AVATAR_PRESETS = ['/Image/barber_alex.jpg', '/Image/barber_alina.jpg', '/Image/barber_vlad.jpg', '/Image/barber_timur.jpg'];
+let avatarOptionsCache = null;
+let avatarOptionsPromise = null;
+const YEAR_IN_MS = 365 * 24 * 60 * 60 * 1000;
 const buildNewBarberState = () => ({
   name: '',
   password: '',
@@ -106,6 +109,15 @@ const useLocalStorage = (key, initialValue) => {
   return [value, updateValue];
 };
 
+const useNowTick = (intervalMs = 1000) => {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(timer);
+  }, [intervalMs]);
+  return now;
+};
+
 const useOutsideClick = (ref, handler) => {
   useEffect(() => {
     if (!handler) return undefined;
@@ -120,6 +132,14 @@ const useOutsideClick = (ref, handler) => {
       document.removeEventListener('touchstart', listener);
     };
   }, [ref, handler]);
+};
+
+const fetchAvatarOptions = async () => {
+  const response = await fetch(`${API_BASE_URL}/assets/avatars`);
+  if (!response.ok) throw new Error('Не удалось получить список аватаров');
+  const payload = await response.json();
+  const images = Array.isArray(payload.images) ? payload.images.filter(Boolean) : [];
+  return images.length ? images : AVATAR_PRESETS;
 };
 
 const normalizeText = (value) => (value == null ? '' : String(value));
@@ -172,6 +192,29 @@ const formatTime = (value) => {
   }
   return safeValue;
 };
+const formatPhoneInput = (value) => {
+  const digits = String(value || '')
+    .replace(/[^\d]/g, '')
+    .trim();
+  if (!digits) return '';
+  let normalized = digits;
+  if (normalized.length === 11 && normalized.startsWith('8')) {
+    normalized = `7${normalized.slice(1)}`;
+  }
+  if (normalized.length === 10) {
+    normalized = `7${normalized}`;
+  }
+  if (normalized.length === 11 && normalized.startsWith('7')) {
+    return `+7 (${normalized.slice(1, 4)}) ${normalized.slice(4, 7)}-${normalized.slice(7, 9)}-${normalized.slice(9, 11)}`;
+  }
+  if (normalized.startsWith('7') && normalized.length > 11) {
+    return `+${normalized}`;
+  }
+  if (value.toString().startsWith('+')) {
+    return value.toString();
+  }
+  return `+${normalized}`;
+};
 
 const formatDateTime = (date, time) => {
   const datePart = formatDate(date);
@@ -180,6 +223,46 @@ const formatDateTime = (date, time) => {
   if (datePart === '-') return timePart;
   if (timePart === '-') return datePart;
   return `${datePart} | ${timePart}`;
+};
+const formatDateHeading = (value, options = { weekday: 'long', day: 'numeric', month: 'long' }) => {
+  if (!value) return 'Без даты';
+  try {
+    const parsed = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return new Intl.DateTimeFormat('ru-RU', options).format(parsed);
+  } catch (error) {
+    return value;
+  }
+};
+const formatDateBadgeLabel = (value) =>
+  formatDateHeading(value, { weekday: 'short', day: 'numeric', month: 'short' });
+const formatLiveTimestamp = (value, nowTs = Date.now()) => {
+  if (!value) return '';
+  try {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '';
+    const diffMs = Math.max(0, nowTs - parsed.getTime());
+    if (diffMs < 1000) return 'только что';
+    if (diffMs < 60_000) return `${Math.floor(diffMs / 1000)} сек назад`;
+    if (diffMs < 3_600_000) {
+      const minutes = Math.floor(diffMs / 60_000);
+      const seconds = Math.floor((diffMs % 60_000) / 1000);
+      return `${minutes} мин ${seconds.toString().padStart(2, '0')} сек назад`;
+    }
+    if (diffMs < 86_400_000) {
+      const hours = Math.floor(diffMs / 3_600_000);
+      const minutes = Math.floor((diffMs % 3_600_000) / 60_000);
+      return `${hours} ч ${minutes.toString().padStart(2, '0')} мин назад`;
+    }
+    return parsed.toLocaleTimeString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch (error) {
+    return '';
+  }
 };
 
 const STATUS_TRANSLATIONS = {
@@ -209,9 +292,23 @@ const STATUS_TRANSLATIONS = {
   waiting: 'В обработке',
   processing: 'В обработке',
 };
+const STATUS_BADGE_MAP = {
+  Активная: 'border border-sky-500/30 bg-sky-500/10 text-sky-100',
+  Подтверждена: 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-100',
+  Завершена: 'border border-indigo-500/30 bg-indigo-500/10 text-indigo-100',
+  Отменена: 'border border-rose-500/30 bg-rose-500/10 text-rose-100',
+  'Не пришёл': 'border border-amber-500/30 bg-amber-500/10 text-amber-100',
+};
+const getStatusBadgeClasses = (status) => {
+  const normalized = normalizeStatusValue(status);
+  return (
+    STATUS_BADGE_MAP[normalized] || 'border border-slate-600/60 bg-slate-800/70 text-slate-200'
+  );
+};
 
 const INACTIVE_STATUS_TOKENS = ['выполн', 'заверш', 'done', 'cancel', 'отмен', 'не приш', 'noshow', 'no-show', 'missed', 'проср', 'expired'];
 const ACTIVE_STATUS_TOKENS = ['актив', 'active', 'подтверж', 'confirm', 'ожид', 'pending', 'wait', 'ждем', 'ждём', 'нов', 'new'];
+const COMPLETED_STATUS_TOKENS = ['выполн', 'заверш', 'done', 'complete', 'готов'];
 
 const normalizeStatusValue = (status) => {
   const normalized = normalizeText(status).trim();
@@ -232,6 +329,12 @@ const normalizeStatusList = (statuses = []) => {
     });
 };
 
+const isCompletedAppointmentStatus = (status) => {
+  const normalized = normalizeStatusValue(status).toLowerCase();
+  if (!normalized) return false;
+  return COMPLETED_STATUS_TOKENS.some((token) => normalized.includes(token));
+};
+
 const sanitizeTimeToken = (value) => {
   const match = normalizeText(value).match(/(\d{1,2}):(\d{2})/);
   if (!match) return '';
@@ -249,6 +352,7 @@ const parseTimeRangeValue = (value) => {
     end: sanitizeTimeToken(rawEnd),
   };
 };
+const parseTimeRangeParts = (value) => parseTimeRangeValue(value);
 
 const buildTimeRangeValue = (start, end) => {
   const safeStart = sanitizeTimeToken(start);
@@ -316,6 +420,36 @@ const SectionCard = ({ title, actions, children }) => (
     {children}
   </div>
 );
+const LiveBadge = ({ timestamp, label = 'LIVE' }) => {
+  const tickingNow = useNowTick(1000);
+  if (!timestamp) return null;
+  const timeLabel = formatLiveTimestamp(timestamp, tickingNow);
+  return (
+    <span className="flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200">
+      <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+      {label}
+      {timeLabel && <span className="text-emerald-100/80 normal-case tracking-normal">обновлено {timeLabel}</span>}
+    </span>
+  );
+};
+
+const IconTrash = ({ className = 'h-4 w-4' }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    <line x1="10" y1="11" x2="10" y2="17" />
+    <line x1="14" y1="11" x2="14" y2="17" />
+  </svg>
+);
 
 const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-w-3xl' }) => {
   if (!isOpen) return null;
@@ -344,7 +478,7 @@ const Sidebar = ({ session, activeTab, onChange, onLogout }) => {
   const username = session?.displayName || session?.username || '—';
 
   return (
-    <aside className="hidden w-72 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950/75 p-5 lg:flex">
+    <aside className="hidden w-72 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950/90 p-5 lg:sticky lg:top-0 lg:flex lg:h-screen lg:overflow-y-auto">
       <div className="space-y-1 border-b border-slate-800 pb-4">
         <p className="text-xs uppercase tracking-wide text-slate-500">Вы вошли как</p>
         <p className="text-lg font-semibold text-white">{username}</p>
@@ -451,7 +585,7 @@ const MobileTabs = ({ session, activeTab, onChange, onLogout }) => {
     </div>
   );
 };
-const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppointment }) => {
+const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppointment, liveMeta = null }) => {
   if (!data) return <LoadingState />;
   const stats = data.stats || {};
 
@@ -501,6 +635,20 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
       .sort((a, b) => a.sortValue - b.sortValue);
   }, [formatGroupLabel, upcomingList]);
 
+  const upcomingActions =
+    liveMeta?.updatedAt || onCreateAppointment
+      ? (
+          <div className="flex flex-wrap items-center gap-3">
+            {liveMeta?.updatedAt && <LiveBadge timestamp={liveMeta.updatedAt} />}
+            {onCreateAppointment && (
+              <button onClick={onCreateAppointment} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500">
+                + Создать запись
+              </button>
+            )}
+          </div>
+        )
+      : null;
+
   return (
     <div className="space-y-6">
       <SectionCard title="Ключевые показатели">
@@ -512,23 +660,18 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
         </div>
       </SectionCard>
 
-      <SectionCard
-        title="Ближайшие записи"
-        actions={
-          onCreateAppointment && (
-            <button onClick={onCreateAppointment} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500">
-              + Создать запись
-            </button>
-          )
-        }
-      >
+      <SectionCard title="Ближайшие записи" actions={upcomingActions}>
         {groupedUpcoming.length === 0 ? (
           <p className="text-slate-400">Нет ближайших записей.</p>
         ) : (
           <div className="space-y-5">
             {groupedUpcoming.map((group) => (
               <div key={group.key} className="space-y-3">
-                <p className="text-xs uppercase tracking-wide text-slate-400">{group.label}</p>
+                <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                  <span className="h-px flex-1 bg-slate-700" />
+                  {group.label}
+                  <span className="h-px flex-1 bg-slate-700" />
+                </div>
                 <div className="space-y-3">
                   {group.items.map((appt) => {
                     const cardProps = {
@@ -537,12 +680,44 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
                       onClick: () => onOpenAppointment?.(appt),
                       onKeyDown: (event) => event.key === 'Enter' && onOpenAppointment?.(appt),
                       className:
-                        'w-full cursor-pointer rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-left transition hover:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500',
+                        'group relative w-full cursor-pointer overflow-hidden rounded-3xl border border-slate-700/60 bg-slate-900/70 p-5 text-left transition hover:border-indigo-500/70 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500',
                     };
+                    const { start, end } = parseTimeRangeParts(appt.Time);
+                    const statusLabel = normalizeStatusValue(appt.Status);
+                    const servicesList = parseMultiValue(appt.Services);
+                    const phoneLabel = appt.Phone ? formatPhoneInput(appt.Phone) : '';
+                    const phoneHref = phoneLabel ? phoneLabel.replace(/[^\d+]/g, '') : '';
                     return (
                       <div key={appt.id || `${group.key}-${appt.CustomerName}-${appt.Time}`} {...cardProps}>
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                          <div>
+                        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-800/80 pb-4">
+                          <div className="space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                              {formatDateBadgeLabel(appt.Date)}
+                            </p>
+                            <div className="flex items-baseline gap-3">
+                              <p className="text-4xl font-bold leading-none text-white">{start || '—'}</p>
+                              {end && <p className="text-base text-slate-400">до {end}</p>}
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-2 text-right">
+                            <span
+                              className={classNames(
+                                'inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide',
+                                getStatusBadgeClasses(statusLabel),
+                              )}
+                            >
+                              {statusLabel || 'Без статуса'}
+                            </span>
+                            {appt.Barber && (
+                              <p className="text-sm text-slate-400">
+                                Барбер:{' '}
+                                <span className="font-semibold text-white">{appt.Barber}</span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-4 grid gap-4 text-sm text-slate-300 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+                          <div className="space-y-3">
                             {appt.CustomerName ? (
                               <button
                                 type="button"
@@ -557,14 +732,53 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
                             ) : (
                               <p className="text-lg font-semibold text-white">Без имени</p>
                             )}
-                            <p className="text-sm text-slate-400">{appt.Barber}</p>
+                            {servicesList.length ? (
+                              <div className="flex flex-wrap gap-2">
+                                {servicesList.map((service, index) => (
+                                  <span
+                                    key={`${service}-${index}`}
+                                    className="rounded-full border border-slate-700/70 bg-slate-800/70 px-3 py-1 text-xs text-slate-200"
+                                  >
+                                    {service}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-slate-400">Нет выбранных услуг</p>
+                            )}
                           </div>
-                          <div className="text-right text-sm text-slate-300">
-                            <p>{formatDate(appt.Date)}</p>
-                            <p>{appt.Time || '—'}</p>
+                          <div className="space-y-3">
+                            {phoneLabel && phoneHref && (
+                              <a
+                                href={`tel:${phoneHref}`}
+                                onClick={(event) => event.stopPropagation()}
+                                className="inline-flex items-center gap-2 rounded-full border border-slate-600/60 px-3 py-1 text-sm text-slate-200 hover:border-indigo-500 hover:text-white"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.5"
+                                  className="h-4 w-4"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.26a1.5 1.5 0 00-1.093-1.44l-4.443-1.27a1.5 1.5 0 00-1.726.752l-.79 1.58a1.5 1.5 0 01-2.278.536A15.052 15.052 0 018.352 14.4a1.5 1.5 0 01.536-2.278l1.58-.79a1.5 1.5 0 00.752-1.726l-1.27-4.443A1.5 1.5 0 009.51 4.07H8.25A2.25 2.25 0 006 6.32z"
+                                  />
+                                </svg>
+                                {phoneLabel}
+                              </a>
+                            )}
+                            {appt.UserID && (
+                              <p className="text-xs uppercase tracking-wide text-slate-500">
+                                ID клиента:{' '}
+                                <span className="font-semibold text-slate-200">{appt.UserID}</span>
+                              </p>
+                            )}
                           </div>
                         </div>
-                        <p className="mt-2 text-sm text-slate-400">{appt.Services || 'Без услуг'}</p>
                       </div>
                     );
                   })}
@@ -578,36 +792,87 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
   );
 };
 const BarberAvatarPicker = ({ value, onChange }) => {
-  const previewSrc = value || AVATAR_PRESETS[0];
+  const [avatarOptions, setAvatarOptions] = useState(() => avatarOptionsCache || AVATAR_PRESETS);
+  const [loading, setLoading] = useState(!avatarOptionsCache);
+
+  const availableOptions = useMemo(() => {
+    if (!value || avatarOptions.includes(value)) return avatarOptions;
+    return [value, ...avatarOptions];
+  }, [avatarOptions, value]);
+
+  const refreshAvatars = useCallback(async () => {
+    setLoading(true);
+    try {
+      avatarOptionsPromise = avatarOptionsPromise || fetchAvatarOptions();
+      const assets = await avatarOptionsPromise;
+      avatarOptionsCache = assets;
+      setAvatarOptions(assets);
+    } catch (error) {
+      console.error('Avatar load error', error);
+    } finally {
+      avatarOptionsPromise = null;
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (avatarOptionsCache) return;
+    refreshAvatars();
+  }, [refreshAvatars]);
+
+  const previewSrc = value || avatarOptions[0] || AVATAR_PRESETS[0];
+
   return (
     <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900/40 p-3">
-      <div className="flex items-center gap-3">
-        <img src={previewSrc} alt="avatar" className="h-14 w-14 rounded-full border border-slate-700 object-cover" />
-        <input
-          type="url"
-          value={value || ''}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder="https://.../avatar.jpg"
-          className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
-        />
-      </div>
-      <div className="grid grid-cols-4 gap-2">
-        {AVATAR_PRESETS.map((preset) => {
-          const isSelected = preset === value;
-          return (
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <img src={previewSrc} alt="avatar" className="h-16 w-16 rounded-full border border-slate-700 object-cover" />
+        <div className="flex-1 space-y-2">
+          <label className="text-xs uppercase tracking-wide text-slate-400">Изображение из папки «Image»</label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <select
+              value={value || ''}
+              onChange={(event) => onChange(event.target.value)}
+              className="flex-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
+            >
+              <option value="">Без изображения</option>
+              {availableOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option.replace('/Image/', '')}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
-              key={preset}
-              onClick={() => onChange(preset)}
-              className={`rounded-lg border p-1 transition hover:border-indigo-400 hover:bg-slate-800 ${
-                isSelected ? 'border-indigo-500 bg-indigo-500/20' : 'border-slate-700 bg-slate-900'
-              }`}
+              onClick={refreshAvatars}
+              className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-100 hover:border-indigo-500 hover:text-white"
             >
-              <img src={preset} alt="avatar preset" className="h-14 w-full rounded-md object-cover" />
+              {loading ? 'Обновляю…' : 'Обновить список'}
             </button>
-          );
-        })}
+          </div>
+          <p className="text-[11px] text-slate-400">Добавьте файл в папку Image, затем обновите список, чтобы выбрать его из выпадающего меню.</p>
+        </div>
       </div>
+      {avatarOptions.length ? (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {avatarOptions.map((preset) => {
+            const isSelected = preset === value;
+            return (
+              <button
+                type="button"
+                key={preset}
+                onClick={() => onChange(preset)}
+                className={`rounded-lg border p-1 transition hover:border-indigo-400 hover:bg-slate-800 ${
+                  isSelected ? 'border-indigo-500 bg-indigo-500/20' : 'border-slate-700 bg-slate-900'
+                }`}
+              >
+                <img src={preset} alt="avatar preset" className="h-16 w-full rounded-md object-cover" />
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500">Нет доступных изображений. Добавьте файлы в папку /Image.</p>
+      )}
     </div>
   );
 };
@@ -671,8 +936,12 @@ const BarbersView = ({ barbers = [], onFieldChange, onSave, onAdd, onDelete }) =
           <button onClick={() => onSave(barber)} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
             Сохранить
           </button>
-          <button onClick={() => onDelete(barber)} className="rounded-lg border border-rose-600 px-4 py-2 text-sm text-rose-400">
-            Удалить
+          <button
+            onClick={() => onDelete(barber)}
+            className="rounded-lg border border-rose-600 p-2 text-rose-300 hover:bg-rose-500/10"
+            aria-label="Удалить барбера"
+          >
+            <IconTrash />
           </button>
         </div>
       </div>
@@ -723,7 +992,7 @@ const BarbersView = ({ barbers = [], onFieldChange, onSave, onAdd, onDelete }) =
   );
 };
 
-const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChange, onSave, onDelete, onAdd }) => {
+const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChange, onDelete, onAdd }) => {
   const [newService, setNewService] = useState({ name: '', duration: 60, prices: {} });
 
   const updateNewService = (field, value) => setNewService((prev) => ({ ...prev, [field]: value }));
@@ -743,7 +1012,7 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
           <p className="text-slate-400">Пока нет ни одной услуги.</p>
         ) : (
           <div className="overflow-auto">
-            <table className="min-w-[900px] table-fixed text-sm">
+            <table className="min-w-[900px] text-sm">
               <thead>
                 <tr className="text-left text-slate-400">
                   <th className="p-2">Название</th>
@@ -751,7 +1020,7 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
                   {barbers.map((barber) => (
                     <th key={barber.id} className="p-2 text-center">{barber.name}</th>
                   ))}
-                  <th className="p-2 w-32" />
+                  <th className="p-2 w-16 text-center" />
                 </tr>
               </thead>
               <tbody>
@@ -768,15 +1037,14 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
                         <input type="number" value={service.prices?.[barber.id] ?? ''} onChange={(event) => onPriceChange(service.id, barber.id, event.target.value)} className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-2 text-white" placeholder="Цена" />
                       </td>
                     ))}
-                    <td className="p-2 align-top">
-                      <div className="flex gap-2">
-                        <button onClick={() => onSave(service)} className="rounded-lg bg-indigo-600 px-3 py-1 text-xs text-white">
-                          Сохранить
-                        </button>
-                        <button onClick={() => onDelete(service)} className="rounded-lg border border-rose-500 px-3 py-1 text-xs text-rose-400">
-                          Удалить
-                        </button>
-                      </div>
+                    <td className="p-2 align-top text-center">
+                      <button
+                        onClick={() => onDelete(service)}
+                        className="inline-flex items-center justify-center rounded-lg border border-rose-500/70 p-2 text-rose-300 hover:bg-rose-500/10"
+                        aria-label="Удалить услугу"
+                      >
+                        <IconTrash />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -1337,10 +1605,31 @@ const TableToolbar = ({
   onRefresh,
   showPastAppointments,
   setShowPastAppointments,
+  supportsGrouping = false,
+  groupByDate = false,
+  setGroupByDate,
+  lastUpdatedAt = null,
 }) => (
   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
     <div className="flex flex-1 flex-wrap gap-3">
-      <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="РџРѕРёСЃРє" className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white sm:w-64" />
+      <label className="relative w-full sm:w-64">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path
+              fillRule="evenodd"
+              d="M9 3.5a5.5 5.5 0 013.995 9.315l3.095 3.095a.75.75 0 11-1.06 1.06l-3.095-3.094A5.5 5.5 0 119 3.5zm0 1.5a4 4 0 100 8 4 4 0 000-8z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </span>
+        <input
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+          placeholder="Поиск..."
+          aria-label="Поиск по таблице"
+          className="w-full rounded-lg border border-slate-600 bg-slate-900 py-2 pl-9 pr-3 text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+        />
+      </label>
       {supportsBarberFilter && (
         <select value={selectedBarber} onChange={(event) => setSelectedBarber(event.target.value)} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white">
           <option value="all">Все барберы</option>
@@ -1365,9 +1654,21 @@ const TableToolbar = ({
           Показать прошедшие
         </label>
       )}
+      {supportsGrouping && typeof setGroupByDate === 'function' && (
+        <label className="flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm text-white">
+          <input
+            type="checkbox"
+            className="accent-indigo-500"
+            checked={!!groupByDate}
+            onChange={(event) => setGroupByDate(event.target.checked)}
+          />
+          Группировать по дням
+        </label>
+      )}
       <ColumnMenu columns={columns} hiddenColumns={hiddenColumns} onToggle={toggleColumn} />
     </div>
-    <div className="flex gap-2">
+    <div className="flex flex-wrap items-center gap-2">
+      {lastUpdatedAt && <LiveBadge timestamp={lastUpdatedAt} />}
       <button onClick={onRefresh} className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-white hover:bg-slate-800">
         Обновить
       </button>
@@ -1379,31 +1680,109 @@ const TableToolbar = ({
     </div>
   </div>
 );
-const DataTable = ({ tableId, rows, columns, hiddenColumns, sortConfig, onSort, onUpdate, onDelete, options, onOpenProfile, isCompact = false }) => {
+const buildAppointmentGroups = (records = []) => {
+  const buckets = new Map();
+  records.forEach((record) => {
+    const key = record.Date || 'Без даты';
+    const bucket = buckets.get(key) || [];
+    bucket.push(record);
+    buckets.set(key, bucket);
+  });
+  return Array.from(buckets.entries())
+    .map(([key, items]) => {
+      const sortedItems = [...items].sort((a, b) => {
+        const left = getAppointmentStartDate(a.Date, a.Time, a.startDateTime)?.getTime() || Number.MAX_SAFE_INTEGER;
+        const right = getAppointmentStartDate(b.Date, b.Time, b.startDateTime)?.getTime() || Number.MAX_SAFE_INTEGER;
+        return left - right;
+      });
+      const reference = sortedItems[0];
+      const sortValue = getAppointmentStartDate(reference.Date, reference.Time, reference.startDateTime)?.getTime() || Number.MAX_SAFE_INTEGER;
+      return {
+        key: key || `no-date-${reference?.id || Math.random()}`,
+        label: formatDateHeading(key),
+        rows: sortedItems,
+        sortValue,
+      };
+    })
+    .sort((a, b) => a.sortValue - b.sortValue);
+};
+const SortIndicator = ({ direction }) => (
+  <span className="flex flex-col leading-[6px]">
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      className={classNames('h-3 w-3 text-slate-600', direction === 'asc' && 'text-indigo-300')}
+    >
+      <path d="M4 10l4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      className={classNames('h-3 w-3 -mt-0.5 text-slate-600', direction === 'desc' && 'text-indigo-300')}
+    >
+      <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  </span>
+);
+const DataTable = ({
+  tableId,
+  rows,
+  columns,
+  hiddenColumns,
+  sortConfig,
+  onSort,
+  onUpdate,
+  onDelete,
+  options,
+  onOpenProfile,
+  isCompact = false,
+  groupByDate = true,
+}) => {
   if (!rows.length) {
     return <p className="text-slate-400">Нет записей.</p>;
   }
 
   const visibleColumns = columns.filter((column) => !hiddenColumns.includes(column.key));
+  const groupedRows =
+    tableId === 'Appointments' && groupByDate ? buildAppointmentGroups(rows) : [{ key: 'default', label: null, rows }];
 
   if (isCompact) {
     return (
-      <div className="space-y-3 md:hidden">
-        {rows.map((record) => (
-          <div key={getRecordId(record)} className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900/60 p-4">
-            {visibleColumns.map((column) => (
-              <div key={column.key} className="text-sm">
-                <p className="text-xs uppercase tracking-wide text-slate-500">{column.label}</p>
-                <div className="mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-2 py-1">
-                  <EditableCell record={record} column={column} options={options} onUpdate={onUpdate} onOpenProfile={onOpenProfile} tableId={tableId} />
-                </div>
+      <div className="space-y-4 md:hidden">
+        {groupedRows.map((group) => (
+          <div key={group.key} className="space-y-3">
+            {group.label && (
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                <span className="h-px flex-1 bg-slate-700" />
+                {group.label}
+                <span className="h-px flex-1 bg-slate-700" />
               </div>
-            ))}
+            )}
+            {group.rows.map((record) => (
+              <div key={getRecordId(record)} className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900/60 p-4">
+                {visibleColumns.map((column) => (
+                  <div key={column.key} className="text-sm">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">{column.label}</p>
+                    <div className="mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-2 py-1">
+                      <EditableCell record={record} column={column} options={options} onUpdate={onUpdate} onOpenProfile={onOpenProfile} tableId={tableId} />
+                    </div>
+                  </div>
+                ))}
             {onDelete && (
-              <button onClick={() => onDelete(record)} className="w-full rounded-lg border border-rose-500 py-2 text-sm font-semibold text-rose-300">
-                Удалить
+              <button
+                onClick={() => onDelete(record)}
+                className="flex w-full items-center justify-center rounded-lg border border-rose-500 p-2 text-rose-300 hover:bg-rose-500/10"
+                aria-label="Удалить запись"
+              >
+                <IconTrash />
               </button>
             )}
+              </div>
+            ))}
           </div>
         ))}
       </div>
@@ -1419,7 +1798,9 @@ const DataTable = ({ tableId, rows, columns, hiddenColumns, sortConfig, onSort, 
               <th key={column.key} className={classNames('p-2', column.align === 'center' && 'text-center', column.minWidth)} onClick={() => column.sortable !== false && onSort(column.key)}>
                 <div className={classNames('flex items-center gap-2', column.align === 'center' && 'justify-center')}>
                   {column.label}
-                  {column.sortable !== false && sortConfig?.key === column.key && <span className="text-xs">{sortConfig.direction === 'asc' ? '^' : 'РЋ'}</span>}
+                  {column.sortable !== false && (
+                    <SortIndicator direction={sortConfig?.key === column.key ? sortConfig.direction : null} />
+                  )}
                 </div>
               </th>
             ))}
@@ -1427,21 +1808,40 @@ const DataTable = ({ tableId, rows, columns, hiddenColumns, sortConfig, onSort, 
           </tr>
         </thead>
         <tbody>
-          {rows.map((record) => (
-            <tr key={getRecordId(record)} className="border-t border-slate-800">
-              {visibleColumns.map((column) => (
-                <td key={column.key} className={classNames('p-2 align-top whitespace-pre-wrap break-words', column.align === 'center' && 'text-center')}>
-                  <EditableCell record={record} column={column} options={options} onUpdate={onUpdate} onOpenProfile={onOpenProfile} tableId={tableId} />
-                </td>
-              ))}
-              {onDelete && (
-                <td className="p-2 text-right">
-                  <button onClick={() => onDelete(record)} className="rounded-lg border border-rose-500 px-3 py-1 text-xs text-rose-400">
-                    Удалить
-                  </button>
-                </td>
+          {groupedRows.map((group) => (
+            <Fragment key={group.key}>
+              {group.label && (
+                <tr className="bg-transparent">
+                  <td colSpan={visibleColumns.length + (onDelete ? 1 : 0)} className="p-3">
+                    <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+                      <span className="h-px flex-1 bg-slate-700" />
+                      {group.label}
+                      <span className="h-px flex-1 bg-slate-700" />
+                    </div>
+                  </td>
+                </tr>
               )}
-            </tr>
+              {group.rows.map((record) => (
+                <tr key={getRecordId(record)} className="border-t border-slate-800">
+                  {visibleColumns.map((column) => (
+                    <td key={column.key} className={classNames('p-2 align-top whitespace-pre-wrap break-words', column.align === 'center' && 'text-center')}>
+                      <EditableCell record={record} column={column} options={options} onUpdate={onUpdate} onOpenProfile={onOpenProfile} tableId={tableId} />
+                    </td>
+                  ))}
+                  {onDelete && (
+                    <td className="p-2 text-right">
+                      <button
+                        onClick={() => onDelete(record)}
+                        className="inline-flex items-center rounded-lg border border-rose-500 p-2 text-rose-300 hover:bg-rose-500/10"
+                        aria-label="Удалить запись"
+                      >
+                        <IconTrash />
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -1574,42 +1974,80 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
   );
 };
 
-const ProfileModal = ({ state, onClose }) => (
-  <Modal
-    title={state.data?.user?.Name || 'Профиль клиента'}
-    isOpen={state.open}
-    onClose={onClose}
-    footer={<button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">Закрыть</button>}
-  >
-    {state.loading && <LoadingState label="Загружаю профиль..." />}
-    {!state.loading && state.data?.error && <ErrorBanner message={state.data.error} />}
-    {!state.loading && state.data?.user && (
-      <div className="space-y-4">
-        <div className="grid gap-2 text-sm text-slate-200">
-          <div><span className="text-slate-400">Телефон:</span> {state.data.user.Phone || '-'}</div>
-          <div><span className="text-slate-400">Telegram:</span> {state.data.user.TelegramID || '-'}</div>
-          <div><span className="text-slate-400">Барбер:</span> {state.data.user.Barber || '-'}</div>
-        </div>
-        <div>
-          <p className="text-sm text-slate-400">История визитов</p>
-          <div className="mt-2 max-h-64 space-y-2 overflow-auto">
-            {state.data.appointments?.length ? (
-              state.data.appointments.map((appt) => (
-                <div key={appt.id} className="rounded-lg border border-slate-800 bg-slate-900/40 p-2 text-xs text-slate-200">
-                  <p className="font-semibold">{formatDateTime(appt.Date, appt.Time)}</p>
-                  <p>{appt.Barber}</p>
-                  <p className="text-slate-400">{appt.Services}</p>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-slate-500">Записей нет.</p>
-            )}
+const ProfileModal = ({ state, onClose }) => {
+  const appointments = state.data?.appointments || [];
+  const visitHistory = useMemo(() => {
+    if (!appointments.length) return [];
+    const cutoff = Date.now() - YEAR_IN_MS;
+    const completed = appointments
+      .map((appt) => {
+        const startDate = getAppointmentStartDate(appt.Date, appt.Time, appt.startDateTime);
+        return { ...appt, startDate };
+      })
+      .filter((appt) => appt.startDate && appt.startDate.getTime() >= cutoff && isCompletedAppointmentStatus(appt.Status))
+      .sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+    return completed.map((appt, index) => ({
+      ...appt,
+      orderNumber: completed.length - index,
+      dateLabel: formatDateTime(appt.Date, appt.Time),
+    }));
+  }, [appointments]);
+
+  return (
+    <Modal
+      title={state.data?.user?.Name || 'Профиль клиента'}
+      isOpen={state.open}
+      onClose={onClose}
+      footer={<button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">Закрыть</button>}
+    >
+      {state.loading && <LoadingState label="Загружаю профиль..." />}
+      {!state.loading && state.data?.error && <ErrorBanner message={state.data.error} />}
+      {!state.loading && state.data?.user && (
+        <div className="space-y-4">
+          <div className="grid gap-2 text-sm text-slate-200">
+            <div><span className="text-slate-400">Телефон:</span> {state.data.user.Phone || '-'}</div>
+            <div><span className="text-slate-400">Telegram:</span> {state.data.user.TelegramID || '-'}</div>
+            <div><span className="text-slate-400">Барбер:</span> {state.data.user.Barber || '-'}</div>
+          </div>
+          <div>
+            <p className="text-sm text-slate-400">История визитов</p>
+            <div className="mt-2 max-h-64 space-y-2 overflow-auto">
+              {visitHistory.length ? (
+                <>
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span>Выполнено за 12 месяцев: <span className="font-semibold text-white">{visitHistory.length}</span></span>
+                    <span>Только завершённые записи</span>
+                  </div>
+                  {visitHistory.map((appt, index) => {
+                    const isLatest = index === 0;
+                    return (
+                      <div
+                        key={`${appt.id || appt.dateLabel}-${appt.orderNumber}`}
+                        className={classNames(
+                          'rounded-lg border p-3 text-xs transition',
+                          isLatest ? 'border-emerald-400/60 bg-emerald-500/10 shadow-inner shadow-emerald-900/30' : 'border-slate-800 bg-slate-900/40'
+                        )}
+                      >
+                        <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-slate-400">
+                          <span className="font-semibold text-white">Стрижка №{appt.orderNumber}</span>
+                          <span>{appt.dateLabel}</span>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-100">{appt.Barber || '—'}</p>
+                        <p className="text-slate-400">{appt.Services || '—'}</p>
+                      </div>
+                    );
+                  })}
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">Выполненных записей за последний год нет.</p>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    )}
-  </Modal>
-);
+      )}
+    </Modal>
+  );
+};
 
 const BackupsPanel = ({ backups = [], onRestore, onCreate }) => (
   <SectionCard
@@ -1750,7 +2188,16 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, is
     </Modal>
   );
 };
-const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenProfile, clients = [], currentUser = null }) => {
+const TablesWorkspace = ({
+  apiRequest,
+  sharedOptions,
+  onOptionsUpdate,
+  onOpenProfile,
+  clients = [],
+  currentUser = null,
+  liveAppointments = null,
+  liveUpdatedAt = null,
+}) => {
   const [activeTable, setActiveTable] = useLocalStorage('tables.active', 'Appointments');
   const [tables, setTables] = useState(() => DATA_TABLES.reduce((acc, table) => ({ ...acc, [table]: [] }), {}));
   const [dropdownOptions, setDropdownOptions] = useState(sharedOptions || { barbers: [], services: [], statuses: [] });
@@ -1772,6 +2219,7 @@ const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenPro
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [compactTableView, setCompactTableView] = useState(window.innerWidth < 768);
   const [showPastAppointments, setShowPastAppointments] = useLocalStorage('tables.showPastAppointments', true);
+  const [groupAppointmentsByDate, setGroupAppointmentsByDate] = useLocalStorage('tables.groupAppointmentsByDate', true);
   const appointmentTemplate = useMemo(
     () => ({
       id: null,
@@ -1850,6 +2298,17 @@ const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenPro
   useEffect(() => {
     fetchTables();
   }, [fetchTables]);
+
+  useEffect(() => {
+    if (!Array.isArray(liveAppointments)) return;
+    setTables((prev) => ({
+      ...prev,
+      Appointments: liveAppointments.map((row) => ({
+        ...row,
+        Status: normalizeStatusValue(row.Status),
+      })),
+    }));
+  }, [liveAppointments, liveUpdatedAt]);
 
   const currentColumns = TABLE_COLUMNS[activeTable] || [];
   const hiddenColumns = hiddenColumnsMap[activeTable] || [];
@@ -2020,6 +2479,10 @@ const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenPro
             onRefresh={fetchTables}
             showPastAppointments={showPastAppointments}
             setShowPastAppointments={setShowPastAppointments}
+            supportsGrouping={activeTable === 'Appointments'}
+            groupByDate={groupAppointmentsByDate}
+            setGroupByDate={setGroupAppointmentsByDate}
+            lastUpdatedAt={liveUpdatedAt}
           />
           {isFetching ? (
             <LoadingState label="Обновляю таблицы..." />
@@ -2037,6 +2500,7 @@ const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenPro
                 options={dropdownOptions}
                 onOpenProfile={onOpenProfile}
                 isCompact={compactTableView}
+                groupByDate={activeTable === 'Appointments' ? groupAppointmentsByDate : false}
               />
             </div>
           )}
@@ -2103,7 +2567,7 @@ const BotControlView = ({
       <div className="space-y-6">
         <BackupsPanel backups={backups} onRestore={onRestoreBackup} onCreate={onCreateBackup} />
 
-        <SectionCard title="Лицензия и регистрация">
+        <SectionCard title="Лицензия и обновления">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
               <p className="font-semibold">Лицензия</p>
@@ -2111,41 +2575,36 @@ const BotControlView = ({
               <p>Комментарий: {licenseStatus?.message || 'Нет данных'}</p>
               {licenseStatus?.license?.owner && <p>Владелец: {licenseStatus.license.owner}</p>}
               {licenseStatus?.license?.expiresAt && <p>Действует до {formatDate(licenseStatus.license.expiresAt)}</p>}
+              {licenseStatus?.license?.number && <p>Номер: {licenseStatus.license.number}</p>}
             </div>
             <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
-              <p className="font-semibold">Регистрационные данные</p>
-              <p className="mt-1">Номер: {licenseStatus?.license?.number || 'Нет данных'}</p>
-              <p>Выдана: {licenseStatus?.license?.issuer || '-'}</p>
-            </div>
-          </div>
-        </SectionCard>
-
-        <SectionCard
-          title="Обновления системы"
-          actions={
-            <button onClick={onRefreshUpdate} disabled={systemBusy} className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
-              Проверить
-            </button>
-          }
-        >
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
-              <p className="font-semibold">Тексты</p>
-              <p className="mt-1">Стерен: {updateInfo?.version || '—'}</p>
-              <p>Перен: {updateInfo?.checkedAt ? formatDate(updateInfo.checkedAt) : '—'}</p>
-            </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
-              <p className="font-semibold">Р'РСʘдере</p>
-              <p className="mt-1">{updateInfo?.details || 'не подтверждена'}</p>
-              <button onClick={onApplyUpdate} disabled={systemBusy || !updateInfo?.available} className="mt-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50">
-                {systemBusy ? 'Стаотое...' : 'Отрерить нере'}
-              </button>
+              <p className="font-semibold">Обновления</p>
+              <p className="mt-1">Последняя версия: {updateInfo?.version || '—'}</p>
+              <p>Проверено: {updateInfo?.checkedAt ? formatDate(updateInfo.checkedAt) : '—'}</p>
+              <p>Статус: {updateInfo?.details || 'Нет данных'}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  onClick={onRefreshUpdate}
+                  disabled={systemBusy}
+                  className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Проверить
+                </button>
+                <button
+                  onClick={onApplyUpdate}
+                  disabled={systemBusy || !updateInfo?.available}
+                  className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {systemBusy ? 'Обновление…' : 'Обновить'}
+                </button>
+              </div>
             </div>
           </div>
         </SectionCard>
       </div>
     );
   }
+
 
   return (
     <div className="space-y-6">
@@ -2188,21 +2647,6 @@ const BotControlView = ({
         </div>
       </SectionCard>
 
-      <SectionCard title="Автоответы">
-        {messages.length === 0 && <p className="text-slate-500">Нет загруженных сообщений.</p>}
-        <div className="grid gap-4 md:grid-cols-2">
-          {messages.map((message) => (
-            <div key={message.id} className="space-y-3 rounded-xl border border-slate-700 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">{message.code}</p>
-              <input value={message.title || ''} onChange={(event) => onSaveMessage(message.id, { ...message, title: event.target.value }, false)} placeholder="Заголовок" className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-              <textarea value={message.text || ''} onChange={(event) => onSaveMessage(message.id, { ...message, text: event.target.value }, false)} rows={3} className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-              <button onClick={() => onSaveMessage(message.id, message, true)} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white">
-                Сохранить
-              </button>
-            </div>
-          ))}
-        </div>
-      </SectionCard>
     </div>
   );
 };
@@ -2334,6 +2778,9 @@ const App = () => {
   const [authError, setAuthError] = useState('');
   const [systemBusy, setSystemBusy] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [realtimeSnapshot, setRealtimeSnapshot] = useState(null);
+  const [fatalError, setFatalError] = useState(null);
+  const serviceSaveTimers = useRef(new Map());
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 1024);
@@ -2346,6 +2793,7 @@ const App = () => {
     setSession(null);
     setDashboard(null);
     setGlobalError('');
+    setRealtimeSnapshot(null);
   }, []);
 
   const apiRequest = useCallback(
@@ -2377,22 +2825,39 @@ const App = () => {
     setLoading(true);
     setGlobalError('');
     try {
-      const [overview, servicesFull, barbersFull, botState, messages, license, update, options] = await Promise.all([
-        apiRequest('/dashboard/overview'),
-        apiRequest('/services/full'),
-        apiRequest('/barbers/full'),
-        apiRequest('/bot/status'),
-        apiRequest('/bot/messages'),
-        apiRequest('/license/status'),
-        apiRequest('/system/update'),
-        apiRequest('/options/appointments'),
-      ]);
+      const overview = await apiRequest('/dashboard/overview');
       setDashboard(overview);
+      const withFallback = (request, fallback, label) =>
+        request.catch((error) => {
+          console.warn(`${label} fetch skipped:`, error?.message || error);
+          return fallback;
+        });
+      const [
+        servicesFull,
+        barbersFull,
+        botState,
+        botMessagesPayload,
+        license,
+        update,
+        options,
+      ] = await Promise.all([
+        withFallback(apiRequest('/services/full'), { services: [] }, 'Services'),
+        withFallback(apiRequest('/barbers/full'), [], 'Barbers'),
+        withFallback(apiRequest('/bot/status'), { status: null, settings: null }, 'Bot status'),
+        withFallback(apiRequest('/bot/messages'), [], 'Bot messages'),
+        withFallback(apiRequest('/license/status'), null, 'License'),
+        withFallback(apiRequest('/system/update'), null, 'Updates'),
+        withFallback(
+          apiRequest('/options/appointments'),
+          { statuses: [], barbers: [], services: [] },
+          'Options',
+        ),
+      ]);
       setServices(servicesFull.services || []);
       setBarbers(barbersFull || overview.barbers || []);
       setBotSettings(botState.settings || overview.bot?.settings || null);
       setBotStatus(botState.status);
-      setBotMessages(messages || []);
+      setBotMessages(botMessagesPayload || []);
       setLicenseStatus(license);
       setUpdateInfo(update);
       const normalizedOptions = { ...options, statuses: normalizeStatusList(options.statuses || []) };
@@ -2410,6 +2875,78 @@ const App = () => {
       fetchAll();
     }
   }, [session?.token, fetchAll]);
+
+  useEffect(() => {
+    if (!session?.token) {
+      setRealtimeSnapshot(null);
+      return undefined;
+    }
+    if (typeof EventSource === 'undefined') return undefined;
+    const tokenParam = encodeURIComponent(session.token);
+    const streamUrl = `${API_BASE_URL}/events/stream?token=${tokenParam}`;
+    const eventSource = new EventSource(streamUrl);
+    const handleEvent = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload?.type !== 'appointments:update') return;
+        const details = payload.payload || {};
+        setRealtimeSnapshot({
+          rows: Array.isArray(details.rows) ? details.rows : [],
+          stats: details.stats || {},
+          upcoming: Array.isArray(details.upcoming) ? details.upcoming : [],
+          updatedAt: details.updatedAt || new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error('Realtime event parse error:', error);
+      }
+    };
+    eventSource.addEventListener('appointments', handleEvent);
+    eventSource.onerror = () => {};
+    return () => {
+      eventSource.removeEventListener('appointments', handleEvent);
+      eventSource.close();
+    };
+  }, [session?.token]);
+
+  useEffect(() => {
+    if (!realtimeSnapshot) return;
+    setDashboard((prev) => {
+      const nextStats = { ...(prev?.stats || {}), ...(realtimeSnapshot.stats || {}) };
+      const nextAppointments = {
+        ...(prev?.appointments || {}),
+        upcoming: realtimeSnapshot.upcoming || prev?.appointments?.upcoming || [],
+      };
+      if (!prev) {
+        return { stats: nextStats, appointments: nextAppointments };
+      }
+      return { ...prev, stats: nextStats, appointments: nextAppointments };
+    });
+  }, [realtimeSnapshot]);
+
+  useEffect(() => {
+    const handleGlobalError = (event) => {
+      const detail = event?.reason || event?.error;
+      const message =
+        detail?.message ||
+        event?.message ||
+        (typeof detail === 'string' ? detail : 'Неизвестная ошибка');
+      console.error('Global UI error:', detail || event);
+      setFatalError(message);
+    };
+    window.addEventListener('error', handleGlobalError);
+    window.addEventListener('unhandledrejection', handleGlobalError);
+    return () => {
+      window.removeEventListener('error', handleGlobalError);
+      window.removeEventListener('unhandledrejection', handleGlobalError);
+    };
+  }, []);
+  useEffect(
+    () => () => {
+      serviceSaveTimers.current.forEach((timer) => clearTimeout(timer));
+      serviceSaveTimers.current.clear();
+    },
+    []
+  );
 
   const handleLogin = async (username, password) => {
     setAuthError('');
@@ -2439,20 +2976,6 @@ const App = () => {
 
   const handleBarberFieldChange = (id, field, value) => {
     setBarbers((prev) => prev.map((barber) => (barber.id === id ? { ...barber, [field]: value } : barber)));
-  };
-
-  const handleServiceFieldChange = (id, field, value) => {
-    setServices((prev) => prev.map((service) => (service.id === id ? { ...service, [field]: value } : service)));
-  };
-
-  const handleServicePriceChange = (serviceId, barberId, value) => {
-    setServices((prev) => prev.map((service) => {
-      if (service.id !== serviceId) return service;
-      return {
-        ...service,
-        prices: { ...(service.prices || {}), [barberId]: value },
-      };
-    }));
   };
 
   const normalizeServicePayload = (service) => ({
@@ -2522,15 +3045,35 @@ const App = () => {
     }
   };
 
-  const handleSaveService = async (service) => {
-    if (!service?.id) return;
-    try {
-      await apiRequest(`/services/full/${encodeURIComponent(service.id)}`, { method: 'PUT', body: JSON.stringify(normalizeServicePayload(service)) });
-      fetchAll();
-    } catch (error) {
-      setGlobalError(error.message || 'Не удалось сохранить услугу');
-    }
-  };
+  const handleSaveService = useCallback(
+    async (service) => {
+      if (!service?.id) return;
+      try {
+        await apiRequest(`/services/full/${encodeURIComponent(service.id)}`, {
+          method: 'PUT',
+          body: JSON.stringify(normalizeServicePayload(service)),
+        });
+      } catch (error) {
+        setGlobalError(error.message || 'Не удалось сохранить услугу');
+      }
+    },
+    [apiRequest]
+  );
+
+  const scheduleServiceAutosave = useCallback(
+    (service) => {
+      if (!service?.id) return;
+      const timers = serviceSaveTimers.current;
+      const existingTimer = timers.get(service.id);
+      if (existingTimer) clearTimeout(existingTimer);
+      const timer = setTimeout(() => {
+        handleSaveService(service);
+        timers.delete(service.id);
+      }, 400);
+      timers.set(service.id, timer);
+    },
+    [handleSaveService]
+  );
 
   const handleDeleteService = async (service) => {
     if (!service?.id) return;
@@ -2552,6 +3095,39 @@ const App = () => {
       setGlobalError(error.message || 'Не удалось добавить услугу');
     }
   };
+
+  const handleServiceFieldChange = useCallback(
+    (id, field, value) => {
+      setServices((prev) => prev.map((service) => (service.id === id ? { ...service, [field]: value } : service)));
+      const target = services.find((service) => service.id === id);
+      if (target) {
+        scheduleServiceAutosave({ ...target, [field]: value });
+      }
+    },
+    [services, scheduleServiceAutosave]
+  );
+
+  const handleServicePriceChange = useCallback(
+    (serviceId, barberId, value) => {
+      setServices((prev) =>
+        prev.map((service) => {
+          if (service.id !== serviceId) return service;
+          return {
+            ...service,
+            prices: { ...(service.prices || {}), [barberId]: value },
+          };
+        })
+      );
+      const target = services.find((service) => service.id === serviceId);
+      if (target) {
+        scheduleServiceAutosave({
+          ...target,
+          prices: { ...(target.prices || {}), [barberId]: value },
+        });
+      }
+    },
+    [services, scheduleServiceAutosave]
+  );
 
   const handleBotToggle = async (enabled) => {
     try {
@@ -2719,7 +3295,15 @@ const App = () => {
     if (loading) return <LoadingState />;
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardView data={dashboard} onOpenAppointment={handleOpenAppointment} onOpenProfile={openProfile} onCreateAppointment={handleCreateAppointment} />;
+        return (
+          <DashboardView
+            data={dashboard}
+            onOpenAppointment={handleOpenAppointment}
+            onOpenProfile={openProfile}
+            onCreateAppointment={handleCreateAppointment}
+            liveMeta={realtimeSnapshot}
+          />
+        );
       case 'barbers':
         return (
           <BarbersView
@@ -2737,7 +3321,6 @@ const App = () => {
             barbers={barbers}
             onFieldChange={handleServiceFieldChange}
             onPriceChange={handleServicePriceChange}
-            onSave={handleSaveService}
             onDelete={handleDeleteService}
             onAdd={handleAddService}
           />
@@ -2751,6 +3334,8 @@ const App = () => {
             onOpenProfile={openProfile}
             clients={dashboard?.clients || []}
             currentUser={session || null}
+            liveAppointments={realtimeSnapshot?.rows || null}
+            liveUpdatedAt={realtimeSnapshot?.updatedAt || null}
           />
         );
       case 'bot':
@@ -2825,6 +3410,28 @@ const App = () => {
     }
   };
 
+  if (fatalError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950 p-6 text-center text-white">
+        <div className="max-w-lg space-y-3 rounded-2xl border border-rose-500/50 bg-slate-900/80 p-6 shadow-2xl">
+          <p className="text-lg font-semibold text-rose-200">Критическая ошибка интерфейса</p>
+          <p className="text-sm text-slate-300">
+            Сообщение ниже можно переслать разработчику. После исправления перезагрузите страницу.
+          </p>
+          <pre className="overflow-x-auto rounded-xl bg-slate-950/80 p-4 text-left text-xs text-rose-200">
+            {fatalError}
+          </pre>
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800"
+        >
+          Перезагрузить страницу
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       {isMobile && <MobileTabs activeTab={activeTab} onChange={setActiveTab} session={session} onLogout={handleLogout} />}
@@ -2849,4 +3456,66 @@ const App = () => {
   );
 };
 
-ReactDOM.render(<App />, document.getElementById('root'));
+let reactAppRoot = null;
+const renderApp = () => {
+  const rootElement = document.getElementById('root');
+  try {
+    if (!rootElement) {
+      throw new Error('Не найден контейнер #root');
+    }
+    if (!reactAppRoot) {
+      reactAppRoot =
+        typeof createRoot === 'function'
+          ? createRoot(rootElement)
+          : {
+              render: (node) => ReactDOM.render(node, rootElement),
+            };
+    }
+    reactAppRoot.render(<App />);
+  } catch (error) {
+    console.error('Fatal render error:', error);
+    if (rootElement) {
+      rootElement.innerHTML = `
+        <div style="
+          min-height:100vh;
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+          justify-content:center;
+          gap:16px;
+          background-color:#020617;
+          color:#fff;
+          font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          padding:24px;
+          text-align:center;
+        ">
+          <div style="max-width:480px;border:1px solid rgba(248,113,113,0.4);background:rgba(15,23,42,0.85);border-radius:16px;padding:24px;">
+            <p style="font-size:18px;font-weight:600;color:#fecaca;margin-bottom:12px;">
+              Ошибка инициализации интерфейса
+            </p>
+            <p style="font-size:14px;color:#cbd5f5;white-space:pre-wrap;">
+              ${error?.message || 'Смотрите консоль браузера (F12)'}
+            </p>
+          </div>
+          <button style="
+            border:1px solid #4b5563;
+            background:transparent;
+            color:#fff;
+            border-radius:999px;
+            padding:8px 20px;
+            cursor:pointer;
+          " onclick="window.location.reload()">
+            Перезагрузить
+          </button>
+        </div>
+      `;
+    }
+  }
+};
+
+renderApp();
+
+
+
+
+

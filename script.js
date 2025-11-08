@@ -1,4 +1,5 @@
-const { useState, useEffect, useCallback, useMemo, useRef } = React;
+const { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } = React;
+const { createPortal } = ReactDOM;
 
 const DEFAULT_API_BASE_URL = 'http://192.168.1.55:3000/api';
 const API_BASE_URL = window.__BARBER_API_BASE__ || DEFAULT_API_BASE_URL;
@@ -17,44 +18,44 @@ const TABLE_ORDER = ['Appointments', 'Schedules', 'Users', 'Cost'];
 const DATA_TABLES = ['Appointments', 'Schedules', 'Users', 'Cost'];
 
 const TABLE_CONFIG = {
-  Appointments: { label: 'Р—Р°РїРёСЃРё', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'asc' } },
-  Schedules: { label: 'Р Р°СЃРїРёСЃР°РЅРёРµ', canCreate: false, supportsBarberFilter: true, defaultSort: { key: 'Date', direction: 'asc' } },
-  Users: { label: 'РљР»РёРµРЅС‚С‹', canCreate: true, defaultSort: { key: 'Name', direction: 'asc' } },
-  Cost: { label: 'РљР°С‚Р°Р»РѕРі СѓСЃР»СѓРі', canCreate: true, defaultSort: { key: 'Uslugi', direction: 'asc' } },
+  Appointments: { label: 'Записи', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'asc' } },
+  Schedules: { label: 'Расписание', canCreate: false, supportsBarberFilter: true, defaultSort: { key: 'Date', direction: 'asc' } },
+  Users: { label: 'Клиенты', canCreate: true, defaultSort: { key: 'Name', direction: 'asc' } },
+  Cost: { label: 'Каталог услуг', canCreate: true, defaultSort: { key: 'Uslugi', direction: 'asc' } },
 };
 
 const TABLE_COLUMNS = {
   Appointments: [
-    { key: 'CustomerName', label: 'РљР»РёРµРЅС‚', editable: true, type: 'text', isProfileLink: true, minWidth: 'w-48' },
-    { key: 'Phone', label: 'РўРµР»РµС„РѕРЅ', editable: true, type: 'text', minWidth: 'w-36' },
-    { key: 'Barber', label: 'Р‘Р°СЂР±РµСЂ', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-32' },
-    { key: 'Date', label: 'Р”Р°С‚Р°', editable: true, type: 'date', minWidth: 'w-32' },
-    { key: 'Time', label: 'Р’СЂРµРјСЏ', editable: true, type: 'text', minWidth: 'w-28' },
-    { key: 'Status', label: 'РЎС‚Р°С‚СѓСЃ', editable: true, type: 'select', optionsKey: 'statuses', align: 'center', minWidth: 'w-28' },
-    { key: 'Services', label: 'РЈСЃР»СѓРіРё', editable: true, type: 'multi-select', optionsKey: 'services', minWidth: 'w-56' },
-    { key: 'UserID', label: 'ID РєР»РёРµРЅС‚Р°', editable: true, type: 'text', minWidth: 'w-24' },
-    { key: 'Reminder2hClientSent', label: 'РќР°РїРѕРјРёРЅР°РЅРёРµ РєР»РёРµРЅС‚Сѓ', editable: true, type: 'boolean', align: 'center' },
-    { key: 'Reminder2hBarberSent', label: 'РќР°РїРѕРјРёРЅР°РЅРёРµ Р±Р°СЂР±РµСЂСѓ', editable: true, type: 'boolean', align: 'center' },
+    { key: 'CustomerName', label: 'Клиент', editable: true, type: 'text', isProfileLink: true, minWidth: 'w-48' },
+    { key: 'Phone', label: 'Телефон', editable: true, type: 'text', minWidth: 'w-36' },
+    { key: 'Barber', label: 'Барбер', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-32' },
+    { key: 'Date', label: 'Дата', editable: true, type: 'date', minWidth: 'w-32' },
+    { key: 'Time', label: 'Время', editable: true, type: 'text', minWidth: 'w-28' },
+    { key: 'Status', label: 'Статус', editable: true, type: 'select', optionsKey: 'statuses', align: 'center', minWidth: 'w-28' },
+    { key: 'Services', label: 'Услуги', editable: true, type: 'multi-select', optionsKey: 'services', minWidth: 'w-56' },
+    { key: 'UserID', label: 'ID клиента', editable: true, type: 'text', minWidth: 'w-24' },
+    { key: 'Reminder2hClientSent', label: 'Напоминание клиенту', editable: true, type: 'boolean', align: 'center' },
+    { key: 'Reminder2hBarberSent', label: 'Напоминание барберу', editable: true, type: 'boolean', align: 'center' },
   ],
   Schedules: [
-    { key: 'Barber', label: 'Р‘Р°СЂР±РµСЂ', editable: false, minWidth: 'w-40' },
-    { key: 'DayOfWeek', label: 'Р”РµРЅСЊ РЅРµРґРµР»Рё', editable: false, minWidth: 'w-32' },
-    { key: 'Date', label: 'Р”Р°С‚Р°', editable: false, minWidth: 'w-32' },
-    { key: 'Week', label: 'РЎР»РѕС‚С‹', editable: true, type: 'text', align: 'center', minWidth: 'w-40' },
+    { key: 'Barber', label: 'Барбер', editable: false, minWidth: 'w-40' },
+    { key: 'DayOfWeek', label: 'День недели', editable: false, minWidth: 'w-32' },
+    { key: 'Date', label: 'Дата', editable: false, minWidth: 'w-32' },
+    { key: 'Week', label: 'Слоты', editable: true, type: 'text', align: 'center', minWidth: 'w-40' },
   ],
   Users: [
-    { key: 'Name', label: 'РРјСЏ', editable: true, type: 'text', isProfileLink: true, minWidth: 'w-40' },
-    { key: 'Phone', label: 'РўРµР»РµС„РѕРЅ', editable: true, type: 'text', minWidth: 'w-36' },
+    { key: 'Name', label: 'Имя', editable: true, type: 'text', isProfileLink: true, minWidth: 'w-40' },
+    { key: 'Phone', label: 'Телефон', editable: true, type: 'text', minWidth: 'w-36' },
     { key: 'TelegramID', label: 'Telegram', editable: true, type: 'text', minWidth: 'w-32' },
-    { key: 'Barber', label: 'Р›СЋР±РёРјС‹Р№ РјР°СЃС‚РµСЂ', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-40' },
+    { key: 'Barber', label: 'Любимый мастер', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-40' },
   ],
   Cost: [
-    { key: 'Uslugi', label: 'РЈСЃР»СѓРіР°', editable: true, type: 'text', minWidth: 'w-56' },
+    { key: 'Uslugi', label: 'Услуга', editable: true, type: 'text', minWidth: 'w-56' },
     { key: 'Timur', label: 'РўРёРјСѓСЂ', editable: true, type: 'text', align: 'center' },
-    { key: 'Vladimir', label: 'Р’Р»Р°РґРёРјРёСЂ', editable: true, type: 'text', align: 'center' },
-    { key: 'Alina', label: 'РђР»РёРЅР°', editable: true, type: 'text', align: 'center' },
-    { key: 'Aleksey', label: 'РђР»РµРєСЃРµР№', editable: true, type: 'text', align: 'center' },
-    { key: 'Dlitelnost', label: 'Р”Р»РёС‚РµР»СЊРЅРѕСЃС‚СЊ', editable: true, type: 'text', minWidth: 'w-32' },
+    { key: 'Vladimir', label: 'Владимир', editable: true, type: 'text', align: 'center' },
+    { key: 'Alina', label: 'Алина', editable: true, type: 'text', align: 'center' },
+    { key: 'Aleksey', label: 'Алексей', editable: true, type: 'text', align: 'center' },
+    { key: 'Dlitelnost', label: 'Длительность', editable: true, type: 'text', minWidth: 'w-32' },
   ],
 };
 
@@ -62,12 +63,17 @@ const RATING_MIN = 3;
 const RATING_MAX = 5;
 const RATING_STEP = 0.5;
 const AVATAR_PRESETS = ['/Image/barber_alex.jpg', '/Image/barber_alina.jpg', '/Image/barber_vlad.jpg', '/Image/barber_timur.jpg'];
-const KNOWN_USERS = [
-  { label: 'Алексей', login: 'Aleksey' },
-  { label: 'Алина', login: 'Alina' },
-  { label: 'Владимир', login: 'Vladimir' },
-  { label: 'Тимур', login: 'Timur' },
-];
+const buildNewBarberState = () => ({
+  name: '',
+  password: '',
+  rating: '5',
+  color: '#6d28d9',
+  avatarUrl: AVATAR_PRESETS[0],
+  description: '',
+  phone: '',
+  telegramId: '',
+  isActive: true,
+});
 const getRecordId = (record = {}) => record.id || record.Id || record.ID || record.recordId || record.ID_Record || null;
 
 const classNames = (...classes) => classes.filter(Boolean).join(' ');
@@ -118,6 +124,37 @@ const useOutsideClick = (ref, handler) => {
 
 const normalizeText = (value) => (value == null ? '' : String(value));
 
+const canonicalizeName = (value) => normalizeText(value).replace(/[^a-z0-9а-яё\s]/gi, '').trim();
+
+const resolveLogin = (value) => normalizeText(value);
+
+const buildSessionPayload = (payload = {}) => {
+  const normalizedLogin = resolveLogin(payload.username || payload.login);
+  return {
+    ...payload,
+    username: normalizedLogin,
+    displayName: payload.displayName || payload.name || normalizedLogin,
+    barberId: payload.barberId || payload.id || null,
+  };
+};
+
+const pickBarberForUser = (userSession, availableBarbers = []) => {
+  const fallback = availableBarbers?.[0] || '';
+  if (!userSession) return fallback;
+  const candidates = [userSession.displayName, userSession.preferredName, userSession.username]
+    .map((candidate) => canonicalizeName(candidate).toLowerCase())
+    .filter(Boolean);
+  if (!candidates.length || !availableBarbers?.length) return fallback;
+  const normalizedOptions = availableBarbers.map((barber) => canonicalizeName(barber).toLowerCase());
+  for (const candidate of candidates) {
+    const matchIndex = normalizedOptions.findIndex((option) => option === candidate);
+    if (matchIndex !== -1) {
+      return availableBarbers[matchIndex];
+    }
+  }
+  return fallback;
+};
+
 const formatDate = (value) => {
   if (!value) return '-';
   try {
@@ -146,35 +183,35 @@ const formatDateTime = (date, time) => {
 };
 
 const STATUS_TRANSLATIONS = {
-  active: 'РђРєС‚РёРІРЅР°СЏ',
-  'Р°РєС‚РёРІРЅР°СЏ': 'РђРєС‚РёРІРЅР°СЏ',
-  confirm: 'РџРѕРґС‚РІРµСЂР¶РґРµРЅР°',
-  confirmed: 'РџРѕРґС‚РІРµСЂР¶РґРµРЅР°',
-  'РїРѕРґС‚РІРµСЂР¶РґРµРЅРѕ': 'РџРѕРґС‚РІРµСЂР¶РґРµРЅР°',
-  'РїРѕРґС‚РІРµСЂР¶РґРµРЅР°': 'РџРѕРґС‚РІРµСЂР¶РґРµРЅР°',
-  done: 'Р’С‹РїРѕР»РЅРµРЅР°',
-  complete: 'Р’С‹РїРѕР»РЅРµРЅР°',
-  completed: 'Р’С‹РїРѕР»РЅРµРЅР°',
-  finished: 'Р’С‹РїРѕР»РЅРµРЅР°',
-  'РІС‹РїРѕР»РЅРµРЅР°': 'Р’С‹РїРѕР»РЅРµРЅР°',
-  'Р·Р°РІРµСЂС€РµРЅР°': 'Р’С‹РїРѕР»РЅРµРЅР°',
-  cancel: 'РћС‚РјРµРЅРµРЅРѕ',
-  canceled: 'РћС‚РјРµРЅРµРЅРѕ',
-  cancelled: 'РћС‚РјРµРЅРµРЅРѕ',
-  'РѕС‚РјРµРЅР°': 'РћС‚РјРµРЅРµРЅРѕ',
-  'РѕС‚РјРµРЅРµРЅРѕ': 'РћС‚РјРµРЅРµРЅРѕ',
-  'no show': 'РќРµ РїСЂРёС€С‘Р»',
-  'no-show': 'РќРµ РїСЂРёС€С‘Р»',
-  noshow: 'РќРµ РїСЂРёС€С‘Р»',
-  missed: 'РќРµ РїСЂРёС€С‘Р»',
-  pending: 'Р’ РѕР±СЂР°Р±РѕС‚РєРµ',
-  wait: 'Р’ РѕР±СЂР°Р±РѕС‚РєРµ',
-  waiting: 'Р’ РѕР±СЂР°Р±РѕС‚РєРµ',
-  processing: 'Р’ РѕР±СЂР°Р±РѕС‚РєРµ',
+  active: 'Активная',
+  'активная': 'Активная',
+  confirm: 'Подтверждена',
+  confirmed: 'Подтверждена',
+  'подтверждено': 'Подтверждена',
+  'подтверждена': 'Подтверждена',
+  done: 'Выполнена',
+  complete: 'Выполнена',
+  completed: 'Выполнена',
+  finished: 'Выполнена',
+  'выполнена': 'Выполнена',
+  'завершена': 'Выполнена',
+  cancel: 'Отменено',
+  canceled: 'Отменено',
+  cancelled: 'Отменено',
+  'отмена': 'Отменено',
+  'отменено': 'Отменено',
+  'no show': 'Не пришёл',
+  'no-show': 'Не пришёл',
+  noshow: 'Не пришёл',
+  missed: 'Не пришёл',
+  pending: 'В обработке',
+  wait: 'В обработке',
+  waiting: 'В обработке',
+  processing: 'В обработке',
 };
 
-const INACTIVE_STATUS_TOKENS = ['РІС‹РїРѕР»РЅ', 'Р·Р°РІРµСЂС€', 'done', 'cancel', 'РѕС‚РјРµРЅ', 'РЅРµ РїСЂРёС€', 'noshow', 'no-show', 'missed', 'РїСЂРѕСЃСЂ', 'expired'];
-const ACTIVE_STATUS_TOKENS = ['Р°РєС‚РёРІ', 'active', 'РїРѕРґС‚РІРµСЂР¶', 'confirm', 'РѕР¶РёРґ', 'pending', 'wait', 'Р¶РґРµРј', 'Р¶РґС‘Рј', 'РЅРѕРІ', 'new'];
+const INACTIVE_STATUS_TOKENS = ['выполн', 'заверш', 'done', 'cancel', 'отмен', 'не приш', 'noshow', 'no-show', 'missed', 'проср', 'expired'];
+const ACTIVE_STATUS_TOKENS = ['актив', 'active', 'подтверж', 'confirm', 'ожид', 'pending', 'wait', 'ждем', 'ждём', 'нов', 'new'];
 
 const normalizeStatusValue = (status) => {
   const normalized = normalizeText(status).trim();
@@ -204,7 +241,7 @@ const sanitizeTimeToken = (value) => {
 };
 
 const parseTimeRangeValue = (value) => {
-  const safe = normalizeText(value).replace(/[вЂ”вЂ“]/g, '-');
+  const safe = normalizeText(value).replace(/[—–]/g, '-');
   if (!safe) return { start: '', end: '' };
   const [rawStart, rawEnd = ''] = safe.split('-').map((part) => part.trim());
   return {
@@ -260,7 +297,7 @@ const parseMultiValue = (value) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
-const LoadingState = ({ label = 'Р—Р°РіСЂСѓР¶Р°СЋ РґР°РЅРЅС‹Рµ...' } = {}) => (
+const LoadingState = ({ label = 'Загружаю данные...' } = {}) => (
   <div className="flex items-center justify-center py-12 text-slate-300">
     <span className="animate-pulse">{label}</span>
   </div>
@@ -280,11 +317,11 @@ const SectionCard = ({ title, actions, children }) => (
   </div>
 );
 
-const Modal = ({ title, isOpen, onClose, children, footer }) => {
+const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-w-3xl' }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+      <div className={`max-h-[90vh] w-full ${maxWidthClass} overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl`}>
         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
           <h3 className="text-lg font-semibold text-white">{title}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-white">x</button>
@@ -302,6 +339,118 @@ const StatCard = ({ label, value, accent = 'text-indigo-300' }) => (
     <p className={classNames('mt-1 text-2xl font-semibold sm:mt-2 sm:text-3xl', accent)}>{value}</p>
   </div>
 );
+
+const Sidebar = ({ session, activeTab, onChange, onLogout }) => {
+  const username = session?.displayName || session?.username || '—';
+
+  return (
+    <aside className="hidden w-72 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950/75 p-5 lg:flex">
+      <div className="space-y-1 border-b border-slate-800 pb-4">
+        <p className="text-xs uppercase tracking-wide text-slate-500">Вы вошли как</p>
+        <p className="text-lg font-semibold text-white">{username}</p>
+        <button
+          onClick={onLogout}
+          className="mt-2 w-full rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-100 hover:border-indigo-500 hover:text-white"
+        >
+          Выйти
+        </button>
+      </div>
+      <nav className="mt-6 flex-1 space-y-2 overflow-y-auto">
+        {VIEW_TABS.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => onChange?.(tab.id)}
+              className={classNames(
+                'w-full rounded-xl px-4 py-3 text-left text-sm font-semibold transition',
+                isActive
+                  ? 'bg-indigo-600/90 text-white shadow-lg shadow-indigo-900/40'
+                  : 'bg-slate-900/40 text-slate-300 hover:bg-slate-800/60 hover:text-white'
+              )}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </nav>
+    </aside>
+  );
+};
+
+const MobileTabs = ({ session, activeTab, onChange, onLogout }) => {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const username = session?.displayName || session?.username || '—';
+  const handleSelect = (tabId) => {
+    onChange?.(tabId);
+    setMenuOpen(false);
+  };
+
+  return (
+    <div className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/80 backdrop-blur lg:hidden">
+      <div className="flex items-center justify-between px-4 py-3">
+        <button
+          onClick={() => setMenuOpen((prev) => !prev)}
+          className="rounded-lg border border-slate-700 p-2 text-slate-200 hover:border-indigo-500 hover:text-white"
+          aria-label="Открыть меню"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+          </svg>
+        </button>
+        <div className="text-center">
+          <p className="text-[11px] uppercase tracking-wide text-slate-400">Вы вошли как</p>
+          <p className="text-base font-semibold text-white">{username}</p>
+        </div>
+        <button
+          onClick={onLogout}
+          className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-rose-200 hover:border-rose-400 hover:text-white"
+        >
+          Выйти
+        </button>
+      </div>
+      <div className="flex overflow-x-auto border-t border-slate-800">
+        {VIEW_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => handleSelect(tab.id)}
+            className={classNames(
+              'flex-1 whitespace-nowrap px-3 py-2 text-xs font-semibold',
+              activeTab === tab.id ? 'text-indigo-300' : 'text-slate-400'
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {menuOpen && (
+        <div className="space-y-3 border-t border-slate-800 bg-slate-900/90 px-4 py-4">
+          <p className="text-sm text-slate-300">Разделы</p>
+          <div className="grid grid-cols-2 gap-2">
+            {VIEW_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => handleSelect(tab.id)}
+                className={classNames(
+                  'rounded-lg px-3 py-2 text-left text-sm font-semibold',
+                  activeTab === tab.id ? 'bg-indigo-600/80 text-white' : 'bg-slate-800/70 text-slate-200'
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={onLogout}
+            className="w-full rounded-lg border border-rose-500 px-3 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-500/10"
+          >
+            Выйти из аккаунта
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppointment }) => {
   if (!data) return <LoadingState />;
   const stats = data.stats || {};
@@ -322,7 +471,7 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
   }, [upcomingRaw]);
 
   const formatGroupLabel = useCallback((dateValue) => {
-    if (!dateValue || dateValue === 'Р‘РµР· РґР°С‚С‹') return 'Р‘РµР· РґР°С‚С‹';
+    if (!dateValue || dateValue === 'Без даты') return 'Без даты';
     try {
       const parsed = new Date(`${dateValue}T00:00:00`);
       if (Number.isNaN(parsed.getTime())) return dateValue;
@@ -335,7 +484,7 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
   const groupedUpcoming = useMemo(() => {
     const groups = new Map();
     upcomingList.forEach((appt) => {
-      const key = appt.Date || 'Р‘РµР· РґР°С‚С‹';
+      const key = appt.Date || 'Без даты';
       const bucket = groups.get(key) || [];
       bucket.push(appt);
       groups.set(key, bucket);
@@ -354,27 +503,27 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
 
   return (
     <div className="space-y-6">
-      <SectionCard title="РљР»СЋС‡РµРІС‹Рµ РїРѕРєР°Р·Р°С‚РµР»Рё">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Р’СЃРµРіРѕ РєР»РёРµРЅС‚РѕРІ" value={stats.totalUsers ?? 0} />
-          <StatCard label="РђРєС‚РёРІРЅС‹Рµ Р·Р°РїРёСЃРё" value={stats.activeAppointments ?? 0} accent="text-emerald-300" />
-          <StatCard label="РџРѕРґС‚РІРµСЂР¶РґРµРЅРѕ Р·Р° РіРѕРґ" value={stats.confirmedYear ?? 0} accent="text-fuchsia-300" />
-          <StatCard label="РЎРµРіРѕРґРЅСЏ" value={stats.todaysAppointments ?? 0} accent="text-cyan-300" />
+      <SectionCard title="Ключевые показатели">
+        <div className="grid gap-4 stat-grid">
+          <StatCard label="Всего клиентов" value={stats.totalUsers ?? 0} />
+          <StatCard label="Активные записи" value={stats.activeAppointments ?? 0} accent="text-emerald-300" />
+          <StatCard label="Подтверждено за год" value={stats.confirmedYear ?? 0} accent="text-fuchsia-300" />
+          <StatCard label="Сегодня" value={stats.todaysAppointments ?? 0} accent="text-cyan-300" />
         </div>
       </SectionCard>
 
       <SectionCard
-        title="Р‘Р»РёР¶Р°Р№С€РёРµ Р·Р°РїРёСЃРё"
+        title="Ближайшие записи"
         actions={
           onCreateAppointment && (
             <button onClick={onCreateAppointment} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500">
-              + РЎРѕР·РґР°С‚СЊ Р·Р°РїРёСЃСЊ
+              + Создать запись
             </button>
           )
         }
       >
         {groupedUpcoming.length === 0 ? (
-          <p className="text-slate-400">РќРµС‚ Р±Р»РёР¶Р°Р№С€РёС… Р·Р°РїРёСЃРµР№.</p>
+          <p className="text-slate-400">Нет ближайших записей.</p>
         ) : (
           <div className="space-y-5">
             {groupedUpcoming.map((group) => (
@@ -406,16 +555,16 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
                                 {appt.CustomerName}
                               </button>
                             ) : (
-                              <p className="text-lg font-semibold text-white">Р‘РµР· РёРјРµРЅРё</p>
+                              <p className="text-lg font-semibold text-white">Без имени</p>
                             )}
                             <p className="text-sm text-slate-400">{appt.Barber}</p>
                           </div>
                           <div className="text-right text-sm text-slate-300">
                             <p>{formatDate(appt.Date)}</p>
-                            <p>{appt.Time || 'вЂ”'}</p>
+                            <p>{appt.Time || '—'}</p>
                           </div>
                         </div>
-                        <p className="mt-2 text-sm text-slate-400">{appt.Services || 'Р‘РµР· СѓСЃР»СѓРі'}</p>
+                        <p className="mt-2 text-sm text-slate-400">{appt.Services || 'Без услуг'}</p>
                       </div>
                     );
                   })}
@@ -428,123 +577,152 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
     </div>
   );
 };
-const BarberAvatarPicker = ({ value, onChange }) => (
-  <div className="space-y-2">
-    <div className="flex items-center gap-3">
-      <img src={value || AVATAR_PRESETS[0]} alt="avatar" className="h-12 w-12 rounded-full border border-slate-700 object-cover" />
-      <input value={value || ''} onChange={(event) => onChange(event.target.value)} placeholder="URL РёР»Рё РїСѓС‚СЊ Рє С„Р°Р№Р»Сѓ" className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white" />
+const BarberAvatarPicker = ({ value, onChange }) => {
+  const previewSrc = value || AVATAR_PRESETS[0];
+  return (
+    <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900/40 p-3">
+      <div className="flex items-center gap-3">
+        <img src={previewSrc} alt="avatar" className="h-14 w-14 rounded-full border border-slate-700 object-cover" />
+        <input
+          type="url"
+          value={value || ''}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="https://.../avatar.jpg"
+          className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
+        />
+      </div>
+      <div className="grid grid-cols-4 gap-2">
+        {AVATAR_PRESETS.map((preset) => {
+          const isSelected = preset === value;
+          return (
+            <button
+              type="button"
+              key={preset}
+              onClick={() => onChange(preset)}
+              className={`rounded-lg border p-1 transition hover:border-indigo-400 hover:bg-slate-800 ${
+                isSelected ? 'border-indigo-500 bg-indigo-500/20' : 'border-slate-700 bg-slate-900'
+              }`}
+            >
+              <img src={preset} alt="avatar preset" className="h-14 w-full rounded-md object-cover" />
+            </button>
+          );
+        })}
+      </div>
     </div>
-    <select value="" onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white">
-      <option value="">Р’С‹Р±СЂР°С‚СЊ РёР· С€Р°Р±Р»РѕРЅРѕРІ</option>
-      {AVATAR_PRESETS.map((preset) => (
-        <option key={preset} value={preset}>
-          {preset}
-        </option>
-      ))}
-    </select>
-  </div>
-);
+  );
+};
+
+const RatingSlider = ({ value, onChange, dense = false }) => {
+  const ratingValue = Number(value || RATING_MAX).toFixed(1);
+  const wrapperClass = dense
+    ? 'space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-1.5'
+    : 'space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2';
+  const labelClass = dense
+    ? 'flex items-center justify-between text-xs text-slate-300'
+    : 'flex items-center justify-between text-sm text-slate-300';
+  return (
+    <div className={wrapperClass}>
+      <label className={labelClass}>
+        <span>Рейтинг</span>
+        <span className="font-semibold text-white">{ratingValue}</span>
+      </label>
+      <input type="range" min={RATING_MIN} max={RATING_MAX} step={RATING_STEP} value={Number(value) || RATING_MAX} onChange={onChange} className="w-full accent-indigo-500" />
+    </div>
+  );
+};
 
 const BarbersView = ({ barbers = [], onFieldChange, onSave, onAdd, onDelete }) => {
-  const [newBarber, setNewBarber] = useState({ name: '', nickname: '', rating: '5', color: '#6d28d9', avatarUrl: AVATAR_PRESETS[0], isActive: true });
+  const [newBarber, setNewBarber] = useState(buildNewBarberState);
 
   const updateNewBarber = (field, value) => setNewBarber((prev) => ({ ...prev, [field]: value }));
 
+  const handleCreateBarber = () => {
+    if (!newBarber.name?.trim() || !newBarber.password?.trim()) return;
+    onAdd(newBarber);
+    setNewBarber(buildNewBarberState());
+  };
+
+  const renderBarberCard = (barber) => {
+    const colorValue = /^#/.test(barber.color || '') ? barber.color : '#6d28d9';
+    return (
+      <div key={barber.id} className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900/40 p-4">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <input value={barber.name || ''} onChange={(event) => onFieldChange(barber.id, 'name', event.target.value)} placeholder="Имя" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-1.5 text-sm text-white" />
+          <RatingSlider dense value={barber.rating} onChange={(event) => onFieldChange(barber.id, 'rating', event.target.value)} />
+        </div>
+        <div className="grid gap-2 mobile-grid-2 md:grid-cols-2">
+          <input type="password" value={barber.password || ''} onChange={(event) => onFieldChange(barber.id, 'password', event.target.value)} placeholder="Пароль" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
+          <label className="flex items-center gap-3 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white">
+            Цвет карточки
+            <input type="color" value={colorValue} onChange={(event) => onFieldChange(barber.id, 'color', event.target.value)} className="h-8 w-16 cursor-pointer rounded border border-slate-500 bg-transparent" />
+          </label>
+        </div>
+        <textarea value={barber.description || ''} onChange={(event) => onFieldChange(barber.id, 'description', event.target.value)} placeholder="Описание" rows={4} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
+        <div className="grid gap-2 mobile-grid-2 md:grid-cols-2">
+          <input type="tel" value={barber.phone || ''} onChange={(event) => onFieldChange(barber.id, 'phone', event.target.value)} placeholder="Телефон" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
+          <input value={barber.telegramId || ''} onChange={(event) => onFieldChange(barber.id, 'telegramId', event.target.value)} placeholder="Telegram ID" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
+        </div>
+        <BarberAvatarPicker value={barber.avatarUrl} onChange={(value) => onFieldChange(barber.id, 'avatarUrl', value)} />
+        <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+          <input type="checkbox" checked={barber.isActive !== false} onChange={(event) => onFieldChange(barber.id, 'isActive', event.target.checked)} />
+          Активен
+        </label>
+        <div className="flex gap-3 pt-2">
+          <button onClick={() => onSave(barber)} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
+            Сохранить
+          </button>
+          <button onClick={() => onDelete(barber)} className="rounded-lg border border-rose-600 px-4 py-2 text-sm text-rose-400">
+            Удалить
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
-      <SectionCard title="РљРѕРјР°РЅРґР°">
+      <SectionCard title="Барберы">
         {barbers.length === 0 ? (
-          <p className="text-slate-400">РЎРїРёСЃРѕРє Р±Р°СЂР±РµСЂРѕРІ РїСѓСЃС‚.</p>
+          <p className="text-slate-400">Список барберов пока пуст.</p>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2">
-            {barbers.map((barber) => {
-              const colorValue = /^#/.test(barber.color || '') ? barber.color : '#6d28d9';
-              return (
-                <div key={barber.id} className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900/40 p-4">
-                  <input value={barber.name || ''} onChange={(event) => onFieldChange(barber.id, 'name', event.target.value)} placeholder="РРјСЏ" className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <input value={barber.nickname || ''} onChange={(event) => onFieldChange(barber.id, 'nickname', event.target.value)} placeholder="РќРёРє" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-                    <div className="space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2">
-                      <label className="flex items-center justify-between text-sm text-slate-300">
-                        <span>Р В Р ВµР в„–РЎвЂљР С‘Р Р…Р С–</span>
-                        <span className="font-semibold text-white">{barber.rating || RATING_MAX}</span>
-                      </label>
-                      <input
-                        type="range"
-                        min={RATING_MIN}
-                        max={RATING_MAX}
-                        step={RATING_STEP}
-                        value={Number(barber.rating) || RATING_MAX}
-                        onChange={(event) => onFieldChange(barber.id, 'rating', event.target.value)}
-                        className="w-full accent-indigo-500"
-                      />
-                    </div>                    </div>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <input value={barber.description || ''} onChange={(event) => onFieldChange(barber.id, 'description', event.target.value)} placeholder="РћРїРёСЃР°РЅРёРµ" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-                    <label className="flex items-center gap-3 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white">
-                      Р¦РІРµС‚
-                      <input type="color" value={colorValue} onChange={(event) => onFieldChange(barber.id, 'color', event.target.value)} className="h-8 w-16 cursor-pointer rounded border border-slate-500 bg-transparent" />
-                    </label>
-                  </div>
-                  <BarberAvatarPicker value={barber.avatarUrl} onChange={(value) => onFieldChange(barber.id, 'avatarUrl', value)} />
-                  <label className="inline-flex items-center gap-2 text-sm text-slate-300">
-                    <input type="checkbox" checked={barber.isActive !== false} onChange={(event) => onFieldChange(barber.id, 'isActive', event.target.checked)} />
-                    РђРєС‚РёРІРµРЅ
-                  </label>
-                  <div className="flex gap-3 pt-2">
-                    <button onClick={() => onSave(barber)} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
-                      РЎРѕС…СЂР°РЅРёС‚СЊ
-                    </button>
-                    <button onClick={() => onDelete(barber)} className="rounded-lg border border-rose-600 px-4 py-2 text-sm text-rose-400">
-                      РЈРґР°Р»РёС‚СЊ
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="grid gap-4 mobile-grid-2 lg:grid-cols-2">
+            {barbers.map((barber) => renderBarberCard(barber))}
           </div>
         )}
       </SectionCard>
 
-      <SectionCard title="Р”РѕР±Р°РІРёС‚СЊ Р±Р°СЂР±РµСЂР°">
-        <div className="grid gap-3 md:grid-cols-2">
-          <input value={newBarber.name} onChange={(event) => updateNewBarber('name', event.target.value)} placeholder="РРјСЏ" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-                    <input value={newBarber.nickname} onChange={(event) => updateNewBarber('nickname', event.target.value)} placeholder="Ник" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-          <div className="space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2">
-            <label className="flex items-center justify-between text-sm text-slate-300">
-              <span>Рейтинг</span>
-              <span className="font-semibold text-white">{newBarber.rating || RATING_MAX}</span>
-            </label>
-            <input
-              type="range"
-              min={RATING_MIN}
-              max={RATING_MAX}
-              step={RATING_STEP}
-              value={Number(newBarber.rating) || RATING_MAX}
-              onChange={(event) => updateNewBarber('rating', event.target.value)}
-              className="w-full accent-indigo-500"
-            />
+      <SectionCard title="Добавить барбера">
+        <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <input value={newBarber.name} onChange={(event) => updateNewBarber('name', event.target.value)} placeholder="Имя" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-1.5 text-sm text-white" />
+            <RatingSlider dense value={newBarber.rating} onChange={(event) => updateNewBarber('rating', event.target.value)} />
           </div>
+          <div className="grid gap-2 mobile-grid-2 md:grid-cols-2">
+            <input type="password" value={newBarber.password} onChange={(event) => updateNewBarber('password', event.target.value)} placeholder="Пароль" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
+            <label className="flex items-center gap-3 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white">
+              Цвет карточки
+              <input type="color" value={newBarber.color} onChange={(event) => updateNewBarber('color', event.target.value)} className="h-8 w-16 cursor-pointer rounded border border-slate-500 bg-transparent" />
+            </label>
+          </div>
+          <textarea value={newBarber.description} onChange={(event) => updateNewBarber('description', event.target.value)} placeholder="Описание" rows={3} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
+          <div className="grid gap-2 mobile-grid-2 md:grid-cols-2">
+            <input type="tel" value={newBarber.phone} onChange={(event) => updateNewBarber('phone', event.target.value)} placeholder="Телефон" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
+            <input value={newBarber.telegramId} onChange={(event) => updateNewBarber('telegramId', event.target.value)} placeholder="Telegram ID" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
+          </div>
+          <BarberAvatarPicker value={newBarber.avatarUrl} onChange={(value) => updateNewBarber('avatarUrl', value)} />
           <label className="inline-flex items-center gap-2 text-sm text-slate-300">
             <input type="checkbox" checked={newBarber.isActive} onChange={(event) => updateNewBarber('isActive', event.target.checked)} />
-            РђРєС‚РёРІРµРЅ
+            Активен
           </label>
+          <button onClick={handleCreateBarber} className="w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white hover:bg-emerald-500">
+            Добавить
+          </button>
         </div>
-        <button
-          onClick={() => {
-            if (!newBarber.name) return;
-            onAdd(newBarber);
-            setNewBarber({ name: '', nickname: '', rating: '5', color: '#6d28d9', avatarUrl: AVATAR_PRESETS[0], isActive: true });
-          }}
-          className="mt-4 w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white hover:bg-emerald-500"
-        >
-          Р”РѕР±Р°РІРёС‚СЊ
-        </button>
       </SectionCard>
     </div>
   );
 };
+
 const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChange, onSave, onDelete, onAdd }) => {
   const [newService, setNewService] = useState({ name: '', duration: 60, prices: {} });
 
@@ -560,16 +738,16 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
 
   return (
     <div className="space-y-6">
-      <SectionCard title="РљР°С‚Р°Р»РѕРі">
+      <SectionCard title="Каталог">
         {services.length === 0 ? (
-          <p className="text-slate-400">РџРѕРєР° РЅРµС‚ РЅРё РѕРґРЅРѕР№ СѓСЃР»СѓРіРё.</p>
+          <p className="text-slate-400">Пока нет ни одной услуги.</p>
         ) : (
           <div className="overflow-auto">
-            <table className="min-w-full table-fixed text-sm">
+            <table className="min-w-[900px] table-fixed text-sm">
               <thead>
                 <tr className="text-left text-slate-400">
-                  <th className="p-2">РќР°Р·РІР°РЅРёРµ</th>
-                  <th className="p-2 w-32">Р”Р»РёС‚РµР»СЊРЅРѕСЃС‚СЊ</th>
+                  <th className="p-2">Название</th>
+                  <th className="p-2 w-32">Длительность</th>
                   {barbers.map((barber) => (
                     <th key={barber.id} className="p-2 text-center">{barber.name}</th>
                   ))}
@@ -587,16 +765,16 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
                     </td>
                     {barbers.map((barber) => (
                       <td key={barber.id} className="p-2 align-top">
-                        <input type="number" value={service.prices?.[barber.id] ?? ''} onChange={(event) => onPriceChange(service.id, barber.id, event.target.value)} className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-2 text-white" placeholder="Р¦РµРЅР°" />
+                        <input type="number" value={service.prices?.[barber.id] ?? ''} onChange={(event) => onPriceChange(service.id, barber.id, event.target.value)} className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-2 text-white" placeholder="Цена" />
                       </td>
                     ))}
                     <td className="p-2 align-top">
                       <div className="flex gap-2">
                         <button onClick={() => onSave(service)} className="rounded-lg bg-indigo-600 px-3 py-1 text-xs text-white">
-                          РЎРѕС…СЂР°РЅРёС‚СЊ
+                          Сохранить
                         </button>
                         <button onClick={() => onDelete(service)} className="rounded-lg border border-rose-500 px-3 py-1 text-xs text-rose-400">
-                          РЈРґР°Р»РёС‚СЊ
+                          Удалить
                         </button>
                       </div>
                     </td>
@@ -608,19 +786,19 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
         )}
       </SectionCard>
 
-      <SectionCard title="РќРѕРІР°СЏ СѓСЃР»СѓРіР°">
-        <div className="grid gap-3 md:grid-cols-2">
-          <input value={newService.name} onChange={(event) => updateNewService('name', event.target.value)} placeholder="РќР°Р·РІР°РЅРёРµ" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-          <input type="number" value={newService.duration} onChange={(event) => updateNewService('duration', Number(event.target.value))} placeholder="Р”Р»РёС‚РµР»СЊРЅРѕСЃС‚СЊ, РјРёРЅ" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
+      <SectionCard title="Новая услуга">
+        <div className="grid gap-3 mobile-grid-2 md:grid-cols-2">
+          <input value={newService.name} onChange={(event) => updateNewService('name', event.target.value)} placeholder="Название" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
+          <input type="number" value={newService.duration} onChange={(event) => updateNewService('duration', Number(event.target.value))} placeholder="Длительность, мин" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
         </div>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="mt-3 grid gap-3 mobile-grid-2 md:grid-cols-2">
           {barbers.map((barber) => (
             <input
               key={barber.id}
               type="number"
               value={newService.prices?.[barber.id] ?? ''}
               onChange={(event) => updateNewServicePrice(barber.id, event.target.value)}
-              placeholder={`Р¦РµРЅР° РґР»СЏ ${barber.name}`}
+              placeholder={`Цена для ${barber.name}`}
               className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
             />
           ))}
@@ -633,7 +811,7 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
           }}
           className="mt-4 w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white hover:bg-emerald-500"
         >
-          Р”РѕР±Р°РІРёС‚СЊ СѓСЃР»СѓРіСѓ
+          Добавить услугу
         </button>
       </SectionCard>
     </div>
@@ -642,13 +820,37 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
 const MultiSelectCell = ({ value, options = [], onCommit }) => {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(parseMultiValue(value));
-  const popoverRef = useRef(null);
+  const anchorRef = useRef(null);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
 
   useEffect(() => {
     setDraft(parseMultiValue(value));
   }, [value]);
 
-  useOutsideClick(popoverRef, open ? () => setOpen(false) : null);
+  const updatePosition = useCallback(() => {
+    if (!anchorRef.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    const panelWidth = 320;
+    const panelHeight = 360;
+    const nextLeft = Math.min(rect.left, window.innerWidth - panelWidth - 16);
+    const nextTop = Math.min(rect.bottom + 8, window.innerHeight - panelHeight - 16);
+    setPosition({
+      top: Math.max(16, nextTop),
+      left: Math.max(16, nextLeft),
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    updatePosition();
+    const handler = () => updatePosition();
+    window.addEventListener('resize', handler);
+    window.addEventListener('scroll', handler, true);
+    return () => {
+      window.removeEventListener('resize', handler);
+      window.removeEventListener('scroll', handler, true);
+    };
+  }, [open, updatePosition]);
 
   const toggleOption = (option) => {
     setDraft((prev) => (prev.includes(option) ? prev.filter((item) => item !== option) : [...prev, option]));
@@ -659,45 +861,103 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
     setOpen(false);
   };
 
+  const summary = draft.length ? draft.join(', ') : 'Выбрать услуги';
+
   return (
-    <div className="relative">
-      <button onClick={() => setOpen((prev) => !prev)} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-left text-sm text-white">
-        {draft.length ? draft.join(', ') : 'Р’С‹Р±СЂР°С‚СЊ'}
+    <>
+      <button
+        ref={anchorRef}
+        onClick={() => setOpen(true)}
+        className="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-left text-sm text-white hover:border-indigo-500"
+      >
+        <span className="block max-h-[40px] overflow-hidden text-ellipsis whitespace-pre-wrap">{summary}</span>
       </button>
-      {open && (
-        <div ref={popoverRef} className="absolute right-0 z-30 mt-2 w-64 rounded-2xl border border-slate-700 bg-slate-900 p-3 shadow-2xl">
-          <div className="max-h-60 space-y-2 overflow-auto">
-            {options.length === 0 && <p className="text-sm text-slate-500">РќРµС‚ РґР°РЅРЅС‹С…</p>}
-            {options.map((option) => (
-              <label key={option} className="flex items-center gap-2 text-sm text-slate-200">
-                <input type="checkbox" checked={draft.includes(option)} onChange={() => toggleOption(option)} />
-                {option}
-              </label>
-            ))}
-          </div>
-          <div className="mt-3 flex justify-end gap-2 text-sm">
-            <button onClick={() => setDraft(parseMultiValue(value))} className="text-slate-400 hover:text-white">
-              РЎР±СЂРѕСЃРёС‚СЊ
-            </button>
-            <button onClick={handleSave} className="rounded-lg bg-indigo-600 px-3 py-1 text-white hover:bg-indigo-500">
-              РЎРѕС…СЂР°РЅРёС‚СЊ
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+      {open &&
+        createPortal(
+          <div className="fixed inset-0 z-50" onClick={() => setOpen(false)}>
+            <div
+              className="absolute w-full max-w-xs rounded-2xl border border-slate-700 bg-slate-900/95 p-3 text-sm text-white shadow-2xl"
+              style={{ top: `${position.top}px`, left: `${position.left}px` }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <p className="font-semibold">Услуги</p>
+                <button
+                  type="button"
+                  className="rounded-full p-1 text-slate-400 hover:text-white"
+                  onClick={() => {
+                    setDraft(parseMultiValue(value));
+                    setOpen(false);
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+              {draft.length > 0 && (
+                <div className="mt-2 mb-2 flex flex-wrap gap-2">
+                  {draft.map((service) => (
+                    <button
+                      type="button"
+                      key={service}
+                      className="flex items-center gap-1 rounded-full bg-indigo-500/20 px-2 py-1 text-xs text-indigo-200"
+                      onClick={() => toggleOption(service)}
+                    >
+                      {service}
+                      <span className="text-slate-400">×</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                {options.length === 0 && <p className="text-slate-400">Нет доступных услуг</p>}
+                {options.map((option) => {
+                  const isActive = draft.includes(option);
+                  return (
+                    <label
+                      key={option}
+                      className={classNames(
+                        'flex items-center justify-between rounded-xl border px-3 py-2',
+                        isActive ? 'border-indigo-500 bg-indigo-500/10 text-white' : 'border-slate-700 text-slate-200 hover:border-indigo-500/60'
+                      )}
+                    >
+                      <span className="pr-2 text-left">{option}</span>
+                      <input type="checkbox" checked={isActive} onChange={() => toggleOption(option)} className="h-4 w-4 rounded border-slate-500 accent-indigo-500" />
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <button type="button" onClick={() => setDraft([])} className="text-xs text-slate-400 hover:text-white">
+                  Очистить
+                </button>
+                <button type="button" onClick={handleSave} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500">
+                  Готово
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 };
 
 const TimeRangePicker = ({
   value,
   onChange,
-  title = 'Р’С‹Р±РѕСЂ РІСЂРµРјРµРЅРё',
-  placeholder = 'РќР°Р¶РјРёС‚Рµ, С‡С‚РѕР±С‹ РІС‹Р±СЂР°С‚СЊ',
+  title = 'Выбор времени',
+  placeholder = 'Нажмите, чтобы выбрать',
   buttonClassName = 'w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-left text-sm text-white',
 }) => {
   const [open, setOpen] = useState(false);
   const [{ start, end }, setDraft] = useState(() => parseTimeRangeValue(value));
+
+  const normalizeHourValue = (inputValue) => {
+    if (!inputValue) return '';
+    const [hours] = inputValue.split(':');
+    if (!hours) return '';
+    return `${hours.padStart(2, '0')}:00`;
+  };
 
   const handleOpen = () => {
     setDraft(parseTimeRangeValue(value));
@@ -724,33 +984,46 @@ const TimeRangePicker = ({
         title={title}
         isOpen={open}
         onClose={() => setOpen(false)}
+        maxWidthClass="max-w-md"
         footer={
           <>
             <button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-slate-600 px-4 py-2 text-white">
-              РћС‚РјРµРЅР°
+              Закрыть
             </button>
             <button type="button" onClick={handleSave} className="rounded-lg bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-500">
-              РЎРѕС…СЂР°РЅРёС‚СЊ
+              Сохранить
             </button>
           </>
         }
       >
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-300">Р’С‹Р±РµСЂРёС‚Рµ РІСЂРµРјСЏ РЅР°С‡Р°Р»Р° Рё РєРѕРЅС†Р° РІРёР·РёС‚Р°</p>
+            <p className="text-sm text-slate-300">Выберите время для начала и завершения</p>
             <button type="button" onClick={handleClear} className="text-xs text-slate-400 hover:text-slate-100">
-              РћС‡РёСЃС‚РёС‚СЊ
+              Очистить
             </button>
           </div>
           <div className="flex flex-wrap items-center justify-around gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
             <div className="text-center">
-              <label className="block text-sm font-medium text-slate-400">РќР°С‡Р°Р»Рѕ</label>
-              <input type="time" value={start} onChange={(event) => setDraft((prev) => ({ ...prev, start: event.target.value }))} className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-900 px-2 py-2 text-center text-lg text-white" />
+              <label className="block text-sm font-medium text-slate-400">Старт</label>
+              <input
+                type="time"
+                step="3600"
+                value={start}
+                onChange={(event) => setDraft((prev) => ({ ...prev, start: normalizeHourValue(event.target.value) }))}
+                className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-900 px-2 py-2 text-center text-lg text-white"
+              />
             </div>
-            <span className="text-2xl font-light text-slate-500">вЂ”</span>
+            <span className="text-2xl font-light text-slate-500">-</span>
             <div className="text-center">
-              <label className="block text-sm font-medium text-slate-400">РљРѕРЅРµС†</label>
-              <input type="time" value={end} onChange={(event) => setDraft((prev) => ({ ...prev, end: event.target.value }))} className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-900 px-2 py-2 text-center text-lg text-white" />
+              <label className="block text-sm font-medium text-slate-400">Финиш</label>
+              <input
+                type="time"
+                step="3600"
+                value={end}
+                onChange={(event) => setDraft((prev) => ({ ...prev, end: normalizeHourValue(event.target.value) }))}
+                className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-900 px-2 py-2 text-center text-lg text-white"
+              />
             </div>
           </div>
         </div>
@@ -758,7 +1031,6 @@ const TimeRangePicker = ({
     </>
   );
 };
-
 const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableId }) => {
   const recordId = record?.id || record?.Id || record?.ID || record?.recordId;
   const value = record[column.key];
@@ -793,8 +1065,8 @@ const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableI
       <TimeRangePicker
         value={value || ''}
         onChange={(nextValue) => commit(nextValue)}
-        placeholder="вЂ”"
-        title={tableId === 'Schedules' ? 'Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ СЃР»РѕС‚РѕРІ' : 'Р’С‹Р±РѕСЂ РІСЂРµРјРµРЅРё'}
+        placeholder="—"
+        title={tableId === 'Schedules' ? 'Редактирование слотов' : 'Выбор времени'}
         buttonClassName="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-left text-sm text-white"
       />
     );
@@ -841,7 +1113,7 @@ const ColumnMenu = ({ columns, hiddenColumns = [], onToggle }) => {
   return (
     <div className="relative">
       <button onClick={() => setOpen((prev) => !prev)} className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-white">
-        РџРѕР»СЏ
+        Поля
       </button>
       {open && (
         <div ref={ref} className="absolute right-0 z-30 mt-2 w-56 space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 shadow-2xl">
@@ -858,7 +1130,14 @@ const ColumnMenu = ({ columns, hiddenColumns = [], onToggle }) => {
 };
 
 const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, placeholder = 'Нет данных' }) => {
+  const [query, setQuery] = useState('');
   const selected = useMemo(() => (Array.isArray(value) ? value : parseMultiValue(value)), [value]);
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!normalizedQuery) return options;
+    return options.filter((option) => option.toLowerCase().includes(normalizedQuery));
+  }, [options, normalizedQuery]);
+
   const toggle = (option) => {
     if (!onChange) return;
     const exists = selected.includes(option);
@@ -867,25 +1146,70 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
   };
 
   return (
-    <div className="space-y-2">
-      {label && <label className="text-sm text-slate-300">{label}</label>}
-      <div className="flex flex-wrap gap-2">
-        {options.length === 0 && <p className="text-sm text-slate-500">{placeholder}</p>}
-        {options.map((option) => {
-          const isActive = selected.includes(option);
-          return (
-            <label
-              key={option}
-              className={classNames(
-                'cursor-pointer rounded-full border px-3 py-1 text-sm font-medium transition',
-                isActive ? 'border-indigo-400 bg-indigo-500/20 text-white' : 'border-slate-600 text-slate-200 hover:border-indigo-400'
-              )}
+    <div className="space-y-3">
+      {label && (
+        <div className="flex items-center justify-between text-sm">
+          <label className="text-slate-300">{label}</label>
+          <span className="text-xs text-slate-400">{selected.length ? `${selected.length} выбрано` : 'Не выбрано'}</span>
+        </div>
+      )}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {selected.map((service) => (
+            <button
+              type="button"
+              key={service}
+              className="flex items-center gap-1 rounded-full bg-indigo-500/10 px-2 py-1 text-xs text-indigo-200"
+              onClick={() => toggle(service)}
             >
-              <input type="checkbox" className="sr-only" checked={isActive} onChange={() => toggle(option)} />
-              {option}
-            </label>
-          );
-        })}
+              {service}
+              <span className="text-slate-400">×</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="rounded-2xl border border-slate-700 bg-slate-900/60">
+        <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-2">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 1016.65 16.65z" />
+          </svg>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Поиск услуги"
+            className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none"
+          />
+          {query && (
+            <button type="button" onClick={() => setQuery('')} className="text-xs text-slate-400 hover:text-white">
+              Очистить
+            </button>
+          )}
+        </div>
+        <div className="max-h-56 overflow-y-auto p-2">
+          {filtered.length === 0 ? (
+            <p className="px-1 py-2 text-sm text-slate-500">{placeholder}</p>
+          ) : (
+            <div className="grid gap-1 sm:grid-cols-2">
+              {filtered.map((option) => {
+                const isActive = selected.includes(option);
+                return (
+                  <button
+                    type="button"
+                    key={option}
+                    onClick={() => toggle(option)}
+                    className={classNames(
+                      'flex items-center justify-between rounded-xl border px-3 py-2 text-left text-sm',
+                      isActive ? 'border-indigo-500 bg-indigo-500/10 text-white' : 'border-slate-700 bg-slate-900/40 text-slate-200 hover:border-indigo-500/40'
+                    )}
+                  >
+                    <span className="truncate">{option}</span>
+                    {isActive && <span className="text-xs text-indigo-300">✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -972,11 +1296,11 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset }) =
   return (
     <div className="relative">
       <button onClick={() => setOpen((prev) => !prev)} className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-white">
-        РЎС‚Р°С‚СѓСЃС‹
+        Статусы
       </button>
       {open && (
         <div ref={ref} className="absolute right-0 z-30 mt-2 w-56 space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 shadow-2xl">
-          {statuses.length === 0 && <p className="text-sm text-slate-500">РќРµС‚ СЃС‚Р°С‚СѓСЃРѕРІ</p>}
+          {statuses.length === 0 && <p className="text-sm text-slate-500">Нет статусов</p>}
           {statuses.map((status) => (
             <label key={status} className="flex items-center gap-2 text-sm text-slate-200">
               <input type="checkbox" checked={!hiddenStatuses.includes(status)} onChange={() => onToggle(status)} />
@@ -984,7 +1308,7 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset }) =
             </label>
           ))}
           <button onClick={onReset} className="text-sm text-indigo-300 hover:text-indigo-100">
-            РџРѕРєР°Р·Р°С‚СЊ РІСЃРµ
+            Показать все
           </button>
         </div>
       )}
@@ -1011,13 +1335,15 @@ const TableToolbar = ({
   canCreate,
   onOpenCreate,
   onRefresh,
+  showPastAppointments,
+  setShowPastAppointments,
 }) => (
   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
     <div className="flex flex-1 flex-wrap gap-3">
       <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="РџРѕРёСЃРє" className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white sm:w-64" />
       {supportsBarberFilter && (
         <select value={selectedBarber} onChange={(event) => setSelectedBarber(event.target.value)} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white">
-          <option value="all">Р’СЃРµ Р±Р°СЂР±РµСЂС‹</option>
+          <option value="all">Все барберы</option>
           {barbers.map((barber) => (
             <option key={barber} value={barber}>
               {barber}
@@ -1028,15 +1354,26 @@ const TableToolbar = ({
       {supportsStatusFilter && (
         <StatusMenu statuses={statuses} hiddenStatuses={hiddenStatuses} onToggle={toggleStatus} onReset={resetStatuses} />
       )}
+      {tableId === 'Appointments' && typeof setShowPastAppointments === 'function' && (
+        <label className="flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm text-white">
+          <input
+            type="checkbox"
+            className="accent-indigo-500"
+            checked={!!showPastAppointments}
+            onChange={(event) => setShowPastAppointments(event.target.checked)}
+          />
+          Показать прошедшие
+        </label>
+      )}
       <ColumnMenu columns={columns} hiddenColumns={hiddenColumns} onToggle={toggleColumn} />
     </div>
     <div className="flex gap-2">
       <button onClick={onRefresh} className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-white hover:bg-slate-800">
-        РћР±РЅРѕРІРёС‚СЊ
+        Обновить
       </button>
       {canCreate && (
         <button onClick={onOpenCreate} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500">
-          + Р”РѕР±Р°РІРёС‚СЊ
+          + Добавить
         </button>
       )}
     </div>
@@ -1074,8 +1411,8 @@ const DataTable = ({ tableId, rows, columns, hiddenColumns, sortConfig, onSort, 
   }
 
   return (
-    <div className="-mx-4 overflow-x-auto md:mx-0">
-      <table className="min-w-full table-auto text-sm">
+    <div className="-mx-4 overflow-x-auto overflow-y-visible pb-4 md:mx-0">
+      <table className="min-w-[860px] table-auto text-sm">
         <thead>
           <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
             {visibleColumns.map((column) => (
@@ -1086,7 +1423,7 @@ const DataTable = ({ tableId, rows, columns, hiddenColumns, sortConfig, onSort, 
                 </div>
               </th>
             ))}
-            {onDelete && <th className="p-2 text-right">Р”РµР№СЃС‚РІРёСЏ</th>}
+            {onDelete && <th className="p-2 text-right">Действия</th>}
           </tr>
         </thead>
         <tbody>
@@ -1100,7 +1437,7 @@ const DataTable = ({ tableId, rows, columns, hiddenColumns, sortConfig, onSort, 
               {onDelete && (
                 <td className="p-2 text-right">
                   <button onClick={() => onDelete(record)} className="rounded-lg border border-rose-500 px-3 py-1 text-xs text-rose-400">
-                    РЈРґР°Р»РёС‚СЊ
+                    Удалить
                   </button>
                 </td>
               )}
@@ -1149,22 +1486,22 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
       CustomerName: client.name || prev.CustomerName,
       Phone: client.phone || prev.Phone,
       Barber: prev.Barber || client.preferredBarber || '',
-      UserID: client.id || prev.UserID || '',
+      UserID: client.telegramId || client.TelegramID || client.id || prev.UserID || '',
     }));
   };
 
   return (
     <Modal
-      title={`РќРѕРІР°СЏ Р·Р°РїРёСЃСЊ: ${tableName}`}
+      title={`Новая запись: ${tableName}`}
       isOpen={isOpen}
       onClose={onClose}
       footer={
         <>
           <button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">
-            РћС‚РјРµРЅР°
+            Отмена
           </button>
           <button onClick={handleSubmit} className="rounded-lg bg-emerald-600 px-4 py-2 text-white">
-            РЎРѕС…СЂР°РЅРёС‚СЊ
+            Сохранить
           </button>
         </>
       }
@@ -1219,8 +1556,8 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
                 <TimeRangePicker
                   value={value || ''}
                   onChange={(nextValue) => setDraft((prev) => ({ ...prev, [column.key]: nextValue }))}
-                  placeholder={column.key === 'Week' ? 'вЂ”' : 'РќР°Р¶РјРёС‚Рµ, С‡С‚РѕР±С‹ РІС‹Р±СЂР°С‚СЊ'}
-                  title={column.key === 'Week' ? 'Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ СЃР»РѕС‚РѕРІ' : 'Р’С‹Р±РѕСЂ РІСЂРµРјРµРЅРё'}
+                  placeholder={column.key === 'Week' ? '—' : 'Нажмите, чтобы выбрать'}
+                  title={column.key === 'Week' ? 'Редактирование слотов' : 'Выбор времени'}
                 />
               </div>
             );
@@ -1239,22 +1576,22 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
 
 const ProfileModal = ({ state, onClose }) => (
   <Modal
-    title={state.data?.user?.Name || 'РџСЂРѕС„РёР»СЊ РєР»РёРµРЅС‚Р°'}
+    title={state.data?.user?.Name || 'Профиль клиента'}
     isOpen={state.open}
     onClose={onClose}
-    footer={<button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">Р—Р°РєСЂС‹С‚СЊ</button>}
+    footer={<button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">Закрыть</button>}
   >
-    {state.loading && <LoadingState label="Р—Р°РіСЂСѓР¶Р°СЋ РїСЂРѕС„РёР»СЊ..." />}
+    {state.loading && <LoadingState label="Загружаю профиль..." />}
     {!state.loading && state.data?.error && <ErrorBanner message={state.data.error} />}
     {!state.loading && state.data?.user && (
       <div className="space-y-4">
         <div className="grid gap-2 text-sm text-slate-200">
-          <div><span className="text-slate-400">РўРµР»РµС„РѕРЅ:</span> {state.data.user.Phone || '-'}</div>
+          <div><span className="text-slate-400">Телефон:</span> {state.data.user.Phone || '-'}</div>
           <div><span className="text-slate-400">Telegram:</span> {state.data.user.TelegramID || '-'}</div>
-          <div><span className="text-slate-400">Р‘Р°СЂР±РµСЂ:</span> {state.data.user.Barber || '-'}</div>
+          <div><span className="text-slate-400">Барбер:</span> {state.data.user.Barber || '-'}</div>
         </div>
         <div>
-          <p className="text-sm text-slate-400">РСЃС‚РѕСЂРёСЏ РІРёР·РёС‚РѕРІ</p>
+          <p className="text-sm text-slate-400">История визитов</p>
           <div className="mt-2 max-h-64 space-y-2 overflow-auto">
             {state.data.appointments?.length ? (
               state.data.appointments.map((appt) => (
@@ -1265,7 +1602,7 @@ const ProfileModal = ({ state, onClose }) => (
                 </div>
               ))
             ) : (
-              <p className="text-sm text-slate-500">Р—Р°РїРёСЃРµР№ РЅРµС‚.</p>
+              <p className="text-sm text-slate-500">Записей нет.</p>
             )}
           </div>
         </div>
@@ -1276,22 +1613,22 @@ const ProfileModal = ({ state, onClose }) => (
 
 const BackupsPanel = ({ backups = [], onRestore, onCreate }) => (
   <SectionCard
-    title="Р РµР·РµСЂРІРЅС‹Рµ РєРѕРїРёРё"
+    title="Резервные копии"
     actions={
       <button onClick={onCreate} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500">
-        РЎРѕР·РґР°С‚СЊ РєРѕРїРёСЋ
+        Создать копию
       </button>
     }
   >
     {backups.length === 0 ? (
-      <p className="text-slate-400">РСЃС‚РѕСЂРёСЏ РїСѓСЃС‚Р°.</p>
+      <p className="text-slate-400">История пуста.</p>
     ) : (
       <div className="space-y-2">
         {backups.map((backup) => (
           <div key={backup} className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-slate-200">
             <span>{backup}</span>
             <button onClick={() => onRestore(backup)} className="text-indigo-300 hover:text-indigo-100">
-              Р’РѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ
+              Восстановить
             </button>
           </div>
         ))}
@@ -1343,55 +1680,64 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, is
         CustomerName: client.name || prev.CustomerName,
         Phone: client.phone || prev.Phone,
         Barber: prev.Barber || client.preferredBarber || '',
-        UserID: client.id || prev.UserID || '',
+        UserID: client.telegramId || client.TelegramID || client.id || prev.UserID || '',
       };
     });
   };
 
   return (
     <Modal
-      title={isNew ? 'РќРѕРІР°СЏ Р·Р°РїРёСЃСЊ' : `Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ Р·Р°РїРёСЃРё ${draft.CustomerName || ''}`}
+      title={isNew ? 'Новая запись' : `Редактирование записи ${draft.CustomerName || ''}`}
       isOpen={open}
       onClose={onClose}
       footer={
         <>
           <button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">
-            РћС‚РјРµРЅР°
+            Отмена
           </button>
           <button onClick={handleSubmit} className="rounded-lg bg-emerald-600 px-4 py-2 text-white">
-            РЎРѕС…СЂР°РЅРёС‚СЊ
+            Сохранить
           </button>
         </>
       }
     >
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 mobile-grid-2 md:grid-cols-2">
         <ClientLookupInput
-          label="Клиент"
+          label="Имя клиента"
           value={draft.CustomerName || ''}
           onChange={(nextValue) => handleChange('CustomerName', nextValue)}
           clients={clients}
           onSelectClient={handleClientAutoFill}
         />
-        <input value={draft.Phone || ''} onChange={(event) => handleChange('Phone', event.target.value)} placeholder="РўРµР»РµС„РѕРЅ" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-        <select value={draft.Barber || ''} onChange={(event) => handleChange('Barber', event.target.value)} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white">
-          <option value="">Р‘Р°СЂР±РµСЂ</option>
+        <div className="space-y-1">
+          <label className="text-sm text-slate-300">Телефон</label>
+          <input
+            type="tel"
+            value={draft.Phone || ''}
+            onChange={(event) => handleChange('Phone', event.target.value)}
+            placeholder="+7..."
+            className="h-11 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 text-white"
+          />
+        </div>
+        <select value={draft.Barber || ''} onChange={(event) => handleChange('Barber', event.target.value)} className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white">
+          <option value="">Барбер</option>
           {(options.barbers || []).map((barber) => (
             <option key={barber} value={barber}>
               {barber}
             </option>
           ))}
         </select>
-        <input type="date" value={draft.Date ? String(draft.Date).slice(0, 10) : ''} onChange={(event) => handleChange('Date', event.target.value)} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-        <TimeRangePicker value={draft.Time || ''} onChange={(nextValue) => handleChange('Time', nextValue)} placeholder="РќР°Р¶РјРёС‚Рµ, С‡С‚РѕР±С‹ РІС‹Р±СЂР°С‚СЊ" />
-        <select value={draft.Status || ''} onChange={(event) => handleChange('Status', event.target.value)} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white">
-          <option value="">РЎС‚Р°С‚СѓСЃ</option>
+        <input type="date" value={draft.Date ? String(draft.Date).slice(0, 10) : ''} onChange={(event) => handleChange('Date', event.target.value)} className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white" />
+        <TimeRangePicker value={draft.Time || ''} onChange={(nextValue) => handleChange('Time', nextValue)} placeholder="Нажмите, чтобы выбрать" />
+        <select value={draft.Status || ''} onChange={(event) => handleChange('Status', event.target.value)} className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white">
+          <option value="">Статус</option>
           {(options.statuses || []).map((status) => (
             <option key={status} value={status}>
               {status}
             </option>
           ))}
         </select>
-        <div className="md:col-span-2">
+        <div className="col-span-2">
           <MultiSelectCheckboxes
             label="Услуги"
             options={options.services || []}
@@ -1404,7 +1750,7 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, is
     </Modal>
   );
 };
-const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenProfile, clients = [] }) => {
+const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenProfile, clients = [], currentUser = null }) => {
   const [activeTable, setActiveTable] = useLocalStorage('tables.active', 'Appointments');
   const [tables, setTables] = useState(() => DATA_TABLES.reduce((acc, table) => ({ ...acc, [table]: [] }), {}));
   const [dropdownOptions, setDropdownOptions] = useState(sharedOptions || { barbers: [], services: [], statuses: [] });
@@ -1425,6 +1771,21 @@ const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenPro
   );
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [compactTableView, setCompactTableView] = useState(window.innerWidth < 768);
+  const [showPastAppointments, setShowPastAppointments] = useLocalStorage('tables.showPastAppointments', true);
+  const appointmentTemplate = useMemo(
+    () => ({
+      id: null,
+      CustomerName: '',
+      Phone: '',
+      Barber: pickBarberForUser(currentUser, dropdownOptions.barbers || []),
+      Date: new Date().toISOString().slice(0, 10),
+      Time: '',
+      Status: normalizeStatusValue((dropdownOptions.statuses && dropdownOptions.statuses[0]) || 'Новая запись'),
+      Services: '',
+      UserID: '',
+    }),
+    [dropdownOptions, currentUser?.displayName, currentUser?.username]
+  );
 
   useEffect(() => {
     if (sharedOptions) {
@@ -1480,7 +1841,7 @@ const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenPro
       onOptionsUpdate?.(normalizedOptions);
     } catch (error) {
       console.error('Table fetch failed', error);
-      setTableError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С‚Р°Р±Р»РёС†С‹');
+      setTableError(error.message || 'Не удалось загрузить таблицы');
     } finally {
       setIsFetching(false);
     }
@@ -1506,6 +1867,7 @@ const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenPro
       const nowTs = Date.now();
       rows = rows.filter((row) => {
         if (hiddenStatuses.length && hiddenStatuses.includes(row.Status)) return false;
+        if (showPastAppointments) return true;
         return shouldDisplayAppointment(row, nowTs);
       });
     }
@@ -1522,7 +1884,7 @@ const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenPro
       });
     }
     return rows;
-  }, [tables, activeTable, selectedBarber, hiddenStatuses, searchTerm, visibleColumns, sortConfig]);
+  }, [tables, activeTable, selectedBarber, hiddenStatuses, searchTerm, visibleColumns, sortConfig, showPastAppointments]);
 
   const handleSort = (columnKey) => {
     setSortConfigs((prev) => {
@@ -1572,14 +1934,14 @@ const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenPro
       await apiRequest(`/${tableId}/${encodeURIComponent(recordId)}`, { method: 'PUT', body: JSON.stringify(payload) });
     } catch (error) {
       console.error('Update failed', error);
-      setTableError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ Р·Р°РїРёСЃСЊ');
+      setTableError(error.message || 'Не удалось обновить запись');
       setTables((prev) => ({ ...prev, [tableId]: original }));
     }
   };
 
   const handleDelete = async (record) => {
     if (!record || activeTable === 'Schedules') return;
-    if (!window.confirm('РЈРґР°Р»РёС‚СЊ Р·Р°РїРёСЃСЊ Р±РµР· РІРѕР·РјРѕР¶РЅРѕСЃС‚Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ?')) return;
+    if (!window.confirm('Удалить запись без возможности восстановления?')) return;
     const tableId = activeTable;
     const original = tables[tableId] || [];
     setTables((prev) => {
@@ -1590,7 +1952,7 @@ const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenPro
       await apiRequest(`/${tableId}/${encodeURIComponent(record.id)}`, { method: 'DELETE' });
     } catch (error) {
       console.error('Delete failed', error);
-      setTableError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ Р·Р°РїРёСЃСЊ');
+      setTableError(error.message || 'Не удалось удалить запись');
       setTables((prev) => ({ ...prev, [tableId]: original }));
     }
   };
@@ -1611,7 +1973,7 @@ const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenPro
       fetchTables();
     } catch (error) {
       console.error('Create failed', error);
-      setTableError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ Р·Р°РїРёСЃСЊ');
+      setTableError(error.message || 'Не удалось создать запись');
     }
   };
 
@@ -1656,9 +2018,11 @@ const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenPro
             canCreate={tableSettings.canCreate}
             onOpenCreate={() => setCreateModalOpen(true)}
             onRefresh={fetchTables}
+            showPastAppointments={showPastAppointments}
+            setShowPastAppointments={setShowPastAppointments}
           />
           {isFetching ? (
-            <LoadingState label="РћР±РЅРѕРІР»СЏСЋ С‚Р°Р±Р»РёС†С‹..." />
+            <LoadingState label="Обновляю таблицы..." />
           ) : (
             <div className="mt-4">
               <DataTable
@@ -1679,19 +2043,30 @@ const TablesWorkspace = ({ apiRequest, sharedOptions, onOptionsUpdate, onOpenPro
         </SectionCard>
       )}
 
-      {tableSettings.canCreate && (
-        <CreateRecordModal
-          isOpen={createModalOpen}
-          onClose={() => setCreateModalOpen(false)}
-          onSave={handleCreateRecord}
-          columns={currentColumns}
-          tableName={tableSettings.label}
-          options={dropdownOptions}
-          tableId={activeTable}
-          clients={clients}
-          hiddenFields={activeTable === 'Appointments' ? ['UserID', 'Reminder2hClientSent', 'Reminder2hBarberSent'] : []}
-        />
-      )}
+      {tableSettings.canCreate &&
+        (activeTable === 'Appointments' ? (
+          <AppointmentModal
+            open={createModalOpen}
+            appointment={appointmentTemplate}
+            options={dropdownOptions}
+            onClose={() => setCreateModalOpen(false)}
+            onSave={({ payload }) => handleCreateRecord(payload)}
+            isNew
+            clients={clients}
+          />
+        ) : (
+          <CreateRecordModal
+            isOpen={createModalOpen}
+            onClose={() => setCreateModalOpen(false)}
+            onSave={handleCreateRecord}
+            columns={currentColumns}
+            tableName={tableSettings.label}
+            options={dropdownOptions}
+            tableId={activeTable}
+            clients={clients}
+            hiddenFields={activeTable === 'Appointments' ? ['UserID', 'Reminder2hClientSent', 'Reminder2hBarberSent'] : []}
+          />
+        ))}
     </div>
   );
 };
@@ -1728,42 +2103,42 @@ const BotControlView = ({
       <div className="space-y-6">
         <BackupsPanel backups={backups} onRestore={onRestoreBackup} onCreate={onCreateBackup} />
 
-        <SectionCard title="Р вЂєР С‘РЎвЂ Р ВµР Р…Р В·Р С‘РЎРЏ Р С‘ Р С•Р В±Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С‘РЎРЏ">
+        <SectionCard title="Лицензия и регистрация">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
-              <p className="font-semibold">Р вЂєР С‘РЎвЂ Р ВµР Р…Р В·Р С‘РЎРЏ</p>
-              <p className="mt-1">Р РЋРЎвЂљР В°РЎвЂљРЎС“РЎРѓ: {licenseStatus?.valid ? 'Р В°Р С”РЎвЂљР С‘Р Р†Р Р…Р В°' : 'Р Р…Р Вµ Р С—Р С•Р Т‘РЎвЂљР Р†Р ВµРЎР‚Р В¶Р Т‘Р ВµР Р…Р В°'}</p>
-              <p>Р РЋР С•Р С•Р В±РЎвЂ°Р ВµР Р…Р С‘Р Вµ: {licenseStatus?.message || 'Р Р…Р ВµРЎвЂљ Р Т‘Р В°Р Р…Р Р…РЎвЂ№РЎвЂ¦'}</p>
-              {licenseStatus?.license?.owner && <p>Р вЂ™Р В»Р В°Р Т‘Р ВµР В»Р ВµРЎвЂ : {licenseStatus.license.owner}</p>}
-              {licenseStatus?.license?.expiresAt && <p>Р вЂќР ВµР в„–РЎРѓРЎвЂљР Р†РЎС“Р ВµРЎвЂљ Р Р…Р ВµРЎР‚Р Вµ Р Р…Р ВµР Т‘ {formatDate(licenseStatus.license.expiresAt)}</p>}
+              <p className="font-semibold">Лицензия</p>
+              <p className="mt-1">Статус: {licenseStatus?.valid ? 'Активна' : 'Не подтверждена'}</p>
+              <p>Комментарий: {licenseStatus?.message || 'Нет данных'}</p>
+              {licenseStatus?.license?.owner && <p>Владелец: {licenseStatus.license.owner}</p>}
+              {licenseStatus?.license?.expiresAt && <p>Действует до {formatDate(licenseStatus.license.expiresAt)}</p>}
             </div>
             <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
-              <p className="font-semibold">Р вЂ¦Р С•Р Т‘Р В¾Р С‘Р Т‘Р В°Р в„–РЎвЂљР С‘ РЎРѓР В¸Р Т‘Р ВµРЎР‚Р ВµР Р…Р С‘</p>
-              <p className="mt-1">{licenseStatus?.license?.number || 'Р Р…Р Вµ Р С—Р С•Р Т‘РЎвЂљР Р†Р ВµРЎР‚Р В¶Р Т‘Р ВµР Р…Р В°'}</p>
-              <p>Р СњР В°Р В°Р С‘Р С”Р С‘: {licenseStatus?.license?.issuer || '—'}</p>
+              <p className="font-semibold">Регистрационные данные</p>
+              <p className="mt-1">Номер: {licenseStatus?.license?.number || 'Нет данных'}</p>
+              <p>Выдана: {licenseStatus?.license?.issuer || '-'}</p>
             </div>
           </div>
         </SectionCard>
 
         <SectionCard
-          title="Р вЂ™РЎвЂљР Р…Р В°Р ВµРЎвЂљР Вµ РЎРѓР В¸Р Т‘Р ВµРЎР‚Р ВµР Р…Р С‘"
+          title="Обновления системы"
           actions={
             <button onClick={onRefreshUpdate} disabled={systemBusy} className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
-              Р СџРЎР‚Р С•Р Р†Р ВµРЎР‚Р С‘РЎвЂљРЎРЉ
+              Проверить
             </button>
           }
         >
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
-              <p className="font-semibold">Р СћР ВµР С”РЎРѓРЎвЂљРЎвЂ№</p>
-              <p className="mt-1">Р РЋРЎвЂљР ВµРЎР‚Р ВµР Р…: {updateInfo?.version || '—'}</p>
-              <p>Р СџР ВµРЎР‚Р ВµР Р…: {updateInfo?.checkedAt ? formatDate(updateInfo.checkedAt) : '—'}</p>
+              <p className="font-semibold">Тексты</p>
+              <p className="mt-1">Стерен: {updateInfo?.version || '—'}</p>
+              <p>Перен: {updateInfo?.checkedAt ? formatDate(updateInfo.checkedAt) : '—'}</p>
             </div>
             <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
-              <p className="font-semibold">Р вЂ™РСКР Т‘Р ВµРЎР‚Р Вµ</p>
-              <p className="mt-1">{updateInfo?.details || 'Р Р…Р Вµ Р С—Р С•Р Т‘РЎвЂљР Р†Р ВµРЎР‚Р В¶Р Т‘Р ВµР Р…Р В°'}</p>
+              <p className="font-semibold">Р'РСʘдере</p>
+              <p className="mt-1">{updateInfo?.details || 'не подтверждена'}</p>
               <button onClick={onApplyUpdate} disabled={systemBusy || !updateInfo?.available} className="mt-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50">
-                {systemBusy ? 'Р РЋРЎвЂљР В°РС•РЎвЂљР С•Р Вµ...' : 'Р С›РЎвЂљРЎР‚Р ВµРЎР‚Р С‘РЎвЂљРЎРЉ Р Р…Р ВµРЎР‚Р Вµ'}
+                {systemBusy ? 'Стаотое...' : 'Отрерить нере'}
               </button>
             </div>
           </div>
@@ -1775,54 +2150,54 @@ const BotControlView = ({
   return (
     <div className="space-y-6">
       <SectionCard
-        title="Р РЋРЎвЂљР В°РЎвЂљРЎС“РЎРѓ Р В±Р С•РЎвЂљР В°"
+        title="Статус бота"
         actions={
           <div className="flex gap-2 text-sm">
             <button onClick={onStart} className="rounded-lg bg-emerald-600 px-3 py-1 text-white">
-              Р вЂ”Р В°Р С—РЎС“РЎРѓРЎвЂљР С‘РЎвЂљРЎРЉ
+              Запустить
             </button>
             <button onClick={onStop} className="rounded-lg bg-rose-600 px-3 py-1 text-white">
-              Р С›РЎРѓРЎвЂљР В°Р Р…Р С•Р Р†Р С‘РЎвЂљРЎРЉ
+              Остановить
             </button>
             <button onClick={onRestart} className="rounded-lg bg-slate-600 px-3 py-1 text-white">
-              Р СџР ВµРЎР‚Р ВµР В·Р В°Р С—РЎС“РЎРѓРЎвЂљР С‘РЎвЂљРЎРЉ
+              Перезапустить
             </button>
           </div>
         }
       >
-        <p className="text-slate-300">Р РЋР С•РЎРѓРЎвЂљР С•РЎРЏ: {status?.running ? 'РЎР‚Р В°Р В±Р С•РЎвЂљР В°Р ВµРЎвЂљ' : 'Р С•РЎРѓРЎвЂљР В°Р Р…Р С•Р Р†Р В»Р ВµР Р…'}</p>
+        <p className="text-slate-300">Состоя: {status?.running ? 'работает' : 'остановлен'}</p>
         <label className="mt-3 inline-flex items-center gap-2 text-slate-300">
           <input type="checkbox" checked={settings?.isBotEnabled !== false} onChange={(event) => onToggleEnabled(event.target.checked)} />
-          Р С’Р Р†РЎвЂљР С•РЎРѓРЎвЂљР В°РЎР†РЎвЂљ Р Р†Р СР ВµРЎРѓРЎвЂљР Вµ РЎРѓ CRM
+          Автостарт вместе с CRM
         </label>
       </SectionCard>
 
-      <SectionCard title="Р СћР ВµР С”РЎРѓРЎвЂљРЎвЂ№ Р В±Р С•РЎвЂљР В°">
+      <SectionCard title="Тексты бота">
         <div className="space-y-4">
           <div>
-            <label className="text-sm text-slate-300">Р С›Р С—Р С‘РЎРѓР В°Р Р…Р С‘Р Вµ Р В»Р ВµР Р…Р Т‘Р С‘Р Р…Р С–Р В°</label>
+            <label className="text-sm text-slate-300">Описание лендинга</label>
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
           </div>
           <div>
-            <label className="text-sm text-slate-300">Р вЂР В»Р С•Р С” Р’В«Р С› Р Р…Р В°РЎРѓР’В»</label>
+            <label className="text-sm text-slate-300">Блок «О нас»</label>
             <textarea value={about} onChange={(event) => setAbout(event.target.value)} rows={4} className="w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
           </div>
           <button onClick={() => onSaveSettings({ botDescription: description, aboutText: about })} className="rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-500">
-            Р РЋР С•РЎвЂ¦РЎР‚Р В°Р Р…Р С‘РЎвЂљРЎРЉ РЎвЂљР ВµР С”РЎРѓРЎвЂљРЎвЂ№
+            Сохранить тексты
           </button>
         </div>
       </SectionCard>
 
-      <SectionCard title="Р С’Р Р†РЎвЂљР С•Р С•РЎвЂљР Р†Р ВµРЎвЂљРЎвЂ№">
-        {messages.length === 0 && <p className="text-slate-500">Р СњР ВµРЎвЂљ Р В·Р В°Р С–РЎР‚РЎС“Р В¶Р ВµР Р…Р Р…РЎвЂ№РЎвЂ¦ РЎРѓР С•Р С•Р В±РЎвЂ°Р ВµР Р…Р С‘Р в„–.</p>}
+      <SectionCard title="Автоответы">
+        {messages.length === 0 && <p className="text-slate-500">Нет загруженных сообщений.</p>}
         <div className="grid gap-4 md:grid-cols-2">
           {messages.map((message) => (
             <div key={message.id} className="space-y-3 rounded-xl border border-slate-700 p-4">
               <p className="text-xs uppercase tracking-wide text-slate-400">{message.code}</p>
-              <input value={message.title || ''} onChange={(event) => onSaveMessage(message.id, { ...message, title: event.target.value }, false)} placeholder="Р вЂ”Р В°Р С–Р С•Р В»Р С•Р Р†Р С•Р С”" className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
+              <input value={message.title || ''} onChange={(event) => onSaveMessage(message.id, { ...message, title: event.target.value }, false)} placeholder="Заголовок" className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
               <textarea value={message.text || ''} onChange={(event) => onSaveMessage(message.id, { ...message, text: event.target.value }, false)} rows={3} className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
               <button onClick={() => onSaveMessage(message.id, message, true)} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white">
-                Р РЋР С•РЎвЂ¦РЎР‚Р В°Р Р…Р С‘РЎвЂљРЎРЉ
+                Сохранить
               </button>
             </div>
           ))}
@@ -1834,42 +2209,100 @@ const BotControlView = ({
 const LoginScreen = ({ onLogin, error }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [validationError, setValidationError] = useState('');
+  const [loginOptions, setLoginOptions] = useState([]);
+  const [optionsError, setOptionsError] = useState('');
+  const [loadingOptions, setLoadingOptions] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchOptions = async () => {
+      setLoadingOptions(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/login/options`);
+        if (!response.ok) throw new Error('failed');
+        const data = await response.json();
+        if (!isMounted) return;
+        const normalized = Array.isArray(data) ? data : [];
+        setLoginOptions(normalized);
+        if (normalized.length === 1) {
+          setUsername(normalized[0].login);
+        } else if (!normalized.some((option) => option.login === username)) {
+          setUsername('');
+        }
+        setOptionsError('');
+      } catch (fetchError) {
+        if (!isMounted) return;
+        setLoginOptions([]);
+        setOptionsError('Не удалось загрузить список барберов.');
+      } finally {
+        if (isMounted) {
+          setLoadingOptions(false);
+        }
+      }
+    };
+    fetchOptions();
+    return () => {
+      isMounted = false;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (error) {
+      setValidationError('');
+    }
+  }, [error]);
 
   const handleSubmit = (event) => {
     event.preventDefault();
+    if (!username) {
+      setValidationError('Выберите барбера из списка');
+      return;
+    }
+    if (!password) {
+      setValidationError('Введите пароль');
+      return;
+    }
+    setValidationError('');
     onLogin(username, password);
   };
+
+  const selectDisabled = loadingOptions || loginOptions.length === 0;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4">
       <form onSubmit={handleSubmit} className="w-full max-w-md space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">
         <h1 className="text-center text-2xl font-semibold text-white">Barber Bot CRM</h1>
         <div>
-          <label className="text-sm text-slate-300">Выберите барбера</label>
+          <label className="text-sm text-slate-300">Выберите барбера (логин)</label>
           <select
-            value={KNOWN_USERS.some((user) => user.login === username) ? username : ''}
-            onChange={(event) => setUsername(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
+            value={username}
+            disabled={selectDisabled}
+            onChange={(event) => {
+              setValidationError('');
+              setUsername(event.target.value);
+            }}
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
           >
-            <option value="">—</option>
-            {KNOWN_USERS.map((user) => (
-              <option key={user.login} value={user.login}>
-                {user.label}
+            <option value="">{loadingOptions ? 'Загрузка...' : 'Укажите барбера'}</option>
+            {loginOptions.map((option) => (
+              <option key={option.id || option.login} value={option.login}>
+                {option.label || option.login}
               </option>
             ))}
           </select>
+          <div className="mt-1 space-y-1">
+            <p className="text-xs text-slate-500">Доступны только активные аккаунты из раздела «Барберы».</p>
+            {optionsError && <p className="text-xs text-rose-400">{optionsError}</p>}
+          </div>
         </div>
         <div>
-          <label className="text-sm text-slate-300">Пользователь</label>
-          <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Введите имя" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white" />
-        </div>
-        <div>
-          <label className="text-sm text-slate-300">РџР°СЂРѕР»СЊ</label>
+          <label className="text-sm text-slate-300">Пароль</label>
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white" />
         </div>
-        {error && <ErrorBanner message={error} />}
-        <button type="submit" className="w-full rounded-lg bg-indigo-600 py-2 font-semibold text-white hover:bg-indigo-500">
-          Р’РѕР№С‚Рё
+        {(validationError || error) && <ErrorBanner message={validationError || error} />}
+        <button type="submit" className="w-full rounded-lg bg-indigo-600 py-2 font-semibold text-white hover:bg-indigo-500" disabled={selectDisabled}>
+          Войти
         </button>
       </form>
     </div>
@@ -1879,7 +2312,7 @@ const App = () => {
   const [session, setSession] = useState(() => {
     try {
       const saved = localStorage.getItem('barber-session');
-      return saved ? JSON.parse(saved) : null;
+      return saved ? buildSessionPayload(JSON.parse(saved)) : null;
     } catch (error) {
       return null;
     }
@@ -1917,7 +2350,7 @@ const App = () => {
 
   const apiRequest = useCallback(
     async (endpoint, options = {}) => {
-      if (!session?.token) throw new Error('РќРµС‚ Р°РєС‚РёРІРЅРѕР№ СЃРµСЃСЃРёРё');
+      if (!session?.token) throw new Error('Нет активной сессии');
       const headers = {
         Accept: 'application/json',
         Authorization: `Bearer ${session.token}`,
@@ -1927,11 +2360,11 @@ const App = () => {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
       if (response.status === 401 || response.status === 403) {
         handleLogout();
-        throw new Error('РЎРµСЃСЃРёСЏ РёСЃС‚РµРєР»Р°');
+        throw new Error('Сессия истекла');
       }
       if (!response.ok) {
         const message = await response.text();
-        throw new Error(message || 'РћС€РёР±РєР° Р·Р°РїСЂРѕСЃР°');
+        throw new Error(message || 'Ошибка запроса');
       }
       if (response.status === 204) return null;
       return response.json();
@@ -1966,7 +2399,7 @@ const App = () => {
       setOptionsCache(normalizedOptions);
     } catch (error) {
       console.error(error);
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РґР°РЅРЅС‹Рµ');
+      setGlobalError(error.message || 'Не удалось загрузить данные');
     } finally {
       setLoading(false);
     }
@@ -1980,21 +2413,27 @@ const App = () => {
 
   const handleLogin = async (username, password) => {
     setAuthError('');
+    const normalizedUsername = resolveLogin(username);
+    if (!normalizedUsername) {
+      setAuthError('Выберите барбера из списка');
+      return;
+    }
     try {
       const response = await fetch(`${API_BASE_URL}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: normalizedUsername, password }),
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
-        setAuthError(data.message || 'РќРµРІРµСЂРЅС‹Р№ Р»РѕРіРёРЅ РёР»Рё РїР°СЂРѕР»СЊ');
+        setAuthError(data.message || 'Неверный логин или пароль');
         return;
       }
-      localStorage.setItem('barber-session', JSON.stringify(data));
-      setSession(data);
+      const sessionPayload = buildSessionPayload({ ...data, username: normalizedUsername });
+      localStorage.setItem('barber-session', JSON.stringify(sessionPayload));
+      setSession(sessionPayload);
     } catch (error) {
-      setAuthError('РЎРµСЂРІРµСЂ РЅРµРґРѕСЃС‚СѓРїРµРЅ');
+      setAuthError('Сервер недоступен');
     }
   };
 
@@ -2023,14 +2462,18 @@ const App = () => {
     ),
   });
 
+  const deriveBarberLogin = (barberData = {}) => resolveLogin(barberData.login || barberData.name || '');
+
   const buildBarberPayload = (barberData = {}, fallbackOrder = 0) => {
     const payload = {
       name: barberData.name || '',
-      nickname: barberData.nickname || '',
+      nickname: null,
       description: barberData.description || '',
       rating: barberData.rating || '',
       avatarUrl: barberData.avatarUrl || '',
       color: barberData.color || '',
+      login: deriveBarberLogin(barberData),
+      password: barberData.password || '',
       phone: barberData.phone || '',
       telegramId: barberData.telegramId || '',
       isActive: barberData.isActive !== false,
@@ -2045,8 +2488,9 @@ const App = () => {
   const handleSaveBarber = async (barber) => {
     if (!barber?.id) return;
     try {
-      await apiRequest(`/Barbers/${encodeURIComponent(barber.id)}`, { method: 'PUT', body: JSON.stringify(buildBarberPayload(barber)) });
-      fetchAll();
+      const response = await apiRequest(`/Barbers/${encodeURIComponent(barber.id)}`, { method: 'PUT', body: JSON.stringify(buildBarberPayload(barber)) });
+      const updatedBarber = response || barber;
+      setBarbers((prev) => prev.map((item) => (item.id === updatedBarber.id ? { ...item, ...updatedBarber } : item)));
     } catch (error) {
       setGlobalError(error.message);
     }
@@ -2054,24 +2498,27 @@ const App = () => {
 
   const handleDeleteBarber = async (barber) => {
     if (!barber?.id) return;
-    if (!window.confirm('РЈРґР°Р»РёС‚СЊ Р±Р°СЂР±РµСЂР° Р±РµР· РІРѕР·РјРѕР¶РЅРѕСЃС‚Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ?')) return;
+    if (!window.confirm('Удалить барбера без возможности восстановления?')) return;
     try {
       await apiRequest(`/Barbers/${encodeURIComponent(barber.id)}`, { method: 'DELETE' });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ Р±Р°СЂР±РµСЂР°');
+      setGlobalError(error.message || 'Не удалось удалить барбера');
     }
   };
 
   const handleAddBarber = async (payload) => {
-    if (!payload.name) return;
+    if (!payload.name || !payload.password) {
+      setGlobalError('Заполните имя, логин и пароль барбера');
+      return;
+    }
     try {
       const newBarberPayload = buildBarberPayload({ ...payload, id: undefined }, barbers.length);
       const { id, ...body } = newBarberPayload;
       await apiRequest('/Barbers', { method: 'POST', body: JSON.stringify(body) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РґРѕР±Р°РІРёС‚СЊ Р±Р°СЂР±РµСЂР°');
+      setGlobalError(error.message || 'Не удалось добавить барбера');
     }
   };
 
@@ -2081,18 +2528,18 @@ const App = () => {
       await apiRequest(`/services/full/${encodeURIComponent(service.id)}`, { method: 'PUT', body: JSON.stringify(normalizeServicePayload(service)) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ СѓСЃР»СѓРіСѓ');
+      setGlobalError(error.message || 'Не удалось сохранить услугу');
     }
   };
 
   const handleDeleteService = async (service) => {
     if (!service?.id) return;
-    if (!window.confirm('РЈРґР°Р»РёС‚СЊ СѓСЃР»СѓРіСѓ?')) return;
+    if (!window.confirm('Удалить услугу?')) return;
     try {
       await apiRequest(`/services/full/${encodeURIComponent(service.id)}`, { method: 'DELETE' });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ СѓСЃР»СѓРіСѓ');
+      setGlobalError(error.message || 'Не удалось удалить услугу');
     }
   };
 
@@ -2102,7 +2549,7 @@ const App = () => {
       await apiRequest('/services/full', { method: 'POST', body: JSON.stringify(normalizeServicePayload(payload)) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РґРѕР±Р°РІРёС‚СЊ СѓСЃР»СѓРіСѓ');
+      setGlobalError(error.message || 'Не удалось добавить услугу');
     }
   };
 
@@ -2111,7 +2558,7 @@ const App = () => {
       await apiRequest('/bot/status', { method: 'POST', body: JSON.stringify({ isBotEnabled: enabled }) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ РЅР°СЃС‚СЂРѕР№РєРё Р±РѕС‚Р°');
+      setGlobalError(error.message || 'Не удалось обновить настройки бота');
     }
   };
 
@@ -2120,7 +2567,7 @@ const App = () => {
       await apiRequest('/bot/status', { method: 'POST', body: JSON.stringify({ action }) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ РґРµР№СЃС‚РІРёРµ');
+      setGlobalError(error.message || 'Не удалось выполнить действие');
     }
   };
 
@@ -2130,7 +2577,7 @@ const App = () => {
       await apiRequest(`/BotSettings/${encodeURIComponent(botSettings.id)}`, { method: 'PUT', body: JSON.stringify(payload) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РЅР°СЃС‚СЂРѕР№РєРё');
+      setGlobalError(error.message || 'Не удалось сохранить настройки');
     }
   };
 
@@ -2143,28 +2590,28 @@ const App = () => {
       await apiRequest(`/bot/messages/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ code: draft.code, title: draft.title, text: draft.text }) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ');
+      setGlobalError(error.message || 'Не удалось сохранить сообщение');
     }
   };
 
   const handleRestoreBackup = async (filename) => {
     if (!filename) return;
-    if (!window.confirm(`Р’РѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ РґР°РЅРЅС‹Рµ РёР· ${filename}?`)) return;
+    if (!window.confirm(`Восстановить данные из ${filename}?`)) return;
     try {
       await apiRequest('/backups/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename }) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РІРѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ Р±СЌРєР°Рї');
+      setGlobalError(error.message || 'Не удалось восстановить бэкап');
     }
   };
 
   const handleCreateBackup = async () => {
-    if (!window.confirm('РЎРѕР·РґР°С‚СЊ РЅРѕРІСѓСЋ СЂРµР·РµСЂРІРЅСѓСЋ РєРѕРїРёСЋ?')) return;
+    if (!window.confirm('Создать новую резервную копию?')) return;
     try {
       await apiRequest('/backups/create', { method: 'POST' });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ Р±СЌРєР°Рї');
+      setGlobalError(error.message || 'Не удалось создать бэкап');
     }
   };
 
@@ -2176,7 +2623,7 @@ const App = () => {
         const payload = await apiRequest(`/user-profile/${encodeURIComponent(name)}`);
         setProfileModal({ open: true, data: payload, loading: false });
       } catch (error) {
-        setProfileModal({ open: true, data: { error: error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РїСЂРѕС„РёР»СЊ' }, loading: false });
+        setProfileModal({ open: true, data: { error: error.message || 'Не удалось загрузить профиль' }, loading: false });
       }
     },
     [apiRequest]
@@ -2204,14 +2651,15 @@ const App = () => {
   const handleCreateAppointment = useCallback(async () => {
     const options = await ensureOptions();
     const today = new Date().toISOString().slice(0, 10);
-    const defaultStatus = normalizeStatusValue(options.statuses?.[0] || 'РђРєС‚РёРІРЅР°СЏ');
+    const defaultStatus = normalizeStatusValue(options.statuses?.[0] || 'Активная');
+    const defaultBarber = pickBarberForUser(session, options.barbers || []);
     setAppointmentModal({
       open: true,
       data: {
         id: null,
         CustomerName: '',
         Phone: '',
-        Barber: options.barbers?.[0] || '',
+        Barber: defaultBarber,
         Date: today,
         Time: '',
         Status: defaultStatus,
@@ -2221,7 +2669,7 @@ const App = () => {
       options,
       isNew: true,
     });
-  }, [ensureOptions]);
+  }, [ensureOptions, session?.displayName, session?.username]);
 
   const handleSaveAppointment = async ({ id, payload, isNew }) => {
     try {
@@ -2233,7 +2681,7 @@ const App = () => {
       setAppointmentModal((prev) => ({ ...prev, open: false, data: null, isNew: false }));
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ Р·Р°РїРёСЃСЊ');
+      setGlobalError(error.message || 'Не удалось сохранить запись');
     }
   };
 
@@ -2243,21 +2691,21 @@ const App = () => {
       const info = await apiRequest('/system/update?force=1');
       setUpdateInfo(info);
     } catch (error) {
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕРІРµСЂРёС‚СЊ РѕР±РЅРѕРІР»РµРЅРёСЏ');
+      setGlobalError(error.message || 'Не удалось проверить обновления');
     } finally {
       setSystemBusy(false);
     }
   };
 
   const handleApplyUpdate = async () => {
-    if (!window.confirm('РћР±РЅРѕРІРёС‚СЊ CRM Рё Р±РѕС‚Р° РґРѕ РїРѕСЃР»РµРґРЅРµР№ РІРµСЂСЃРёРё?')) return;
+    if (!window.confirm('Обновить CRM и бота до последней версии?')) return;
     setSystemBusy(true);
     try {
       const result = await apiRequest('/system/update', { method: 'POST' });
       setUpdateInfo(result.info || result);
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРёРјРµРЅРёС‚СЊ РѕР±РЅРѕРІР»РµРЅРёРµ');
+      setGlobalError(error.message || 'Не удалось применить обновление');
     } finally {
       setSystemBusy(false);
     }
@@ -2295,7 +2743,16 @@ const App = () => {
           />
         );
       case 'tables':
-        return <TablesWorkspace apiRequest={apiRequest} sharedOptions={optionsCache} onOptionsUpdate={setOptionsCache} onOpenProfile={openProfile} clients={dashboard?.clients || []} />;
+        return (
+          <TablesWorkspace
+            apiRequest={apiRequest}
+            sharedOptions={optionsCache}
+            onOptionsUpdate={setOptionsCache}
+            onOpenProfile={openProfile}
+            clients={dashboard?.clients || []}
+            currentUser={session || null}
+          />
+        );
       case 'bot':
         return (
           <BotControlView
@@ -2370,7 +2827,7 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
-      {isMobile && <MobileTabs activeTab={activeTab} onChange={setActiveTab} />}
+      {isMobile && <MobileTabs activeTab={activeTab} onChange={setActiveTab} session={session} onLogout={handleLogout} />}
       <div className="flex">
         <Sidebar session={session} activeTab={activeTab} onChange={setActiveTab} onLogout={handleLogout} />
         <main className="flex-1 space-y-4 p-4 md:p-8">

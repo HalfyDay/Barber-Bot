@@ -24,66 +24,16 @@ const BACKUP_RETENTION_DAYS = 30;
 const DEFAULT_BOT_DESCRIPTION = 'Telegram-бот Brothers Shop записывает клиентов, напоминает о визите и синхронизируется с этой панелью.';
 const DEFAULT_ABOUT_TEXT = 'Запишитесь на стрижку в пару кликов, выбирайте услуги и барбера, получайте напоминания и новости барбершопа.';
 
-const FALLBACK_BARBERS = [
-  {
-    id: 'barber-alexey',
-    name: 'Алексей🦐',
-    nickname: 'Alex',
-    description: 'Специалист по классическим мужским стрижкам и аккуратной бороде.',
-    rating: '⭐⭐⭐⭐⭐',
-    avatarUrl: '/Image/barber_alex.jpg',
-    color: '#65a30d',
-    orderIndex: 0,
-  },
-  {
-    id: 'barber-alina',
-    name: 'Алина💖',
-    nickname: 'Alina',
-    description: 'Топ-колорист и эксперт по сложным укладкам.',
-    rating: '⭐⭐⭐⭐⭐',
-    avatarUrl: '/Image/barber_alina.jpg',
-    color: '#f472b6',
-    orderIndex: 1,
-  },
-  {
-    id: 'barber-vladimir',
-    name: 'Владимир😎',
-    nickname: 'Vlad',
-    description: 'Делает сильные контрастные образы и работает с брутальными укладками.',
-    rating: '⭐⭐⭐⭐',
-    avatarUrl: '/Image/barber_vlad.jpg',
-    color: '#fb923c',
-    orderIndex: 2,
-  },
-  {
-    id: 'barber-timur',
-    name: 'Тимур🐼',
-    nickname: 'Tim',
-    description: 'Ведёт барбершоп и отвечает за мужские укладки и бритьё опаской.',
-    rating: '⭐⭐⭐⭐⭐',
-    avatarUrl: '/Image/barber_timur.jpg',
-    color: '#06b6d4',
-    orderIndex: 3,
-  },
-];
-
 const COST_FIELD_TO_BARBER = {
-  Timur: 'Тимур🐼',
-  Vladimir: 'Владимир😎',
-  Alina: 'Алина💖',
-  Aleksey: 'Алексей🦐',
+  Timur: 'Timur',
+  Vladimir: 'Vladimir',
+  Alina: 'Alina',
+  Aleksey: 'Aleksey',
 };
 
 const CONFIRMED_STATUS_TOKENS = ['подтверж', 'done', 'выполн', 'заверш'];
 const ACTIVE_STATUS_TOKENS = ['актив', 'active'];
 const BLOCKED_STATUS_TOKENS = ['блок'];
-
-const usersWithPasswords = {
-  'Алексей🦐': 'alex_pass_123',
-  'Алина💖': 'alina_pass_456',
-  'Владимир😎': 'vladimir_pass_789',
-  'Тимур🐼': 'timur_pass_000',
-};
 
 const tableToModelMap = {
   Appointments: 'appointments',
@@ -138,7 +88,6 @@ const noCacheMiddleware = (req, res, next) => {
 };
 
 app.use('/api', noCacheMiddleware);
-app.use('/api', licenseMiddleware);
 const normalizeText = (value) => (value ?? '').toString().trim();
 const normalizePhone = (phone) => {
   if (!phone) return '';
@@ -149,6 +98,8 @@ const normalizePhone = (phone) => {
   if (digits.startsWith('7')) return `+7${digits.slice(1)}`;
   return digits;
 };
+
+const normalizeLogin = (value) => normalizeText(value);
 
 const toLower = (value) => normalizeText(value).toLowerCase();
 const isConfirmedStatus = (status) => {
@@ -252,22 +203,6 @@ const ensureBootstrapData = async () => {
     });
   }
 
-  if (!barbersCount) {
-    await prisma.barbers.createMany({
-      data: FALLBACK_BARBERS.map((barber, index) => ({
-        id: barber.id,
-        name: barber.name,
-        nickname: barber.nickname,
-        description: barber.description,
-        rating: barber.rating,
-        avatarUrl: barber.avatarUrl,
-        color: barber.color,
-        orderIndex: barber.orderIndex ?? index,
-        isActive: true,
-      })),
-    });
-  }
-
   if (!messagesCount) {
     await prisma.botMessages.createMany({
       data: [
@@ -293,7 +228,11 @@ const seedServicesFromCost = async () => {
   const costRows = await prisma.cost.findMany();
   if (!costRows.length) return;
   const barbers = await prisma.barbers.findMany();
-  const barberMap = new Map(barbers.map((barber) => [barber.name, barber.id]));
+  const barberMap = new Map();
+  barbers.forEach((barber) => {
+    if (barber.name) barberMap.set(barber.name, barber.id);
+    if (barber.login) barberMap.set(barber.login, barber.id);
+  });
 
   await prisma.$transaction(async (tx) => {
     for (const [index, row] of costRows.entries()) {
@@ -313,10 +252,10 @@ const seedServicesFromCost = async () => {
 
       const priceEntries = Object.entries(COST_FIELD_TO_BARBER);
       const priceRecords = [];
-      for (const [fieldName, barberName] of priceEntries) {
+      for (const [fieldName, barberKey] of priceEntries) {
         const priceValue = row[fieldName];
         if (priceValue === null || priceValue === undefined || priceValue === '') continue;
-        const barberId = barberMap.get(barberName);
+        const barberId = barberMap.get(barberKey);
         const parsedPrice = Number(priceValue);
         if (!barberId || Number.isNaN(parsedPrice)) continue;
         priceRecords.push({
@@ -340,8 +279,7 @@ const getBarbers = async ({ includeInactive = false } = {}) => {
     where,
     orderBy: [{ orderIndex: 'asc' }, { name: 'asc' }],
   });
-  if (barbers.length) return barbers;
-  return FALLBACK_BARBERS;
+  return barbers;
 };
 
 const getBotSettings = async () => {
@@ -576,13 +514,105 @@ const ensureBotProcessState = async () => {
   }
 };
 
-app.post('/api/login', (req, res) => {
-  const { username, password } = req.body;
-  if (usersWithPasswords[username] && usersWithPasswords[username] === password) {
-    const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '7d' });
-    return res.json({ success: true, token, username });
+app.get('/api/login/options', async (req, res) => {
+  try {
+    const barbers = await prisma.barbers.findMany({
+      where: { isActive: true, login: { not: null }, password: { not: null } },
+      select: { id: true, name: true, login: true, color: true, orderIndex: true, password: true },
+      orderBy: [{ orderIndex: 'asc' }, { name: 'asc' }],
+    });
+    const options = barbers
+      .filter((barber) => normalizeLogin(barber.login) && normalizeText(barber.password))
+      .map((barber) => ({
+        id: barber.id,
+        login: barber.login,
+        label: barber.name || barber.login,
+        color: barber.color || null,
+      }));
+    res.json(options);
+  } catch (error) {
+    console.error('Login options error:', error);
+    res.status(500).json({ error: 'Не удалось получить список барберов' });
   }
-  return res.status(401).json({ success: false, message: 'Неверный логин или пароль.' });
+});
+
+app.post('/api/login', async (req, res) => {
+  try {
+    const username = normalizeLogin(req.body?.username);
+    const password = normalizeText(req.body?.password);
+    if (!username || !password) {
+      return res.status(400).json({ success: false, message: 'Укажите логин и пароль.' });
+    }
+    const barber = await prisma.barbers.findFirst({
+      where: { login: username, isActive: true },
+      select: { id: true, name: true, login: true, password: true },
+    });
+    if (!barber || !barber.password || barber.password !== password) {
+      return res.status(401).json({ success: false, message: 'Неверный логин или пароль.' });
+    }
+    const token = jwt.sign({ username: barber.login }, JWT_SECRET, { expiresIn: '7d' });
+    return res.json({
+      success: true,
+      token,
+      username: barber.login,
+      displayName: barber.name || barber.login,
+      barberId: barber.id,
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    return res.status(500).json({ success: false, message: 'Ошибка входа. Попробуйте позже.' });
+  }
+});
+
+app.use('/api', licenseMiddleware);
+app.get('/api/login/options', async (req, res) => {
+  try {
+    const barbers = await prisma.barbers.findMany({
+      where: { isActive: true, login: { not: null }, password: { not: null } },
+      select: { id: true, name: true, login: true, color: true, orderIndex: true, password: true },
+      orderBy: [{ orderIndex: 'asc' }, { name: 'asc' }],
+    });
+    const options = barbers
+      .filter((barber) => normalizeLogin(barber.login) && normalizeText(barber.password))
+      .map((barber) => ({
+        id: barber.id,
+        login: barber.login,
+        label: barber.name || barber.login,
+        color: barber.color || null,
+      }));
+    res.json(options);
+  } catch (error) {
+    console.error('Login options error:', error);
+    res.status(500).json({ error: 'Не удалось получить список барберов' });
+  }
+});
+
+app.post('/api/login', async (req, res) => {
+  try {
+    const username = normalizeLogin(req.body?.username);
+    const password = normalizeText(req.body?.password);
+    if (!username || !password) {
+      return res.status(400).json({ success: false, message: 'Укажите логин и пароль.' });
+    }
+    const barber = await prisma.barbers.findFirst({
+      where: { login: username, isActive: true },
+      select: { id: true, name: true, login: true, password: true },
+    });
+    if (!barber || !barber.password || barber.password !== password) {
+      return res.status(401).json({ success: false, message: 'Неверный логин или пароль.' });
+    }
+    const token = jwt.sign({ username: barber.login }, JWT_SECRET, { expiresIn: '7d' });
+    return res.json({
+      success: true,
+      token,
+      username: barber.login,
+      displayName: barber.name || barber.login,
+      barberId: barber.id,
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    return res.status(500).json({ success: false, message: 'Ошибка входа. Попробуйте позже.' });
+  }
 });
 
 app.get('/api/license/status', authenticateToken, async (req, res) => {

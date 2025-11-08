@@ -19,75 +19,41 @@ from telegram.ext import (
     PicklePersistence,
 )
 from telegram.error import BadRequest
-import config  # РџСЂРµРґРїРѕР»Р°РіР°РµС‚СЃСЏ, С‡С‚Рѕ config.py СЃРѕРґРµСЂР¶РёС‚ TOKEN Рё ADMIN_IDS
+import config  # Предполагается, что config.py содержит TOKEN и ADMIN_IDS
 import asyncio
 from datetime import time as dt_time
 from zoneinfo import ZoneInfo
 
-# ---------- РќР°СЃС‚СЂРѕР№РєРё ----------
+# ---------- Настройки ----------
 TOKEN = config.TOKEN
 
 BASE_DIR = Path(__file__).parent
-DB_PATH = BASE_DIR / "prisma" / "dev.db"  # РџСѓС‚СЊ Рє Р±Р°Р·Рµ РґР°РЅРЅС‹С… SQLite
+DB_PATH = BASE_DIR / "prisma" / "dev.db"  # Путь к базе данных SQLite
 
-# РњРµРґРёР°-СЂРµСЃСѓСЂСЃС‹ Рё РєСЌС€
+# Медиа-ресурсы и кэш
 IMAGE_FILE = BASE_DIR / "Image" / "bot.jpg"
 DEFAULT_BARBER_IMAGES = {
     "menu": BASE_DIR / "Image" / "menu_barber.jpg",
-    "РђР»РµРєСЃРµР№рџ¦ђ": BASE_DIR / "Image" / "barber_alex.jpg",
+    "Алексей🦐": BASE_DIR / "Image" / "barber_alex.jpg",
     "РўРёРјСѓСЂрџђј": BASE_DIR / "Image" / "barber_timur.jpg",
-    "Р’Р»Р°РґРёРјРёСЂрџЋ": BASE_DIR / "Image" / "barber_vlad.jpg",
-    "РђР»РёРЅР°рџ’–": BASE_DIR / "Image" / "barber_alina.jpg",
+    "Владимир😎": BASE_DIR / "Image" / "barber_vlad.jpg",
+    "Алина💖": BASE_DIR / "Image" / "barber_alina.jpg",
 }
-FALLBACK_BARBERS = [
-    {
-        "id": "barber-alexey",
-        "name": "РђР»РµРєСЃРµР№рџ¦ђ",
-        "nickname": "Alex",
-        "description": "РЎРїРµС†РёР°Р»РёСЃС‚ РїРѕ РєР»Р°СЃСЃРёС‡РµСЃРєРёРј РјСѓР¶СЃРєРёРј СЃС‚СЂРёР¶РєР°Рј Рё Р°РєРєСѓСЂР°С‚РЅРѕР№ Р±РѕСЂРѕРґРµ.",
-        "rating": "в­ђв­ђв­ђв­ђв­ђ",
-        "color": "#65a30d",
-    },
-    {
-        "id": "barber-timur",
-        "name": "РўРёРјСѓСЂрџђј",
-        "nickname": "Tim",
-        "description": "Р’РµРґС‘С‚ Р±СЂР°С‚СЃС‚РІРѕ Р±Р°СЂР±РµСЂРѕРІ, РґРµР»Р°РµС‚ Р°РєС†РµРЅС‚ РЅР° СѓРєР»Р°РґРєСѓ Рё Р±СЂРёС‚СЊС‘ РѕРїР°СЃРєРѕР№.",
-        "rating": "в­ђв­ђв­ђв­ђв­ђ",
-        "color": "#06b6d4",
-    },
-    {
-        "id": "barber-vladimir",
-        "name": "Р’Р»Р°РґРёРјРёСЂрџЋ",
-        "nickname": "Vlad",
-        "description": "Р›СЋР±РёС‚ РєРѕРЅС‚СЂР°СЃС‚РЅС‹Рµ РѕР±СЂР°Р·С‹ Рё СЂР°Р±РѕС‚Р°РµС‚ СЃ Р¶С‘СЃС‚РєРёРјРё С„РѕСЂРјР°РјРё.",
-        "rating": "в­ђв­ђв­ђв­ђ",
-        "color": "#fb923c",
-    },
-    {
-        "id": "barber-alina",
-        "name": "РђР»РёРЅР°рџ’–",
-        "nickname": "Alina",
-        "description": "Р­РєСЃРїРµСЂС‚ РїРѕ РѕРєСЂР°С€РёРІР°РЅРёСЏРј Рё СЃР»РѕР¶РЅС‹Рј СѓРєР»Р°РґРєР°Рј.",
-        "rating": "в­ђв­ђв­ђв­ђв­ђ",
-        "color": "#f472b6",
-    },
-]
 COST_FIELD_TO_BARBER = {
     "Timur": "РўРёРјСѓСЂрџђј",
-    "Vladimir": "Р’Р»Р°РґРёРјРёСЂрџЋ",
-    "Alina": "РђР»РёРЅР°рџ’–",
-    "Aleksey": "РђР»РµРєСЃРµР№рџ¦ђ",
+    "Vladimir": "Владимир😎",
+    "Alina": "Алина💖",
+    "Aleksey": "Алексей🦐",
 }
 CACHE_TTL_SECONDS = 120
 BARBER_CACHE = {True: {"data": [], "ts": 0.0}, False: {"data": [], "ts": 0.0}}
 SERVICE_CACHE = {"data": [], "ts": 0.0}
 SETTINGS_CACHE = {"data": None, "ts": 0.0}
 MESSAGE_CACHE = {"data": {}, "ts": 0.0}
-STATUS_ACTIVE_TOKENS = ("Р°РєС‚РёРІ", "active")
-STATUS_BLOCK_TOKENS = ("Р±Р»РѕРє", "block")
+STATUS_ACTIVE_TOKENS = ("актив", "active")
+STATUS_BLOCK_TOKENS = ("блок", "block")
 
-# Р‘Р°Р·РѕРІР°СЏ РєР°СЂС‚РёРЅРєР° РґР»СЏ СЃРѕРѕР±С‰РµРЅРёР№
+# Базовая картинка для сообщений
 with open(IMAGE_FILE, "rb") as f:
     IMAGE_BYTES = f.read()
 
@@ -99,27 +65,27 @@ with open(IMAGE_FILE, "rb") as f:
  CHANGE_PHONE, CHANGE_NAME) = range(12)
 
 # ---
-# --- РџРѕРјРѕС‰РЅРёРє РґР»СЏ СЂР°Р±РѕС‚С‹ СЃ Р‘Р” ---
+# --- Помощник для работы с БД ---
 def get_db_connection():
-    """РЈСЃС‚Р°РЅР°РІР»РёРІР°РµС‚ СЃРѕРµРґРёРЅРµРЅРёРµ СЃ Р±Р°Р·РѕР№ РґР°РЅРЅС‹С… SQLite."""
+    """Устанавливает соединение с базой данных SQLite."""
     try:
         conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-        conn.row_factory = sqlite3.Row  # Р”РѕСЃС‚СѓРї Рє РєРѕР»РѕРЅРєР°Рј РїРѕ РёРјРµРЅРё
+        conn.row_factory = sqlite3.Row  # Доступ к колонкам по имени
         global _SCHEMA_INITIALIZED
         if not _SCHEMA_INITIALIZED:
             try:
                 ensure_schema(conn)
             except sqlite3.Error as e:
-                logger.error(f"РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ СЃС…РµРјС‹ Р±Р°Р·С‹ РґР°РЅРЅС‹С…: {e}")
+                logger.error(f"Ошибка обновления схемы базы данных: {e}")
             else:
                 _SCHEMA_INITIALIZED = True
         return conn
     except sqlite3.Error as e:
-        logger.error(f"РћС€РёР±РєР° РїРѕРґРєР»СЋС‡РµРЅРёСЏ Рє Р±Р°Р·Рµ РґР°РЅРЅС‹С…: {e}")
+        logger.error(f"Ошибка подключения к базе данных: {e}")
         return None
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
-    """Р“Р°СЂР°РЅС‚РёСЂСѓРµС‚ РЅР°Р»РёС‡РёРµ СЃР»СѓР¶РµР±РЅС‹С… РєРѕР»РѕРЅРѕРє, РЅРµРѕР±С…РѕРґРёРјС‹С… Р±РѕС‚Сѓ."""
+    """Гарантирует наличие служебных колонок, необходимых боту."""
     cursor = conn.cursor()
     cursor.execute("PRAGMA table_info(Users)")
     columns = {row["name"] for row in cursor.fetchall()}
@@ -146,7 +112,7 @@ def _cached(now_ts: float, cache_entry: dict) -> bool:
     return cache_entry["ts"] and (now_ts - cache_entry["ts"] < CACHE_TTL_SECONDS - CACHE_EPSILON)
 
 def load_bot_settings(force: bool = False) -> dict:
-    """Р—Р°РіСЂСѓР¶Р°РµС‚ РЅР°СЃС‚СЂРѕР№РєРё Р±РѕС‚Р° РёР· С‚Р°Р±Р»РёС†С‹ BotSettings СЃ РєРµС€РёСЂРѕРІР°РЅРёРµРј."""
+    """Загружает настройки бота из таблицы BotSettings с кешированием."""
     now_ts = time.time()
     if not force and SETTINGS_CACHE["data"] is not None and _cached(now_ts, SETTINGS_CACHE):
         return SETTINGS_CACHE["data"]
@@ -173,7 +139,7 @@ def load_bot_settings(force: bool = False) -> dict:
     return base_settings
 
 def load_barbers(include_inactive: bool = False, force: bool = False) -> list[dict]:
-    """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє Р±Р°СЂР±РµСЂРѕРІ РёР· С‚Р°Р±Р»РёС†С‹ Barbers (РёР»Рё Р·Р°РіР»СѓС€РєРё)."""
+    """Возвращает список барберов из таблицы Barbers (или заглушки)."""
     now_ts = time.time()
     cache_entry = BARBER_CACHE[include_inactive]
     if not force and cache_entry["data"] and _cached(now_ts, cache_entry):
@@ -193,22 +159,12 @@ def load_barbers(include_inactive: bool = False, force: bool = False) -> list[di
             cursor.execute(query)
             barbers = [dict(row) for row in cursor.fetchall()]
 
-    if not barbers:
-        barbers = []
-        for fallback in FALLBACK_BARBERS:
-            avatar_path = DEFAULT_BARBER_IMAGES.get(fallback["name"], DEFAULT_BARBER_IMAGES.get("menu"))
-            barbers.append({
-                **fallback,
-                "avatarUrl": str(avatar_path) if avatar_path else "",
-                "isActive": True,
-            })
-
     cache_entry["data"] = barbers
     cache_entry["ts"] = now_ts
     return barbers
 
 def load_bot_messages(force: bool = False) -> dict:
-    """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃР»РѕРІР°СЂСЊ СЃРѕРѕР±С‰РµРЅРёР№ Р±РѕС‚Р° (code -> text)."""
+    """Возвращает словарь сообщений бота (code -> text)."""
     now_ts = time.time()
     if not force and MESSAGE_CACHE["data"] and _cached(now_ts, MESSAGE_CACHE):
         return MESSAGE_CACHE["data"]
@@ -228,7 +184,7 @@ def get_bot_message(code: str, default: str = "") -> str:
     return load_bot_messages().get(code) or default
 
 def load_services(force: bool = False) -> list[dict]:
-    """Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє СѓСЃР»СѓРі СЃ С†РµРЅР°РјРё РїРѕ Р±Р°СЂР±РµСЂР°Рј."""
+    """Возвращает список услуг с ценами по барберам."""
     now_ts = time.time()
     if not force and SERVICE_CACHE["data"] and _cached(now_ts, SERVICE_CACHE):
         return SERVICE_CACHE["data"]
@@ -345,16 +301,16 @@ def get_max_days_ahead() -> int:
     except (TypeError, ValueError):
         return 14
 
-# РР—РњР•РќР•РќРР•: РђРІС‚РѕРјР°С‚РёС‡РµСЃРєРё РѕРїСЂРµРґРµР»СЏРµРј С‡Р°СЃРѕРІРѕР№ РїРѕСЏСЃ СЃРёСЃС‚РµРјС‹
+# ИЗМЕНЕНИЕ: Автоматически определяем часовой пояс системы
 try:
     ZONE = datetime.datetime.now().astimezone().tzinfo
 except Exception:
-    # Р—Р°РїР°СЃРЅРѕР№ РІР°СЂРёР°РЅС‚, РµСЃР»Рё Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРѕРµ РѕРїСЂРµРґРµР»РµРЅРёРµ РЅРµ СЃСЂР°Р±РѕС‚Р°РµС‚
+    # Запасной вариант, если автоматическое определение не сработает
     ZONE = ZoneInfo("Europe/Chisinau")
 PHONE_PATTERN = re.compile(r'^\+?\d{10,15}$')
 
 def parse_appointment_start(date_str: str | None, time_str: str | None) -> datetime.datetime | None:
-    """Р’РѕР·РІСЂР°С‰Р°РµС‚ datetime РЅР°С‡Р°Р»Р° Р·Р°РїРёСЃРё РёР· Р·РЅР°С‡РµРЅРёР№ Р‘Р”."""
+    """Возвращает datetime начала записи из значений БД."""
     if not date_str or not time_str:
         return None
 
@@ -377,7 +333,7 @@ def parse_appointment_start(date_str: str | None, time_str: str | None) -> datet
 
 
 async def safe_upsert_menu(ctx, chat_id, msg_id, photo_bytes: bytes, caption: str, reply_markup):
-    """Р‘РµР·РѕРїР°СЃРЅРѕ РѕР±РЅРѕРІР»СЏРµС‚ РёР»Рё РїРµСЂРµСЃРѕР·РґР°РµС‚ СЃРѕРѕР±С‰РµРЅРёРµ СЃ РјРµРЅСЋ."""
+    """Безопасно обновляет или пересоздает сообщение с меню."""
     try:
         media = InputMediaPhoto(io.BytesIO(photo_bytes), caption=caption, parse_mode="HTML")
         await ctx.bot.edit_message_media(
@@ -397,19 +353,19 @@ async def safe_upsert_menu(ctx, chat_id, msg_id, photo_bytes: bytes, caption: st
             )
             ctx.user_data['bot_msg'] = (chat_id, msg.message_id)
         else:
-            logger.error(f"РћС€РёР±РєР° РїСЂРё РѕР±РЅРѕРІР»РµРЅРёРё РјРµРЅСЋ: {e}")
+            logger.error(f"Ошибка при обновлении меню: {e}")
 
-# --- Р›РѕРіРёРєР° РЅР°РїРѕРјРёРЅР°РЅРёР№ ---
+# --- Логика напоминаний ---
 async def reminder_checker_job(context: ContextTypes.DEFAULT_TYPE):
-    """РџСЂРѕРІРµСЂСЏРµС‚ РїСЂРµРґСЃС‚РѕСЏС‰РёРµ Р·Р°РїРёСЃРё Рё РѕС‚РїСЂР°РІР»СЏРµС‚ РЅР°РїРѕРјРёРЅР°РЅРёСЏ."""
+    """Проверяет предстоящие записи и отправляет напоминания."""
     conn = get_db_connection()
     if not conn: return
     try:
         now = datetime.datetime.now(tz=ZONE)
         today_str = now.strftime('%Y-%m-%d')
-        logger.info(f"РџСЂРѕРІРµСЂРєР° РЅР°РїРѕРјРёРЅР°РЅРёР№ РЅР° {today_str}, С‚РµРєСѓС‰РµРµ РІСЂРµРјСЏ: {now.isoformat()}")
+        logger.info(f"Проверка напоминаний на {today_str}, текущее время: {now.isoformat()}")
 
-        # РџСЂРѕРІРµСЂСЏРµРј, РЅРµ РїРѕСЂР° Р»Рё РЅР°РїРѕРјРЅРёС‚СЊ РєР»РёРµРЅС‚Р°Рј Рѕ РЅРѕРІРѕР№ СЃС‚СЂРёР¶РєРµ
+        # Проверяем, не пора ли напомнить клиентам о новой стрижке
         monthly_cursor = conn.cursor()
         monthly_cursor.execute("SELECT TelegramID, LastHaircutReminderSent FROM Users WHERE TelegramID IS NOT NULL")
         monthly_users = monthly_cursor.fetchall()
@@ -418,7 +374,7 @@ async def reminder_checker_job(context: ContextTypes.DEFAULT_TYPE):
             if not telegram_id:
                 continue
             last_cursor = conn.cursor()
-            last_cursor.execute("SELECT MAX(Date) FROM Appointments WHERE UserID = ? AND Status = 'Р—Р°РІРµСЂС€РµРЅР°'", (str(telegram_id),))
+            last_cursor.execute("SELECT MAX(Date) FROM Appointments WHERE UserID = ? AND Status = 'Завершена'", (str(telegram_id),))
             last_row = last_cursor.fetchone()
             last_haircut_raw = last_row[0] if last_row and last_row[0] else None
             if not last_haircut_raw:
@@ -440,7 +396,7 @@ async def reminder_checker_job(context: ContextTypes.DEFAULT_TYPE):
                 try:
                     await context.bot.send_message(
                         telegram_id,
-                        "Р’С‹ РґРѕСЃС‚Р°С‚РѕС‡РЅРѕ СЃРёР»СЊРЅРѕ РѕР±СЂРѕСЃР»Рё, РїСЂРµРґР»Р°РіР°РµРј РІР°Рј Р·Р°РїРёСЃР°С‚СЊСЃСЏ РЅР° СЃС‚СЂРёР¶РєСѓ."
+                        "Вы достаточно сильно обросли, предлагаем вам записаться на стрижку."
                     )
                     update_cursor = conn.cursor()
                     update_cursor.execute(
@@ -448,13 +404,13 @@ async def reminder_checker_job(context: ContextTypes.DEFAULT_TYPE):
                         (last_haircut_raw, telegram_id)
                     )
                     conn.commit()
-                    logger.info(f"РћС‚РїСЂР°РІР»РµРЅРѕ РµР¶РµРјРµСЃСЏС‡РЅРѕРµ РЅР°РїРѕРјРёРЅР°РЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ {telegram_id}")
+                    logger.info(f"Отправлено ежемесячное напоминание пользователю {telegram_id}")
                 except Exception as e:
-                    logger.error(f"РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ РµР¶РµРјРµСЃСЏС‡РЅРѕРµ РЅР°РїРѕРјРёРЅР°РЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ {telegram_id}: {e}")
+                    logger.error(f"Не удалось отправить ежемесячное напоминание пользователю {telegram_id}: {e}")
 
         cursor = conn.cursor()
-        # РР·РІР»РµРєР°РµРј С‚РѕР»СЊРєРѕ СЂРµР»РµРІР°РЅС‚РЅС‹Рµ Р·Р°РїРёСЃРё: Р°РєС‚РёРІРЅС‹Рµ Рё РЅР° РЎР•Р“РћР”РќРЇ
-        cursor.execute("SELECT * FROM Appointments WHERE Status = 'РђРєС‚РёРІРЅР°СЏ' AND Date = ?", (today_str,))
+        # Извлекаем только релевантные записи: активные и на СЕГОДНЯ
+        cursor.execute("SELECT * FROM Appointments WHERE Status = 'Активная' AND Date = ?", (today_str,))
         appts = [dict(row) for row in cursor.fetchall()]
 
         for appt in appts:
@@ -471,28 +427,28 @@ async def reminder_checker_job(context: ContextTypes.DEFAULT_TYPE):
                 appt_dt = appt_dt_naive.replace(tzinfo=ZONE)
                 delta = appt_dt - now
             except (ValueError, TypeError) as e:
-                logger.error(f"РћС€РёР±РєР° РїР°СЂСЃРёРЅРіР° РґР°С‚С‹ РґР»СЏ Р·Р°РїРёСЃРё {rec_id}: {e}")
+                logger.error(f"Ошибка парсинга даты для записи {rec_id}: {e}")
                 continue
 
-            # РћС‚РїСЂР°РІРєР° РЅР°РїРѕРјРёРЅР°РЅРёР№, РµСЃР»Рё РґРѕ Р·Р°РїРёСЃРё 2 С‡Р°СЃР° РёР»Рё РјРµРЅСЊС€Рµ (Рё РѕРЅР° РµС‰Рµ РЅРµ РїСЂРѕС€Р»Р°)
+            # Отправка напоминаний, если до записи 2 часа или меньше (и она еще не прошла)
             if datetime.timedelta(0) <= delta <= datetime.timedelta(hours=2):
-                # РќР°РїРѕРјРёРЅР°РЅРёРµ РєР»РёРµРЅС‚Сѓ
+                # Напоминание клиенту
                 if not appt.get("Reminder2hClientSent"):
                     user_id = appt.get("UserID")
                     if user_id:
                         try:
-                            msg = (f"вЏ° РќР°РїРѕРјРёРЅР°РЅРёРµ: Сѓ РІР°СЃ СЃРµРіРѕРґРЅСЏ РІ {start_time_str} Р·Р°РїРёСЃСЊ Рє Р±Р°СЂР±РµСЂСѓ "
+                            msg = (f"⏰ Напоминание: у вас сегодня в {start_time_str} запись к барберу "
                                    f"<b>{appt.get('Barber')}</b>.")
                             await context.bot.send_message(user_id, msg, parse_mode="HTML")
-                            # РСЃРїРѕР»СЊР·СѓРµРј РЅРѕРІС‹Р№ РєСѓСЂСЃРѕСЂ РґР»СЏ СЌС‚РѕРіРѕ РѕР±РЅРѕРІР»РµРЅРёСЏ, С‡С‚РѕР±С‹ РЅРµ РјРµС€Р°С‚СЊ РѕСЃРЅРѕРІРЅРѕРјСѓ С†РёРєР»Сѓ
+                            # Используем новый курсор для этого обновления, чтобы не мешать основному циклу
                             update_cursor = conn.cursor()
                             update_cursor.execute("UPDATE Appointments SET Reminder2hClientSent = 1 WHERE id = ?", (rec_id,))
                             conn.commit()
-                            logger.info(f"РћС‚РїСЂР°РІР»РµРЅРѕ РЅР°РїРѕРјРёРЅР°РЅРёРµ РєР»РёРµРЅС‚Сѓ РґР»СЏ Р·Р°РїРёСЃРё {rec_id}")
+                            logger.info(f"Отправлено напоминание клиенту для записи {rec_id}")
                         except Exception as e:
-                            logger.error(f"РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ РЅР°РїРѕРјРёРЅР°РЅРёРµ РєР»РёРµРЅС‚Сѓ {user_id}: {e}")
+                            logger.error(f"Не удалось отправить напоминание клиенту {user_id}: {e}")
 
-                # РќР°РїРѕРјРёРЅР°РЅРёРµ Р±Р°СЂР±РµСЂСѓ
+                # Напоминание барберу
                 if not appt.get("Reminder2hBarberSent"):
                     barber_name = appt.get("Barber")
                     barber_cursor = conn.cursor()
@@ -501,30 +457,30 @@ async def reminder_checker_job(context: ContextTypes.DEFAULT_TYPE):
 
                     if barber_user and barber_user["TelegramID"]:
                         try:
-                            msg = (f"вЏ° РќР°РїРѕРјРёРЅР°РЅРёРµ: Сѓ РІР°СЃ СЃРµРіРѕРґРЅСЏ РІ {start_time_str} Р·Р°РїРёСЃСЊ.\n"
-                                   f"РљР»РёРµРЅС‚: <b>{appt.get('CustomerName')}</b>\n"
-                                   f"РўРµР»РµС„РѕРЅ: {appt.get('Phone')}")
+                            msg = (f"⏰ Напоминание: у вас сегодня в {start_time_str} запись.\n"
+                                   f"Клиент: <b>{appt.get('CustomerName')}</b>\n"
+                                   f"Телефон: {appt.get('Phone')}")
                             await context.bot.send_message(barber_user["TelegramID"], msg, parse_mode="HTML")
-                            # РСЃРїРѕР»СЊР·СѓРµРј РЅРѕРІС‹Р№ РєСѓСЂСЃРѕСЂ РґР»СЏ СЌС‚РѕРіРѕ РѕР±РЅРѕРІР»РµРЅРёСЏ
+                            # Используем новый курсор для этого обновления
                             update_cursor = conn.cursor()
                             update_cursor.execute("UPDATE Appointments SET Reminder2hBarberSent = 1 WHERE id = ?", (rec_id,))
                             conn.commit()
-                            logger.info(f"РћС‚РїСЂР°РІР»РµРЅРѕ РЅР°РїРѕРјРёРЅР°РЅРёРµ Р±Р°СЂР±РµСЂСѓ {barber_name} РґР»СЏ Р·Р°РїРёСЃРё {rec_id}")
+                            logger.info(f"Отправлено напоминание барберу {barber_name} для записи {rec_id}")
                         except Exception as e:
-                            logger.error(f"РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ РЅР°РїРѕРјРёРЅР°РЅРёРµ Р±Р°СЂР±РµСЂСѓ {barber_name}: {e}")
+                            logger.error(f"Не удалось отправить напоминание барберу {barber_name}: {e}")
 
     except sqlite3.Error as e:
-        logger.error(f"РћС€РёР±РєР° Р‘Р” РІ reminder_checker_job: {e}")
+        logger.error(f"Ошибка БД в reminder_checker_job: {e}")
     finally:
         if conn: conn.close()
 
 
-# ---------- Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅС‹Рµ С„СѓРЅРєС†РёРё (РїРµСЂРµРїРёСЃР°РЅРѕ РґР»СЏ SQLite) ----------
+# ---------- Вспомогательные функции (переписано для SQLite) ----------
 def is_barber(user_id: int) -> bool:
-    """РџСЂРѕРІРµСЂСЏРµС‚, СЏРІР»СЏРµС‚СЃСЏ Р»Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ Р±Р°СЂР±РµСЂРѕРј."""
+    """Проверяет, является ли пользователь барбером."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        # РџСЂРѕРІРµСЂСЏРµРј, РµСЃС‚СЊ Р»Рё Р·Р°РїРёСЃСЊ СЃ С‚Р°РєРёРј TelegramID Рё РЅРµРїСѓСЃС‚С‹Рј РїРѕР»РµРј Barber
+        # Проверяем, есть ли запись с таким TelegramID и непустым полем Barber
         cursor.execute("SELECT 1 FROM Users WHERE TelegramID = ? AND Barber IS NOT NULL AND Barber != ''", (user_id,))
         return cursor.fetchone() is not None
     return False
@@ -540,7 +496,7 @@ def count_active_appts(user_id: str) -> int:
 def get_last_haircut_date(user_id: str) -> str | None:
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT MAX(Date) FROM Appointments WHERE UserID = ? AND Status = 'Р—Р°РІРµСЂС€РµРЅР°'", (str(user_id),))
+        cursor.execute("SELECT MAX(Date) FROM Appointments WHERE UserID = ? AND Status = 'Завершена'", (str(user_id),))
         result = cursor.fetchone()
         return result[0] if result and result[0] else None
     return None
@@ -549,7 +505,7 @@ def count_no_shows(user_id: str) -> int:
     with get_db_connection() as conn:
         threshold = (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM Appointments WHERE UserID = ? AND Status = 'РќРµСЏРІРєР°' AND Date >= ?", (str(user_id), threshold))
+        cursor.execute("SELECT COUNT(*) FROM Appointments WHERE UserID = ? AND Status = 'Неявка' AND Date >= ?", (str(user_id), threshold))
         return cursor.fetchone()[0]
     return 0
 
@@ -559,18 +515,18 @@ def purge_old_appts():
         cursor = conn.cursor()
         cursor.execute("DELETE FROM Appointments WHERE Date < ?", (threshold,))
         conn.commit()
-        logger.info("purge_old_appts: РЎС‚Р°СЂС‹Рµ Р·Р°РїРёСЃРё СѓРґР°Р»РµРЅС‹.")
+        logger.info("purge_old_appts: Старые записи удалены.")
 
 def get_working_hours(barber: str, date_str: str) -> tuple[int, int] | None:
-    """РџРѕР»СѓС‡Р°РµС‚ СЂР°Р±РѕС‡РёРµ С‡Р°СЃС‹ Р±Р°СЂР±РµСЂР° РЅР° РљРћРќРљР Р•РўРќРЈР® РґР°С‚Сѓ."""
+    """Получает рабочие часы барбера на КОНКРЕТНУЮ дату."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        # РџРѕРёСЃРє СЃС‚СЂРѕРіРѕ РїРѕ С‚РѕС‡РЅРѕР№ РґР°С‚Рµ. Р—Р°РїР°СЃРЅРѕР№ РІР°СЂРёР°РЅС‚ РїРѕ РґРЅСЋ РЅРµРґРµР»Рё СѓР±СЂР°РЅ.
+        # Поиск строго по точной дате. Запасной вариант по дню недели убран.
         cursor.execute("SELECT Week FROM Schedules WHERE Barber = ? AND Date = ?", (barber, date_str))
         row = cursor.fetchone()
         if row and row['Week'] and row['Week'] != '0':
             return _parse_working_hours(row['Week'])
-    # Р•СЃР»Рё РЅР° РєРѕРЅРєСЂРµС‚РЅСѓСЋ РґР°С‚Сѓ РЅРёС‡РµРіРѕ РЅРµ РЅР°Р№РґРµРЅРѕ, Р·РЅР°С‡РёС‚ Р±Р°СЂР±РµСЂ РЅРµ СЂР°Р±РѕС‚Р°РµС‚.
+    # Если на конкретную дату ничего не найдено, значит барбер не работает.
     return None
 
 def get_busy_intervals(barber: str, date_str: str) -> list[tuple[int, int]]:
@@ -628,11 +584,11 @@ async def book_unavailable_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 def contact_kb():
     return ReplyKeyboardMarkup(
-        [[KeyboardButton("рџ“І РџРѕРґРµР»РёС‚СЊСЃСЏ РєРѕРЅС‚Р°РєС‚РѕРј", request_contact=True)]],
+        [[KeyboardButton("📲 Поделиться контактом", request_contact=True)]],
         resize_keyboard=True, one_time_keyboard=True
     )
 
-# ---------- РћР±СЂР°Р±РѕС‚С‡РёРєРё ----------
+# ---------- Обработчики ----------
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Приветствие и точка входа /start."""
     user_id = update.effective_user.id
@@ -661,13 +617,13 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def reg_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     name = update.message.text.strip()
     if len(name.split()) < 2:
-        await update.message.reply_text("РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РІРІРµРґРёС‚Рµ РёРјСЏ Рё С„Р°РјРёР»РёСЋ.")
+        await update.message.reply_text("Пожалуйста, введите имя и фамилию.")
         return REG_NAME
     ctx.user_data['name'] = name
     chat_id, msg_id = ctx.user_data['bot_msg']
-    await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, "<b>2пёЏвѓЈ РЈРєР°Р¶РёС‚Рµ РІР°С€ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР°:</b>", None)
+    await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, "<b>2️⃣ Укажите ваш номер телефона:</b>", None)
     await update.message.delete()
-    sent = await ctx.bot.send_message(chat_id, "РќР°Р¶РјРёС‚Рµ РЅР° РєРЅРѕРїРєСѓ РЅРёР¶Рµ РёР»Рё РІРІРµРґРёС‚Рµ РЅРѕРјРµСЂ РІСЂСѓС‡РЅСѓСЋ:", reply_markup=contact_kb())
+    sent = await ctx.bot.send_message(chat_id, "Нажмите на кнопку ниже или введите номер вручную:", reply_markup=contact_kb())
     ctx.user_data['last_prompt'] = sent.message_id
     return REG_PHONE
 
@@ -721,28 +677,28 @@ async def show_profile(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, msg_id: int
             user_data = dict(rec)
 
     if not user_data:
-        await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, "вќЊ РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°Р№С‚Рё РІР°С€ РїСЂРѕС„РёР»СЊ. РџРѕРїСЂРѕР±СѓР№С‚Рµ /start.", main_menu_kb(user_id))
+        await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, "❌ Не удалось найти ваш профиль. Попробуйте /start.", main_menu_kb(user_id))
         return
 
-    last = get_last_haircut_date(str(user_id)) or "вЂ”"
+    last = get_last_haircut_date(str(user_id)) or "—"
     active = count_active_appts(str(user_id))
     warns = count_no_shows(str(user_id))
 
     text = (
-        f"<b>рџ‘¤ РџСЂРѕС„РёР»СЊ</b>\n\n"
-        f"<b>РРјСЏ:</b> {user_data.get('Name','вЂ”')}\n"
-        f"<b>РўРµР»РµС„РѕРЅ:</b> {user_data.get('Phone','вЂ”')}\n\n"
-        f"<b>РџРѕСЃР»РµРґРЅСЏСЏ СЃС‚СЂРёР¶РєР°:</b> {last}\n"
-        f"<b>РђРєС‚РёРІРЅС‹С… Р·Р°РїРёСЃРµР№:</b> {active}\n"
-        f"<b>РџСЂРµРґСѓРїСЂРµР¶РґРµРЅРёСЏ:</b> {warns}\n\n"
-        f"<i>вќ— 3 РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёСЏ вЂ” Р±Р»РѕРєРёСЂРѕРІРєР° Р·Р°РїРёСЃРё.</i>"
+        f"<b>👤 Профиль</b>\n\n"
+        f"<b>Имя:</b> {user_data.get('Name','—')}\n"
+        f"<b>Телефон:</b> {user_data.get('Phone','—')}\n\n"
+        f"<b>Последняя стрижка:</b> {last}\n"
+        f"<b>Активных записей:</b> {active}\n"
+        f"<b>Предупреждения:</b> {warns}\n\n"
+        f"<i>❗ 3 предупреждения — блокировка записи.</i>"
     )
     kb = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("вњЏпёЏ РЎРјРµРЅРёС‚СЊ РёРјСЏ",   callback_data="profile_change_name"),
-            InlineKeyboardButton("вњЏпёЏ РЎРјРµРЅРёС‚СЊ РЅРѕРјРµСЂ", callback_data="profile_change")
+            InlineKeyboardButton("✏️ Сменить имя",   callback_data="profile_change_name"),
+            InlineKeyboardButton("✏️ Сменить номер", callback_data="profile_change")
         ],
-        [InlineKeyboardButton("рџ”™ Р“Р»Р°РІРЅРѕРµ РјРµРЅСЋ", callback_data="menu_main")]
+        [InlineKeyboardButton("🔙 Главное меню", callback_data="menu_main")]
     ])
     await safe_upsert_menu(ctx, chat_id, msg_id, photo_bytes=IMAGE_BYTES, caption=text, reply_markup=kb)
 
@@ -792,7 +748,7 @@ async def menu_book_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     return BOOK_BARBER
 
 async def menu_profile_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ РЅР°Р¶Р°С‚РёРµ РєРЅРѕРїРєРё 'РџСЂРѕС„РёР»СЊ'."""
+    """Обрабатывает нажатие кнопки 'Профиль'."""
     query = update.callback_query
     await query.answer()
     await show_profile(ctx, query.message.chat_id, query.message.message_id, query.from_user.id)
@@ -831,7 +787,7 @@ async def menu_main_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     return MENU
 
 async def show_records(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """РћС‚РѕР±СЂР°Р¶Р°РµС‚ Р·Р°РїРёСЃРё РґР»СЏ РєР»РёРµРЅС‚Р° РёР»Рё РґР»СЏ Р±Р°СЂР±РµСЂР°."""
+    """Отображает записи для клиента или для барбера."""
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
@@ -840,52 +796,52 @@ async def show_records(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     with get_db_connection() as conn:
         cursor = conn.cursor()
 
-        # РџСЂРѕРІРµСЂСЏРµРј, СЏРІР»СЏРµС‚СЃСЏ Р»Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ Р±Р°СЂР±РµСЂРѕРј
+        # Проверяем, является ли пользователь барбером
         cursor.execute("SELECT Barber FROM Users WHERE TelegramID = ?", (user_id,))
         barber_record = cursor.fetchone()
 
-        # РЎС†РµРЅР°СЂРёР№ РґР»СЏ Р‘РђР Р‘Р•Р Рђ
+        # Сценарий для БАРБЕРА
         if barber_record and barber_record['Barber']:
             barber_name = barber_record['Barber']
             cursor.execute(
-                "SELECT * FROM Appointments WHERE Barber = ? AND Status = 'РђРєС‚РёРІРЅР°СЏ' ORDER BY Date, Time",
+                "SELECT * FROM Appointments WHERE Barber = ? AND Status = 'Активная' ORDER BY Date, Time",
                 (barber_name,)
             )
             recs = cursor.fetchall()
 
             if not recs:
-                await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, "РЈ РІР°СЃ РЅРµС‚ РїСЂРµРґСЃС‚РѕСЏС‰РёС… Р·Р°РїРёСЃРµР№.", main_menu_kb(user_id))
+                await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, "У вас нет предстоящих записей.", main_menu_kb(user_id))
                 return MENU
 
-            text = f"<b>Р—Р°РїРёСЃРё РґР»СЏ Р±Р°СЂР±РµСЂР° {barber_name}:</b>\n"
+            text = f"<b>Записи для барбера {barber_name}:</b>\n"
             for i, r in enumerate(recs, 1):
                 f = dict(r)
                 text += (f"\n{i}. <b>{f['Date']} {f['Time']}</b>\n"
-                         f"   РљР»РёРµРЅС‚: {f.get('CustomerName', 'РЅРµ СѓРєР°Р·Р°РЅ')}\n"
-                         f"   РўРµР»РµС„РѕРЅ: {f.get('Phone', 'РЅРµ СѓРєР°Р·Р°РЅ')}\n"
-                         f"   РЈСЃР»СѓРіРё: {f.get('Services', 'РЅРµ СѓРєР°Р·Р°РЅС‹')}\n")
+                         f"   Клиент: {f.get('CustomerName', 'не указан')}\n"
+                         f"   Телефон: {f.get('Phone', 'не указан')}\n"
+                         f"   Услуги: {f.get('Services', 'не указаны')}\n")
 
-            kb = [[InlineKeyboardButton("рџ”™ Р“Р»Р°РІРЅРѕРµ РјРµРЅСЋ", callback_data="menu_main")]]
+            kb = [[InlineKeyboardButton("🔙 Главное меню", callback_data="menu_main")]]
             await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, text, InlineKeyboardMarkup(kb))
             return SHOW_RECORDS
 
-        # РЎС†РµРЅР°СЂРёР№ РґР»СЏ РљР›РР•РќРўРђ (СЃСѓС‰РµСЃС‚РІСѓСЋС‰Р°СЏ Р»РѕРіРёРєР°)
+        # Сценарий для КЛИЕНТА (существующая логика)
         else:
-            cursor.execute("SELECT * FROM Appointments WHERE UserID = ? AND Status = 'РђРєС‚РёРІРЅР°СЏ' ORDER BY Date, Time", (str(user_id),))
+            cursor.execute("SELECT * FROM Appointments WHERE UserID = ? AND Status = 'Активная' ORDER BY Date, Time", (str(user_id),))
             recs = cursor.fetchall()
 
             if not recs:
-                await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, "РЈ РІР°СЃ РЅРµС‚ Р°РєС‚РёРІРЅС‹С… Р·Р°РїРёСЃРµР№.", main_menu_kb(user_id))
+                await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, "У вас нет активных записей.", main_menu_kb(user_id))
                 return MENU
 
-            text = "<b>Р’Р°С€Рё Р°РєС‚РёРІРЅС‹Рµ Р·Р°РїРёСЃРё:</b>\n"
+            text = "<b>Ваши активные записи:</b>\n"
             kb = []
             for i, r in enumerate(recs, 1):
                 f = dict(r)
-                text += f"\n{i}. {f['Date']} {f['Time']} Рє <b>{f['Barber']}</b>\n  РЈСЃР»СѓРіРё: {f.get('Services', 'РЅРµ СѓРєР°Р·Р°РЅС‹')}"
-                kb.append([InlineKeyboardButton(f"вќЊ РћС‚РјРµРЅРёС‚СЊ Р·Р°РїРёСЃСЊ в„–{i}", callback_data=f"cancel|{f['id']}")])
+                text += f"\n{i}. {f['Date']} {f['Time']} к <b>{f['Barber']}</b>\n  Услуги: {f.get('Services', 'не указаны')}"
+                kb.append([InlineKeyboardButton(f"❌ Отменить запись №{i}", callback_data=f"cancel|{f['id']}")])
 
-            kb.append([InlineKeyboardButton("рџ”™ Р“Р»Р°РІРЅРѕРµ РјРµРЅСЋ", callback_data="menu_main")])
+            kb.append([InlineKeyboardButton("🔙 Главное меню", callback_data="menu_main")])
             await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, text, InlineKeyboardMarkup(kb))
             return SHOW_RECORDS
 
@@ -901,20 +857,20 @@ async def cancel_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         rec = cursor.fetchone()
 
     if not rec:
-        await query.answer("Р—Р°РїРёСЃСЊ РЅРµ РЅР°Р№РґРµРЅР°.", show_alert=True)
+        await query.answer("Запись не найдена.", show_alert=True)
         return SHOW_RECORDS
 
     appt_start = parse_appointment_start(rec["Date"], rec["Time"])
     if appt_start:
         now = datetime.datetime.now(tz=ZONE)
         if appt_start - now < datetime.timedelta(hours=2):
-            await query.answer("Р—Р°РїРёСЃСЊ РЅРµР»СЊР·СЏ РѕС‚РјРµРЅРёС‚СЊ РјРµРЅРµРµ С‡РµРј Р·Р° 2 С‡Р°СЃР° РґРѕ РІСЂРµРјРµРЅРё РїСЂРёРµРјР°.", show_alert=True)
+            await query.answer("Запись нельзя отменить менее чем за 2 часа до времени приема.", show_alert=True)
             return SHOW_RECORDS
 
-    caption = f"РћС‚РјРµРЅРёС‚СЊ Р·Р°РїРёСЃСЊ Сѓ <b>{rec['Barber']}</b>\n{rec['Date']} {rec['Time']}?"
+    caption = f"Отменить запись у <b>{rec['Barber']}</b>\n{rec['Date']} {rec['Time']}?"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("вњ… Р”Р°, РѕС‚РјРµРЅРёС‚СЊ", callback_data=f"cancel_confirm|{rec_id}|yes")],
-        [InlineKeyboardButton("в¬…пёЏ РќР°Р·Р°Рґ", callback_data="menu_show")]
+        [InlineKeyboardButton("✅ Да, отменить", callback_data=f"cancel_confirm|{rec_id}|yes")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="menu_show")]
     ])
     await query.edit_message_caption(caption, reply_markup=kb, parse_mode="HTML")
     return CANCEL_CONFIRM
@@ -927,14 +883,14 @@ async def cancel_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id, msg_id = query.message.chat_id, query.message.message_id
 
     if choice == "yes":
-        deny_text = "Р—Р°РїРёСЃСЊ РЅРµР»СЊР·СЏ РѕС‚РјРµРЅРёС‚СЊ РјРµРЅРµРµ С‡РµРј Р·Р° 2 С‡Р°СЃР° РґРѕ РІСЂРµРјРµРЅРё РїСЂРёРµРјР°."
+        deny_text = "Запись нельзя отменить менее чем за 2 часа до времени приема."
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM Appointments WHERE id = ?", (rec_id,))
             rec = cursor.fetchone()
 
             if not rec:
-                res_text = "Р—Р°РїРёСЃСЊ РЅРµ РЅР°Р№РґРµРЅР°."
+                res_text = "Запись не найдена."
             else:
                 appt_start = parse_appointment_start(rec["Date"], rec["Time"])
                 now = datetime.datetime.now(tz=ZONE)
@@ -942,11 +898,11 @@ async def cancel_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                     await query.answer(deny_text, show_alert=True)
                     await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, deny_text, main_menu_kb(query.from_user.id))
                     return MENU
-                cursor.execute("UPDATE Appointments SET Status = 'РћС‚РјРµРЅРµРЅР°' WHERE id = ?", (rec_id,))
+                cursor.execute("UPDATE Appointments SET Status = 'Отменена' WHERE id = ?", (rec_id,))
                 conn.commit()
-                res_text = "Р“РѕС‚РѕРІРѕ: Р·Р°РїРёСЃСЊ РѕС‚РјРµРЅРµРЅР°."
+                res_text = "Готово: запись отменена."
     else:
-        res_text = "РћС‚РјРµРЅР° РѕС‚РјРµРЅРµРЅР°."
+        res_text = "Отмена отменена."
 
     await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, res_text, main_menu_kb(query.from_user.id))
     return MENU
@@ -966,17 +922,17 @@ async def profile_change_name_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
             last_date = datetime.date.fromisoformat(last_changed)
             days = (datetime.date.today() - last_date).days
             if days < 7:
-                await query.answer(f"РЎРјРµРЅРёС‚СЊ РёРјСЏ РјРѕР¶РЅРѕ РЅРµ С‡Р°С‰Рµ СЂР°Р·Р° РІ РЅРµРґРµР»СЋ.\nРџСЂРѕС€Р»Рѕ С‚РѕР»СЊРєРѕ {days} РґРЅ.", show_alert=True)
+                await query.answer(f"Сменить имя можно не чаще раза в неделю.\nПрошло только {days} дн.", show_alert=True)
                 return MENU
         except (ValueError, TypeError):
-             pass # РРіРЅРѕСЂРёСЂСѓРµРј РЅРµРєРѕСЂСЂРµРєС‚РЅСѓСЋ РґР°С‚Сѓ
-    await safe_upsert_menu(ctx, *ctx.user_data['bot_msg'], photo_bytes=IMAGE_BYTES, caption="<b>Р’РІРµРґРёС‚Рµ РЅРѕРІРѕРµ Р¤РРћ:</b>", reply_markup=None)
+             pass # Игнорируем некорректную дату
+    await safe_upsert_menu(ctx, *ctx.user_data['bot_msg'], photo_bytes=IMAGE_BYTES, caption="<b>Введите новое ФИО:</b>", reply_markup=None)
     return CHANGE_NAME
 
 async def change_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     new_name = update.message.text.strip()
     if len(new_name.split()) < 2:
-        await update.message.reply_text("Р’РІРµРґРёС‚Рµ РїРѕР»РЅРѕРµ Р¤РРћ (РёРјСЏ Рё С„Р°РјРёР»РёСЏ).")
+        await update.message.reply_text("Введите полное ФИО (имя и фамилия).")
         return CHANGE_NAME
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -991,15 +947,15 @@ async def profile_change_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     chat_id, msg_id = query.message.chat_id, query.message.message_id
-    await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, "<b>РЎРјРµРЅРёС‚СЊ РЅРѕРјРµСЂ</b>\nРџРѕРґРµР»РёС‚РµСЃСЊ РєРѕРЅС‚Р°РєС‚РѕРј РёР»Рё РІРІРµРґРёС‚Рµ РІСЂСѓС‡РЅСѓСЋ:", None)
-    sent = await ctx.bot.send_message(chat_id, "Р’РІРµРґРёС‚Рµ РЅРѕРІС‹Р№ РЅРѕРјРµСЂ:", reply_markup=contact_kb())
+    await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, "<b>Сменить номер</b>\nПоделитесь контактом или введите вручную:", None)
+    sent = await ctx.bot.send_message(chat_id, "Введите новый номер:", reply_markup=contact_kb())
     ctx.user_data['last_prompt'] = sent.message_id
     return CHANGE_PHONE
 
 async def change_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     phone = update.message.contact.phone_number if update.message.contact else update.message.text.strip()
     if not PHONE_PATTERN.match(phone):
-        await update.message.reply_text("РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚, РЅР°РїСЂРёРјРµСЂ +71234567890.")
+        await update.message.reply_text("Неверный формат, например +71234567890.")
         return CHANGE_PHONE
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -1244,7 +1200,7 @@ async def svc_done_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id, msg_id = query.message.chat_id, query.message.message_id
     selected = ctx.user_data.get('selected_services')
     if not selected:
-        await query.answer("РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РІС‹Р±РµСЂРёС‚Рµ С…РѕС‚СЏ Р±С‹ РѕРґРЅСѓ СѓСЃР»СѓРіСѓ.", show_alert=True)
+        await query.answer("Пожалуйста, выберите хотя бы одну услугу.", show_alert=True)
         return SELECT_SERVICES
 
     services = ctx.user_data['all_services']
@@ -1254,7 +1210,7 @@ async def svc_done_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await query.answer()
     await ctx.bot.edit_message_caption(chat_id=chat_id, message_id=msg_id,
-                                       caption="вЏі РџРѕРґР±РёСЂР°РµРј СЃРІРѕР±РѕРґРЅС‹Рµ РґР°С‚С‹...",
+                                       caption="⏳ Подбираем свободные даты...",
                                        parse_mode="HTML")
 
     return await show_available_dates(query, ctx)
@@ -1307,7 +1263,7 @@ async def book_back_time_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     return await show_available_times(query, ctx)
 
 async def book_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """РџРѕРґС‚РІРµСЂР¶РґР°РµС‚ Рё СЃРѕС…СЂР°РЅСЏРµС‚ Р·Р°РїРёСЃСЊ РІ Р‘Р”."""
+    """Подтверждает и сохраняет запись в БД."""
     query = update.callback_query
     await query.answer()
     choice = query.data.split("|", 1)[1]
@@ -1331,12 +1287,12 @@ async def book_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                     ctx.user_data['name'] = user_rec['Name']
                     ctx.user_data['phone'] = user_rec['Phone']
                 else:
-                    await query.edit_message_caption("РћС€РёР±РєР°: РІР°С€ РїСЂРѕС„РёР»СЊ РЅРµ РЅР°Р№РґРµРЅ. РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РїСЂРѕР№РґРёС‚Рµ СЂРµРіРёСЃС‚СЂР°С†РёСЋ РєРѕРјР°РЅРґРѕР№ /start.", parse_mode="HTML")
+                    await query.edit_message_caption("Ошибка: ваш профиль не найден. Пожалуйста, пройдите регистрацию командой /start.", parse_mode="HTML")
                     return ConversationHandler.END
             record_tuple = (
                 new_id, str(user_id), ctx.user_data.get('name'), ctx.user_data.get('phone'),
                 barber_name, appointment_date, time_range,
-                'РђРєС‚РёРІРЅР°СЏ', services_str, False, False
+                'Активная', services_str, False, False
             )
             cursor.execute(
                 "INSERT INTO Appointments (id, UserID, CustomerName, Phone, Barber, Date, Time, Status, Services, Reminder2hClientSent, Reminder2hBarberSent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1354,15 +1310,15 @@ async def book_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             start_time = time_range.split(' - ')[0] if ' - ' in time_range else time_range
             try:
                 barber_message = (
-                    f"РќРѕРІР°СЏ Р·Р°РїРёСЃСЊ: {appointment_date} {start_time}.\n"
-                    f"РљР»РёРµРЅС‚: <b>{ctx.user_data.get('name')}</b>\n"
-                    f"РўРµР»РµС„РѕРЅ: {ctx.user_data.get('phone')}\n"
-                    f"РЈСЃР»СѓРіРё: {services_str}"
+                    f"Новая запись: {appointment_date} {start_time}.\n"
+                    f"Клиент: <b>{ctx.user_data.get('name')}</b>\n"
+                    f"Телефон: {ctx.user_data.get('phone')}\n"
+                    f"Услуги: {services_str}"
                 )
                 await ctx.bot.send_message(barber_chat_id, barber_message, parse_mode="HTML")
                 barber_notified = True
             except Exception as e:
-                logger.error(f"РќРµ СѓРґР°Р»РѕСЃСЊ СѓРІРµРґРѕРјРёС‚СЊ Р±Р°СЂР±РµСЂР° {barber_name}: {e}")
+                logger.error(f"Не удалось уведомить барбера {barber_name}: {e}")
 
         if barber_notified:
             with get_db_connection() as conn:
@@ -1370,32 +1326,32 @@ async def book_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 update_cursor.execute("UPDATE Appointments SET Reminder2hBarberSent = 1 WHERE id = ?", (new_id,))
                 conn.commit()
 
-        res = "вњ… Р—Р°РїРёСЃСЊ СѓСЃРїРµС€РЅРѕ РѕС„РѕСЂРјР»РµРЅР°!\nРњС‹ РЅР°РїРѕРјРЅРёРј Р·Р° 2 С‡Р°СЃР° РґРѕ РЅР°С‡Р°Р»Р°."
+        res = "✅ Запись успешно оформлена!\nМы напомним за 2 часа до начала."
         await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, res, main_menu_kb(query.from_user.id))
 
     else:
-        await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, "Р—Р°РїРёСЃСЊ РѕС‚РјРµРЅРµРЅР°.", main_menu_kb(query.from_user.id))
+        await safe_upsert_menu(ctx, chat_id, msg_id, IMAGE_BYTES, "Запись отменена.", main_menu_kb(query.from_user.id))
     return MENU
 
 def main():
-    """Р—Р°РїСѓСЃРєР°РµС‚ Р±РѕС‚Р°."""
-    # РЎРѕР·РґР°РµРј РѕР±СЉРµРєС‚ РґР»СЏ СЃРѕС…СЂР°РЅРµРЅРёСЏ СЃРѕСЃС‚РѕСЏРЅРёСЏ, С‡С‚РѕР±С‹ РєРЅРѕРїРєРё СЂР°Р±РѕС‚Р°Р»Рё РїРѕСЃР»Рµ РїРµСЂРµР·Р°РїСѓСЃРєР°
+    """Запускает бота."""
+    # Создаем объект для сохранения состояния, чтобы кнопки работали после перезапуска
     persistence = PicklePersistence(filepath=BASE_DIR / "bot_persistence.pickle")
 
-    # РџРµСЂРµРґР°РµРј РµРіРѕ РІ ApplicationBuilder
+    # Передаем его в ApplicationBuilder
     app = ApplicationBuilder().token(TOKEN).persistence(persistence).build()
 
     try:
-        # РџСЂРё Р·Р°РїСѓСЃРєРµ СѓРґР°Р»СЏРµРј СЃС‚Р°СЂС‹Рµ Р·Р°РїРёСЃРё, РєРѕС‚РѕСЂС‹Рј Р±РѕР»СЊС€Рµ 90 РґРЅРµР№
+        # При запуске удаляем старые записи, которым больше 90 дней
         purge_old_appts()
     except Exception as e:
-        logger.exception(f"РћС€РёР±РєР° РїСЂРё РїРµСЂРІРёС‡РЅРѕР№ РѕС‡РёСЃС‚РєРµ СЃС‚Р°СЂС‹С… Р·Р°РїРёСЃРµР№: {e}")
+        logger.exception(f"Ошибка при первичной очистке старых записей: {e}")
 
-    # РџР»Р°РЅРёСЂСѓРµРј Р·Р°РґР°С‡Сѓ РґР»СЏ РѕС‚РїСЂР°РІРєРё РЅР°РїРѕРјРёРЅР°РЅРёР№
+    # Планируем задачу для отправки напоминаний
     if app.job_queue:
-        # Р—Р°РїСѓСЃРєР°РµРј Р·Р°РґР°С‡Сѓ РєР°Р¶РґС‹Рµ 10 РјРёРЅСѓС‚ (600 СЃРµРєСѓРЅРґ)
+        # Запускаем задачу каждые 10 минут (600 секунд)
         app.job_queue.run_repeating(reminder_checker_job, interval=600, first=10, name="reminder_checker")
-        logger.info("Р—Р°РґР°С‡Р° РґР»СЏ РїСЂРѕРІРµСЂРєРё РЅР°РїРѕРјРёРЅР°РЅРёР№ Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅР° (РєР°Р¶РґС‹Рµ 10 РјРёРЅСѓС‚).")
+        logger.info("Задача для проверки напоминаний запланирована (каждые 10 минут).")
 
     conv = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
@@ -1403,7 +1359,7 @@ def main():
              REG_NAME:    [MessageHandler(filters.TEXT & ~filters.COMMAND, reg_name)],
              REG_PHONE:   [MessageHandler((filters.TEXT | filters.CONTACT) & ~filters.COMMAND, reg_phone)],
              MENU:        [
-                 # РР—РњР•РќР•РќРР•: Р Р°Р·РґРµР»СЊРЅС‹Рµ РѕР±СЂР°Р±РѕС‚С‡РёРєРё РґР»СЏ РєР°Р¶РґРѕР№ РєРЅРѕРїРєРё РјРµРЅСЋ
+                 # ИЗМЕНЕНИЕ: Раздельные обработчики для каждой кнопки меню
                  CallbackQueryHandler(menu_book_cb, pattern="^menu_book$"),
                  CallbackQueryHandler(book_unavailable_cb, pattern="^book_unavailable$"),
                  CallbackQueryHandler(show_records, pattern="^menu_show$"),
@@ -1456,7 +1412,7 @@ def main():
         },
         fallbacks=[CommandHandler("start", start)],
         allow_reentry=True,
-        # РР—РњР•РќР•РќРР•: РЇРІРЅРѕ СѓРєР°Р·С‹РІР°РµРј, С‡С‚Рѕ СЃРѕСЃС‚РѕСЏРЅРёРµ РґРёР°Р»РѕРіР° РЅСѓР¶РЅРѕ СЃРѕС…СЂР°РЅСЏС‚СЊ
+        # ИЗМЕНЕНИЕ: Явно указываем, что состояние диалога нужно сохранять
         persistent=True,
         name="bot_conversation"
     )

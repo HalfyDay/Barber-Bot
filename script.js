@@ -51,7 +51,7 @@ const TABLE_COLUMNS = {
   ],
   Cost: [
     { key: 'Uslugi', label: 'Услуга', editable: true, type: 'text', minWidth: 'w-56' },
-    { key: 'Timur', label: 'РўРёРјСѓСЂ', editable: true, type: 'text', align: 'center' },
+    { key: 'Timur', label: 'Тимур', editable: true, type: 'text', align: 'center' },
     { key: 'Vladimir', label: 'Владимир', editable: true, type: 'text', align: 'center' },
     { key: 'Alina', label: 'Алина', editable: true, type: 'text', align: 'center' },
     { key: 'Aleksey', label: 'Алексей', editable: true, type: 'text', align: 'center' },
@@ -62,16 +62,14 @@ const TABLE_COLUMNS = {
 const RATING_MIN = 3;
 const RATING_MAX = 5;
 const RATING_STEP = 0.5;
-const AVATAR_PRESETS = ['/Image/barber_alex.jpg', '/Image/barber_alina.jpg', '/Image/barber_vlad.jpg', '/Image/barber_timur.jpg'];
 let avatarOptionsCache = null;
-let avatarOptionsPromise = null;
 const YEAR_IN_MS = 365 * 24 * 60 * 60 * 1000;
 const buildNewBarberState = () => ({
   name: '',
   password: '',
   rating: '5',
   color: '#6d28d9',
-  avatarUrl: AVATAR_PRESETS[0],
+  avatarUrl: '',
   description: '',
   phone: '',
   telegramId: '',
@@ -139,7 +137,7 @@ const fetchAvatarOptions = async () => {
   if (!response.ok) throw new Error('Не удалось получить список аватаров');
   const payload = await response.json();
   const images = Array.isArray(payload.images) ? payload.images.filter(Boolean) : [];
-  return images.length ? images : AVATAR_PRESETS;
+  return images;
 };
 
 const normalizeText = (value) => (value == null ? '' : String(value));
@@ -243,18 +241,18 @@ const formatLiveTimestamp = (value, nowTs = Date.now()) => {
     if (Number.isNaN(parsed.getTime())) return '';
     const diffMs = Math.max(0, nowTs - parsed.getTime());
     if (diffMs < 1000) return 'только что';
-    if (diffMs < 60_000) return `${Math.floor(diffMs / 1000)} сек назад`;
+    if (diffMs < 60_000) return `${Math.floor(diffMs / 1000)} сек`;
     if (diffMs < 3_600_000) {
       const minutes = Math.floor(diffMs / 60_000);
       const seconds = Math.floor((diffMs % 60_000) / 1000);
-      return `${minutes} мин ${seconds.toString().padStart(2, '0')} сек назад`;
+      return `${minutes} мин ${seconds.toString().padStart(2, '0')} сек`;
     }
     if (diffMs < 86_400_000) {
       const hours = Math.floor(diffMs / 3_600_000);
       const minutes = Math.floor((diffMs % 3_600_000) / 60_000);
-      return `${hours} ч ${minutes.toString().padStart(2, '0')} мин назад`;
+      return `${hours} ч ${minutes.toString().padStart(2, '0')} мин`;
     }
-    return parsed.toLocaleTimeString('ru-RU', {
+    return parsed.toLocaleString('ru-RU', {
       day: '2-digit',
       month: '2-digit',
       hour: '2-digit',
@@ -428,7 +426,7 @@ const LiveBadge = ({ timestamp, label = 'LIVE' }) => {
     <span className="flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200">
       <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
       {label}
-      {timeLabel && <span className="text-emerald-100/80 normal-case tracking-normal">обновлено {timeLabel}</span>}
+      {timeLabel && <span className="text-emerald-100/80 normal-case tracking-normal">{timeLabel}</span>}
     </span>
   );
 };
@@ -792,67 +790,79 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
   );
 };
 const BarberAvatarPicker = ({ value, onChange }) => {
-  const [avatarOptions, setAvatarOptions] = useState(() => avatarOptionsCache || AVATAR_PRESETS);
-  const [loading, setLoading] = useState(!avatarOptionsCache);
+  const [avatarOptions, setAvatarOptions] = useState(() => avatarOptionsCache || []);
+  const [loading, setLoading] = useState(false);
+  const [showGallery, setShowGallery] = useState(false);
 
   const availableOptions = useMemo(() => {
     if (!value || avatarOptions.includes(value)) return avatarOptions;
-    return [value, ...avatarOptions];
+    return value ? [value, ...avatarOptions] : avatarOptions;
   }, [avatarOptions, value]);
 
-  const refreshAvatars = useCallback(async () => {
-    setLoading(true);
-    try {
-      avatarOptionsPromise = avatarOptionsPromise || fetchAvatarOptions();
-      const assets = await avatarOptionsPromise;
-      avatarOptionsCache = assets;
-      setAvatarOptions(assets);
-    } catch (error) {
-      console.error('Avatar load error', error);
-    } finally {
-      avatarOptionsPromise = null;
-      setLoading(false);
-    }
+  useEffect(() => {
+    let isMounted = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const assets = await fetchAvatarOptions();
+        if (!isMounted) return;
+        avatarOptionsCache = assets;
+        setAvatarOptions(assets);
+      } catch (error) {
+        console.error('Avatar load error', error);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  useEffect(() => {
-    if (avatarOptionsCache) return;
-    refreshAvatars();
-  }, [refreshAvatars]);
-
-  const previewSrc = value || avatarOptions[0] || AVATAR_PRESETS[0];
+  const previewSrc = value || avatarOptions[0] || null;
 
   return (
     <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900/40 p-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <img src={previewSrc} alt="avatar" className="h-16 w-16 rounded-full border border-slate-700 object-cover" />
+        {previewSrc ? (
+          <img src={previewSrc} alt="avatar" className="h-16 w-16 rounded-full border border-slate-700 object-cover" />
+        ) : (
+          <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-slate-700 text-[10px] uppercase text-slate-500">
+            Нет фото
+          </div>
+        )}
         <div className="flex-1 space-y-2">
           <label className="text-xs uppercase tracking-wide text-slate-400">Изображение из папки «Image»</label>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <select
-              value={value || ''}
-              onChange={(event) => onChange(event.target.value)}
-              className="flex-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
-            >
-              <option value="">Без изображения</option>
-              {availableOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option.replace('/Image/', '')}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={refreshAvatars}
-              className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-100 hover:border-indigo-500 hover:text-white"
-            >
-              {loading ? 'Обновляю…' : 'Обновить список'}
-            </button>
-          </div>
-          <p className="text-[11px] text-slate-400">Добавьте файл в папку Image, затем обновите список, чтобы выбрать его из выпадающего меню.</p>
+          <select
+            value={value || ''}
+            onChange={(event) => onChange(event.target.value)}
+            className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
+          >
+            <option value="">Без изображения</option>
+            {availableOptions.map((option) => (
+              <option key={option} value={option}>
+                {option.replace('/Image/', '')}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setShowGallery((prev) => !prev)}
+            className="text-left text-sm text-indigo-300 hover:text-indigo-100 disabled:text-slate-500"
+            disabled={loading}
+          >
+            {loading
+              ? 'Сканирую папку…'
+              : avatarOptions.length
+                ? showGallery
+                  ? 'Скрыть миниатюры'
+                  : 'Показать миниатюры'
+                : 'Нет изображений в папке Image'}
+          </button>
         </div>
       </div>
-      {avatarOptions.length ? (
+      {showGallery && avatarOptions.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {avatarOptions.map((preset) => {
             const isSelected = preset === value;
@@ -870,9 +880,8 @@ const BarberAvatarPicker = ({ value, onChange }) => {
             );
           })}
         </div>
-      ) : (
-        <p className="text-sm text-slate-500">Нет доступных изображений. Добавьте файлы в папку /Image.</p>
       )}
+      {!avatarOptions.length && !loading && <p className="text-sm text-slate-500">Добавьте файлы в папку /Image, чтобы выбрать аватар.</p>}
     </div>
   );
 };
@@ -918,7 +927,7 @@ const BarbersView = ({ barbers = [], onFieldChange, onSave, onAdd, onDelete }) =
         <div className="grid gap-2 mobile-grid-2 md:grid-cols-2">
           <input type="password" value={barber.password || ''} onChange={(event) => onFieldChange(barber.id, 'password', event.target.value)} placeholder="Пароль" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
           <label className="flex items-center gap-3 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white">
-            Цвет карточки
+            Цвет
             <input type="color" value={colorValue} onChange={(event) => onFieldChange(barber.id, 'color', event.target.value)} className="h-8 w-16 cursor-pointer rounded border border-slate-500 bg-transparent" />
           </label>
         </div>
@@ -969,7 +978,7 @@ const BarbersView = ({ barbers = [], onFieldChange, onSave, onAdd, onDelete }) =
           <div className="grid gap-2 mobile-grid-2 md:grid-cols-2">
             <input type="password" value={newBarber.password} onChange={(event) => updateNewBarber('password', event.target.value)} placeholder="Пароль" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
             <label className="flex items-center gap-3 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white">
-              Цвет карточки
+              Цвет
               <input type="color" value={newBarber.color} onChange={(event) => updateNewBarber('color', event.target.value)} className="h-8 w-16 cursor-pointer rounded border border-slate-500 bg-transparent" />
             </label>
           </div>
@@ -1012,35 +1021,35 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
           <p className="text-slate-400">Пока нет ни одной услуги.</p>
         ) : (
           <div className="overflow-auto">
-            <table className="min-w-[900px] text-sm">
+            <table className="min-w-[860px] text-[13px] leading-tight sm:text-sm">
               <thead>
-                <tr className="text-left text-slate-400">
-                  <th className="p-2">Название</th>
-                  <th className="p-2 w-32">Длительность</th>
+                <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                  <th className="px-2 py-1.5">Название</th>
+                  <th className="px-2 py-1.5 w-28">Длительность</th>
                   {barbers.map((barber) => (
-                    <th key={barber.id} className="p-2 text-center">{barber.name}</th>
+                    <th key={barber.id} className="px-2 py-1.5 text-center">{barber.name}</th>
                   ))}
-                  <th className="p-2 w-16 text-center" />
+                  <th className="px-2 py-1.5 w-12 text-center" />
                 </tr>
               </thead>
               <tbody>
                 {services.map((service) => (
                   <tr key={service.id} className="border-t border-slate-800">
-                    <td className="p-2 align-top">
-                      <input value={service.name || ''} onChange={(event) => onFieldChange(service.id, 'name', event.target.value)} className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-2 text-white" />
+                    <td className="px-2 py-1.5 align-top">
+                      <input value={service.name || ''} onChange={(event) => onFieldChange(service.id, 'name', event.target.value)} className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-white" />
                     </td>
-                    <td className="p-2 align-top">
-                      <input type="number" value={service.duration || 0} onChange={(event) => onFieldChange(service.id, 'duration', Number(event.target.value))} className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-2 text-white" />
+                    <td className="px-2 py-1.5 align-top">
+                      <input type="number" value={service.duration || 0} onChange={(event) => onFieldChange(service.id, 'duration', Number(event.target.value))} className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-white" />
                     </td>
                     {barbers.map((barber) => (
-                      <td key={barber.id} className="p-2 align-top">
-                        <input type="number" value={service.prices?.[barber.id] ?? ''} onChange={(event) => onPriceChange(service.id, barber.id, event.target.value)} className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-2 text-white" placeholder="Цена" />
+                      <td key={barber.id} className="px-2 py-1.5 align-top">
+                        <input type="number" value={service.prices?.[barber.id] ?? ''} onChange={(event) => onPriceChange(service.id, barber.id, event.target.value)} className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-white" placeholder="Цена" />
                       </td>
                     ))}
-                    <td className="p-2 align-top text-center">
+                    <td className="px-2 py-1.5 align-top text-center">
                       <button
                         onClick={() => onDelete(service)}
-                        className="inline-flex items-center justify-center rounded-lg border border-rose-500/70 p-2 text-rose-300 hover:bg-rose-500/10"
+                        className="inline-flex items-center justify-center rounded-lg border border-rose-500/70 p-2 text-xs text-rose-300 hover:bg-rose-500/10"
                         aria-label="Удалить услугу"
                       >
                         <IconTrash />
@@ -1739,7 +1748,6 @@ const DataTable = ({
   onDelete,
   options,
   onOpenProfile,
-  isCompact = false,
   groupByDate = true,
 }) => {
   if (!rows.length) {
@@ -1750,52 +1758,17 @@ const DataTable = ({
   const groupedRows =
     tableId === 'Appointments' && groupByDate ? buildAppointmentGroups(rows) : [{ key: 'default', label: null, rows }];
 
-  if (isCompact) {
-    return (
-      <div className="space-y-4 md:hidden">
-        {groupedRows.map((group) => (
-          <div key={group.key} className="space-y-3">
-            {group.label && (
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                <span className="h-px flex-1 bg-slate-700" />
-                {group.label}
-                <span className="h-px flex-1 bg-slate-700" />
-              </div>
-            )}
-            {group.rows.map((record) => (
-              <div key={getRecordId(record)} className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900/60 p-4">
-                {visibleColumns.map((column) => (
-                  <div key={column.key} className="text-sm">
-                    <p className="text-xs uppercase tracking-wide text-slate-500">{column.label}</p>
-                    <div className="mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-2 py-1">
-                      <EditableCell record={record} column={column} options={options} onUpdate={onUpdate} onOpenProfile={onOpenProfile} tableId={tableId} />
-                    </div>
-                  </div>
-                ))}
-            {onDelete && (
-              <button
-                onClick={() => onDelete(record)}
-                className="flex w-full items-center justify-center rounded-lg border border-rose-500 p-2 text-rose-300 hover:bg-rose-500/10"
-                aria-label="Удалить запись"
-              >
-                <IconTrash />
-              </button>
-            )}
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
   return (
-    <div className="-mx-4 overflow-x-auto overflow-y-visible pb-4 md:mx-0">
-      <table className="min-w-[860px] table-auto text-sm">
+    <div className="-mx-4 overflow-x-auto overflow-y-visible pb-3 sm:mx-0">
+      <table className="min-w-[760px] table-auto text-[13px] leading-tight sm:text-sm">
         <thead>
-          <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
+          <tr className="text-left text-[11px] uppercase tracking-[0.25em] text-slate-400">
             {visibleColumns.map((column) => (
-              <th key={column.key} className={classNames('p-2', column.align === 'center' && 'text-center', column.minWidth)} onClick={() => column.sortable !== false && onSort(column.key)}>
+              <th
+                key={column.key}
+                className={classNames('px-2 py-1.5 whitespace-nowrap', column.align === 'center' && 'text-center', column.minWidth)}
+                onClick={() => column.sortable !== false && onSort(column.key)}
+              >
                 <div className={classNames('flex items-center gap-2', column.align === 'center' && 'justify-center')}>
                   {column.label}
                   {column.sortable !== false && (
@@ -1804,7 +1777,7 @@ const DataTable = ({
                 </div>
               </th>
             ))}
-            {onDelete && <th className="p-2 text-right">Действия</th>}
+            {onDelete && <th className="px-2 py-1.5 text-right">Действия</th>}
           </tr>
         </thead>
         <tbody>
@@ -1812,8 +1785,8 @@ const DataTable = ({
             <Fragment key={group.key}>
               {group.label && (
                 <tr className="bg-transparent">
-                  <td colSpan={visibleColumns.length + (onDelete ? 1 : 0)} className="p-3">
-                    <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+                  <td colSpan={visibleColumns.length + (onDelete ? 1 : 0)} className="px-2 py-2">
+                    <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
                       <span className="h-px flex-1 bg-slate-700" />
                       {group.label}
                       <span className="h-px flex-1 bg-slate-700" />
@@ -1824,15 +1797,21 @@ const DataTable = ({
               {group.rows.map((record) => (
                 <tr key={getRecordId(record)} className="border-t border-slate-800">
                   {visibleColumns.map((column) => (
-                    <td key={column.key} className={classNames('p-2 align-top whitespace-pre-wrap break-words', column.align === 'center' && 'text-center')}>
+                    <td
+                      key={column.key}
+                      className={classNames(
+                        'px-2 py-1.5 align-top whitespace-pre-wrap break-words text-[13px] leading-snug sm:text-sm',
+                        column.align === 'center' && 'text-center'
+                      )}
+                    >
                       <EditableCell record={record} column={column} options={options} onUpdate={onUpdate} onOpenProfile={onOpenProfile} tableId={tableId} />
                     </td>
                   ))}
                   {onDelete && (
-                    <td className="p-2 text-right">
+                    <td className="px-2 py-1.5 text-right">
                       <button
                         onClick={() => onDelete(record)}
-                        className="inline-flex items-center rounded-lg border border-rose-500 p-2 text-rose-300 hover:bg-rose-500/10"
+                        className="inline-flex items-center rounded-lg border border-rose-500 px-2 py-1.5 text-xs text-rose-300 hover:bg-rose-500/10"
                         aria-label="Удалить запись"
                       >
                         <IconTrash />
@@ -2217,7 +2196,6 @@ const TablesWorkspace = ({
     DATA_TABLES.reduce((acc, table) => ({ ...acc, [table]: TABLE_CONFIG[table]?.defaultSort || null }), {})
   );
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [compactTableView, setCompactTableView] = useState(window.innerWidth < 768);
   const [showPastAppointments, setShowPastAppointments] = useLocalStorage('tables.showPastAppointments', true);
   const [groupAppointmentsByDate, setGroupAppointmentsByDate] = useLocalStorage('tables.groupAppointmentsByDate', true);
   const appointmentTemplate = useMemo(
@@ -2243,12 +2221,6 @@ const TablesWorkspace = ({
       });
     }
   }, [sharedOptions]);
-
-  useEffect(() => {
-    const handleResize = () => setCompactTableView(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   useEffect(() => {
     if (!TABLE_CONFIG[activeTable]) {
@@ -2499,7 +2471,6 @@ const TablesWorkspace = ({
                 onDelete={tableSettings.canCreate ? handleDelete : null}
                 options={dropdownOptions}
                 onOpenProfile={onOpenProfile}
-                isCompact={compactTableView}
                 groupByDate={activeTable === 'Appointments' ? groupAppointmentsByDate : false}
               />
             </div>

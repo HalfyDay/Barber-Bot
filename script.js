@@ -3328,10 +3328,12 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, on
     []
   );
   const [draft, setDraft] = useState(buildDraft(appointment));
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setDraft(buildDraft(appointment));
+    setDetailsOpen(false);
   }, [appointment, buildDraft, open]);
 
   if (!open || !draft) return null;
@@ -3339,6 +3341,24 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, on
   const servicesSelection = parseMultiValue(draft.Services);
   const actionButtonClass = 'rounded-lg px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap sm:px-4 sm:py-2 sm:text-sm';
   const handleChange = (field, value) => setDraft((prev) => ({ ...prev, [field]: value }));
+  const isReminderSent = (value) => value === true || value === 'true' || value === 1 || value === '1';
+  const getReminderLabel = (value) => (isReminderSent(value) ? 'Отправлено' : 'Не отправлено');
+  const getReminderAccent = (value) => (isReminderSent(value) ? 'text-emerald-300' : 'text-slate-500');
+  const recordDetails = [
+    { key: 'user', label: 'UserID', value: draft.UserID || '—', accent: draft.UserID ? 'text-white' : 'text-slate-500' },
+    {
+      key: 'clientReminder',
+      label: 'Клиенту отправлено (2ч)',
+      value: getReminderLabel(draft.Reminder2hClientSent),
+      accent: getReminderAccent(draft.Reminder2hClientSent),
+    },
+    {
+      key: 'barberReminder',
+      label: 'Мастеру отправлено (2ч)',
+      value: getReminderLabel(draft.Reminder2hBarberSent),
+      accent: getReminderAccent(draft.Reminder2hBarberSent),
+    },
+  ];
 
   const submitDraft = (nextDraft) => {
     if (!nextDraft) return;
@@ -3454,6 +3474,35 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, on
             onChange={(selected) => handleChange('Services', selected.join(', '))}
             placeholder="Нет доступных услуг"
           />
+        </div>
+      </div>
+      <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/60">
+        <button
+          type="button"
+          onClick={() => setDetailsOpen((prev) => !prev)}
+          className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left"
+        >
+          <p className="text-sm font-semibold text-white">Данные о записи</p>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            className={classNames('h-4 w-4 text-slate-400 transition-transform', detailsOpen ? 'rotate-180' : 'rotate-0')}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+        <div className={classNames('overflow-hidden transition-all duration-200', detailsOpen ? 'max-h-64 border-t border-slate-800' : 'max-h-0')}>
+          <dl className="divide-y divide-slate-800 px-4 py-2 text-sm text-slate-300">
+            {recordDetails.map((item) => (
+              <div key={item.key} className="flex items-center justify-between gap-3 py-2">
+                <dt className="text-xs text-slate-400">{item.label}</dt>
+                <dd className={classNames('text-right font-semibold', item.accent)}>{item.value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       </div>
     </Modal>

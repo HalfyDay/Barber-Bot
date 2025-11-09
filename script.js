@@ -2199,7 +2199,9 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
               onClick={() => toggle(service)}
             >
               {service}
-              <span className="text-slate-400">?</span>
+              <span className="text-base leading-none text-slate-400" aria-hidden="true">
+                &times;
+              </span>
             </button>
           ))}
         </div>
@@ -2239,7 +2241,11 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
                     )}
                   >
                     <span className="truncate">{option}</span>
-                    {isActive && <span className="text-xs text-indigo-300">?</span>}
+                    {isActive && (
+                      <span className="text-xs font-semibold text-indigo-300" aria-hidden="true">
+                        ✓
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -2391,7 +2397,7 @@ const TableToolbar = ({
     );
   const allowManualRefresh = typeof onRefresh === 'function' && !['Appointments', 'Users'].includes(tableId);
   const inlineCreateForMobile = canCreate && typeof onOpenCreate === 'function' && ['Appointments', 'Users'].includes(tableId);
-  const showColumnMenu = columns.length > 0 && tableId !== 'Users';
+  const showColumnMenu = columns.length > 0 && !['Users', 'Appointments'].includes(tableId);
   const statusControl =
     supportsStatusFilter ? (
       <StatusMenu statuses={statuses} hiddenStatuses={hiddenStatuses} onToggle={toggleStatus} onReset={resetStatuses} />
@@ -3331,6 +3337,7 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, on
   if (!open || !draft) return null;
 
   const servicesSelection = parseMultiValue(draft.Services);
+  const actionButtonClass = 'rounded-lg px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap sm:px-4 sm:py-2 sm:text-sm';
   const handleChange = (field, value) => setDraft((prev) => ({ ...prev, [field]: value }));
 
   const submitDraft = (nextDraft) => {
@@ -3380,24 +3387,24 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, on
       isOpen={open}
       onClose={onClose}
       footer={
-        <div className="flex flex-wrap justify-end gap-3">
+        <div className="flex flex-wrap justify-end gap-2 sm:gap-3">
           {!isNew && canDelete && (
-            <button onClick={() => onDelete?.(draft)} className="rounded-lg border border-rose-600 px-4 py-2 text-sm text-rose-200 hover:bg-rose-500/10">
+            <button onClick={() => onDelete?.(draft)} className={classNames(actionButtonClass, 'border border-rose-600 text-rose-200 hover:bg-rose-500/10')}>
               Удалить
             </button>
           )}
-          <button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">
+          <button onClick={onClose} className={classNames(actionButtonClass, 'border border-slate-600 text-white')}>
             Отмена
           </button>
           {!isNew && (
             <button
               onClick={handleMarkCompleted}
-              className="rounded-lg border border-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-200 hover:bg-emerald-500/10"
+              className={classNames(actionButtonClass, 'border border-emerald-500 text-emerald-200 hover:bg-emerald-500/10')}
             >
               Выполнено
             </button>
           )}
-          <button onClick={handleSubmit} className="rounded-lg bg-emerald-600 px-4 py-2 text-white">
+          <button onClick={handleSubmit} className={classNames(actionButtonClass, 'bg-emerald-600 text-white hover:bg-emerald-500')}>
             Сохранить
           </button>
         </div>

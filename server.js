@@ -145,14 +145,27 @@ const IMAGE_EXTENSIONS = new Set([
   ".gif",
   ".svg",
 ]);
+const walkImageDir = async (dir, relative = "") => {
+  const entries = await fs.readdir(dir);
+  const assets = [];
+  for (const entry of entries) {
+    if (!entry) continue;
+    const fullPath = path.join(dir, entry);
+    const stats = await fs.stat(fullPath);
+    const relPath = relative ? path.join(relative, entry) : entry;
+    if (stats.isDirectory()) {
+      assets.push(...(await walkImageDir(fullPath, relPath)));
+    } else if (IMAGE_EXTENSIONS.has(path.extname(entry).toLowerCase())) {
+      assets.push(`/Image/${relPath.replace(/\\/g, "/")}`);
+    }
+  }
+  return assets;
+};
 const listAvatarImages = async () => {
   try {
     if (!(await fs.pathExists(IMAGE_DIR))) return [];
-    const files = await fs.readdir(IMAGE_DIR);
-    return files
-      .filter((file) => IMAGE_EXTENSIONS.has(path.extname(file).toLowerCase()))
-      .sort((a, b) => a.localeCompare(b, "ru"))
-      .map((file) => `/Image/${file}`);
+    const images = await walkImageDir(IMAGE_DIR);
+    return Array.from(new Set(images)).sort((a, b) => a.localeCompare(b, "ru"));
   } catch (error) {
     console.error("Avatar scan error:", error);
     return [];
@@ -1137,7 +1150,15 @@ app.get("/api/:tableName", authenticateToken, async (req, res) => {
     return res.status(404).json({ error: "Неизвестная таблица." });
   if (tableName === "Schedules") {
     try {
-      const barbers = await getBarbers({ includeInactive: true });
+      const barbersList = await getBarbers({ includeInactive: true });
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      await prisma.schedules.deleteMany({
+        where: {
+          Date: { lt: todayKey },
+        },
+      });
       const allSchedules = await prisma.schedules.findMany();
       const schedulesMap = allSchedules.reduce((acc, schedule) => {
         if (schedule.Barber && schedule.Date) {
@@ -1145,19 +1166,15 @@ app.get("/api/:tableName", authenticateToken, async (req, res) => {
         }
         return acc;
       }, new Map());
-      const daysOfWeek = [
-        "Понедельник",
-        "Вторник",
-        "Среда",
-        "Четверг",
-        "Пятница",
-        "Суббота",
-        "Воскресенье",
-      ];
-      const today = new Date();
+      const daysOfWeek = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
+      const windowDays = 14;
+      const fallbackNames = Array.from(new Set(allSchedules.map((item) => item.Barber).filter(Boolean)));
+      const barberNames = (barbersList.map((barber) => barber.name).filter(Boolean).length ? barbersList.map((barber) => barber.name).filter(Boolean) : fallbackNames).sort((a, b) =>
+        a.localeCompare(b, "ru")
+      );
       const fullSchedule = [];
-      for (const barber of barbers) {
-        for (let offset = 0; offset < 14; offset += 1) {
+      barberNames.forEach((name) => {
+        for (let offset = 0; offset < windowDays; offset += 1) {
           const date = new Date(today);
           date.setDate(today.getDate() + offset);
           const yyyy = date.getFullYear();
@@ -1165,17 +1182,18 @@ app.get("/api/:tableName", authenticateToken, async (req, res) => {
           const dd = String(date.getDate()).padStart(2, "0");
           const dateKey = `${yyyy}-${mm}-${dd}`;
           const dayIndex = (date.getDay() + 6) % 7;
-          const existing = schedulesMap.get(`${barber.name}-${dateKey}`);
+          const mapKey = `${name}-${dateKey}`;
+          const existing = schedulesMap.get(mapKey);
           fullSchedule.push({
-            id: `${barber.id}-${dateKey}`,
-            Barber: barber.name,
+            id: mapKey,
+            Barber: name,
             DayOfWeek: daysOfWeek[dayIndex],
             Date: dateKey,
-            Week: existing?.Week || "—",
+            Week: existing?.Week || "",
             originalId: existing?.id || null,
           });
         }
-      }
+      });
       return res.json(fullSchedule);
     } catch (error) {
       console.error("Schedules fetch error:", error);
@@ -1213,7 +1231,7 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
   }
   if (tableName === "Schedules") {
     try {
-      const { Barber, Week, Date: date } = data;
+      const { Barber, Week = "", Date: date } = data;
       const existing = await prisma.schedules.findFirst({
         where: { Barber, Date: date },
       });

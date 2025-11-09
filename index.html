@@ -12,6 +12,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Подключаем стили панели -->
     <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="icon" type="image/png" sizes="32x32" href="Image/Icon/icon-32.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="Image/Icon/icon-192.png">
+    <link rel="apple-touch-icon" href="Image/Icon/icon-192.png">
 </head>
 <body class="bg-gray-900">
     <!-- Контейнер, в который монтируется React-приложение -->
@@ -22,5 +27,14 @@
     </script>
     <!-- Собранный фронтенд-бандл -->
     <script src="script.bundle.js" defer></script>
+    <script>
+        if ("serviceWorker" in navigator) {
+            window.addEventListener("load", () => {
+                navigator.serviceWorker
+                    .register("/service-worker.js")
+                    .catch((error) => console.error("SW registration failed:", error));
+            });
+        }
+    </script>
 </body>
 </html>

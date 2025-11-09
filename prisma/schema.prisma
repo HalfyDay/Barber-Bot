@@ -39,6 +39,7 @@ model Schedules {
   Today                Boolean?    @map("Today")
   Date                 String?    @map("Date")
   Week                 String?    @map("Week")
+  Time                 String?    @map("Time")
 
   @@map("Schedules")
 }

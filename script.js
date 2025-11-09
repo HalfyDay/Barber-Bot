@@ -20,15 +20,20 @@ const VIEW_TABS = [
 ];
 
 const TABLE_ORDER = ['Appointments', 'Schedules', 'Users', 'Barbers', 'Services'];
+const VISIBLE_TABLE_ORDER = TABLE_ORDER.filter((table) => table !== 'Schedules');
 const DATA_TABLES = ['Appointments', 'Schedules', 'Users'];
 
 const TABLE_CONFIG = {
-  Appointments: { label: 'Записи', mode: 'data', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'desc' } },
+  Appointments: { label: 'Записи', mode: 'data', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'asc' } },
   Schedules: { label: 'Расписание', mode: 'data', canCreate: false, supportsBarberFilter: true, defaultSort: { key: 'Date', direction: 'asc' } },
   Users: { label: 'Клиенты', mode: 'data', canCreate: true, defaultSort: { key: 'Name', direction: 'asc' } },
   Barbers: { label: 'Барберы', mode: 'custom' },
   Services: { label: 'Услуги', mode: 'custom' },
 };
+const DATA_SHORTCUTS = ['Appointments', 'Users', 'Barbers', 'Services'].map((tableId) => ({
+  id: tableId,
+  label: TABLE_CONFIG[tableId]?.label || tableId,
+}));
 
 const TABLE_COLUMNS = {
   Appointments: [
@@ -62,6 +67,7 @@ const RATING_MAX = 5;
 const RATING_STEP = 0.5;
 let avatarOptionsCache = null;
 const YEAR_IN_MS = 365 * 24 * 60 * 60 * 1000;
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const buildNewBarberState = () => ({
   name: '',
   password: '',
@@ -76,8 +82,34 @@ const buildNewBarberState = () => ({
 const buildNewServiceState = () => ({
   name: '',
   duration: 60,
+  isActive: true,
   prices: {},
 });
+const ACTIVE_BARBER_LABEL = String.fromCharCode(0x0410, 0x043a, 0x0442, 0x0438, 0x0432, 0x0435, 0x043d);
+const HIDDEN_BARBER_LABEL = String.fromCharCode(0x0421, 0x043a, 0x0440, 0x044b, 0x0442);
+const ACTIVE_SERVICE_LABEL = String.fromCharCode(0x0410, 0x043a, 0x0442, 0x0438, 0x0432, 0x043d, 0x0430);
+const HIDDEN_SERVICE_LABEL = String.fromCharCode(0x0421, 0x043a, 0x0440, 0x044b, 0x0442, 0x0430);
+const buildVisitHistory = (appointments = []) => {
+  if (!appointments.length) return [];
+  const cutoff = Date.now() - YEAR_IN_MS;
+  const completed = appointments
+    .map((appt) => {
+      const startDate = getAppointmentStartDate(appt.Date, appt.Time, appt.startDateTime);
+      return { ...appt, startDate };
+    })
+    .filter(
+      (appt) =>
+        appt.startDate &&
+        appt.startDate.getTime() >= cutoff &&
+        (isCompletedAppointmentStatus(appt.Status) || isActiveAppointmentStatus(appt.Status))
+    )
+    .sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+  return completed.map((appt, index) => ({
+    ...appt,
+    orderNumber: completed.length - index,
+    dateLabel: formatDateTime(appt.Date, appt.Time),
+  }));
+};
 const defaultConfirmState = {
   open: false,
   title: '',
@@ -152,6 +184,7 @@ const fetchAvatarOptions = async () => {
 };
 
 const normalizeText = (value) => (value == null ? '' : String(value));
+const isValidDate = (value) => value instanceof Date && !Number.isNaN(value.getTime());
 const resolveAssetUrl = (value) => {
   const normalized = normalizeText(value).trim();
   if (!normalized) return '';
@@ -171,7 +204,7 @@ const numberFormatter = new Intl.NumberFormat('ru-RU');
 const formatCurrency = (value) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return '';
-  return `${numberFormatter.format(numeric)} ₽`;
+  return `${numberFormatter.format(numeric)} \u20BD`;
 };
 const pluralize = (count, [one, few, many]) => {
   const mod10 = count % 10;
@@ -253,6 +286,16 @@ const formatPhoneInput = (value) => {
   return `+${normalized}`;
 };
 
+const formatTelegramHandle = (value) => {
+  const handle = normalizeText(value).replace(/^@+/, '').trim();
+  return handle ? `@${handle}` : '';
+};
+
+const buildTelegramLink = (value) => {
+  const handle = normalizeText(value).replace(/^@+/, '').trim();
+  return handle ? `https://t.me/${handle}` : '';
+};
+
 const formatDateTime = (date, time) => {
   const datePart = formatDate(date);
   const timePart = formatTime(time);
@@ -260,6 +303,28 @@ const formatDateTime = (date, time) => {
   if (datePart === '-') return timePart;
   if (timePart === '-') return datePart;
   return `${datePart} | ${timePart}`;
+};
+
+const backupDateFormatter = new Intl.DateTimeFormat('ru-RU', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+const parseBackupTimestamp = (filename = '') => {
+  const match = normalizeText(filename).match(/backup-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})(?:-(\d{3}))?/i);
+  if (!match) return null;
+  const [, datePart, hours, minutes, seconds, milliseconds] = match;
+  const isoCandidate = `${datePart}T${hours}:${minutes}:${seconds}${milliseconds ? `.${milliseconds}` : ''}Z`;
+  const parsed = new Date(isoCandidate);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatBackupLabel = (filename = '') => {
+  const parsed = parseBackupTimestamp(filename);
+  return parsed ? backupDateFormatter.format(parsed) : filename;
 };
 const formatDateHeading = (value, options = { weekday: 'long', day: 'numeric', month: 'long' }) => {
   if (!value) return 'Без даты';
@@ -416,6 +481,38 @@ const getAppointmentStartDate = (dateValue, timeValue, fallbackIso) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const getAppointmentEndDate = (dateValue, timeValue, fallbackIso) => {
+  const startDate = getAppointmentStartDate(dateValue, timeValue, fallbackIso);
+  if (!startDate) return null;
+  const { start, end } = parseTimeRangeParts(timeValue);
+  const endToken = end || start;
+  if (!endToken) return startDate;
+  const baseDatePart = normalizeText(dateValue).slice(0, 10) || startDate.toISOString().slice(0, 10);
+  if (!baseDatePart) return startDate;
+  const isoCandidate = `${baseDatePart}T${endToken}:00`;
+  let parsed = new Date(isoCandidate);
+  if (Number.isNaN(parsed.getTime())) return startDate;
+  if (end && start && end <= start) {
+    parsed = new Date(parsed.getTime() + DAY_IN_MS);
+  }
+  if (parsed.getTime() < startDate.getTime()) {
+    return startDate;
+  }
+  return parsed;
+};
+
+const resolveAppointmentStartDate = (appointment = {}) => {
+  if (isValidDate(appointment.startDate)) return appointment.startDate;
+  return getAppointmentStartDate(appointment.Date, appointment.Time, appointment.startDateTime);
+};
+
+const resolveAppointmentEndDate = (appointment = {}) => {
+  if (isValidDate(appointment.endDate)) return appointment.endDate;
+  const endDate = getAppointmentEndDate(appointment.Date, appointment.Time, appointment.startDateTime);
+  if (endDate) return endDate;
+  return resolveAppointmentStartDate(appointment);
+};
+
 const isActiveAppointmentStatus = (status) => {
   const normalized = normalizeStatusValue(status).toLowerCase();
   if (!normalized) return false;
@@ -425,11 +522,21 @@ const isActiveAppointmentStatus = (status) => {
 };
 
 const shouldDisplayAppointment = (appointment, nowTs = Date.now()) => {
-  const status = normalizeStatusValue(appointment.Status);
-  if (!isActiveAppointmentStatus(status)) return false;
-  const startDate = getAppointmentStartDate(appointment.Date, appointment.Time, appointment.startDateTime);
-  if (!startDate) return false;
-  return startDate.getTime() >= nowTs;
+  if (!isActiveAppointmentStatus(normalizeStatusValue(appointment.Status))) return false;
+  const startDate = resolveAppointmentStartDate(appointment);
+  const endDate = resolveAppointmentEndDate(appointment);
+  if (!startDate || !endDate) return false;
+  return endDate.getTime() >= nowTs;
+};
+
+const isAppointmentOngoing = (appointment, nowTs = Date.now()) => {
+  if (!isActiveAppointmentStatus(normalizeStatusValue(appointment.Status))) return false;
+  const startDate = resolveAppointmentStartDate(appointment);
+  const endDate = resolveAppointmentEndDate(appointment);
+  if (!startDate || !endDate) return false;
+  const startTs = startDate.getTime();
+  const endTs = endDate.getTime();
+  return startTs <= nowTs && endTs > nowTs;
 };
 
 const parseMultiValue = (value) =>
@@ -447,6 +554,60 @@ const LoadingState = ({ label = 'Загружаю данные...' } = {}) => (
 const ErrorBanner = ({ message }) => (
   <div className="rounded-lg bg-rose-600 px-4 py-3 text-white">{message}</div>
 );
+
+const VisitHistoryList = ({
+  visits = [],
+  loading = false,
+  error = '',
+  emptyMessage = 'История визитов пуста.',
+  maxHeightClass = 'max-h-64',
+  showSummary = true,
+}) => {
+  if (loading) {
+    return <p className="text-sm text-slate-500">Загружаем историю...</p>;
+  }
+  if (error) {
+    return <ErrorBanner message={error} />;
+  }
+  return (
+    <div className="space-y-2">
+      {showSummary && (
+        <div className="flex items-center justify-between text-xs text-slate-400">
+          <span>
+            Записей за 12 месяцев: <span className="font-semibold text-white">{visits.length}</span>
+          </span>
+          <span>Последние визиты</span>
+        </div>
+      )}
+      <div className={classNames('space-y-2 overflow-auto', maxHeightClass)}>
+        {visits.length ? (
+          visits.map((visit) => {
+            const isActive = isActiveAppointmentStatus(visit.Status);
+            return (
+              <div
+                key={`${visit.id || visit.dateLabel}-${visit.orderNumber}`}
+                className={classNames(
+                  'rounded-lg border p-3 text-xs transition',
+                  isActive ? 'border-emerald-400/60 bg-emerald-500/10 shadow-inner shadow-emerald-900/30' : 'border-slate-800 bg-slate-900/40'
+                )}
+              >
+                <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-slate-400">
+                  <span className="font-semibold text-white">Визит №{visit.orderNumber || '—'}</span>
+                  <span>{visit.dateLabel}</span>
+                </div>
+                <p className="mt-1 text-sm text-slate-100">{visit.Barber || '—'}</p>
+                <p className="text-slate-400">{visit.Services || '—'}</p>
+                {visit.Status && <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-slate-500">{visit.Status}</p>}
+              </div>
+            );
+          })
+        ) : (
+          <p className="text-sm text-slate-500">{emptyMessage}</p>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const SectionCard = ({ title, actions, children }) => (
   <div className="space-y-4 rounded-2xl border border-slate-700 bg-slate-800/70 p-6 shadow-lg">
@@ -488,6 +649,97 @@ const IconTrash = ({ className = 'h-4 w-4' }) => (
   </svg>
 );
 
+const IconDashboard = ({ className = 'h-5 w-5' }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M3.5 11 12 4l8.5 7" />
+    <path d="M6 10v10h5v-5h2v5h5V10" />
+  </svg>
+);
+
+const IconData = ({ className = 'h-5 w-5' }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+    <path d="M3.5 9h17M3.5 13h17M8 5v14M13 5v14" />
+  </svg>
+);
+
+const IconBot = ({ className = 'h-5 w-5' }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M12 2v3" />
+    <rect x="5" y="7" width="14" height="11" rx="4" />
+    <path d="M5 12H3m18 0h-2M9 19v2m6-2v2" />
+    <circle cx="10" cy="12" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="14" cy="12" r="1.2" fill="currentColor" stroke="none" />
+    <path d="M9.5 15h5" />
+  </svg>
+);
+
+const IconSystem = ({ className = 'h-5 w-5' }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2.5v3M12 18.5v3M4.2 7.5l2.6 1.5M17.2 15l2.6 1.5M4.2 16.5l2.6-1.5M17.2 9l2.6-1.5M2.5 12h3M18.5 12h3" />
+  </svg>
+);
+
+const IconDots = ({ className = 'h-5 w-5' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <circle cx="5" cy="12" r="1.5" />
+    <circle cx="12" cy="12" r="1.5" />
+    <circle cx="19" cy="12" r="1.5" />
+  </svg>
+);
+
+const VIEW_TAB_ICONS = {
+  dashboard: IconDashboard,
+  tables: IconData,
+  bot: IconBot,
+  system: IconSystem,
+};
+
+const UI_TEXT = Object.freeze({
+  accountTitle: 'Ваш аккаунт',
+  logout: 'Выйти',
+  newAppointmentCta: 'Новая запись',
+  liveFallback: 'LIVE',
+});
+
+
 const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-w-3xl' }) => {
   if (!isOpen) return null;
   return (
@@ -526,7 +778,8 @@ const ConfirmDialog = ({ open, title, message, confirmLabel = 'Подтверд�
         <div className="flex justify-end gap-3">
           <button onClick={() => onResult(false)} className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800">
             {cancelLabel}
-          </button>
+            </button>
+          )}
           <button onClick={() => onResult(true)} className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${confirmToneClass}`}>
             {confirmLabel}
           </button>
@@ -545,37 +798,65 @@ const StatCard = ({ label, value, accent = 'text-indigo-300' }) => (
   </div>
 );
 
-const Sidebar = ({ session, activeTab, onChange, onLogout }) => {
-  const username = session?.displayName || session?.username || '—';
+const Sidebar = ({ session, activeTab, onChange, onLogout, liveUpdatedAt, activeDataTable = 'Appointments', onSelectTable }) => {
+  const username = session?.displayName || session?.username || '-';
 
   return (
     <aside className="hidden w-72 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950/90 p-5 lg:sticky lg:top-0 lg:flex lg:h-screen lg:overflow-y-auto">
-      <div className="space-y-1 border-b border-slate-800 pb-4">
-        <p className="text-xs uppercase tracking-wide text-slate-500">Вы вошли как</p>
+      <div className="space-y-2 border-b border-slate-800 pb-4">
+        <p className="text-xs uppercase tracking-wide text-slate-500">{UI_TEXT.accountTitle}</p>
         <p className="text-lg font-semibold text-white">{username}</p>
         <button
           onClick={onLogout}
           className="mt-2 w-full rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-100 hover:border-indigo-500 hover:text-white"
         >
-          Выйти
+          {UI_TEXT.logout}
         </button>
+        {liveUpdatedAt && (
+          <div className="pt-2">
+            <LiveBadge timestamp={liveUpdatedAt} />
+          </div>
+        )}
       </div>
       <nav className="mt-6 flex-1 space-y-2 overflow-y-auto">
         {VIEW_TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
-            <button
-              key={tab.id}
-              onClick={() => onChange?.(tab.id)}
-              className={classNames(
-                'w-full rounded-xl px-4 py-3 text-left text-sm font-semibold transition',
-                isActive
-                  ? 'bg-indigo-600/90 text-white shadow-lg shadow-indigo-900/40'
-                  : 'bg-slate-900/40 text-slate-300 hover:bg-slate-800/60 hover:text-white'
+            <div key={tab.id} className="space-y-1">
+              <button
+                onClick={() => onChange?.(tab.id)}
+                className={classNames(
+                  'w-full rounded-xl px-4 py-3 text-left text-sm font-semibold transition',
+                  isActive
+                    ? 'bg-indigo-600/90 text-white shadow-lg shadow-indigo-900/40'
+                    : 'bg-slate-900/40 text-slate-300 hover:bg-slate-800/60 hover:text-white'
+                )}
+              >
+                {tab.label}
+              </button>
+              {tab.id === 'tables' && (
+                <div className="space-y-1 pl-4">
+                  {DATA_SHORTCUTS.map((shortcut) => {
+                    const isShortcutActive = activeDataTable === shortcut.id && activeTab === 'tables';
+                    return (
+                      <button
+                        key={shortcut.id}
+                        onClick={() => onSelectTable?.(shortcut.id)}
+                        className={classNames(
+                          'w-full rounded-lg px-3 py-2 text-left text-xs font-semibold transition',
+                          isShortcutActive
+                            ? 'bg-indigo-600/20 text-indigo-100'
+                            : 'text-slate-400 hover:bg-slate-900/60 hover:text-white'
+                        )}
+                        disabled={!onSelectTable}
+                      >
+                        {shortcut.label}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
-            >
-              {tab.label}
-            </button>
+            </div>
           );
         })}
       </nav>
@@ -583,80 +864,63 @@ const Sidebar = ({ session, activeTab, onChange, onLogout }) => {
   );
 };
 
-const MobileTabs = ({ session, activeTab, onChange, onLogout }) => {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const username = session?.displayName || session?.username || '—';
-  const handleSelect = (tabId) => {
-    onChange?.(tabId);
-    setMenuOpen(false);
-  };
+const MobileTabs = ({ session, activeTab, onChange, onLogout, liveUpdatedAt }) => {
+  const username = session?.displayName || session?.username || '-';
+  const handleSelect = (tabId) => onChange?.(tabId);
+  const renderLiveIndicator = () =>
+    liveUpdatedAt ? (
+      <LiveBadge timestamp={liveUpdatedAt} />
+    ) : (
+      <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">{UI_TEXT.liveFallback}</span>
+    );
 
   return (
-    <div className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/80 backdrop-blur lg:hidden">
-      <div className="flex items-center justify-between px-4 py-3">
-        <button
-          onClick={() => setMenuOpen((prev) => !prev)}
-          className="rounded-lg border border-slate-700 p-2 text-slate-200 hover:border-indigo-500 hover:text-white"
-          aria-label="Открыть меню"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
-          </svg>
-        </button>
-        <div className="text-center">
-          <p className="text-[11px] uppercase tracking-wide text-slate-400">Вы вошли как</p>
-          <p className="text-base font-semibold text-white">{username}</p>
+    <>
+      <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/80 backdrop-blur lg:hidden">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <div className="flex min-w-[88px] justify-start">
+            {renderLiveIndicator()}
+          </div>
+          <div className="flex flex-1 items-center justify-end text-right">
+            <p className="text-base font-semibold text-white max-w-[60vw] truncate">{username}</p>
+          </div>
+          <div className="flex min-w-[96px] justify-end">
+            <button
+              onClick={onLogout}
+              className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-rose-200 hover:border-rose-400 hover:text-white whitespace-nowrap"
+            >
+              {UI_TEXT.logout}
+            </button>
+          </div>
         </div>
-        <button
-          onClick={onLogout}
-          className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-rose-200 hover:border-rose-400 hover:text-white"
-        >
-          Выйти
-        </button>
-      </div>
-      <div className="flex overflow-x-auto border-t border-slate-800">
-        {VIEW_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => handleSelect(tab.id)}
-            className={classNames(
-              'flex-1 whitespace-nowrap px-3 py-2 text-xs font-semibold',
-              activeTab === tab.id ? 'text-indigo-300' : 'text-slate-400'
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      {menuOpen && (
-        <div className="space-y-3 border-t border-slate-800 bg-slate-900/90 px-4 py-4">
-          <p className="text-sm text-slate-300">Разделы</p>
-          <div className="grid grid-cols-2 gap-2">
-            {VIEW_TABS.map((tab) => (
+      </header>
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 px-4 py-2 backdrop-blur lg:hidden">
+        <div className="flex items-center gap-2">
+          {VIEW_TABS.map((tab) => {
+            const IconComponent = VIEW_TAB_ICONS[tab.id] || IconDots;
+            const isActive = activeTab === tab.id;
+            return (
               <button
                 key={tab.id}
                 onClick={() => handleSelect(tab.id)}
                 className={classNames(
-                  'rounded-lg px-3 py-2 text-left text-sm font-semibold',
-                  activeTab === tab.id ? 'bg-indigo-600/80 text-white' : 'bg-slate-800/70 text-slate-200'
+                  'flex-1 rounded-2xl px-3 py-2 text-center transition',
+                  isActive ? 'bg-indigo-600/20 text-indigo-200' : 'text-slate-400 hover:text-white'
                 )}
+                aria-label={tab.label}
               >
-                {tab.label}
+                <IconComponent className={classNames('mx-auto h-6 w-6', isActive ? 'text-indigo-300' : 'text-slate-400')} />
+                <span className="sr-only">{tab.label}</span>
               </button>
-            ))}
-          </div>
-          <button
-            onClick={onLogout}
-            className="w-full rounded-lg border border-rose-500 px-3 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-500/10"
-          >
-            Выйти из аккаунта
-          </button>
+            );
+          })}
         </div>
-      )}
-    </div>
+      </nav>
+    </>
   );
 };
-const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppointment, liveMeta = null }) => {
+
+const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppointment }) => {
   if (!data) return <LoadingState />;
   const stats = data.stats || {};
 
@@ -665,7 +929,16 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
   const upcomingList = useMemo(() => {
     const nowTs = Date.now();
     return upcomingRaw
-      .map((appt) => ({ ...appt, Status: normalizeStatusValue(appt.Status) }))
+      .map((appt) => {
+        const startDate = getAppointmentStartDate(appt.Date, appt.Time, appt.startDateTime);
+        const endDate = getAppointmentEndDate(appt.Date, appt.Time, appt.startDateTime);
+        return {
+          ...appt,
+          Status: normalizeStatusValue(appt.Status),
+          startDate,
+          endDate,
+        };
+      })
       .filter((appt) => shouldDisplayAppointment(appt, nowTs))
       .sort((a, b) => {
         const left = getAppointmentStartDate(a.Date, a.Time, a.startDateTime)?.getTime() || Number.MAX_SAFE_INTEGER;
@@ -706,19 +979,11 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
       .sort((a, b) => a.sortValue - b.sortValue);
   }, [formatGroupLabel, upcomingList]);
 
-  const upcomingActions =
-    liveMeta?.updatedAt || onCreateAppointment
-      ? (
-          <div className="flex flex-wrap items-center gap-3">
-            {liveMeta?.updatedAt && <LiveBadge timestamp={liveMeta.updatedAt} />}
-            {onCreateAppointment && (
-              <button onClick={onCreateAppointment} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500">
-                + Создать запись
-              </button>
-            )}
-          </div>
-        )
-      : null;
+  const upcomingActions = onCreateAppointment ? (
+    <button onClick={onCreateAppointment} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500">
+      + {UI_TEXT.newAppointmentCta}
+    </button>
+  ) : null;
 
   return (
     <div className="space-y-6">
@@ -743,21 +1008,22 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
                   {group.label}
                   <span className="h-px flex-1 bg-slate-700" />
                 </div>
-                <div className="space-y-3">
+                <div className="grid gap-3 lg:grid-cols-2">
                   {group.items.map((appt) => {
+                    const inProgress = isAppointmentOngoing(appt);
                     const cardProps = {
                       role: 'button',
                       tabIndex: 0,
                       onClick: () => onOpenAppointment?.(appt, { allowDelete: true }),
                       onKeyDown: (event) => event.key === 'Enter' && onOpenAppointment?.(appt, { allowDelete: true }),
-                      className:
+                      className: classNames(
                         'group upcoming-card relative w-full cursor-pointer overflow-hidden rounded-3xl border border-slate-700/60 bg-slate-900/70 p-4 text-left transition hover:border-indigo-500/70 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:p-5',
+                        inProgress && 'border-emerald-400/80 shadow-[0_0_25px_rgba(16,185,129,0.25)]'
+                      ),
                     };
                     const { start, end } = parseTimeRangeParts(appt.Time);
                     const statusLabel = normalizeStatusValue(appt.Status);
                     const servicesList = parseMultiValue(appt.Services);
-                    const phoneLabel = appt.Phone ? formatPhoneInput(appt.Phone) : '';
-                    const phoneHref = phoneLabel ? phoneLabel.replace(/[^\d+]/g, '') : '';
                     return (
                       <div key={appt.id || `${group.key}-${appt.CustomerName}-${appt.Time}`} {...cardProps}>
                         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-800/80 pb-4">
@@ -787,7 +1053,7 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
                             )}
                           </div>
                         </div>
-                        <div className="mt-4 grid gap-3 text-[13px] text-slate-300 upcoming-card-grid sm:text-sm">
+                        <div className="mt-4 space-y-4 text-[13px] text-slate-300 sm:text-sm">
                           <div className="space-y-3 min-w-0">
                             {appt.CustomerName ? (
                               <button
@@ -803,52 +1069,22 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
                             ) : (
                               <p className="text-base font-semibold text-white sm:text-lg">Без имени</p>
                             )}
-                            {servicesList.length ? (
-                              <div className="flex flex-wrap gap-2">
-                                {servicesList.map((service, index) => (
-                                  <span
-                                    key={`${service}-${index}`}
-                                    className="rounded-full border border-slate-700/70 bg-slate-800/70 px-3 py-1 text-[11px] text-slate-200 sm:text-xs"
-                                  >
-                                    {service}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-slate-400 sm:text-sm">Нет выбранных услуг</p>
-                            )}
                           </div>
-                          <div className="space-y-3 min-w-0">
-                            {phoneLabel && phoneHref && (
-                              <a
-                                href={`tel:${phoneHref}`}
-                                onClick={(event) => event.stopPropagation()}
-                                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-600/60 px-3 py-1 text-xs text-slate-200 hover:border-indigo-500 hover:text-white sm:w-auto sm:justify-start sm:text-sm"
-                              >
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.5"
-                                  className="h-4 w-4"
+                          {servicesList.length ? (
+                            <div className="flex flex-wrap gap-2">
+                              {servicesList.map((service, index) => (
+                                <span
+                                  key={`${service}-${index}`}
+                                  className="rounded-full border border-slate-700/70 bg-slate-800/70 px-3 py-1 text-[11px] text-slate-200 sm:text-xs"
                                 >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.26a1.5 1.5 0 00-1.093-1.44l-4.443-1.27a1.5 1.5 0 00-1.726.752l-.79 1.58a1.5 1.5 0 01-2.278.536A15.052 15.052 0 018.352 14.4a1.5 1.5 0 01.536-2.278l1.58-.79a1.5 1.5 0 00.752-1.726l-1.27-4.443A1.5 1.5 0 009.51 4.07H8.25A2.25 2.25 0 006 6.32z"
-                                  />
-                                </svg>
-                                {phoneLabel}
-                              </a>
-                            )}
-                            {appt.UserID && (
-                              <p className="text-[10px] uppercase tracking-wide text-slate-500 sm:text-xs">
-                                ID клиента:{' '}
-                                <span className="font-semibold text-slate-200">{appt.UserID}</span>
-                              </p>
-                            )}
-                          </div>
+                                  {service}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400 sm:text-sm">Нет выбранных услуг</p>
+                          )}
+
                         </div>
                       </div>
                     );
@@ -862,7 +1098,8 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
     </div>
   );
 };
-const BarberAvatarPicker = ({ value, onChange }) => {
+
+const BarberAvatarPicker = ({ value, onChange, loadOptions }) => {
   const [avatarOptions, setAvatarOptions] = useState(() => avatarOptionsCache || []);
   const [loading, setLoading] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
@@ -887,8 +1124,14 @@ const BarberAvatarPicker = ({ value, onChange }) => {
     const load = async () => {
       setLoading(true);
       try {
-        const assets = await fetchAvatarOptions();
+        const loader = typeof loadOptions === 'function' ? loadOptions : fetchAvatarOptions;
+        const assetsPayload = await loader();
         if (!isMounted) return;
+        const assets = Array.isArray(assetsPayload)
+          ? assetsPayload
+          : Array.isArray(assetsPayload?.images)
+            ? assetsPayload.images
+            : [];
         avatarOptionsCache = assets;
         setAvatarOptions(assets);
       } catch (error) {
@@ -901,72 +1144,140 @@ const BarberAvatarPicker = ({ value, onChange }) => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [loadOptions]);
 
   const previewSrc = resolveAssetUrl(normalizedValue || avatarOptions[0] || '');
 
   return (
-    <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900/40 p-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+    <div className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 shadow-2xl">
+      <div className="relative h-52 w-full bg-slate-900">
         {previewSrc ? (
-          <img src={previewSrc} alt="avatar" className="h-16 w-16 rounded-full border border-slate-700 object-cover" />
+          <img src={previewSrc} alt="avatar preview" className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-slate-700 text-[10px] uppercase text-slate-500">
-            нет фото
-          </div>
+          <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.4em] text-slate-500">нет фото</div>
         )}
-        <div className="flex-1 space-y-2">
-          <label className="text-xs uppercase tracking-wide text-slate-400">Изображение из папки “Image”</label>
-          <select
-            value={normalizedValue || ''}
-            onChange={(event) => onChange(normalizeImagePath(event.target.value))}
-            className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
-          >
-            <option value="">Без изображения</option>
-            {availableOptions.map((option) => (
-              <option key={option} value={option}>
-                {option.replace('/Image/', '')}
-              </option>
-            ))}
-          </select>
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/10 to-transparent" />
+      </div>
+      <div className="space-y-4 p-5">
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Текущее фото</p>
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-200">
+            {normalizedValue ? normalizedValue.replace('/Image/', '') : 'Не выбрано'}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setShowGallery((prev) => !prev)}
-            className="text-left text-sm text-indigo-300 hover:text-indigo-100 disabled:text-slate-500"
-            disabled={loading}
+            className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-indigo-200 transition hover:border-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+            disabled={loading || (!avatarOptions.length && !normalizedValue)}
           >
-            {loading
-              ? 'Загружаем список'
-              : avatarOptions.length
-                ? showGallery
-                  ? 'Скрыть галерею'
-                  : 'Показать галерею'
-                : 'Нет файлов в папке Image'}
+            {loading ? 'Сканирую...' : showGallery ? 'Скрыть галерею' : 'Открыть галерею'}
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-rose-400 hover:text-white"
+          >
+            Без изображения
           </button>
         </div>
+        {showGallery && avatarOptions.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {avatarOptions.map((preset) => {
+              const isSelected = preset === normalizedValue;
+              return (
+                <button
+                  type="button"
+                  key={preset}
+                  onClick={() => onChange(preset)}
+                  className={classNames(
+                    'rounded-2xl border p-1.5 transition hover:border-indigo-400 hover:bg-slate-800',
+                    isSelected ? 'border-indigo-500 bg-indigo-500/15' : 'border-slate-700 bg-slate-900'
+                  )}
+                >
+                  <img src={resolveAssetUrl(preset)} alt="avatar preset" className="h-20 w-full rounded-xl object-cover" />
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {!avatarOptions.length && !loading && <p className="text-sm text-slate-500">Добавьте изображения в папку /Image, чтобы выбрать аватар.</p>}
       </div>
-      {showGallery && avatarOptions.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {avatarOptions.map((preset) => {
-            const isSelected = preset === normalizedValue;
-            return (
-              <button
-                type="button"
-                key={preset}
-                onClick={() => onChange(preset)}
-                className={`rounded-lg border p-1 transition hover:border-indigo-400 hover:bg-slate-800 ${
-                  isSelected ? 'border-indigo-500 bg-indigo-500/20' : 'border-slate-700 bg-slate-900'
-                }`}
-              >
-                <img src={resolveAssetUrl(preset)} alt="avatar preset" className="h-16 w-full rounded-md object-cover" />
-              </button>
-            );
-          })}
-        </div>
-      )}
-      {!avatarOptions.length && !loading && <p className="text-sm text-slate-500">Добавьте изображения в папку /Image, чтобы выбрать аватар.</p>}
     </div>
   );
+};
+
+const DAY_INDEX_LOOKUP = (() => {
+  const full = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
+  const short = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+  const map = {};
+  full.forEach((name, index) => {
+    map[name] = index;
+  });
+  short.forEach((name, index) => {
+    map[name] = index;
+  });
+  return map;
+})();
+const getDayIndex = (value = '') => {
+  const normalized = normalizeText(value).toLowerCase();
+  return Number.isFinite(DAY_INDEX_LOOKUP[normalized]) ? DAY_INDEX_LOOKUP[normalized] : 7;
+};
+const formatScheduleDayShort = (dateValue, fallbackDay = '') => {
+  const safeDate = normalizeText(dateValue);
+  if (safeDate) {
+    try {
+      const parsed = new Date(`${safeDate}T00:00:00`);
+      if (!Number.isNaN(parsed.getTime())) {
+        return new Intl.DateTimeFormat('ru-RU', { weekday: 'short' }).format(parsed).replace('.', '');
+      }
+    } catch {
+      // noop
+    }
+  }
+  const normalizedFallback = normalizeText(fallbackDay);
+  return normalizedFallback ? normalizedFallback.slice(0, 2) : '';
+};
+const formatScheduleDateLabel = (dateValue) => {
+  const safeDate = normalizeText(dateValue);
+  if (!safeDate) return '';
+  try {
+    const parsed = new Date(`${safeDate}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(parsed).replace('.', '');
+  } catch {
+    return '';
+  }
+};
+const isTodayDate = (dateValue) => {
+  const safeDate = normalizeText(dateValue);
+  if (!safeDate) return false;
+  const today = new Date();
+  const target = new Date(`${safeDate}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return false;
+  return (
+    today.getFullYear() === target.getFullYear() &&
+    today.getMonth() === target.getMonth() &&
+    today.getDate() === target.getDate()
+  );
+};
+const parseSlotTimeMinutes = (value) => {
+  const match = normalizeText(value).match(/(\d{1,2}):(\d{2})/);
+  if (!match) return 0;
+  return Number(match[1]) * 60 + Number(match[2]);
+};
+const getScheduleSortValue = (slot) => {
+  const safeDate = normalizeText(slot.Date);
+  if (safeDate) {
+    const parsed = new Date(`${safeDate}T00:00:00`);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.getTime() + parseSlotTimeMinutes(parseTimeRangeParts(slot.Week).start) * 60000;
+    }
+  }
+  const base = Number.MAX_SAFE_INTEGER - 1_000_000_000;
+  const dayIndex = getDayIndex(slot.DayOfWeek);
+  return base + dayIndex * 10000 + parseSlotTimeMinutes(parseTimeRangeParts(slot.Week).start || slot.Week) * 10;
 };
 
 const RatingSlider = ({ value, onChange, dense = false }) => {
@@ -988,7 +1299,17 @@ const RatingSlider = ({ value, onChange, dense = false }) => {
   );
 };
 
-const BarbersView = ({ barbers = [], onFieldChange, onSave, onAdd, onDelete }) => {
+
+const BarbersView = ({
+  barbers = [],
+  schedules = [],
+  loadAvatarOptions,
+  onFieldChange,
+  onSave,
+  onAdd,
+  onDelete,
+  onScheduleUpdate,
+}) => {
   const [editorState, setEditorState] = useState({ open: false, mode: 'edit', targetId: null });
   const [draftBarber, setDraftBarber] = useState(buildNewBarberState);
 
@@ -1004,6 +1325,14 @@ const BarbersView = ({ barbers = [], onFieldChange, onSave, onAdd, onDelete }) =
   const isCreateMode = editorState.mode === 'create';
   const activeBarber = barbers.find((barber) => barber.id === editorState.targetId) || null;
   const workingBarber = isCreateMode ? draftBarber : activeBarber;
+
+  const workingBarberSchedule = useMemo(() => {
+    if (!workingBarber?.name) return [];
+    const target = normalizeText(workingBarber.name).toLowerCase();
+    return schedules
+      .filter((slot) => normalizeText(slot.Barber).toLowerCase() === target)
+      .sort((a, b) => getScheduleSortValue(a) - getScheduleSortValue(b));
+  }, [workingBarber, schedules]);
 
   const handleFieldChange = (field, value) => {
     if (isCreateMode) {
@@ -1042,11 +1371,24 @@ const BarbersView = ({ barbers = [], onFieldChange, onSave, onAdd, onDelete }) =
           barber.isActive !== false ? 'bg-emerald-500/15 text-emerald-200' : 'bg-slate-700 text-slate-300'
         )}
       >
-        {barber.isActive !== false ? 'Активен' : 'Скрыт'}
+        {barber.isActive !== false ? ACTIVE_BARBER_LABEL : HIDDEN_BARBER_LABEL}
       </span>
     ) : null;
 
   const canSubmit = isCreateMode ? Boolean(workingBarber?.name?.trim() && workingBarber?.password?.trim()) : Boolean(workingBarber);
+
+  const handleSchedulePickerChange = async (slot, nextValue) => {
+    if (typeof onScheduleUpdate !== 'function') return;
+    const slotId = getRecordId(slot);
+    if (!slotId) return;
+    await onScheduleUpdate(slotId, {
+      Barber: slot.Barber,
+      Date: slot.Date,
+      DayOfWeek: slot.DayOfWeek,
+      Week: nextValue,
+      Time: nextValue,
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -1090,7 +1432,7 @@ const BarbersView = ({ barbers = [], onFieldChange, onSave, onAdd, onDelete }) =
                       )}
                     />
                   </div>
-                  <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex-1 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-base font-semibold text-white sm:text-lg">{barber.name || 'Без имени'}</p>
                       {renderStatusBadge(barber)}
@@ -1115,7 +1457,7 @@ const BarbersView = ({ barbers = [], onFieldChange, onSave, onAdd, onDelete }) =
         title={isCreateMode ? 'Добавить барбера' : workingBarber?.name || 'Редактирование барбера'}
         isOpen={editorState.open}
         onClose={closeEditor}
-        maxWidthClass="max-w-3xl"
+        maxWidthClass="max-w-4xl"
         footer={
           <>
             {!isCreateMode && (
@@ -1140,61 +1482,115 @@ const BarbersView = ({ barbers = [], onFieldChange, onSave, onAdd, onDelete }) =
         }
       >
         {workingBarber ? (
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-              <input
-                value={workingBarber.name || ''}
-                onChange={(event) => handleFieldChange('name', event.target.value)}
-                placeholder="Имя"
-                className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
-              />
-              <RatingSlider dense value={workingBarber.rating} onChange={(event) => handleFieldChange('rating', event.target.value)} />
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <input
-                type="password"
-                value={workingBarber.password || ''}
-                onChange={(event) => handleFieldChange('password', event.target.value)}
-                placeholder="Пароль"
-                className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
-              />
-              <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white">
-                Цвет
+          <div className="space-y-6">
+            <BarberAvatarPicker value={workingBarber.avatarUrl} onChange={(value) => handleFieldChange('avatarUrl', value)} loadOptions={loadAvatarOptions} />
+            <div className="space-y-5 rounded-3xl border border-slate-800 bg-slate-950/80 p-6 shadow-inner shadow-black/10">
+              <div className="grid grid-cols-2 gap-4">
                 <input
-                  type="color"
-                  value={/^#/.test(workingBarber.color || '') ? workingBarber.color : '#6d28d9'}
-                  onChange={(event) => handleFieldChange('color', event.target.value)}
-                  className="h-10 w-16 cursor-pointer rounded border border-slate-500 bg-transparent"
+                  value={workingBarber.name || ''}
+                  onChange={(event) => handleFieldChange('name', event.target.value)}
+                  placeholder="Имя"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
                 />
-              </label>
+                <div className="w-full">
+                  <RatingSlider dense value={workingBarber.rating} onChange={(event) => handleFieldChange('rating', event.target.value)} />
+                </div>
+                <input
+                  type="password"
+                  value={workingBarber.password || ''}
+                  onChange={(event) => handleFieldChange('password', event.target.value)}
+                  placeholder="Пароль"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                />
+                <label className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm text-white">
+                  Цвет
+                  <input
+                    type="color"
+                    value={/^#/.test(workingBarber.color || '') ? workingBarber.color : '#6d28d9'}
+                    onChange={(event) => handleFieldChange('color', event.target.value)}
+                    className="h-10 w-16 cursor-pointer rounded-xl border border-slate-500 bg-transparent"
+                  />
+                </label>
+                <textarea
+                  value={workingBarber.description || ''}
+                  onChange={(event) => handleFieldChange('description', event.target.value)}
+                  placeholder="Описание"
+                  rows={4}
+                  className="col-span-2 w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                />
+                <input
+                  type="tel"
+                  value={workingBarber.phone || ''}
+                  onChange={(event) => handleFieldChange('phone', event.target.value)}
+                  placeholder="Телефон"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                />
+                <input
+                  value={workingBarber.telegramId || ''}
+                  onChange={(event) => handleFieldChange('telegramId', event.target.value)}
+                  placeholder="Telegram ID"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                />
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleFieldChange('isActive', !(workingBarber.isActive !== false))}
+                  className={classNames(
+                    'inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition',
+                    workingBarber.isActive !== false ? 'border-emerald-400 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 bg-slate-900/60 text-slate-400'
+                  )}
+                >
+                  <span>{workingBarber.isActive !== false ? ACTIVE_BARBER_LABEL : HIDDEN_BARBER_LABEL}</span>
+                  <span
+                    className={classNames(
+                      'flex h-5 w-5 items-center justify-center rounded-full border',
+                      workingBarber.isActive !== false ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100' : 'border-slate-600 text-slate-500'
+                    )}
+                  >
+                    {workingBarber.isActive !== false ? '✓' : ''}
+                  </span>
+                </button>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-slate-400">Расписание</p>
+                {workingBarberSchedule.length ? (
+                  <div className="grid gap-2 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                    {workingBarberSchedule.map((slot) => {
+                      const slotId = getRecordId(slot) || `${slot.Barber}-${slot.Date}-${slot.Week}`;
+                      const timeValue = slot.Week || '';
+                      const dayLabel = formatScheduleDayShort(slot.Date, slot.DayOfWeek);
+                      const dateLabel = formatScheduleDateLabel(slot.Date);
+                      const isTodaySlot = isTodayDate(slot.Date);
+                      return (
+                        <div
+                          key={slotId}
+                          className={classNames(
+                            'space-y-2 rounded-2xl border bg-slate-900/60 p-3',
+                            isTodaySlot ? 'border-emerald-400/70 ring-1 ring-emerald-400/30' : 'border-slate-800'
+                          )}
+                        >
+                          <div className="flex flex-col items-center justify-center gap-1 text-center text-xs uppercase tracking-[0.3em] text-slate-500">
+                            <span className="text-slate-200 text-sm font-semibold tracking-wide">
+                              {[dayLabel, dateLabel].filter(Boolean).join(' · ')}
+                            </span>
+                          </div>
+                          <TimeRangePicker
+                            value={timeValue}
+                            onChange={(nextValue) => handleSchedulePickerChange(slot, nextValue)}
+                            buttonClassName="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-center text-sm text-white focus:ring-2 focus:ring-indigo-500"
+                            title="Редактирование времени"
+                            placeholder="Время"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">Для этого барбера нет запланированных слотов.</p>
+                )}
+              </div>
             </div>
-            <textarea
-              value={workingBarber.description || ''}
-              onChange={(event) => handleFieldChange('description', event.target.value)}
-              placeholder="Описание"
-              rows={4}
-              className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
-            />
-            <div className="grid gap-3 md:grid-cols-2">
-              <input
-                type="tel"
-                value={workingBarber.phone || ''}
-                onChange={(event) => handleFieldChange('phone', event.target.value)}
-                placeholder="Телефон"
-                className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
-              />
-              <input
-                value={workingBarber.telegramId || ''}
-                onChange={(event) => handleFieldChange('telegramId', event.target.value)}
-                placeholder="Telegram ID"
-                className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
-              />
-            </div>
-            <BarberAvatarPicker value={workingBarber.avatarUrl} onChange={(value) => handleFieldChange('avatarUrl', value)} />
-            <label className="inline-flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={workingBarber.isActive !== false} onChange={(event) => handleFieldChange('isActive', event.target.checked)} />
-              Активен
-            </label>
           </div>
         ) : (
           <p className="text-slate-300">Выберите барбера, чтобы изменить данные.</p>
@@ -1378,6 +1774,26 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
                 />
               </div>
             </div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => handleFieldChange('isActive', !(workingService.isActive !== false))}
+                className={classNames(
+                  'inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-semibold transition',
+                  workingService.isActive !== false ? 'border-emerald-400 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 bg-slate-900/60 text-slate-400'
+                )}
+              >
+                <span>{workingService.isActive !== false ? ACTIVE_SERVICE_LABEL : HIDDEN_SERVICE_LABEL}</span>
+                <span
+                  className={classNames(
+                    'flex h-5 w-5 items-center justify-center rounded-full border',
+                    workingService.isActive !== false ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100' : 'border-slate-600 text-slate-500'
+                  )}
+                >
+                  {workingService.isActive !== false ? '\u2713' : ''}
+                </span>
+              </button>
+            </div>
             <div className="space-y-2">
               <p className="text-sm text-slate-300">Цены по барберам</p>
               {barbers.length ? (
@@ -1482,7 +1898,7 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
                     setOpen(false);
                   }}
                 >
-                  ✕
+                  ?
                 </button>
               </div>
               {draft.length > 0 && (
@@ -1495,7 +1911,7 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
                       onClick={() => toggleOption(service)}
                     >
                       {service}
-                      <span className="text-slate-400">×</span>
+                      <span className="text-slate-400">?</span>
                     </button>
                   ))}
                 </div>
@@ -1562,7 +1978,7 @@ const TimeRangePicker = ({
   };
 
   const handleClear = () => {
-    onChange?.('');
+    onChange?.('0');
     setDraft({ start: '', end: '' });
     setOpen(false);
   };
@@ -1703,12 +2119,18 @@ const ColumnMenu = ({ columns, hiddenColumns = [], onToggle }) => {
   useOutsideClick(ref, open ? () => setOpen(false) : null);
 
   return (
-    <div className="relative">
-      <button onClick={() => setOpen((prev) => !prev)} className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-white">
+    <div className="relative w-full sm:w-auto">
+      <button
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex w-full items-center justify-center rounded-lg border border-slate-600 px-3 py-2 text-sm text-white sm:w-auto"
+      >
         Поля
       </button>
       {open && (
-        <div ref={ref} className="absolute right-0 z-30 mt-2 w-56 space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 shadow-2xl">
+        <div
+          ref={ref}
+          className="absolute left-0 z-30 mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 shadow-2xl sm:left-auto sm:right-0"
+        >
           {columns.map((column) => (
             <label key={column.key} className="flex items-center gap-2 text-sm text-slate-200">
               <input type="checkbox" checked={!hiddenColumns.includes(column.key)} onChange={() => onToggle(column.key)} />
@@ -1755,7 +2177,7 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
               onClick={() => toggle(service)}
             >
               {service}
-              <span className="text-slate-400">×</span>
+              <span className="text-slate-400">?</span>
             </button>
           ))}
         </div>
@@ -1795,7 +2217,7 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
                     )}
                   >
                     <span className="truncate">{option}</span>
-                    {isActive && <span className="text-xs text-indigo-300">✓</span>}
+                    {isActive && <span className="text-xs text-indigo-300">?</span>}
                   </button>
                 );
               })}
@@ -1886,12 +2308,18 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset }) =
   useOutsideClick(ref, open ? () => setOpen(false) : null);
 
   return (
-    <div className="relative">
-      <button onClick={() => setOpen((prev) => !prev)} className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-white">
+    <div className="relative w-full sm:w-auto">
+      <button
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex w-full items-center justify-center rounded-lg border border-slate-600 px-3 py-2 text-sm text-white sm:w-auto"
+      >
         Статусы
       </button>
       {open && (
-        <div ref={ref} className="absolute right-0 z-30 mt-2 w-56 space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 shadow-2xl">
+        <div
+          ref={ref}
+          className="absolute left-0 z-30 mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 shadow-2xl sm:left-auto sm:right-0"
+        >
           {statuses.length === 0 && <p className="text-sm text-slate-500">Нет статусов</p>}
           {statuses.map((status) => (
             <label key={status} className="flex items-center gap-2 text-sm text-slate-200">
@@ -1908,6 +2336,7 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset }) =
   );
 };
 
+
 const TableToolbar = ({
   tableId,
   searchTerm,
@@ -1915,14 +2344,14 @@ const TableToolbar = ({
   supportsBarberFilter,
   selectedBarber,
   setSelectedBarber,
-  barbers,
+  barbers = [],
   supportsStatusFilter,
-  statuses,
-  hiddenStatuses,
+  statuses = [],
+  hiddenStatuses = [],
   toggleStatus,
   resetStatuses,
-  columns,
-  hiddenColumns,
+  columns = [],
+  hiddenColumns = [],
   toggleColumn,
   canCreate,
   onOpenCreate,
@@ -1932,78 +2361,140 @@ const TableToolbar = ({
   supportsGrouping = false,
   groupByDate = false,
   setGroupByDate,
-  lastUpdatedAt = null,
-}) => (
-  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-    <div className="flex flex-1 flex-wrap gap-3">
-      <label className="relative w-full sm:w-64">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-            <path
-              fillRule="evenodd"
-              d="M9 3.5a5.5 5.5 0 013.995 9.315l3.095 3.095a.75.75 0 11-1.06 1.06l-3.095-3.094A5.5 5.5 0 119 3.5zm0 1.5a4 4 0 100 8 4 4 0 000-8z"
-              clipRule="evenodd"
-            />
-          </svg>
-        </span>
-        <input
-          value={searchTerm}
-          onChange={(event) => setSearchTerm(event.target.value)}
-          placeholder="Поиск..."
-          aria-label="Поиск по таблице"
-          className="w-full rounded-lg border border-slate-600 bg-slate-900 py-2 pl-9 pr-3 text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-        />
-      </label>
-      {supportsBarberFilter && (
-        <select value={selectedBarber} onChange={(event) => setSelectedBarber(event.target.value)} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white">
-          <option value="all">Все барберы</option>
-          {barbers.map((barber) => (
-            <option key={barber} value={barber}>
-              {barber}
-            </option>
-          ))}
-        </select>
-      )}
-      {supportsStatusFilter && (
-        <StatusMenu statuses={statuses} hiddenStatuses={hiddenStatuses} onToggle={toggleStatus} onReset={resetStatuses} />
-      )}
-      {tableId === 'Appointments' && typeof setShowPastAppointments === 'function' && (
-        <label className="flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm text-white">
-          <input
-            type="checkbox"
-            className="accent-indigo-500"
-            checked={!!showPastAppointments}
-            onChange={(event) => setShowPastAppointments(event.target.checked)}
-          />
-          Показать прошедшие
-        </label>
-      )}
-      {supportsGrouping && typeof setGroupByDate === 'function' && (
-        <label className="flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm text-white">
-          <input
-            type="checkbox"
-            className="accent-indigo-500"
-            checked={!!groupByDate}
-            onChange={(event) => setGroupByDate(event.target.checked)}
-          />
-          Группировать по дням
-        </label>
-      )}
-      <ColumnMenu columns={columns} hiddenColumns={hiddenColumns} onToggle={toggleColumn} />
+}) => {
+  const chipClass = (active) =>
+    classNames(
+      'rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition whitespace-nowrap text-center',
+      active ? 'border-indigo-400 bg-indigo-500/10 text-indigo-100' : 'border-slate-700 text-slate-300 hover:border-slate-500'
+    );
+  const allowManualRefresh = typeof onRefresh === 'function' && !['Appointments', 'Users'].includes(tableId);
+  const inlineCreateForMobile = canCreate && typeof onOpenCreate === 'function' && ['Appointments', 'Users'].includes(tableId);
+  const showColumnMenu = columns.length > 0 && tableId !== 'Users';
+  const statusControl =
+    supportsStatusFilter ? (
+      <StatusMenu statuses={statuses} hiddenStatuses={hiddenStatuses} onToggle={toggleStatus} onReset={resetStatuses} />
+    ) : null;
+  const columnControl = showColumnMenu ? <ColumnMenu columns={columns} hiddenColumns={hiddenColumns} onToggle={toggleColumn} /> : null;
+  const pastControl =
+    tableId === 'Appointments' && typeof setShowPastAppointments === 'function'
+      ? (
+          <button
+            type="button"
+            onClick={() => setShowPastAppointments(!showPastAppointments)}
+            className={classNames(chipClass(showPastAppointments), 'w-full sm:w-auto')}
+          >
+            Прошедшие
+          </button>
+        )
+      : null;
+  const groupingControl =
+    supportsGrouping && typeof setGroupByDate === 'function'
+      ? (
+          <button type="button" onClick={() => setGroupByDate(!groupByDate)} className={classNames(chipClass(groupByDate), 'w-full sm:w-auto')}>
+            Группировать по дням
+          </button>
+        )
+      : null;
+  const controlOrder =
+    tableId === 'Appointments'
+      ? [
+          { key: 'status', node: statusControl },
+          { key: 'columns', node: columnControl },
+          { key: 'past', node: pastControl },
+          { key: 'group', node: groupingControl },
+        ]
+      : [
+          { key: 'status', node: statusControl },
+          { key: 'past', node: pastControl },
+          { key: 'group', node: groupingControl },
+          { key: 'columns', node: columnControl },
+        ];
+
+  return (
+    <div className="space-y-3 rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex-1 space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex w-full items-stretch gap-2">
+              <label className="relative flex-1 min-w-[200px]">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path
+                      fillRule="evenodd"
+                      d="M9 3.5a5.5 5.5 0 013.995 9.315l3.095 3.095a.75.75 0 11-1.06 1.06l-3.095-3.094A5.5 5.5 0 119 3.5zm0 1.5a4 4 0 100 8 4 4 0 000-8z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </span>
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Поиск..."
+                  aria-label="Поиск по таблице"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                />
+              </label>
+              {inlineCreateForMobile && (
+                <button
+                  onClick={onOpenCreate}
+                  className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 hover:bg-emerald-500 sm:hidden"
+                >
+                  + Добавить
+                </button>
+              )}
+            </div>
+            {supportsBarberFilter && (
+              <select
+                value={selectedBarber}
+                onChange={(event) => setSelectedBarber(event.target.value)}
+                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white sm:w-48"
+              >
+                <option value="all">Все мастера</option>
+                {barbers.map((barber) => (
+                  <option key={barber} value={barber}>
+                    {barber}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            {controlOrder.map(
+              (control) => control.node && <Fragment key={control.key}>{control.node}</Fragment>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {allowManualRefresh && (
+            <button
+              onClick={onRefresh}
+              className="rounded-full border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800 sm:px-5"
+              title="�������� ������"
+            >
+              <span className="hidden sm:inline">��������</span>
+              <span className="sm:hidden">?</span>
+            </button>
+          )}
+          {canCreate && (
+            <button
+              onClick={onOpenCreate}
+              className={classNames(
+                'rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500',
+                inlineCreateForMobile ? 'hidden sm:inline-flex' : ''
+              )}
+            >
+              <span className="hidden sm:inline">+ Добавить</span>
+              <span className="sm:hidden">+</span>
+            </button>
+          )}
+        </div>
+      </div>
     </div>
-    <div className="flex flex-wrap items-center gap-2">
-      {lastUpdatedAt && <LiveBadge timestamp={lastUpdatedAt} />}
-      <button onClick={onRefresh} className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-white hover:bg-slate-800">
-        Обновить
-      </button>
-      {canCreate && (
-        <button onClick={onOpenCreate} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500">
-          + Добавить
-        </button>
-      )}
-    </div>
-  </div>
-);
+  );
+};
+
 const buildAppointmentGroups = (records = [], sortDirection = 'desc') => {
   const buckets = new Map();
   records.forEach((record) => {
@@ -2070,6 +2561,195 @@ const SortIndicator = ({ direction }) => (
     </svg>
   </span>
 );
+
+const SchedulesBoard = ({ rows = [], columns = [], onUpdate, options }) => {
+  const visibleKeys = useMemo(() => new Set(columns.map((column) => column.key)), [columns]);
+  const editableColumns = useMemo(() => columns.filter((column) => column.editable), [columns]);
+  const groupedByDate = useMemo(() => {
+    if (!rows.length) return [];
+    const buckets = new Map();
+    rows.forEach((slot) => {
+      const key = slot.Date || slot.DayOfWeek || `barber-${slot.Barber || 'no-barber'}`;
+      const next = buckets.get(key) || [];
+      next.push(slot);
+      buckets.set(key, next);
+    });
+    return Array.from(buckets.entries())
+      .map(([key, slots]) => {
+        const sortedSlots = [...slots].sort((a, b) => normalizeText(a.Week).localeCompare(normalizeText(b.Week)));
+        const reference = sortedSlots[0] || {};
+        const timestamp = key && !key.startsWith('barber-') ? new Date(key).getTime() : Number.NaN;
+        return {
+          key,
+          title: key && !key.startsWith('barber-') ? formatDateHeading(key) : reference.DayOfWeek || 'Без даты',
+          badge: key && !key.startsWith('barber-') ? formatDateBadgeLabel(key) : reference.DayOfWeek || '—',
+          sortValue: Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER,
+          slots: sortedSlots,
+        };
+      })
+      .sort((a, b) => a.sortValue - b.sortValue);
+  }, [rows]);
+
+  if (!groupedByDate.length) {
+    return <p className="text-slate-400">Расписание пусто.</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {groupedByDate.map((group) => (
+        <section key={group.key} className="space-y-2 rounded-2xl border border-slate-800/80 bg-slate-950/30 p-4 shadow-inner shadow-black/10">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">{group.badge}</p>
+              <p className="text-base font-semibold text-white">{group.title}</p>
+            </div>
+            <span className="rounded-full border border-slate-700 px-2.5 py-0.5 text-[11px] text-slate-300">
+              {group.slots.length} {pluralize(group.slots.length, ['слот', 'слота', 'слотов'])}
+            </span>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {group.slots.map((slot) => (
+              <article
+                key={slot.id || `${slot.Barber || 'no-barber'}-${slot.Date || slot.DayOfWeek || slot.Week}`}
+                className="rounded-2xl border border-slate-800/70 bg-slate-950/50 p-3 text-sm text-slate-200"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{slot.DayOfWeek || 'День не указан'}</p>
+                    <p className="text-base font-semibold text-white">{slot.Barber || 'Не назначен'}</p>
+                  </div>
+                    <div className="text-right">
+                      <p className="text-lg font-semibold text-white">{slot.Week || '-'}</p>
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">{slot.Date ? formatDate(slot.Date) : 'Без даты'}</p>
+                  </div>
+                </div>
+                {editableColumns.length > 0 && (
+                  <div className="mt-2 grid gap-2 text-xs text-slate-400">
+                    {editableColumns.map((column) => (
+                      <div key={`${slot.id || slot.Date}-${column.key}`} className="flex items-center justify-between rounded-xl border border-slate-800/60 bg-slate-950/60 px-2 py-1.5">
+                        <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">{column.label}</p>
+                        <EditableCell record={slot} column={column} options={options} onUpdate={onUpdate} tableId="Schedules" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+};
+
+const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [] }) => {
+  if (!groups.length) {
+    return <p className="text-slate-400">Записей пока нет.</p>;
+  }
+
+  const visibleColumns = useMemo(() => columns.filter((column) => !hiddenColumns.includes(column.key)), [columns, hiddenColumns]);
+  const renderColumnValue = (record, column) => {
+    const value = record[column.key];
+    switch (column.key) {
+      case 'Date':
+        return formatDate(value) || '—';
+      case 'Time': {
+        const { start, end } = parseTimeRangeParts(value);
+        return [start || value || '-', end ? `до ${end}` : ''].filter(Boolean).join(' ');
+      }
+      case 'Status':
+        return normalizeStatusValue(value) || '—';
+      case 'Services': {
+        const items = parseMultiValue(value);
+        return items.length ? items.join(', ') : '—';
+      }
+      case 'Phone':
+        return value ? formatPhoneInput(value) : '—';
+      case 'Reminder2hClientSent':
+      case 'Reminder2hBarberSent':
+        return value === 'true' || value === true || value === 1 ? 'Отправлено' : '—';
+      default:
+        return value || '—';
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      {groups.map((group) => (
+        <section key={group.key} className="space-y-3">
+          {group.label && (
+            <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
+              <span className="h-px flex-1 bg-slate-700" />
+              {group.label}
+              <span className="h-px flex-1 bg-slate-700" />
+            </div>
+          )}
+          <div className="grid gap-3 lg:grid-cols-2">
+            {group.rows.map((record) => {
+              const key = getRecordId(record) || `${group.key}-${record.CustomerName}-${record.Time}`;
+              const statusLabel = normalizeStatusValue(record.Status) || '-';
+              const { start, end } = parseTimeRangeParts(record.Time);
+              const servicesList = parseMultiValue(record.Services);
+              return (
+                <button
+                  type="button"
+                  key={key}
+                  onClick={() => onOpen?.(record, { allowDelete: true })}
+                  className="flex h-full flex-col rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-left transition hover:border-indigo-500/70 hover:bg-slate-900/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 sm:p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800/70 pb-3">
+                    <div className="space-y-1">
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{formatDateBadgeLabel(record.Date)}</p>
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-2xl font-semibold text-white sm:text-3xl">{start || record.Time || '-'}</p>
+                        {end && <p className="text-xs text-slate-400 sm:text-sm">до {end}</p>}
+                      </div>
+                    </div>
+                    <div className="text-right space-y-1">
+                      <span className={classNames('inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide', getStatusBadgeClasses(statusLabel))}>
+                        {statusLabel}
+                      </span>
+                      {record.Barber && <p className="text-xs text-slate-400">{record.Barber}</p>}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-col gap-3 text-[13px] text-slate-300 sm:text-sm">
+                    {visibleColumns.length > 0 ? (
+                      <div className="grid gap-2">
+                        {visibleColumns.map((column) => (
+                          <div key={`${key}-${column.key}`} className="flex items-center justify-between rounded-xl border border-slate-800/70 bg-slate-950/50 px-2 py-1.5">
+                            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">{column.label}</p>
+                            <p className="text-right text-slate-200">{renderColumnValue(record, column)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-base font-semibold text-white sm:text-lg">{record.CustomerName || 'Без имени'}</p>
+                        {servicesList.length ? (
+                          <div className="flex flex-wrap gap-2">
+                            {servicesList.slice(0, 3).map((service, index) => (
+                              <span key={`${service}-${index}`} className="rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-0.5 text-[11px] text-slate-200 sm:text-xs">
+                                {service}
+                              </span>
+                            ))}
+                            {servicesList.length > 3 && <span className="text-[11px] text-slate-500">+{servicesList.length - 3}</span>}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-500">Услуги не указаны</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+};
+
 const DataTable = ({
   tableId,
   rows,
@@ -2081,6 +2761,7 @@ const DataTable = ({
   onDelete,
   options,
   onOpenProfile,
+  onOpenAppointment,
   groupByDate = true,
 }) => {
   if (!rows.length) {
@@ -2097,58 +2778,11 @@ const DataTable = ({
     : [{ key: 'default', label: null, rows }];
 
   if (isAppointmentsTable) {
-    return (
-      <div className="space-y-6">
-        {groupedRows.map((group) => (
-          <div key={group.key} className="space-y-3">
-            {group.label && (
-              <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
-                <span className="h-px flex-1 bg-slate-700" />
-                {group.label}
-                <span className="h-px flex-1 bg-slate-700" />
-              </div>
-            )}
-            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-              {group.rows.map((record) => {
-                const recordId = getRecordId(record);
-                const statusLabel = normalizeStatusValue(record.Status) || '—';
-                return (
-                  <article key={recordId} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg shadow-black/10">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Запись</p>
-                        <p className="text-base font-semibold text-white">{record.CustomerName || 'Без имени'}</p>
-                        <p className="text-xs text-slate-400">{formatDateTime(record.Date, record.Time)}</p>
-                      </div>
-                      <span className={classNames('text-xs font-semibold', getStatusBadgeClasses(record.Status))}>{statusLabel}</span>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {visibleColumns.map((column) => (
-                        <div key={`${recordId}-${column.key}`} className="space-y-1">
-                          <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">{column.label}</p>
-                          <div className="rounded-lg border border-slate-700 bg-slate-950/40 px-2 py-1.5">
-                            <EditableCell record={record} column={column} options={options} onUpdate={onUpdate} onOpenProfile={onOpenProfile} tableId={tableId} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {onDelete && (
-                      <button
-                        onClick={() => onDelete(record)}
-                        className="w-full rounded-lg border border-rose-500 px-3 py-2 text-sm text-rose-200 hover:bg-rose-500/10"
-                        aria-label="Удалить запись"
-                      >
-                        Удалить запись
-                      </button>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
+    return <AppointmentsList groups={groupedRows} onOpen={onOpenAppointment} />;
+  }
+
+  if (tableId === 'Schedules') {
+    return <SchedulesBoard rows={rows} columns={visibleColumns} onUpdate={onUpdate} options={options} />;
   }
 
   return (
@@ -2164,7 +2798,7 @@ const DataTable = ({
                   <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
                     {tableId === 'Users' ? 'Клиент' : tableId === 'Schedules' ? 'Расписание' : 'Запись'}
                   </p>
-                  <p className="text-base font-semibold text-white">{record[visibleColumns[0]?.key] || '—'}</p>
+                  <p className="text-base font-semibold text-white">{record[visibleColumns[0]?.key] || '-'}</p>
                 </div>
                 {onDelete && (
                   <button
@@ -2180,14 +2814,7 @@ const DataTable = ({
                 {visibleColumns.map((column) => (
                   <div key={`${cardKey}-${column.key}`} className="space-y-1 rounded-2xl border border-slate-800/80 bg-slate-950/50 p-2">
                     <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">{column.label}</p>
-                    <EditableCell
-                      record={record}
-                      column={column}
-                      options={options}
-                      onUpdate={onUpdate}
-                      onOpenProfile={onOpenProfile}
-                      tableId={tableId}
-                    />
+                    <EditableCell record={record} column={column} options={options} onUpdate={onUpdate} onOpenProfile={onOpenProfile} tableId={tableId} />
                   </div>
                 ))}
               </div>
@@ -2208,9 +2835,7 @@ const DataTable = ({
                 >
                   <div className={classNames('flex items-center gap-2', column.align === 'center' && 'justify-center')}>
                     {column.label}
-                    {column.sortable !== false && (
-                      <SortIndicator direction={sortConfig?.key === column.key ? sortConfig.direction : null} />
-                    )}
+                    {column.sortable !== false && <SortIndicator direction={sortConfig?.key === column.key ? sortConfig.direction : null} />}
                   </div>
                 </th>
               ))}
@@ -2263,6 +2888,185 @@ const DataTable = ({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+};
+
+
+const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHistory, onRequestConfirm }) => {
+  const [modalState, setModalState] = useState({ open: false, record: null, history: [], loading: false, error: '' });
+  const barberOptions = useMemo(() => (Array.isArray(barbers) ? barbers.filter(Boolean) : []), [barbers]);
+
+  const openClientModal = async (client) => {
+    if (!client) return;
+    setModalState({ open: true, record: { ...client }, history: [], loading: true, error: '' });
+    try {
+      if (fetchHistory && client.Name) {
+        const profile = await fetchHistory(client);
+        const history = buildVisitHistory(profile?.appointments || []);
+        setModalState((prev) => ({ ...prev, history, loading: false }));
+      } else {
+        setModalState((prev) => ({ ...prev, loading: false, history: [] }));
+      }
+    } catch (error) {
+      setModalState((prev) => ({ ...prev, loading: false, error: error.message || 'Не удалось загрузить историю' }));
+    }
+  };
+
+  const closeClientModal = () => setModalState({ open: false, record: null, history: [], loading: false, error: '' });
+
+  const handleFieldChange = (field, value) => {
+    setModalState((prev) => ({ ...prev, record: { ...prev.record, [field]: value } }));
+  };
+
+  const handleSave = () => {
+    if (!modalState.record || typeof onUpdate !== 'function') return;
+    const recordId = getRecordId(modalState.record);
+    if (!recordId) return;
+    const payload = {
+      Name: modalState.record.Name,
+      Phone: modalState.record.Phone,
+      TelegramID: modalState.record.TelegramID,
+      Barber: modalState.record.Barber,
+    };
+    onUpdate(recordId, payload);
+    closeClientModal();
+  };
+
+  const handleDelete = async () => {
+    if (!modalState.record || typeof onDelete !== 'function') return;
+    const confirmed = await onRequestConfirm?.({
+      title: 'Удалить клиента?',
+      message: `Клиент «${modalState.record.Name || 'Без имени'}» будет удален без возможности восстановления.`,
+      confirmLabel: 'Удалить',
+      tone: 'danger',
+    });
+    if (onRequestConfirm && !confirmed) return;
+    await onDelete(modalState.record, { skipConfirm: true });
+    closeClientModal();
+  };
+
+  return (
+    <div className="space-y-6">
+      {clients.length === 0 ? (
+        <p className="text-slate-400">Список клиентов пуст.</p>
+      ) : (
+        <div className="rounded-3xl border border-slate-800 bg-slate-950/40 shadow-inner shadow-black/10">
+          <div className="divide-y divide-slate-900">
+            {clients.map((client, index) => {
+              const clientNumber = String(index + 1).padStart(2, '0');
+              const phoneDisplay = client.Phone ? formatPhoneInput(client.Phone) : '';
+              const telegramHandle = formatTelegramHandle(client.TelegramID);
+              return (
+                <button
+                  type="button"
+                  key={client.id}
+                  onClick={() => openClientModal(client)}
+                  className="flex w-full flex-col gap-2 px-4 py-3 text-left transition hover:bg-slate-900/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-indigo-300">
+                      {clientNumber}
+                    </div>
+                    <div className="flex flex-1 flex-col gap-1">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <p className="text-base font-semibold text-white">{client.Name || 'Нет имени'}</p>
+                          {client.Barber && <p className="text-xs text-slate-400">Любимый барбер: {client.Barber}</p>}
+                        </div>
+                        <div className="hidden text-right text-sm text-slate-300 sm:block">
+                          {phoneDisplay && <p>{phoneDisplay}</p>}
+                          {telegramHandle && <p className="text-xs text-slate-500">{telegramHandle}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <Modal
+        title={modalState.record?.Name || 'Клиент'}
+        isOpen={modalState.open}
+        onClose={closeClientModal}
+        maxWidthClass="max-w-3xl"
+        footer={
+          <div className="flex flex-wrap justify-end gap-3">
+            {modalState.record && (
+              <button onClick={handleDelete} className="rounded-lg border border-rose-600 px-4 py-2 text-sm text-rose-200 hover:bg-rose-500/10">
+                Удалить
+              </button>
+            )}
+            <button onClick={closeClientModal} className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800">
+              Отмена
+            </button>
+            <button onClick={handleSave} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">
+              Сохранить
+            </button>
+          </div>
+        }
+      >
+        {!modalState.record ? (
+          <p className="text-slate-400">Выберите клиента.</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="space-y-1 text-sm text-slate-300">
+                Имя
+                <input
+                  value={modalState.record.Name || ''}
+                  onChange={(event) => handleFieldChange('Name', event.target.value)}
+                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                />
+              </label>
+              <label className="space-y-1 text-sm text-slate-300">
+                Телефон
+                <input
+                  value={modalState.record.Phone || ''}
+                  onChange={(event) => handleFieldChange('Phone', event.target.value)}
+                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                />
+              </label>
+              <label className="space-y-1 text-sm text-slate-300">
+                Telegram ID
+                <input
+                  value={modalState.record.TelegramID || ''}
+                  onChange={(event) => handleFieldChange('TelegramID', event.target.value)}
+                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                />
+              </label>
+              <label className="space-y-1 text-sm text-slate-300">
+                Любимый барбер
+                <select
+                  value={modalState.record.Barber || ''}
+                  onChange={(event) => handleFieldChange('Barber', event.target.value)}
+                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                >
+                  <option value="">Не выбран</option>
+                  {barberOptions.map((barber) => (
+                    <option key={barber} value={barber}>
+                      {barber}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm text-slate-400">История визитов</p>
+              <VisitHistoryList
+                visits={modalState.history}
+                loading={modalState.loading}
+                error={modalState.error}
+                emptyMessage="История визитов пуста."
+                maxHeightClass="max-h-56"
+              />
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };
@@ -2394,22 +3198,12 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
 
 const ProfileModal = ({ state, onClose }) => {
   const appointments = state.data?.appointments || [];
-  const visitHistory = useMemo(() => {
-    if (!appointments.length) return [];
-    const cutoff = Date.now() - YEAR_IN_MS;
-    const completed = appointments
-      .map((appt) => {
-        const startDate = getAppointmentStartDate(appt.Date, appt.Time, appt.startDateTime);
-        return { ...appt, startDate };
-      })
-      .filter((appt) => appt.startDate && appt.startDate.getTime() >= cutoff && isCompletedAppointmentStatus(appt.Status))
-      .sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
-    return completed.map((appt, index) => ({
-      ...appt,
-      orderNumber: completed.length - index,
-      dateLabel: formatDateTime(appt.Date, appt.Time),
-    }));
-  }, [appointments]);
+  const visitHistory = useMemo(() => buildVisitHistory(appointments), [appointments]);
+  const user = state.data?.user || null;
+  const phoneLabel = user?.Phone ? formatPhoneInput(user.Phone) : '';
+  const phoneHref = phoneLabel ? `tel:${phoneLabel.replace(/[^\d+]/g, '')}` : '';
+  const telegramHandle = user?.TelegramID ? formatTelegramHandle(user.TelegramID) : '';
+  const telegramHref = user?.TelegramID ? buildTelegramLink(user.TelegramID) : '';
 
   return (
     <Modal
@@ -2420,45 +3214,35 @@ const ProfileModal = ({ state, onClose }) => {
     >
       {state.loading && <LoadingState label="Загружаю профиль..." />}
       {!state.loading && state.data?.error && <ErrorBanner message={state.data.error} />}
-      {!state.loading && state.data?.user && (
+      {!state.loading && user && (
         <div className="space-y-4">
           <div className="grid gap-2 text-sm text-slate-200">
-            <div><span className="text-slate-400">Телефон:</span> {state.data.user.Phone || '-'}</div>
-            <div><span className="text-slate-400">Telegram:</span> {state.data.user.TelegramID || '-'}</div>
-            <div><span className="text-slate-400">Барбер:</span> {state.data.user.Barber || '-'}</div>
+            <div>
+              <span className="text-slate-400">Телефон:</span>{' '}
+              {phoneLabel && phoneHref ? (
+                <a href={phoneHref} className="text-indigo-300 hover:text-indigo-100">
+                  {phoneLabel}
+                </a>
+              ) : (
+                '—'
+              )}
+            </div>
+            <div>
+              <span className="text-slate-400">Telegram:</span>{' '}
+              {telegramHandle && telegramHref ? (
+                <a href={telegramHref} target="_blank" rel="noopener noreferrer" className="text-indigo-300 hover:text-indigo-100">
+                  {telegramHandle}
+                </a>
+              ) : (
+                '—'
+              )}
+            </div>
+            <div><span className="text-slate-400">Любимый барбер:</span> {user.Barber || '—'}</div>
           </div>
           <div>
             <p className="text-sm text-slate-400">История визитов</p>
-            <div className="mt-2 max-h-64 space-y-2 overflow-auto">
-              {visitHistory.length ? (
-                <>
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>Выполнено за 12 месяцев: <span className="font-semibold text-white">{visitHistory.length}</span></span>
-                    <span>Только завершённые записи</span>
-                  </div>
-                  {visitHistory.map((appt, index) => {
-                    const isLatest = index === 0;
-                    return (
-                      <div
-                        key={`${appt.id || appt.dateLabel}-${appt.orderNumber}`}
-                        className={classNames(
-                          'rounded-lg border p-3 text-xs transition',
-                          isLatest ? 'border-emerald-400/60 bg-emerald-500/10 shadow-inner shadow-emerald-900/30' : 'border-slate-800 bg-slate-900/40'
-                        )}
-                      >
-                        <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-slate-400">
-                          <span className="font-semibold text-white">Стрижка №{appt.orderNumber}</span>
-                          <span>{appt.dateLabel}</span>
-                        </div>
-                        <p className="mt-1 text-sm text-slate-100">{appt.Barber || '—'}</p>
-                        <p className="text-slate-400">{appt.Services || '—'}</p>
-                      </div>
-                    );
-                  })}
-                </>
-              ) : (
-                <p className="text-sm text-slate-500">Выполненных записей за последний год нет.</p>
-              )}
+            <div className="mt-2">
+              <VisitHistoryList visits={visitHistory} emptyMessage="Записей за последний год нет." />
             </div>
           </div>
         </div>
@@ -2467,7 +3251,7 @@ const ProfileModal = ({ state, onClose }) => {
   );
 };
 
-const BackupsPanel = ({ backups = [], onRestore, onCreate }) => (
+const BackupsPanel = ({ backups = [], onRestore, onCreate, onDelete }) => (
   <SectionCard
     title="Резервные копии"
     actions={
@@ -2480,14 +3264,31 @@ const BackupsPanel = ({ backups = [], onRestore, onCreate }) => (
       <p className="text-slate-400">История пуста.</p>
     ) : (
       <div className="space-y-2">
-        {backups.map((backup) => (
-          <div key={backup} className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-slate-200">
-            <span>{backup}</span>
-            <button onClick={() => onRestore(backup)} className="text-indigo-300 hover:text-indigo-100">
-              Восстановить
-            </button>
-          </div>
-        ))}
+        {backups.map((backup) => {
+          const label = formatBackupLabel(backup);
+          return (
+            <div key={backup} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-slate-200">
+              <div>
+                <p className="font-semibold text-white">{label}</p>
+                <p className="text-xs text-slate-500">{backup}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={() => onRestore(backup)} className="rounded-lg border border-slate-600 px-3 py-1 text-xs font-semibold text-indigo-200 hover:border-indigo-400 hover:text-white">
+                  Восстановить
+                </button>
+                {onDelete && (
+                  <button
+                    onClick={() => onDelete(backup)}
+                    className="inline-flex items-center rounded-lg border border-rose-600 px-3 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-500/10"
+                  >
+                    <IconTrash className="mr-1 h-3.5 w-3.5" />
+                    Удалить
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     )}
   </SectionCard>
@@ -2510,21 +3311,31 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, on
   const servicesSelection = parseMultiValue(draft.Services);
   const handleChange = (field, value) => setDraft((prev) => ({ ...prev, [field]: value }));
 
-  const handleSubmit = () => {
+  const submitDraft = (nextDraft) => {
+    if (!nextDraft) return;
     onSave({
-      id: draft.id,
+      id: nextDraft.id,
       payload: {
-        CustomerName: draft.CustomerName,
-        Phone: draft.Phone,
-        Barber: draft.Barber,
-        Date: draft.Date,
-        Time: draft.Time,
-        Status: normalizeStatusValue(draft.Status),
-        Services: draft.Services,
-        UserID: draft.UserID || '',
+        CustomerName: nextDraft.CustomerName,
+        Phone: nextDraft.Phone,
+        Barber: nextDraft.Barber,
+        Date: nextDraft.Date,
+        Time: nextDraft.Time,
+        Status: normalizeStatusValue(nextDraft.Status),
+        Services: nextDraft.Services,
+        UserID: nextDraft.UserID || '',
       },
       isNew,
     });
+  };
+
+  const handleSubmit = () => submitDraft(draft);
+
+  const handleMarkCompleted = () => {
+    if (!draft) return;
+    const nextDraft = { ...draft, Status: 'Выполнена' };
+    setDraft(nextDraft);
+    submitDraft(nextDraft);
   };
 
   const handleClientAutoFill = (client) => {
@@ -2556,6 +3367,14 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, on
           <button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">
             Отмена
           </button>
+          {!isNew && (
+            <button
+              onClick={handleMarkCompleted}
+              className="rounded-lg border border-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-200 hover:bg-emerald-500/10"
+            >
+              Выполнено
+            </button>
+          )}
           <button onClick={handleSubmit} className="rounded-lg bg-emerald-600 px-4 py-2 text-white">
             Сохранить
           </button>
@@ -2616,6 +3435,7 @@ const TablesWorkspace = ({
   sharedOptions,
   onOptionsUpdate,
   onOpenProfile,
+  onOpenAppointmentRecord,
   clients = [],
   currentUser = null,
   liveAppointments = null,
@@ -2630,6 +3450,7 @@ const TablesWorkspace = ({
   onServicePriceChange,
   onDeleteService,
   onAddService,
+  onActiveTableChange,
   preferredTable = null,
   onPreferredTableConsumed,
   onRequestConfirm = null,
@@ -2679,15 +3500,24 @@ const TablesWorkspace = ({
   }, [sharedOptions]);
 
   useEffect(() => {
+    if (activeTable === 'Schedules') {
+      setActiveTable('Barbers');
+      return;
+    }
     if (!TABLE_CONFIG[activeTable]) {
       setActiveTable('Appointments');
     }
   }, [activeTable, setActiveTable]);
 
   useEffect(() => {
+    onActiveTableChange?.(activeTable);
+  }, [activeTable, onActiveTableChange]);
+
+  useEffect(() => {
     if (!preferredTable) return;
-    if (TABLE_ORDER.includes(preferredTable)) {
-      setActiveTable(preferredTable);
+    const nextTable = preferredTable === 'Schedules' ? 'Barbers' : preferredTable;
+    if (TABLE_ORDER.includes(nextTable)) {
+      setActiveTable(nextTable);
     }
     onPreferredTableConsumed?.();
   }, [preferredTable, setActiveTable, onPreferredTableConsumed]);
@@ -2810,9 +3640,9 @@ const TablesWorkspace = ({
     setHiddenStatuses((prev) => (prev.includes(normalized) ? prev.filter((item) => item !== normalized) : [...prev, normalized]));
   };
 
-  const handleUpdate = async (recordId, data) => {
+  const handleUpdate = async (recordId, data, { tableId: overrideTableId } = {}) => {
     if (!recordId) return;
-    const tableId = activeTable;
+    const tableId = overrideTableId || activeTable;
     const normalizedData =
       tableId === 'Appointments' && data?.Status !== undefined
         ? { ...data, Status: normalizeStatusValue(data.Status) }
@@ -2838,18 +3668,29 @@ const TablesWorkspace = ({
     }
   };
 
-  const handleDelete = async (record) => {
+  const handleDelete = async (record, { skipConfirm = false } = {}) => {
     if (!record || activeTable === 'Schedules') return;
-    const confirmed = onRequestConfirm
-      ? await onRequestConfirm({
-          title: 'Удалить запись?',
-          message: 'Запись будет удалена без возможности восстановления.',
-          confirmLabel: 'Удалить',
-          tone: 'danger',
-        })
-      : true;
-    if (!confirmed) return;
     const tableId = activeTable;
+    const confirmCopy = (() => {
+      switch (tableId) {
+        case 'Users':
+          return { title: 'Удалить клиента?', message: 'Клиент будет удален без возможности восстановления.' };
+        case 'Appointments':
+          return { title: 'Удалить запись?', message: 'Запись будет удалена без возможности восстановления.' };
+        default:
+          return { title: 'Удалить запись?', message: 'Запись будет удалена.' };
+      }
+    })();
+    if (!skipConfirm) {
+      const confirmed = onRequestConfirm
+        ? await onRequestConfirm({
+            ...confirmCopy,
+            confirmLabel: 'Удалить',
+            tone: 'danger',
+          })
+        : true;
+      if (!confirmed) return;
+    }
     const original = tables[tableId] || [];
     setTables((prev) => {
       const list = prev[tableId] || [];
@@ -2884,13 +3725,21 @@ const TablesWorkspace = ({
     }
   };
 
+  const fetchClientProfile = useCallback(
+    (client) => {
+      if (!client?.Name) return null;
+      return apiRequest(`/user-profile/${encodeURIComponent(client.Name)}`);
+    },
+    [apiRequest]
+  );
+
   const tableSettings = TABLE_CONFIG[activeTable] || {};
   const isCustomTable = tableSettings?.mode === 'custom';
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        {TABLE_ORDER.map((table) => (
+        {VISIBLE_TABLE_ORDER.map((table) => (
           <button
             key={table}
             onClick={() => setActiveTable(table)}
@@ -2909,10 +3758,13 @@ const TablesWorkspace = ({
           {activeTable === 'Barbers' && (
             <BarbersView
               barbers={barbers}
+              schedules={tables.Schedules || []}
               onFieldChange={onBarberFieldChange}
               onSave={onSaveBarber}
               onAdd={onAddBarber}
               onDelete={onDeleteBarber}
+              loadAvatarOptions={() => apiRequest('/assets/avatars')}
+              onScheduleUpdate={(recordId, payload) => handleUpdate(recordId, payload, { tableId: 'Schedules' })}
             />
           )}
           {activeTable === 'Services' && (
@@ -2955,25 +3807,36 @@ const TablesWorkspace = ({
             supportsGrouping={activeTable === 'Appointments'}
             groupByDate={groupAppointmentsByDate}
             setGroupByDate={setGroupAppointmentsByDate}
-            lastUpdatedAt={liveUpdatedAt}
           />
           {isFetching ? (
             <LoadingState label="Обновляю таблицы..." />
           ) : (
             <div className="mt-4">
-              <DataTable
-                tableId={activeTable}
-                rows={processedRows}
-                columns={currentColumns}
-                hiddenColumns={hiddenColumns}
-                sortConfig={sortConfig}
-                onSort={handleSort}
-                onUpdate={handleUpdate}
-                onDelete={tableSettings.canCreate ? handleDelete : null}
-                options={dropdownOptions}
-                onOpenProfile={onOpenProfile}
-                groupByDate={activeTable === 'Appointments' ? groupAppointmentsByDate : false}
-              />
+              {activeTable === 'Users' ? (
+                <ClientsList
+                  clients={processedRows}
+                  barbers={dropdownOptions.barbers || []}
+                  onUpdate={handleUpdate}
+                  onDelete={handleDelete}
+                  fetchHistory={fetchClientProfile}
+                  onRequestConfirm={onRequestConfirm}
+                />
+              ) : (
+                <DataTable
+                  tableId={activeTable}
+                  rows={processedRows}
+                  columns={currentColumns}
+                  hiddenColumns={hiddenColumns}
+                  sortConfig={sortConfig}
+                  onSort={handleSort}
+                  onUpdate={handleUpdate}
+                  onDelete={tableSettings.canCreate ? handleDelete : null}
+                  options={dropdownOptions}
+                  onOpenProfile={onOpenProfile}
+                  onOpenAppointment={activeTable === 'Appointments' ? onOpenAppointmentRecord : null}
+                  groupByDate={activeTable === 'Appointments' ? groupAppointmentsByDate : false}
+                />
+              )}
             </div>
           )}
         </SectionCard>
@@ -3021,6 +3884,7 @@ const BotControlView = ({
   onSaveMessage,
   onRestoreBackup,
   onCreateBackup,
+  onDeleteBackup,
   licenseStatus,
   updateInfo,
   onRefreshUpdate,
@@ -3039,7 +3903,7 @@ const BotControlView = ({
   if (viewMode === 'system') {
     return (
       <div className="space-y-6">
-        <BackupsPanel backups={backups} onRestore={onRestoreBackup} onCreate={onCreateBackup} />
+        <BackupsPanel backups={backups} onRestore={onRestoreBackup} onCreate={onCreateBackup} onDelete={onDeleteBackup} />
 
         <SectionCard title="Лицензия и обновления">
           <div className="grid gap-4 md:grid-cols-2">
@@ -3237,6 +4101,14 @@ const App = () => {
   });
   const [activeTab, setActiveTab] = useLocalStorage('barber.activeTab', 'dashboard');
   const [pendingTableView, setPendingTableView] = useState(null);
+  const [activeDataTable, setActiveDataTable] = useState(() => {
+    try {
+      const stored = localStorage.getItem('tables.active');
+      return stored ? JSON.parse(stored) : 'Appointments';
+    } catch {
+      return 'Appointments';
+    }
+  });
   const [dashboard, setDashboard] = useState(null);
   const [services, setServices] = useState([]);
   const [barbers, setBarbers] = useState([]);
@@ -3285,6 +4157,24 @@ const App = () => {
       setActiveTab('tables');
     }
   }, [activeTab, setActiveTab]);
+
+  const handleSidebarTableChange = useCallback(
+    (tableId) => {
+      if (!tableId) return;
+      setActiveDataTable(tableId);
+      setPendingTableView(tableId);
+      setActiveTab('tables');
+    },
+    [setActiveTab, setPendingTableView]
+  );
+
+  const handleActiveTableSync = useCallback(
+    (tableId) => {
+      if (!tableId) return;
+      setActiveDataTable(tableId);
+    },
+    []
+  );
 
   const handlePreferredTableConsumed = useCallback(() => setPendingTableView(null), []);
   const serviceSaveTimers = useRef(new Map());
@@ -3722,6 +4612,32 @@ const App = () => {
     }
   };
 
+  const handleDeleteBackup = async (filename) => {
+    if (!filename) return;
+    const confirmed = await requestConfirm({
+      title: 'Удалить резервную копию?',
+      message: `Файл ${filename} будет удален безвозвратно.`,
+      confirmLabel: 'Удалить',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await apiRequest('/backups/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename }) });
+      fetchAll();
+    } catch (error) {
+      setGlobalError(error.message || 'Не удалось удалить бэкап');
+    }
+  };
+
+  const fetchClientHistory = useCallback(
+    async (client) => {
+      if (!client?.Name) return null;
+      return apiRequest(`/user-profile/${encodeURIComponent(client.Name)}`);
+    },
+    [apiRequest]
+  );
+
+
   const openProfile = useCallback(
     async (name) => {
       if (!name) return;
@@ -3854,6 +4770,8 @@ const App = () => {
   }
 
   const preferredTableTarget = activeTab === 'barbers' ? 'Barbers' : activeTab === 'services' ? 'Services' : pendingTableView;
+  const liveUpdatedAt = realtimeSnapshot?.updatedAt || null;
+  const mainClassName = classNames('flex-1 space-y-4 p-4 md:p-8', isMobile ? 'pb-24' : '');
 
   const renderActive = () => {
     if (loading) return <LoadingState />;
@@ -3865,7 +4783,6 @@ const App = () => {
             onOpenAppointment={handleOpenAppointment}
             onOpenProfile={openProfile}
             onCreateAppointment={handleCreateAppointment}
-            liveMeta={realtimeSnapshot}
           />
         );
       case 'tables':
@@ -3877,6 +4794,7 @@ const App = () => {
             sharedOptions={optionsCache}
             onOptionsUpdate={setOptionsCache}
             onOpenProfile={openProfile}
+            onOpenAppointmentRecord={handleOpenAppointment}
             clients={dashboard?.clients || []}
             currentUser={session || null}
             liveAppointments={realtimeSnapshot?.rows || null}
@@ -3891,6 +4809,7 @@ const App = () => {
             onServicePriceChange={handleServicePriceChange}
             onDeleteService={handleDeleteService}
             onAddService={handleAddService}
+            onActiveTableChange={handleActiveTableSync}
             preferredTable={preferredTableTarget}
             onPreferredTableConsumed={handlePreferredTableConsumed}
             onRequestConfirm={requestConfirm}
@@ -3911,6 +4830,7 @@ const App = () => {
             onSaveMessage={(id, draft, persist) => handleSaveMessage(id, draft, persist)}
             onRestoreBackup={handleRestoreBackup}
             onCreateBackup={handleCreateBackup}
+            onDeleteBackup={handleDeleteBackup}
             licenseStatus={licenseStatus}
             updateInfo={updateInfo}
             onRefreshUpdate={handleRefreshUpdate}
@@ -3934,6 +4854,7 @@ const App = () => {
             onSaveMessage={(id, draft, persist) => handleSaveMessage(id, draft, persist)}
             onRestoreBackup={handleRestoreBackup}
             onCreateBackup={handleCreateBackup}
+            onDeleteBackup={handleDeleteBackup}
             licenseStatus={licenseStatus}
             updateInfo={updateInfo}
             onRefreshUpdate={handleRefreshUpdate}
@@ -3957,6 +4878,7 @@ const App = () => {
             onSaveMessage={(id, draft, persist) => handleSaveMessage(id, draft, persist)}
             onRestoreBackup={handleRestoreBackup}
             onCreateBackup={handleCreateBackup}
+            onDeleteBackup={handleDeleteBackup}
             licenseStatus={licenseStatus}
             updateInfo={updateInfo}
             onRefreshUpdate={handleRefreshUpdate}
@@ -3992,10 +4914,20 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
-      {isMobile && <MobileTabs activeTab={activeTab} onChange={setActiveTab} session={session} onLogout={handleLogout} />}
+      {isMobile && (
+        <MobileTabs activeTab={activeTab} onChange={setActiveTab} session={session} onLogout={handleLogout} liveUpdatedAt={liveUpdatedAt} />
+      )}
       <div className="flex">
-        <Sidebar session={session} activeTab={activeTab} onChange={setActiveTab} onLogout={handleLogout} />
-        <main className="flex-1 space-y-4 p-4 md:p-8">
+        <Sidebar
+          session={session}
+          activeTab={activeTab}
+          onChange={setActiveTab}
+          onLogout={handleLogout}
+          liveUpdatedAt={liveUpdatedAt}
+          activeDataTable={activeDataTable}
+          onSelectTable={handleSidebarTableChange}
+        />
+        <main className={mainClassName}>
           {globalError && <ErrorBanner message={globalError} />}
           {renderActive()}
         </main>
@@ -4075,6 +5007,7 @@ const renderApp = () => {
 };
 
 renderApp();
+
 
 
 

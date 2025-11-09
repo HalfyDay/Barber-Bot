@@ -43,7 +43,7 @@ IMAGE_FILE = BASE_DIR / "Image" / "bot.jpg"
 MENU_IMAGE_PATH = BASE_DIR / "Image" / "menu_barber.jpg"
 CACHE_TTL_SECONDS = 120
 BARBER_CACHE = {True: {"data": [], "ts": 0.0}, False: {"data": [], "ts": 0.0}}
-SERVICE_CACHE = {"data": [], "ts": 0.0}
+SERVICE_CACHE = {"data": [], "ts": 0.0, "version": None}
 SETTINGS_CACHE = {"data": None, "ts": 0.0}
 STATUS_ACTIVE_TOKENS = ("актив", "active")
 STATUS_BLOCK_TOKENS = ("блок", "block")
@@ -175,20 +175,42 @@ def load_barbers(include_inactive: bool = False, force: bool = False) -> list[di
     cache_entry["data"] = barbers
     cache_entry["ts"] = now_ts
     return barbers
-def load_services(force: bool = False) -> list[dict]:
-    """Возвращает список услуг с ценами по барберам."""
+
+def load_services(force: bool = False) -> tuple[list[dict], str | None]:
+    """Load service list with price map for the Telegram bot."""
     now_ts = time.time()
-    if not force and SERVICE_CACHE["data"] and _cached(now_ts, SERVICE_CACHE):
-        return SERVICE_CACHE["data"]
     services: list[dict] = []
+    version_token = SERVICE_CACHE.get("version")
     conn = get_db_connection()
     if conn:
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, name, description, duration FROM Services WHERE isActive = 1 ORDER BY orderIndex, name"
+                "SELECT MAX(updatedAt) as version, COUNT(*) as total FROM Services"
+            )
+            services_meta_row = cursor.fetchone()
+            services_meta = dict(services_meta_row or {})
+            cursor.execute("SELECT MAX(createdAt) as version FROM ServicePrices")
+            price_meta_row = cursor.fetchone()
+            price_meta = dict(price_meta_row or {})
+            version_token = (
+                f"{services_meta.get('version') or 'none'}|"
+                f"{services_meta.get('total') or 0}|"
+                f"{price_meta.get('version') or 'none'}"
+            )
+            if (
+                not force
+                and SERVICE_CACHE["data"]
+                and SERVICE_CACHE.get("version") == version_token
+            ):
+                SERVICE_CACHE["ts"] = now_ts
+                return SERVICE_CACHE["data"], SERVICE_CACHE["version"]
+            cursor.execute(
+                "SELECT id, name, description, duration, isActive, orderIndex "
+                "FROM Services ORDER BY orderIndex, name"
             )
             rows = cursor.fetchall()
+            has_records = bool(rows)
             if rows:
                 prices_map: dict[str, dict[str, float]] = defaultdict(dict)
                 cursor.execute(
@@ -201,24 +223,27 @@ def load_services(force: bool = False) -> list[dict]:
                         continue
                     prices_map[price_row["serviceId"]][barber_name] = price_row["price"]
                 for row in rows:
+                    if not row["isActive"]:
+                        continue
                     services.append(
                         {
                             "id": row["id"],
                             "name": row["name"],
                             "duration": int(row["duration"] or 0),
+                            "isActive": True,
                             "prices": prices_map.get(row["id"], {}),
                         }
                     )
-            else:
+            if not services and not has_records:
                 cursor.execute(
                     """
                     SELECT
-                        "Услуги" as Uslugi,
-                        "Длительность" as Dlitelnost,
-                        "Тимур" as Timur,
-                        "Владимир" as Vladimir,
-                        "Алина" as Alina,
-                        "Алексей" as Aleksey
+                        "�?�?�>�?�?��" as Uslugi,
+                        "�"�>��'��>�?�?�?�?�'�?" as Dlitelnost,
+                        "����?�?�?" as Timur,
+                        "�'�>���?��?��?" as Vladimir,
+                        "�?�>��?��" as Alina,
+                        "�?�>���?���" as Aleksey
                     FROM Cost
                 """
                 )
@@ -253,6 +278,7 @@ def load_services(force: bool = False) -> list[dict]:
                             "id": str(uuid.uuid4()),
                             "name": row["Uslugi"],
                             "duration": duration,
+                            "isActive": True,
                             "prices": prices,
                         }
                     )
@@ -260,7 +286,9 @@ def load_services(force: bool = False) -> list[dict]:
             conn.close()
     SERVICE_CACHE["data"] = services
     SERVICE_CACHE["ts"] = now_ts
-    return services
+    SERVICE_CACHE["version"] = version_token
+    return services, version_token
+
 
 def get_menu_photo_bytes() -> bytes:
     source = MENU_IMAGE_PATH if MENU_IMAGE_PATH.exists() else IMAGE_FILE
@@ -286,6 +314,7 @@ def get_barber_photo_bytes(barber_info: dict | None) -> bytes:
 def invalidate_services_cache():
     SERVICE_CACHE["data"] = []
     SERVICE_CACHE["ts"] = 0.0
+    SERVICE_CACHE["version"] = None
 
 def get_booking_limit() -> int:
     settings = load_bot_settings()
@@ -1231,10 +1260,15 @@ async def change_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 def build_services_view(ctx) -> tuple[str, InlineKeyboardMarkup]:
     """Формирует текст и клавиатуру выбора услуг для выбранного барбера."""
-    services = ctx.user_data.get("all_services", [])
+    services, services_version = load_services()
+    ctx.user_data["all_services"] = services
+    ctx.user_data["services_version"] = services_version
     barber = ctx.user_data.get("barber") or {}
     barber_name = barber.get("name")
     selected = ctx.user_data.setdefault("selected_services", set())
+    if selected:
+        valid_names = {svc["name"] for svc in services}
+        selected.intersection_update(valid_names)
     buttons: list[list[InlineKeyboardButton]] = []
     total_min = 0
     for svc in services:
@@ -1291,8 +1325,9 @@ async def book_barber_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await query.answer("Барбер не найден. Обновите панель.", show_alert=True)
         return MENU
     ctx.user_data["barber"] = selected
-    services = load_services()
+    services, services_version = load_services(force=True)
     ctx.user_data["all_services"] = services
+    ctx.user_data["services_version"] = services_version
     ctx.user_data["selected_services"] = set()
     ctx.user_data.pop("services_list", None)
     ctx.user_data.pop("total_duration", None)
@@ -1341,6 +1376,7 @@ async def book_back_barber_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "barber",
         "all_services",
         "selected_services",
+        "services_version",
         "services_list",
         "total_duration",
         "date",
@@ -1536,6 +1572,31 @@ async def book_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     choice = query.data.split("|", 1)[1]
     chat_id, msg_id = query.message.chat_id, query.message.message_id
     if choice == "yes":
+        services_snapshot, _ = load_services()
+        active_service_names = {svc["name"] for svc in services_snapshot}
+        current_list = ctx.user_data.get("services_list") or []
+        invalid_services = [name for name in current_list if name not in active_service_names]
+        if invalid_services:
+            selection = ctx.user_data.setdefault("selected_services", set())
+            selection.intersection_update(active_service_names)
+            for key in ("services_list", "total_duration", "date", "time_range"):
+                ctx.user_data.pop(key, None)
+            ctx.user_data.pop("services_version", None)
+            await query.answer(
+                "\u0427\u0430\u0441\u0442\u044c \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u044b\u0445 \u0443\u0441\u043b\u0443\u0433 \u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0435 \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430. \u041f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430, \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u0435 \u0432\u044b\u0431\u043e\u0440.",
+                show_alert=True,
+            )
+            caption, markup = build_services_view(ctx)
+            img_bytes = get_barber_photo_bytes(ctx.user_data.get("barber"))
+            await safe_upsert_menu(
+                ctx,
+                chat_id,
+                msg_id,
+                photo_bytes=img_bytes,
+                caption=caption,
+                reply_markup=markup,
+            )
+            return SELECT_SERVICES
         user_id = query.from_user.id
         barber_info = ctx.user_data.get("barber") or {}
         barber_name = barber_info.get("name", ctx.user_data.get("barber"))

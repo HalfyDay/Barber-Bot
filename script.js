@@ -618,15 +618,28 @@ const SectionCard = ({ title, actions, children }) => (
     {children}
   </div>
 );
-const LiveBadge = ({ timestamp, label = 'LIVE' }) => {
+const LiveBadge = ({ timestamp, status = 'unknown' }) => {
   const tickingNow = useNowTick(1000);
-  if (!timestamp) return null;
-  const timeLabel = formatLiveTimestamp(timestamp, tickingNow);
+  if (status === 'unknown' && !timestamp) return null;
+  const isOffline = status === 'offline';
+  const isOnline = status === 'online';
+  const label = isOffline ? 'OFFLINE' : 'LIVE';
+  const timeLabel = isOnline && timestamp ? formatLiveTimestamp(timestamp, tickingNow) : null;
   return (
-    <span className="flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200">
-      <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+    <span
+      className={classNames(
+        'flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em]',
+        isOffline ? 'border-rose-500/50 bg-rose-500/10 text-rose-200' : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+      )}
+    >
+      <span
+        className={classNames(
+          'h-2 w-2 rounded-full',
+          isOffline ? 'bg-rose-400' : 'animate-pulse bg-emerald-400'
+        )}
+      />
       {label}
-      {timeLabel && <span className="text-emerald-100/80 normal-case tracking-normal">{timeLabel}</span>}
+      {timeLabel && <span className={classNames(isOffline ? 'text-rose-100/80' : 'text-emerald-100/80', 'normal-case tracking-normal')}>{timeLabel}</span>}
     </span>
   );
 };
@@ -798,7 +811,16 @@ const StatCard = ({ label, value, accent = 'text-indigo-300' }) => (
   </div>
 );
 
-const Sidebar = ({ session, activeTab, onChange, onLogout, liveUpdatedAt, activeDataTable = 'Appointments', onSelectTable }) => {
+const Sidebar = ({
+  session,
+  activeTab,
+  onChange,
+  onLogout,
+  liveUpdatedAt,
+  liveStatus = 'unknown',
+  activeDataTable = 'Appointments',
+  onSelectTable,
+}) => {
   const username = session?.displayName || session?.username || '-';
 
   return (
@@ -812,9 +834,9 @@ const Sidebar = ({ session, activeTab, onChange, onLogout, liveUpdatedAt, active
         >
           {UI_TEXT.logout}
         </button>
-        {liveUpdatedAt && (
+        {(liveUpdatedAt || liveStatus !== 'unknown') && (
           <div className="pt-2">
-            <LiveBadge timestamp={liveUpdatedAt} />
+            <LiveBadge timestamp={liveUpdatedAt} status={liveStatus} />
           </div>
         )}
       </div>
@@ -864,14 +886,14 @@ const Sidebar = ({ session, activeTab, onChange, onLogout, liveUpdatedAt, active
   );
 };
 
-const MobileTabs = ({ session, activeTab, onChange, onLogout, liveUpdatedAt }) => {
+const MobileTabs = ({ session, activeTab, onChange, onLogout, liveUpdatedAt, liveStatus = 'unknown' }) => {
   const username = session?.displayName || session?.username || '-';
   const handleSelect = (tabId) => onChange?.(tabId);
   const renderLiveIndicator = () =>
-    liveUpdatedAt ? (
-      <LiveBadge timestamp={liveUpdatedAt} />
-    ) : (
+    liveStatus === 'unknown' && !liveUpdatedAt ? (
       <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">{UI_TEXT.liveFallback}</span>
+    ) : (
+      <LiveBadge timestamp={liveUpdatedAt} status={liveStatus} />
     );
 
   return (
@@ -2391,7 +2413,7 @@ const TableToolbar = ({
     supportsGrouping && typeof setGroupByDate === 'function'
       ? (
           <button type="button" onClick={() => setGroupByDate(!groupByDate)} className={classNames(chipClass(groupByDate), 'w-full sm:w-auto')}>
-            Группировать по дням
+            По дням
           </button>
         )
       : null;
@@ -2431,7 +2453,7 @@ const TableToolbar = ({
                   onChange={(event) => setSearchTerm(event.target.value)}
                   placeholder="Поиск..."
                   aria-label="Поиск по таблице"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  className="h-11 w-full rounded-xl border border-slate-700 bg-slate-900 pl-9 pr-3 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                 />
               </label>
               {inlineCreateForMobile && (
@@ -2459,9 +2481,9 @@ const TableToolbar = ({
             )}
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            {controlOrder.map(
-              (control) => control.node && <Fragment key={control.key}>{control.node}</Fragment>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+            {controlOrder.map((control) =>
+              control.node ? <Fragment key={control.key}>{control.node}</Fragment> : null
             )}
           </div>
         </div>
@@ -4128,6 +4150,7 @@ const App = () => {
   const [realtimeSnapshot, setRealtimeSnapshot] = useState(null);
   const [fatalError, setFatalError] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(defaultConfirmState);
+  const [connectionStatus, setConnectionStatus] = useState('unknown');
   const confirmResolverRef = useRef(null);
 
   const requestConfirm = useCallback(
@@ -4184,6 +4207,33 @@ const App = () => {
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!session?.token) {
+      setConnectionStatus('unknown');
+      return () => {
+        cancelled = true;
+      };
+    }
+    const checkServer = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/login/options`, { cache: 'no-store' });
+        if (cancelled) return;
+        setConnectionStatus(response.ok ? 'online' : 'offline');
+      } catch (error) {
+        if (!cancelled) {
+          setConnectionStatus('offline');
+        }
+      }
+    };
+    checkServer();
+    const interval = setInterval(checkServer, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [session?.token]);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('barber-session');
@@ -4282,6 +4332,7 @@ const App = () => {
     const tokenParam = encodeURIComponent(session.token);
     const streamUrl = `${API_BASE_URL}/events/stream?token=${tokenParam}`;
     const eventSource = new EventSource(streamUrl);
+    eventSource.onopen = () => setConnectionStatus('online');
     const handleEvent = (event) => {
       try {
         const payload = JSON.parse(event.data);
@@ -4298,7 +4349,9 @@ const App = () => {
       }
     };
     eventSource.addEventListener('appointments', handleEvent);
-    eventSource.onerror = () => {};
+    eventSource.onerror = () => {
+      setConnectionStatus('offline');
+    };
     return () => {
       eventSource.removeEventListener('appointments', handleEvent);
       eventSource.close();
@@ -4915,7 +4968,14 @@ const App = () => {
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       {isMobile && (
-        <MobileTabs activeTab={activeTab} onChange={setActiveTab} session={session} onLogout={handleLogout} liveUpdatedAt={liveUpdatedAt} />
+        <MobileTabs
+          activeTab={activeTab}
+          onChange={setActiveTab}
+          session={session}
+          onLogout={handleLogout}
+          liveUpdatedAt={liveUpdatedAt}
+          liveStatus={connectionStatus}
+        />
       )}
       <div className="flex">
         <Sidebar
@@ -4924,6 +4984,7 @@ const App = () => {
           onChange={setActiveTab}
           onLogout={handleLogout}
           liveUpdatedAt={liveUpdatedAt}
+          liveStatus={connectionStatus}
           activeDataTable={activeDataTable}
           onSelectTable={handleSidebarTableChange}
         />

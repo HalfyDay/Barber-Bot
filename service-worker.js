@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const CACHE_PREFIX = "barber-bot-cache";
 const CACHE_NAME = `${CACHE_PREFIX}-${CACHE_VERSION}`;
 const OFFLINE_URL = "/";
@@ -6,9 +6,9 @@ const STATIC_ASSETS = [
   OFFLINE_URL,
   "/index.html",
   "/styles.css",
-  "/script.bundle.js",
   "/manifest.webmanifest"
 ];
+const BUNDLE_ASSET = "/script.bundle.js";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -43,6 +43,11 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (!isSameOrigin(url) || shouldBypass(url)) return;
+
+  if (url.pathname === BUNDLE_ASSET) {
+    event.respondWith(networkFirst(request));
+    return;
+  }
 
   if (request.mode === "navigate") {
     event.respondWith(networkFirst(request));

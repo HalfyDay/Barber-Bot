@@ -1,27 +1,33 @@
 ﻿const { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, Fragment } = React;
 const { createPortal, createRoot } = ReactDOM;
 
-const DEFAULT_API_BASE_URL = 'http://192.168.1.55:3000/api';
+const resolveDefaultApiBaseUrl = () => {
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    return `${window.location.origin}/api`;
+  }
+  return 'http://localhost:3000/api';
+};
+
+const DEFAULT_API_BASE_URL = resolveDefaultApiBaseUrl();
 const API_BASE_URL = window.__BARBER_API_BASE__ || DEFAULT_API_BASE_URL;
 window.__BARBER_API_BASE__ = API_BASE_URL;
 
 const VIEW_TABS = [
   { id: 'dashboard', label: 'Обзор' },
-  { id: 'barbers', label: 'Барберы' },
-  { id: 'services', label: 'Услуги' },
-  { id: 'tables', label: 'Таблицы' },
+  { id: 'tables', label: 'Данные' },
   { id: 'bot', label: 'Бот' },
   { id: 'system', label: 'Система' },
 ];
 
-const TABLE_ORDER = ['Appointments', 'Schedules', 'Users', 'Cost'];
-const DATA_TABLES = ['Appointments', 'Schedules', 'Users', 'Cost'];
+const TABLE_ORDER = ['Appointments', 'Schedules', 'Users', 'Barbers', 'Services'];
+const DATA_TABLES = ['Appointments', 'Schedules', 'Users'];
 
 const TABLE_CONFIG = {
-  Appointments: { label: 'Записи', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'asc' } },
-  Schedules: { label: 'Расписание', canCreate: false, supportsBarberFilter: true, defaultSort: { key: 'Date', direction: 'asc' } },
-  Users: { label: 'Клиенты', canCreate: true, defaultSort: { key: 'Name', direction: 'asc' } },
-  Cost: { label: 'Каталог услуг', canCreate: true, defaultSort: { key: 'Uslugi', direction: 'asc' } },
+  Appointments: { label: 'Записи', mode: 'data', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'desc' } },
+  Schedules: { label: 'Расписание', mode: 'data', canCreate: false, supportsBarberFilter: true, defaultSort: { key: 'Date', direction: 'asc' } },
+  Users: { label: 'Клиенты', mode: 'data', canCreate: true, defaultSort: { key: 'Name', direction: 'asc' } },
+  Barbers: { label: 'Барберы', mode: 'custom' },
+  Services: { label: 'Услуги', mode: 'custom' },
 };
 
 const TABLE_COLUMNS = {
@@ -30,7 +36,7 @@ const TABLE_COLUMNS = {
     { key: 'Phone', label: 'Телефон', editable: true, type: 'text', minWidth: 'w-36' },
     { key: 'Barber', label: 'Барбер', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-32' },
     { key: 'Date', label: 'Дата', editable: true, type: 'date', minWidth: 'w-32' },
-    { key: 'Time', label: 'Время', editable: true, type: 'text', minWidth: 'w-28' },
+    { key: 'Time', label: 'Время', editable: true, type: 'text', minWidth: 'w-28', noWrap: true },
     { key: 'Status', label: 'Статус', editable: true, type: 'select', optionsKey: 'statuses', align: 'center', minWidth: 'w-28' },
     { key: 'Services', label: 'Услуги', editable: true, type: 'multi-select', optionsKey: 'services', minWidth: 'w-56' },
     { key: 'UserID', label: 'ID клиента', editable: true, type: 'text', minWidth: 'w-24' },
@@ -48,14 +54,6 @@ const TABLE_COLUMNS = {
     { key: 'Phone', label: 'Телефон', editable: true, type: 'text', minWidth: 'w-36' },
     { key: 'TelegramID', label: 'Telegram', editable: true, type: 'text', minWidth: 'w-32' },
     { key: 'Barber', label: 'Любимый мастер', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-40' },
-  ],
-  Cost: [
-    { key: 'Uslugi', label: 'Услуга', editable: true, type: 'text', minWidth: 'w-56' },
-    { key: 'Timur', label: 'Тимур', editable: true, type: 'text', align: 'center' },
-    { key: 'Vladimir', label: 'Владимир', editable: true, type: 'text', align: 'center' },
-    { key: 'Alina', label: 'Алина', editable: true, type: 'text', align: 'center' },
-    { key: 'Aleksey', label: 'Алексей', editable: true, type: 'text', align: 'center' },
-    { key: 'Dlitelnost', label: 'Длительность', editable: true, type: 'text', minWidth: 'w-32' },
   ],
 };
 
@@ -75,6 +73,19 @@ const buildNewBarberState = () => ({
   telegramId: '',
   isActive: true,
 });
+const buildNewServiceState = () => ({
+  name: '',
+  duration: 60,
+  prices: {},
+});
+const defaultConfirmState = {
+  open: false,
+  title: '',
+  message: '',
+  confirmLabel: 'Подтвердить',
+  cancelLabel: 'Отмена',
+  tone: 'neutral',
+};
 const getRecordId = (record = {}) => record.id || record.Id || record.ID || record.recordId || record.ID_Record || null;
 
 const classNames = (...classes) => classes.filter(Boolean).join(' ');
@@ -136,11 +147,39 @@ const fetchAvatarOptions = async () => {
   const response = await fetch(`${API_BASE_URL}/assets/avatars`);
   if (!response.ok) throw new Error('Не удалось получить список аватаров');
   const payload = await response.json();
-  const images = Array.isArray(payload.images) ? payload.images.filter(Boolean) : [];
-  return images;
+  const images = Array.isArray(payload.images) ? payload.images.filter(Boolean).map(normalizeImagePath) : [];
+  return Array.from(new Set(images));
 };
 
 const normalizeText = (value) => (value == null ? '' : String(value));
+const resolveAssetUrl = (value) => {
+  const normalized = normalizeText(value).trim();
+  if (!normalized) return '';
+  if (/^(https?:)?\/\//i.test(normalized) || normalized.startsWith('data:')) return normalized;
+  const sanitized = normalized.replace(/\\/g, '/').replace(/^\.\/+/, '');
+  if (sanitized.startsWith('/')) return sanitized;
+  if (sanitized.startsWith('Image/')) return `/${sanitized}`;
+  return `/Image/${sanitized}`;
+};
+const normalizeImagePath = (value) => {
+  const resolved = resolveAssetUrl(value);
+  if (!resolved) return '';
+  if (/^(https?:)?\/\//i.test(resolved) || resolved.startsWith('data:')) return resolved;
+  return resolved.startsWith('/') ? resolved : `/${resolved}`;
+};
+const numberFormatter = new Intl.NumberFormat('ru-RU');
+const formatCurrency = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '';
+  return `${numberFormatter.format(numeric)} ₽`;
+};
+const pluralize = (count, [one, few, many]) => {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+};
 
 const canonicalizeName = (value) => normalizeText(value).replace(/[^a-z0-9а-яё\s]/gi, '').trim();
 
@@ -465,6 +504,40 @@ const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-
   );
 };
 
+const ConfirmDialog = ({ open, title, message, confirmLabel = 'Подтвердить', cancelLabel = 'Отмена', tone = 'neutral', onResult }) => {
+  if (!open) return null;
+  const confirmToneClass = (() => {
+    switch (tone) {
+      case 'danger':
+        return 'bg-rose-600 hover:bg-rose-500';
+      case 'success':
+        return 'bg-emerald-600 hover:bg-emerald-500';
+      default:
+        return 'bg-indigo-600 hover:bg-indigo-500';
+    }
+  })();
+  return (
+    <Modal
+      isOpen={open}
+      title={title || 'Подтвердите действие'}
+      onClose={() => onResult(false)}
+      maxWidthClass="max-w-md"
+      footer={
+        <div className="flex justify-end gap-3">
+          <button onClick={() => onResult(false)} className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800">
+            {cancelLabel}
+          </button>
+          <button onClick={() => onResult(true)} className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${confirmToneClass}`}>
+            {confirmLabel}
+          </button>
+        </div>
+      }
+    >
+      <p className="text-sm text-slate-200">{message || 'Вы уверены, что хотите продолжить?'}</p>
+    </Modal>
+  );
+};
+
 const StatCard = ({ label, value, accent = 'text-indigo-300' }) => (
   <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-3 sm:p-4">
     <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
@@ -675,10 +748,10 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
                     const cardProps = {
                       role: 'button',
                       tabIndex: 0,
-                      onClick: () => onOpenAppointment?.(appt),
-                      onKeyDown: (event) => event.key === 'Enter' && onOpenAppointment?.(appt),
+                      onClick: () => onOpenAppointment?.(appt, { allowDelete: true }),
+                      onKeyDown: (event) => event.key === 'Enter' && onOpenAppointment?.(appt, { allowDelete: true }),
                       className:
-                        'group relative w-full cursor-pointer overflow-hidden rounded-3xl border border-slate-700/60 bg-slate-900/70 p-5 text-left transition hover:border-indigo-500/70 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500',
+                        'group upcoming-card relative w-full cursor-pointer overflow-hidden rounded-3xl border border-slate-700/60 bg-slate-900/70 p-4 text-left transition hover:border-indigo-500/70 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:p-5',
                     };
                     const { start, end } = parseTimeRangeParts(appt.Time);
                     const statusLabel = normalizeStatusValue(appt.Status);
@@ -693,29 +766,29 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
                               {formatDateBadgeLabel(appt.Date)}
                             </p>
                             <div className="flex items-baseline gap-3">
-                              <p className="text-4xl font-bold leading-none text-white">{start || '—'}</p>
-                              {end && <p className="text-base text-slate-400">до {end}</p>}
+                              <p className="text-3xl font-bold leading-none text-white sm:text-4xl">{start || '—'}</p>
+                              {end && <p className="text-sm text-slate-400 sm:text-base">до {end}</p>}
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-2 text-right">
                             <span
                               className={classNames(
-                                'inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide',
+                                'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide sm:text-xs',
                                 getStatusBadgeClasses(statusLabel),
                               )}
                             >
                               {statusLabel || 'Без статуса'}
                             </span>
                             {appt.Barber && (
-                              <p className="text-sm text-slate-400">
+                              <p className="text-xs text-slate-400 sm:text-sm">
                                 Барбер:{' '}
                                 <span className="font-semibold text-white">{appt.Barber}</span>
                               </p>
                             )}
                           </div>
                         </div>
-                        <div className="mt-4 grid gap-4 text-sm text-slate-300 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-                          <div className="space-y-3">
+                        <div className="mt-4 grid gap-3 text-[13px] text-slate-300 upcoming-card-grid sm:text-sm">
+                          <div className="space-y-3 min-w-0">
                             {appt.CustomerName ? (
                               <button
                                 type="button"
@@ -723,34 +796,34 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
                                   event.stopPropagation();
                                   onOpenProfile?.(appt.CustomerName);
                                 }}
-                                className="text-left text-lg font-semibold text-white hover:text-indigo-300"
+                                className="text-left text-base font-semibold text-white hover:text-indigo-300 sm:text-lg"
                               >
                                 {appt.CustomerName}
                               </button>
                             ) : (
-                              <p className="text-lg font-semibold text-white">Без имени</p>
+                              <p className="text-base font-semibold text-white sm:text-lg">Без имени</p>
                             )}
                             {servicesList.length ? (
                               <div className="flex flex-wrap gap-2">
                                 {servicesList.map((service, index) => (
                                   <span
                                     key={`${service}-${index}`}
-                                    className="rounded-full border border-slate-700/70 bg-slate-800/70 px-3 py-1 text-xs text-slate-200"
+                                    className="rounded-full border border-slate-700/70 bg-slate-800/70 px-3 py-1 text-[11px] text-slate-200 sm:text-xs"
                                   >
                                     {service}
                                   </span>
                                 ))}
                               </div>
                             ) : (
-                              <p className="text-sm text-slate-400">Нет выбранных услуг</p>
+                              <p className="text-xs text-slate-400 sm:text-sm">Нет выбранных услуг</p>
                             )}
                           </div>
-                          <div className="space-y-3">
+                          <div className="space-y-3 min-w-0">
                             {phoneLabel && phoneHref && (
                               <a
                                 href={`tel:${phoneHref}`}
                                 onClick={(event) => event.stopPropagation()}
-                                className="inline-flex items-center gap-2 rounded-full border border-slate-600/60 px-3 py-1 text-sm text-slate-200 hover:border-indigo-500 hover:text-white"
+                                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-600/60 px-3 py-1 text-xs text-slate-200 hover:border-indigo-500 hover:text-white sm:w-auto sm:justify-start sm:text-sm"
                               >
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
@@ -770,7 +843,7 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
                               </a>
                             )}
                             {appt.UserID && (
-                              <p className="text-xs uppercase tracking-wide text-slate-500">
+                              <p className="text-[10px] uppercase tracking-wide text-slate-500 sm:text-xs">
                                 ID клиента:{' '}
                                 <span className="font-semibold text-slate-200">{appt.UserID}</span>
                               </p>
@@ -794,10 +867,20 @@ const BarberAvatarPicker = ({ value, onChange }) => {
   const [loading, setLoading] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
 
+  const normalizedValue = normalizeImagePath(value);
+
+  useEffect(() => {
+    if (!value || typeof onChange !== 'function') return;
+    const normalized = normalizeImagePath(value);
+    if (normalized && normalized !== value) {
+      onChange(normalized);
+    }
+  }, [value, onChange]);
+
   const availableOptions = useMemo(() => {
-    if (!value || avatarOptions.includes(value)) return avatarOptions;
-    return value ? [value, ...avatarOptions] : avatarOptions;
-  }, [avatarOptions, value]);
+    if (!normalizedValue || avatarOptions.includes(normalizedValue)) return avatarOptions;
+    return [normalizedValue, ...avatarOptions];
+  }, [avatarOptions, normalizedValue]);
 
   useEffect(() => {
     let isMounted = true;
@@ -820,7 +903,7 @@ const BarberAvatarPicker = ({ value, onChange }) => {
     };
   }, []);
 
-  const previewSrc = value || avatarOptions[0] || null;
+  const previewSrc = resolveAssetUrl(normalizedValue || avatarOptions[0] || '');
 
   return (
     <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900/40 p-3">
@@ -829,14 +912,14 @@ const BarberAvatarPicker = ({ value, onChange }) => {
           <img src={previewSrc} alt="avatar" className="h-16 w-16 rounded-full border border-slate-700 object-cover" />
         ) : (
           <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-slate-700 text-[10px] uppercase text-slate-500">
-            Нет фото
+            нет фото
           </div>
         )}
         <div className="flex-1 space-y-2">
-          <label className="text-xs uppercase tracking-wide text-slate-400">Изображение из папки «Image»</label>
+          <label className="text-xs uppercase tracking-wide text-slate-400">Изображение из папки “Image”</label>
           <select
-            value={value || ''}
-            onChange={(event) => onChange(event.target.value)}
+            value={normalizedValue || ''}
+            onChange={(event) => onChange(normalizeImagePath(event.target.value))}
             className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
           >
             <option value="">Без изображения</option>
@@ -853,19 +936,19 @@ const BarberAvatarPicker = ({ value, onChange }) => {
             disabled={loading}
           >
             {loading
-              ? 'Сканирую папку…'
+              ? 'Загружаем список'
               : avatarOptions.length
                 ? showGallery
-                  ? 'Скрыть миниатюры'
-                  : 'Показать миниатюры'
-                : 'Нет изображений в папке Image'}
+                  ? 'Скрыть галерею'
+                  : 'Показать галерею'
+                : 'Нет файлов в папке Image'}
           </button>
         </div>
       </div>
       {showGallery && avatarOptions.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {avatarOptions.map((preset) => {
-            const isSelected = preset === value;
+            const isSelected = preset === normalizedValue;
             return (
               <button
                 type="button"
@@ -875,13 +958,13 @@ const BarberAvatarPicker = ({ value, onChange }) => {
                   isSelected ? 'border-indigo-500 bg-indigo-500/20' : 'border-slate-700 bg-slate-900'
                 }`}
               >
-                <img src={preset} alt="avatar preset" className="h-16 w-full rounded-md object-cover" />
+                <img src={resolveAssetUrl(preset)} alt="avatar preset" className="h-16 w-full rounded-md object-cover" />
               </button>
             );
           })}
         </div>
       )}
-      {!avatarOptions.length && !loading && <p className="text-sm text-slate-500">Добавьте файлы в папку /Image, чтобы выбрать аватар.</p>}
+      {!avatarOptions.length && !loading && <p className="text-sm text-slate-500">Добавьте изображения в папку /Image, чтобы выбрать аватар.</p>}
     </div>
   );
 };
@@ -906,194 +989,426 @@ const RatingSlider = ({ value, onChange, dense = false }) => {
 };
 
 const BarbersView = ({ barbers = [], onFieldChange, onSave, onAdd, onDelete }) => {
-  const [newBarber, setNewBarber] = useState(buildNewBarberState);
+  const [editorState, setEditorState] = useState({ open: false, mode: 'edit', targetId: null });
+  const [draftBarber, setDraftBarber] = useState(buildNewBarberState);
 
-  const updateNewBarber = (field, value) => setNewBarber((prev) => ({ ...prev, [field]: value }));
-
-  const handleCreateBarber = () => {
-    if (!newBarber.name?.trim() || !newBarber.password?.trim()) return;
-    onAdd(newBarber);
-    setNewBarber(buildNewBarberState());
+  const openEditor = (mode, targetId = null) => {
+    if (mode === 'create') {
+      setDraftBarber(buildNewBarberState());
+    }
+    setEditorState({ open: true, mode, targetId });
   };
 
-  const renderBarberCard = (barber) => {
-    const colorValue = /^#/.test(barber.color || '') ? barber.color : '#6d28d9';
-    return (
-      <div key={barber.id} className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900/40 p-4">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <input value={barber.name || ''} onChange={(event) => onFieldChange(barber.id, 'name', event.target.value)} placeholder="Имя" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-1.5 text-sm text-white" />
-          <RatingSlider dense value={barber.rating} onChange={(event) => onFieldChange(barber.id, 'rating', event.target.value)} />
-        </div>
-        <div className="grid gap-2 mobile-grid-2 md:grid-cols-2">
-          <input type="password" value={barber.password || ''} onChange={(event) => onFieldChange(barber.id, 'password', event.target.value)} placeholder="Пароль" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-          <label className="flex items-center gap-3 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white">
-            Цвет
-            <input type="color" value={colorValue} onChange={(event) => onFieldChange(barber.id, 'color', event.target.value)} className="h-8 w-16 cursor-pointer rounded border border-slate-500 bg-transparent" />
-          </label>
-        </div>
-        <textarea value={barber.description || ''} onChange={(event) => onFieldChange(barber.id, 'description', event.target.value)} placeholder="Описание" rows={4} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-        <div className="grid gap-2 mobile-grid-2 md:grid-cols-2">
-          <input type="tel" value={barber.phone || ''} onChange={(event) => onFieldChange(barber.id, 'phone', event.target.value)} placeholder="Телефон" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-          <input value={barber.telegramId || ''} onChange={(event) => onFieldChange(barber.id, 'telegramId', event.target.value)} placeholder="Telegram ID" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-        </div>
-        <BarberAvatarPicker value={barber.avatarUrl} onChange={(value) => onFieldChange(barber.id, 'avatarUrl', value)} />
-        <label className="inline-flex items-center gap-2 text-sm text-slate-300">
-          <input type="checkbox" checked={barber.isActive !== false} onChange={(event) => onFieldChange(barber.id, 'isActive', event.target.checked)} />
-          Активен
-        </label>
-        <div className="flex gap-3 pt-2">
-          <button onClick={() => onSave(barber)} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
-            Сохранить
-          </button>
-          <button
-            onClick={() => onDelete(barber)}
-            className="rounded-lg border border-rose-600 p-2 text-rose-300 hover:bg-rose-500/10"
-            aria-label="Удалить барбера"
-          >
-            <IconTrash />
-          </button>
-        </div>
-      </div>
-    );
+  const closeEditor = () => setEditorState({ open: false, mode: 'edit', targetId: null });
+
+  const isCreateMode = editorState.mode === 'create';
+  const activeBarber = barbers.find((barber) => barber.id === editorState.targetId) || null;
+  const workingBarber = isCreateMode ? draftBarber : activeBarber;
+
+  const handleFieldChange = (field, value) => {
+    if (isCreateMode) {
+      setDraftBarber((prev) => ({ ...prev, [field]: value }));
+    } else if (activeBarber) {
+      onFieldChange?.(activeBarber.id, field, value);
+    }
   };
+
+  const handleSave = () => {
+    if (isCreateMode) {
+      onAdd?.(draftBarber);
+      setDraftBarber(buildNewBarberState());
+    } else if (activeBarber) {
+      onSave?.(activeBarber);
+    }
+    closeEditor();
+  };
+
+  const handleDelete = () => {
+    if (!isCreateMode && activeBarber) {
+      const result = onDelete?.(activeBarber);
+      if (result && typeof result.finally === 'function') {
+        result.finally(() => closeEditor());
+      } else {
+        closeEditor();
+      }
+    }
+  };
+
+  const renderStatusBadge = (barber) =>
+    barber ? (
+      <span
+        className={classNames(
+          'rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide',
+          barber.isActive !== false ? 'bg-emerald-500/15 text-emerald-200' : 'bg-slate-700 text-slate-300'
+        )}
+      >
+        {barber.isActive !== false ? 'Активен' : 'Скрыт'}
+      </span>
+    ) : null;
+
+  const canSubmit = isCreateMode ? Boolean(workingBarber?.name?.trim() && workingBarber?.password?.trim()) : Boolean(workingBarber);
 
   return (
     <div className="space-y-6">
-      <SectionCard title="Барберы">
+      <SectionCard
+        title="Барберы"
+        actions={
+          <button
+            onClick={() => openEditor('create')}
+            className="rounded-full bg-emerald-600/90 px-4 py-2 text-sm font-semibold text-white shadow shadow-emerald-900/40 hover:bg-emerald-500"
+          >
+            + Добавить барбера
+          </button>
+        }
+      >
         {barbers.length === 0 ? (
-          <p className="text-slate-400">Список барберов пока пуст.</p>
+          <p className="text-slate-400">Список барберов пока пуст. Добавьте первого сотрудника.</p>
         ) : (
-          <div className="grid gap-4 mobile-grid-2 lg:grid-cols-2">
-            {barbers.map((barber) => renderBarberCard(barber))}
+          <div className="grid gap-3 md:grid-cols-2">
+            {barbers.map((barber) => {
+              const avatarSrc = resolveAssetUrl(barber.avatarUrl);
+              const phoneLabel = barber.phone ? formatPhoneInput(barber.phone) : '';
+              const ratingLabel = Number(barber.rating || RATING_MAX).toFixed(1);
+              return (
+                <button
+                  key={barber.id}
+                  onClick={() => openEditor('edit', barber.id)}
+                  className="group flex w-full items-center gap-4 rounded-2xl border border-slate-700/70 bg-slate-900/50 p-4 text-left transition hover:border-indigo-500/70 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <div className="relative h-16 w-16 flex-shrink-0">
+                    {avatarSrc ? (
+                      <img src={avatarSrc} alt={barber.name || 'avatar'} className="h-16 w-16 rounded-2xl object-cover" />
+                    ) : (
+                      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800 text-lg font-semibold text-slate-200">
+                        {(barber.name || 'B').slice(0, 1)}
+                      </div>
+                    )}
+                    <span
+                      className={classNames(
+                        'absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-slate-900',
+                        barber.isActive !== false ? 'bg-emerald-400' : 'bg-slate-600'
+                      )}
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-base font-semibold text-white sm:text-lg">{barber.name || 'Без имени'}</p>
+                      {renderStatusBadge(barber)}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 sm:text-sm">
+                      <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-200">
+                        ★ {ratingLabel}
+                      </span>
+                      {phoneLabel && <span className="text-slate-300">{phoneLabel}</span>}
+                      {barber.telegramId && <span className="text-slate-400">@{barber.telegramId}</span>}
+                    </div>
+                    {barber.description && <p className="text-sm text-slate-400">{barber.description}</p>}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </SectionCard>
 
-      <SectionCard title="Добавить барбера">
-        <div className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-            <input value={newBarber.name} onChange={(event) => updateNewBarber('name', event.target.value)} placeholder="Имя" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-1.5 text-sm text-white" />
-            <RatingSlider dense value={newBarber.rating} onChange={(event) => updateNewBarber('rating', event.target.value)} />
-          </div>
-          <div className="grid gap-2 mobile-grid-2 md:grid-cols-2">
-            <input type="password" value={newBarber.password} onChange={(event) => updateNewBarber('password', event.target.value)} placeholder="Пароль" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-            <label className="flex items-center gap-3 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white">
-              Цвет
-              <input type="color" value={newBarber.color} onChange={(event) => updateNewBarber('color', event.target.value)} className="h-8 w-16 cursor-pointer rounded border border-slate-500 bg-transparent" />
+      <Modal
+        title={isCreateMode ? 'Добавить барбера' : workingBarber?.name || 'Редактирование барбера'}
+        isOpen={editorState.open}
+        onClose={closeEditor}
+        maxWidthClass="max-w-3xl"
+        footer={
+          <>
+            {!isCreateMode && (
+              <button onClick={handleDelete} className="rounded-lg border border-rose-600 px-4 py-2 text-sm text-rose-200 hover:bg-rose-500/10">
+                Удалить
+              </button>
+            )}
+            <button onClick={closeEditor} className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800">
+              Отмена
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!canSubmit}
+              className={classNames(
+                'rounded-lg px-4 py-2 text-sm font-semibold text-white',
+                canSubmit ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-slate-700 text-slate-300'
+              )}
+            >
+              {isCreateMode ? 'Добавить' : 'Сохранить'}
+            </button>
+          </>
+        }
+      >
+        {workingBarber ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+              <input
+                value={workingBarber.name || ''}
+                onChange={(event) => handleFieldChange('name', event.target.value)}
+                placeholder="Имя"
+                className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+              />
+              <RatingSlider dense value={workingBarber.rating} onChange={(event) => handleFieldChange('rating', event.target.value)} />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <input
+                type="password"
+                value={workingBarber.password || ''}
+                onChange={(event) => handleFieldChange('password', event.target.value)}
+                placeholder="Пароль"
+                className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+              />
+              <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white">
+                Цвет
+                <input
+                  type="color"
+                  value={/^#/.test(workingBarber.color || '') ? workingBarber.color : '#6d28d9'}
+                  onChange={(event) => handleFieldChange('color', event.target.value)}
+                  className="h-10 w-16 cursor-pointer rounded border border-slate-500 bg-transparent"
+                />
+              </label>
+            </div>
+            <textarea
+              value={workingBarber.description || ''}
+              onChange={(event) => handleFieldChange('description', event.target.value)}
+              placeholder="Описание"
+              rows={4}
+              className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+            />
+            <div className="grid gap-3 md:grid-cols-2">
+              <input
+                type="tel"
+                value={workingBarber.phone || ''}
+                onChange={(event) => handleFieldChange('phone', event.target.value)}
+                placeholder="Телефон"
+                className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+              />
+              <input
+                value={workingBarber.telegramId || ''}
+                onChange={(event) => handleFieldChange('telegramId', event.target.value)}
+                placeholder="Telegram ID"
+                className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+              />
+            </div>
+            <BarberAvatarPicker value={workingBarber.avatarUrl} onChange={(value) => handleFieldChange('avatarUrl', value)} />
+            <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+              <input type="checkbox" checked={workingBarber.isActive !== false} onChange={(event) => handleFieldChange('isActive', event.target.checked)} />
+              Активен
             </label>
           </div>
-          <textarea value={newBarber.description} onChange={(event) => updateNewBarber('description', event.target.value)} placeholder="Описание" rows={3} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-          <div className="grid gap-2 mobile-grid-2 md:grid-cols-2">
-            <input type="tel" value={newBarber.phone} onChange={(event) => updateNewBarber('phone', event.target.value)} placeholder="Телефон" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-            <input value={newBarber.telegramId} onChange={(event) => updateNewBarber('telegramId', event.target.value)} placeholder="Telegram ID" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-          </div>
-          <BarberAvatarPicker value={newBarber.avatarUrl} onChange={(value) => updateNewBarber('avatarUrl', value)} />
-          <label className="inline-flex items-center gap-2 text-sm text-slate-300">
-            <input type="checkbox" checked={newBarber.isActive} onChange={(event) => updateNewBarber('isActive', event.target.checked)} />
-            Активен
-          </label>
-          <button onClick={handleCreateBarber} className="w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white hover:bg-emerald-500">
-            Добавить
-          </button>
-        </div>
-      </SectionCard>
+        ) : (
+          <p className="text-slate-300">Выберите барбера, чтобы изменить данные.</p>
+        )}
+      </Modal>
     </div>
   );
 };
 
 const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChange, onDelete, onAdd }) => {
-  const [newService, setNewService] = useState({ name: '', duration: 60, prices: {} });
+  const [editorState, setEditorState] = useState({ open: false, mode: 'edit', targetId: null });
+  const [draftService, setDraftService] = useState(buildNewServiceState);
 
-  const updateNewService = (field, value) => setNewService((prev) => ({ ...prev, [field]: value }));
-  const updateNewServicePrice = (barberId, value) =>
-    setNewService((prev) => ({
-      ...prev,
-      prices: {
-        ...(prev.prices || {}),
-        [barberId]: value,
-      },
-    }));
+  const openEditor = (mode, targetId = null) => {
+    if (mode === 'create') {
+      setDraftService(buildNewServiceState());
+    }
+    setEditorState({ open: true, mode, targetId });
+  };
+
+  const closeEditor = () => setEditorState({ open: false, mode: 'edit', targetId: null });
+
+  const isCreateMode = editorState.mode === 'create';
+  const activeService = services.find((service) => service.id === editorState.targetId) || null;
+  const workingService = isCreateMode ? draftService : activeService;
+
+  const handleFieldChange = (field, value) => {
+    if (isCreateMode) {
+      setDraftService((prev) => ({ ...prev, [field]: value }));
+    } else if (activeService) {
+      onFieldChange?.(activeService.id, field, value);
+    }
+  };
+
+  const handlePriceChange = (barberId, value) => {
+    if (isCreateMode) {
+      setDraftService((prev) => ({
+        ...prev,
+        prices: { ...(prev.prices || {}), [barberId]: value },
+      }));
+    } else if (activeService) {
+      onPriceChange?.(activeService.id, barberId, value);
+    }
+  };
+
+  const handleSave = () => {
+    if (isCreateMode) {
+      if (!workingService?.name?.trim()) return;
+      onAdd?.(draftService);
+      setDraftService(buildNewServiceState());
+    }
+    closeEditor();
+  };
+
+  const handleDeleteLocal = () => {
+    if (!isCreateMode && activeService) {
+      const result = onDelete?.(activeService);
+      if (result && typeof result.finally === 'function') {
+        result.finally(() => closeEditor());
+      } else {
+        closeEditor();
+      }
+    }
+  };
+
+  const servicePriceSummary = (service) => {
+    if (!service) {
+      return { label: '—', details: '' };
+    }
+    const values = barbers
+      .map((barber) => Number(service.prices?.[barber.id]))
+      .filter((price) => Number.isFinite(price) && price >= 0);
+    if (!values.length) {
+      return {
+        label: 'Цены не заданы',
+        details: barbers.length ? 'Нажмите, чтобы добавить' : 'Нет барберов для назначения',
+      };
+    }
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const count = values.length;
+    return {
+      label: min === max ? formatCurrency(min) : `${formatCurrency(min)} – ${formatCurrency(max)}`,
+      details: `Для ${count} ${pluralize(count, ['барбера', 'барбера', 'барберов'])}`,
+    };
+  };
+
+  const canSubmit = isCreateMode ? Boolean(workingService?.name?.trim()) : true;
 
   return (
     <div className="space-y-6">
-      <SectionCard title="Каталог">
+      <SectionCard
+        title="Услуги"
+        actions={
+          <button
+            onClick={() => openEditor('create')}
+            className="rounded-full bg-emerald-600/90 px-4 py-2 text-sm font-semibold text-white shadow shadow-emerald-900/40 hover:bg-emerald-500"
+          >
+            + Добавить услугу
+          </button>
+        }
+      >
         {services.length === 0 ? (
-          <p className="text-slate-400">Пока нет ни одной услуги.</p>
+          <p className="text-slate-400">Список услуг пуст. Добавьте первую услугу.</p>
         ) : (
-          <div className="overflow-auto">
-            <table className="min-w-[860px] text-[13px] leading-tight sm:text-sm">
-              <thead>
-                <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                  <th className="px-2 py-1.5">Название</th>
-                  <th className="px-2 py-1.5 w-28">Длительность</th>
-                  {barbers.map((barber) => (
-                    <th key={barber.id} className="px-2 py-1.5 text-center">{barber.name}</th>
-                  ))}
-                  <th className="px-2 py-1.5 w-12 text-center" />
-                </tr>
-              </thead>
-              <tbody>
-                {services.map((service) => (
-                  <tr key={service.id} className="border-t border-slate-800">
-                    <td className="px-2 py-1.5 align-top">
-                      <input value={service.name || ''} onChange={(event) => onFieldChange(service.id, 'name', event.target.value)} className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-white" />
-                    </td>
-                    <td className="px-2 py-1.5 align-top">
-                      <input type="number" value={service.duration || 0} onChange={(event) => onFieldChange(service.id, 'duration', Number(event.target.value))} className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-white" />
-                    </td>
-                    {barbers.map((barber) => (
-                      <td key={barber.id} className="px-2 py-1.5 align-top">
-                        <input type="number" value={service.prices?.[barber.id] ?? ''} onChange={(event) => onPriceChange(service.id, barber.id, event.target.value)} className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-white" placeholder="Цена" />
-                      </td>
-                    ))}
-                    <td className="px-2 py-1.5 align-top text-center">
-                      <button
-                        onClick={() => onDelete(service)}
-                        className="inline-flex items-center justify-center rounded-lg border border-rose-500/70 p-2 text-xs text-rose-300 hover:bg-rose-500/10"
-                        aria-label="Удалить услугу"
-                      >
-                        <IconTrash />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid gap-3 md:grid-cols-2">
+            {services.map((service) => {
+              const summary = servicePriceSummary(service);
+              return (
+                <button
+                  key={service.id}
+                  onClick={() => openEditor('edit', service.id)}
+                  className="group flex w-full flex-col gap-3 rounded-2xl border border-slate-700/70 bg-slate-900/50 p-4 text-left transition hover:border-indigo-500/70 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-base font-semibold text-white sm:text-lg">{service.name || 'Без названия'}</p>
+                    <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-300">
+                      {service.duration ? `${service.duration} мин` : '—'}
+                    </span>
+                  </div>
+                  <div className="text-sm text-slate-100">{summary.label}</div>
+                  <p className="text-xs text-slate-400">{summary.details}</p>
+                </button>
+              );
+            })}
           </div>
         )}
       </SectionCard>
 
-      <SectionCard title="Новая услуга">
-        <div className="grid gap-3 mobile-grid-2 md:grid-cols-2">
-          <input value={newService.name} onChange={(event) => updateNewService('name', event.target.value)} placeholder="Название" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-          <input type="number" value={newService.duration} onChange={(event) => updateNewService('duration', Number(event.target.value))} placeholder="Длительность, мин" className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
-        </div>
-        <div className="mt-3 grid gap-3 mobile-grid-2 md:grid-cols-2">
-          {barbers.map((barber) => (
-            <input
-              key={barber.id}
-              type="number"
-              value={newService.prices?.[barber.id] ?? ''}
-              onChange={(event) => updateNewServicePrice(barber.id, event.target.value)}
-              placeholder={`Цена для ${barber.name}`}
-              className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
-            />
-          ))}
-        </div>
-        <button
-          onClick={() => {
-            if (!newService.name) return;
-            onAdd(newService);
-            setNewService({ name: '', duration: 60, prices: {} });
-          }}
-          className="mt-4 w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white hover:bg-emerald-500"
-        >
-          Добавить услугу
-        </button>
-      </SectionCard>
+      <Modal
+        title={isCreateMode ? 'Новая услуга' : workingService?.name || 'Редактирование услуги'}
+        isOpen={editorState.open}
+        onClose={closeEditor}
+        maxWidthClass="max-w-3xl"
+        footer={
+          <>
+            {!isCreateMode && (
+              <button onClick={handleDeleteLocal} className="rounded-lg border border-rose-600 px-4 py-2 text-sm text-rose-200 hover:bg-rose-500/10">
+                Удалить
+              </button>
+            )}
+            <button onClick={closeEditor} className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800">
+              Отмена
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!canSubmit}
+              className={classNames(
+                'rounded-lg px-4 py-2 text-sm font-semibold text-white',
+                canSubmit ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-slate-700 text-slate-300'
+              )}
+            >
+              {isCreateMode ? 'Добавить' : 'Готово'}
+            </button>
+          </>
+        }
+      >
+        {workingService ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1">
+                <label className="block text-sm text-slate-300">Название</label>
+                <input
+                  value={workingService.name || ''}
+                  onChange={(event) => handleFieldChange('name', event.target.value)}
+                  placeholder="Например, стрижка"
+                  className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-sm text-slate-300">Длительность, мин</label>
+                <input
+                  type="number"
+                  min={5}
+                  step={5}
+                  value={workingService.duration ?? ''}
+                  onChange={(event) =>
+                    handleFieldChange('duration', event.target.value === '' ? '' : Number(event.target.value))
+                  }
+                  className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm text-slate-300">Цены по барберам</p>
+              {barbers.length ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {barbers.map((barber) => (
+                    <label key={barber.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-white">
+                      <span className="truncate">{barber.name || 'Без имени'}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={workingService.prices?.[barber.id] ?? ''}
+                        onChange={(event) => handlePriceChange(barber.id, event.target.value)}
+                        className="w-28 rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-right text-sm text-white"
+                        placeholder="0"
+                      />
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">Добавьте барберов, чтобы назначать цены.</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="text-slate-300">Выберите услугу для редактирования.</p>
+        )}
+      </Modal>
     </div>
   );
 };
+
 const MultiSelectCell = ({ value, options = [], onCommit }) => {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(parseMultiValue(value));
@@ -1224,7 +1539,7 @@ const TimeRangePicker = ({
   onChange,
   title = 'Выбор времени',
   placeholder = 'Нажмите, чтобы выбрать',
-  buttonClassName = 'w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-left text-sm text-white',
+  buttonClassName = 'w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-left text-sm text-white whitespace-nowrap',
 }) => {
   const [open, setOpen] = useState(false);
   const [{ start, end }, setDraft] = useState(() => parseTimeRangeValue(value));
@@ -1325,7 +1640,7 @@ const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableI
         </button>
       );
     }
-    return <span className="text-slate-200 whitespace-pre-wrap break-words leading-tight">{value || '-'}</span>;
+    return <span className="text-slate-200 whitespace-normal break-words leading-tight">{value || '-'}</span>;
   }
 
   const commit = (nextValue) => {
@@ -1689,7 +2004,7 @@ const TableToolbar = ({
     </div>
   </div>
 );
-const buildAppointmentGroups = (records = []) => {
+const buildAppointmentGroups = (records = [], sortDirection = 'desc') => {
   const buckets = new Map();
   records.forEach((record) => {
     const key = record.Date || 'Без даты';
@@ -1697,15 +2012,16 @@ const buildAppointmentGroups = (records = []) => {
     bucket.push(record);
     buckets.set(key, bucket);
   });
+  const compare = sortDirection === 'asc' ? (a, b) => a - b : (a, b) => b - a;
   return Array.from(buckets.entries())
     .map(([key, items]) => {
       const sortedItems = [...items].sort((a, b) => {
         const left = getAppointmentStartDate(a.Date, a.Time, a.startDateTime)?.getTime() || Number.MAX_SAFE_INTEGER;
         const right = getAppointmentStartDate(b.Date, b.Time, b.startDateTime)?.getTime() || Number.MAX_SAFE_INTEGER;
-        return left - right;
+        return compare(left, right);
       });
       const reference = sortedItems[0];
-      const sortValue = getAppointmentStartDate(reference.Date, reference.Time, reference.startDateTime)?.getTime() || Number.MAX_SAFE_INTEGER;
+      const sortValue = getAppointmentStartDate(reference.Date, reference.Time, reference.startDateTime)?.getTime() || (sortDirection === 'asc' ? Number.MAX_SAFE_INTEGER : Number.MIN_SAFE_INTEGER);
       return {
         key: key || `no-date-${reference?.id || Math.random()}`,
         label: formatDateHeading(key),
@@ -1713,7 +2029,24 @@ const buildAppointmentGroups = (records = []) => {
         sortValue,
       };
     })
-    .sort((a, b) => a.sortValue - b.sortValue);
+    .sort((a, b) => compare(a.sortValue, b.sortValue));
+};
+const resolveSortValue = (row, column, tableId) => {
+  if (!column) return normalizeText(row[column?.key]).toLowerCase();
+  if (tableId === 'Appointments' && column.key === 'Date') {
+    return getAppointmentStartDate(row.Date, row.Time, row.startDateTime)?.getTime() || 0;
+  }
+  if (column.type === 'date') {
+    const ts = new Date(row[column.key]).getTime();
+    return Number.isNaN(ts) ? 0 : ts;
+  }
+  if (typeof row[column.key] === 'number') {
+    return row[column.key];
+  }
+  if (column.type === 'boolean') {
+    return row[column.key] ? 1 : 0;
+  }
+  return normalizeText(row[column.key]).toLowerCase();
 };
 const SortIndicator = ({ direction }) => (
   <span className="flex flex-col leading-[6px]">
@@ -1755,75 +2088,181 @@ const DataTable = ({
   }
 
   const visibleColumns = columns.filter((column) => !hiddenColumns.includes(column.key));
-  const groupedRows =
-    tableId === 'Appointments' && groupByDate ? buildAppointmentGroups(rows) : [{ key: 'default', label: null, rows }];
+  const isAppointmentsTable = tableId === 'Appointments';
+  const canGroupAppointments = isAppointmentsTable && groupByDate && (!sortConfig || sortConfig.key === 'Date');
+  const groupedRows = isAppointmentsTable
+    ? canGroupAppointments
+      ? buildAppointmentGroups(rows, sortConfig?.direction || 'desc')
+      : [{ key: 'default', label: null, rows }]
+    : [{ key: 'default', label: null, rows }];
 
-  return (
-    <div className="-mx-4 overflow-x-auto overflow-y-visible pb-3 sm:mx-0">
-      <table className="min-w-[760px] table-auto text-[13px] leading-tight sm:text-sm">
-        <thead>
-          <tr className="text-left text-[11px] uppercase tracking-[0.25em] text-slate-400">
-            {visibleColumns.map((column) => (
-              <th
-                key={column.key}
-                className={classNames('px-2 py-1.5 whitespace-nowrap', column.align === 'center' && 'text-center', column.minWidth)}
-                onClick={() => column.sortable !== false && onSort(column.key)}
-              >
-                <div className={classNames('flex items-center gap-2', column.align === 'center' && 'justify-center')}>
-                  {column.label}
-                  {column.sortable !== false && (
-                    <SortIndicator direction={sortConfig?.key === column.key ? sortConfig.direction : null} />
-                  )}
-                </div>
-              </th>
-            ))}
-            {onDelete && <th className="px-2 py-1.5 text-right">Действия</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {groupedRows.map((group) => (
-            <Fragment key={group.key}>
-              {group.label && (
-                <tr className="bg-transparent">
-                  <td colSpan={visibleColumns.length + (onDelete ? 1 : 0)} className="px-2 py-2">
-                    <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
-                      <span className="h-px flex-1 bg-slate-700" />
-                      {group.label}
-                      <span className="h-px flex-1 bg-slate-700" />
+  if (isAppointmentsTable) {
+    return (
+      <div className="space-y-6">
+        {groupedRows.map((group) => (
+          <div key={group.key} className="space-y-3">
+            {group.label && (
+              <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
+                <span className="h-px flex-1 bg-slate-700" />
+                {group.label}
+                <span className="h-px flex-1 bg-slate-700" />
+              </div>
+            )}
+            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              {group.rows.map((record) => {
+                const recordId = getRecordId(record);
+                const statusLabel = normalizeStatusValue(record.Status) || '—';
+                return (
+                  <article key={recordId} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg shadow-black/10">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Запись</p>
+                        <p className="text-base font-semibold text-white">{record.CustomerName || 'Без имени'}</p>
+                        <p className="text-xs text-slate-400">{formatDateTime(record.Date, record.Time)}</p>
+                      </div>
+                      <span className={classNames('text-xs font-semibold', getStatusBadgeClasses(record.Status))}>{statusLabel}</span>
                     </div>
-                  </td>
-                </tr>
-              )}
-              {group.rows.map((record) => (
-                <tr key={getRecordId(record)} className="border-t border-slate-800">
-                  {visibleColumns.map((column) => (
-                    <td
-                      key={column.key}
-                      className={classNames(
-                        'px-2 py-1.5 align-top whitespace-pre-wrap break-words text-[13px] leading-snug sm:text-sm',
-                        column.align === 'center' && 'text-center'
-                      )}
-                    >
-                      <EditableCell record={record} column={column} options={options} onUpdate={onUpdate} onOpenProfile={onOpenProfile} tableId={tableId} />
-                    </td>
-                  ))}
-                  {onDelete && (
-                    <td className="px-2 py-1.5 text-right">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {visibleColumns.map((column) => (
+                        <div key={`${recordId}-${column.key}`} className="space-y-1">
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">{column.label}</p>
+                          <div className="rounded-lg border border-slate-700 bg-slate-950/40 px-2 py-1.5">
+                            <EditableCell record={record} column={column} options={options} onUpdate={onUpdate} onOpenProfile={onOpenProfile} tableId={tableId} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {onDelete && (
                       <button
                         onClick={() => onDelete(record)}
-                        className="inline-flex items-center rounded-lg border border-rose-500 px-2 py-1.5 text-xs text-rose-300 hover:bg-rose-500/10"
+                        className="w-full rounded-lg border border-rose-500 px-3 py-2 text-sm text-rose-200 hover:bg-rose-500/10"
                         aria-label="Удалить запись"
                       >
-                        <IconTrash />
+                        Удалить запись
                       </button>
-                    </td>
-                  )}
-                </tr>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {rows.map((record, index) => {
+          const recordId = getRecordId(record);
+          const cardKey = recordId || `${tableId}-card-${index}`;
+          return (
+            <article key={cardKey} className="space-y-3 rounded-3xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg shadow-black/10">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
+                    {tableId === 'Users' ? 'Клиент' : tableId === 'Schedules' ? 'Расписание' : 'Запись'}
+                  </p>
+                  <p className="text-base font-semibold text-white">{record[visibleColumns[0]?.key] || '—'}</p>
+                </div>
+                {onDelete && (
+                  <button
+                    onClick={() => onDelete(record)}
+                    className="rounded-full border border-rose-600/70 p-2 text-rose-200 hover:bg-rose-500/10"
+                    aria-label="Удалить запись"
+                  >
+                    <IconTrash className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <div className="grid gap-3">
+                {visibleColumns.map((column) => (
+                  <div key={`${cardKey}-${column.key}`} className="space-y-1 rounded-2xl border border-slate-800/80 bg-slate-950/50 p-2">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">{column.label}</p>
+                    <EditableCell
+                      record={record}
+                      column={column}
+                      options={options}
+                      onUpdate={onUpdate}
+                      onOpenProfile={onOpenProfile}
+                      tableId={tableId}
+                    />
+                  </div>
+                ))}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      <div className="hidden 2xl:block -mx-4 overflow-x-auto overflow-y-visible pb-3 sm:mx-0">
+        <table className="min-w-[760px] w-full table-auto text-[13px] leading-tight sm:text-sm">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-[0.25em] text-slate-400">
+              {visibleColumns.map((column) => (
+                <th
+                  key={column.key}
+                  className={classNames('px-2 py-1.5 whitespace-nowrap', column.align === 'center' && 'text-center', column.minWidth)}
+                  onClick={() => column.sortable !== false && onSort(column.key)}
+                >
+                  <div className={classNames('flex items-center gap-2', column.align === 'center' && 'justify-center')}>
+                    {column.label}
+                    {column.sortable !== false && (
+                      <SortIndicator direction={sortConfig?.key === column.key ? sortConfig.direction : null} />
+                    )}
+                  </div>
+                </th>
               ))}
-            </Fragment>
-          ))}
-        </tbody>
-      </table>
+              {onDelete && <th className="px-2 py-1.5 text-right" aria-label="Действия" />}
+            </tr>
+          </thead>
+          <tbody>
+            {groupedRows.map((group) => (
+              <Fragment key={group.key}>
+                {group.label && (
+                  <tr className="bg-transparent">
+                    <td colSpan={visibleColumns.length + (onDelete ? 1 : 0)} className="px-2 py-2">
+                      <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
+                        <span className="h-px flex-1 bg-slate-700" />
+                        {group.label}
+                        <span className="h-px flex-1 bg-slate-700" />
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {group.rows.map((record) => (
+                  <tr key={getRecordId(record)} className="border-t border-slate-800">
+                    {visibleColumns.map((column) => (
+                      <td
+                        key={column.key}
+                        className={classNames(
+                          'px-2 py-1.5 align-top text-[13px] leading-snug sm:text-sm',
+                          column.align === 'center' && 'text-center',
+                          column.noWrap ? 'whitespace-nowrap' : 'whitespace-normal break-words'
+                        )}
+                      >
+                        <EditableCell record={record} column={column} options={options} onUpdate={onUpdate} onOpenProfile={onOpenProfile} tableId={tableId} />
+                      </td>
+                    ))}
+                    {onDelete && (
+                      <td className="px-2 py-1.5 text-right">
+                        <button
+                          onClick={() => onDelete(record)}
+                          className="inline-flex items-center rounded-lg border border-rose-500 px-2 py-1.5 text-xs text-rose-300 hover:bg-rose-500/10"
+                          aria-label="Удалить запись"
+                        >
+                          <IconTrash />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };
@@ -2054,7 +2493,7 @@ const BackupsPanel = ({ backups = [], onRestore, onCreate }) => (
   </SectionCard>
 );
 
-const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, isNew = false, clients = [] }) => {
+const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, onDelete, canDelete = false, isNew = false, clients = [] }) => {
   const buildDraft = useCallback(
     (record) => (record ? { ...record, UserID: record.UserID || record.userId || '', Status: normalizeStatusValue(record.Status) } : null),
     []
@@ -2108,14 +2547,19 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, is
       isOpen={open}
       onClose={onClose}
       footer={
-        <>
+        <div className="flex flex-wrap justify-end gap-3">
+          {!isNew && canDelete && (
+            <button onClick={() => onDelete?.(draft)} className="rounded-lg border border-rose-600 px-4 py-2 text-sm text-rose-200 hover:bg-rose-500/10">
+              Удалить
+            </button>
+          )}
           <button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">
             Отмена
           </button>
           <button onClick={handleSubmit} className="rounded-lg bg-emerald-600 px-4 py-2 text-white">
             Сохранить
           </button>
-        </>
+        </div>
       }
     >
       <div className="grid gap-3 mobile-grid-2 md:grid-cols-2">
@@ -2176,6 +2620,19 @@ const TablesWorkspace = ({
   currentUser = null,
   liveAppointments = null,
   liveUpdatedAt = null,
+  barbers = [],
+  services = [],
+  onBarberFieldChange,
+  onSaveBarber,
+  onAddBarber,
+  onDeleteBarber,
+  onServiceFieldChange,
+  onServicePriceChange,
+  onDeleteService,
+  onAddService,
+  preferredTable = null,
+  onPreferredTableConsumed,
+  onRequestConfirm = null,
 }) => {
   const [activeTable, setActiveTable] = useLocalStorage('tables.active', 'Appointments');
   const [tables, setTables] = useState(() => DATA_TABLES.reduce((acc, table) => ({ ...acc, [table]: [] }), {}));
@@ -2189,7 +2646,6 @@ const TablesWorkspace = ({
     Appointments: ['UserID'],
     Schedules: [],
     Users: [],
-    Cost: [],
   });
   const [sortConfigs, setSortConfigs] = useLocalStorage(
     'tables.sortConfigs',
@@ -2227,6 +2683,14 @@ const TablesWorkspace = ({
       setActiveTable('Appointments');
     }
   }, [activeTable, setActiveTable]);
+
+  useEffect(() => {
+    if (!preferredTable) return;
+    if (TABLE_ORDER.includes(preferredTable)) {
+      setActiveTable(preferredTable);
+    }
+    onPreferredTableConsumed?.();
+  }, [preferredTable, setActiveTable, onPreferredTableConsumed]);
 
   useEffect(() => {
     setHiddenStatuses((prev) => {
@@ -2307,10 +2771,14 @@ const TablesWorkspace = ({
       rows = rows.filter((row) => visibleColumns.some((column) => normalizeText(row[column.key]).toLowerCase().includes(query)));
     }
     if (sortConfig?.key) {
+      const columnDef = currentColumns.find((column) => column.key === sortConfig.key);
       rows.sort((a, b) => {
-        const left = normalizeText(a[sortConfig.key]).toLowerCase();
-        const right = normalizeText(b[sortConfig.key]).toLowerCase();
+        const left = resolveSortValue(a, columnDef, activeTable);
+        const right = resolveSortValue(b, columnDef, activeTable);
         if (left === right) return 0;
+        if (typeof left === 'number' && typeof right === 'number') {
+          return sortConfig.direction === 'asc' ? left - right : right - left;
+        }
         return sortConfig.direction === 'asc' ? (left > right ? 1 : -1) : left > right ? -1 : 1;
       });
     }
@@ -2372,7 +2840,15 @@ const TablesWorkspace = ({
 
   const handleDelete = async (record) => {
     if (!record || activeTable === 'Schedules') return;
-    if (!window.confirm('Удалить запись без возможности восстановления?')) return;
+    const confirmed = onRequestConfirm
+      ? await onRequestConfirm({
+          title: 'Удалить запись?',
+          message: 'Запись будет удалена без возможности восстановления.',
+          confirmLabel: 'Удалить',
+          tone: 'danger',
+        })
+      : true;
+    if (!confirmed) return;
     const tableId = activeTable;
     const original = tables[tableId] || [];
     setTables((prev) => {
@@ -2409,6 +2885,7 @@ const TablesWorkspace = ({
   };
 
   const tableSettings = TABLE_CONFIG[activeTable] || {};
+  const isCustomTable = tableSettings?.mode === 'custom';
 
   return (
     <div className="space-y-4">
@@ -2427,7 +2904,31 @@ const TablesWorkspace = ({
         ))}
       </div>
 
-      {tableSettings && (
+      {isCustomTable ? (
+        <div className="space-y-6">
+          {activeTable === 'Barbers' && (
+            <BarbersView
+              barbers={barbers}
+              onFieldChange={onBarberFieldChange}
+              onSave={onSaveBarber}
+              onAdd={onAddBarber}
+              onDelete={onDeleteBarber}
+            />
+          )}
+          {activeTable === 'Services' && (
+            <ServicesView
+              services={services}
+              barbers={barbers}
+              onFieldChange={onServiceFieldChange}
+              onPriceChange={onServicePriceChange}
+              onDelete={onDeleteService}
+              onAdd={onAddService}
+            />
+          )}
+        </div>
+      ) : (
+        <>
+          {tableSettings && (
         <SectionCard title={tableSettings.label}>
           {tableError && <ErrorBanner message={tableError} />}
           <TableToolbar
@@ -2478,30 +2979,32 @@ const TablesWorkspace = ({
         </SectionCard>
       )}
 
-      {tableSettings.canCreate &&
-        (activeTable === 'Appointments' ? (
-          <AppointmentModal
-            open={createModalOpen}
-            appointment={appointmentTemplate}
-            options={dropdownOptions}
-            onClose={() => setCreateModalOpen(false)}
-            onSave={({ payload }) => handleCreateRecord(payload)}
-            isNew
-            clients={clients}
-          />
-        ) : (
-          <CreateRecordModal
-            isOpen={createModalOpen}
-            onClose={() => setCreateModalOpen(false)}
-            onSave={handleCreateRecord}
-            columns={currentColumns}
-            tableName={tableSettings.label}
-            options={dropdownOptions}
-            tableId={activeTable}
-            clients={clients}
-            hiddenFields={activeTable === 'Appointments' ? ['UserID', 'Reminder2hClientSent', 'Reminder2hBarberSent'] : []}
-          />
-        ))}
+          {tableSettings.canCreate &&
+            (activeTable === 'Appointments' ? (
+              <AppointmentModal
+                open={createModalOpen}
+                appointment={appointmentTemplate}
+                options={dropdownOptions}
+                onClose={() => setCreateModalOpen(false)}
+                onSave={({ payload }) => handleCreateRecord(payload)}
+                isNew
+                clients={clients}
+              />
+            ) : (
+              <CreateRecordModal
+                isOpen={createModalOpen}
+                onClose={() => setCreateModalOpen(false)}
+                onSave={handleCreateRecord}
+                columns={currentColumns}
+                tableName={tableSettings.label}
+                options={dropdownOptions}
+                tableId={activeTable}
+                clients={clients}
+                hiddenFields={activeTable === 'Appointments' ? ['UserID', 'Reminder2hClientSent', 'Reminder2hBarberSent'] : []}
+              />
+            ))}
+        </>
+      )}
     </div>
   );
 };
@@ -2733,6 +3236,7 @@ const App = () => {
     }
   });
   const [activeTab, setActiveTab] = useLocalStorage('barber.activeTab', 'dashboard');
+  const [pendingTableView, setPendingTableView] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [services, setServices] = useState([]);
   const [barbers, setBarbers] = useState([]);
@@ -2743,7 +3247,7 @@ const App = () => {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [optionsCache, setOptionsCache] = useState(null);
   const [profileModal, setProfileModal] = useState({ open: false, data: null, loading: false });
-  const [appointmentModal, setAppointmentModal] = useState({ open: false, data: null, options: null, isNew: false });
+  const [appointmentModal, setAppointmentModal] = useState({ open: false, data: null, options: null, isNew: false, allowDelete: false });
   const [loading, setLoading] = useState(false);
   const [globalError, setGlobalError] = useState('');
   const [authError, setAuthError] = useState('');
@@ -2751,6 +3255,38 @@ const App = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [realtimeSnapshot, setRealtimeSnapshot] = useState(null);
   const [fatalError, setFatalError] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(defaultConfirmState);
+  const confirmResolverRef = useRef(null);
+
+  const requestConfirm = useCallback(
+    (options = {}) =>
+      new Promise((resolve) => {
+        confirmResolverRef.current = resolve;
+        setConfirmDialog({ ...defaultConfirmState, ...options, open: true });
+      }),
+    []
+  );
+
+  const handleConfirmResult = useCallback(
+    (result) => {
+      setConfirmDialog(defaultConfirmState);
+      if (confirmResolverRef.current) {
+        confirmResolverRef.current(result);
+        confirmResolverRef.current = null;
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (activeTab === 'barbers' || activeTab === 'services') {
+      const target = activeTab === 'barbers' ? 'Barbers' : 'Services';
+      setPendingTableView(target);
+      setActiveTab('tables');
+    }
+  }, [activeTab, setActiveTab]);
+
+  const handlePreferredTableConsumed = useCallback(() => setPendingTableView(null), []);
   const serviceSaveTimers = useRef(new Map());
 
   useEffect(() => {
@@ -2992,7 +3528,13 @@ const App = () => {
 
   const handleDeleteBarber = async (barber) => {
     if (!barber?.id) return;
-    if (!window.confirm('Удалить барбера без возможности восстановления?')) return;
+    const confirmed = await requestConfirm({
+      title: 'Удалить барбера?',
+      message: `Барбер «${barber.name || 'Без имени'}» будет удален без возможности восстановления.`,
+      confirmLabel: 'Удалить',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     try {
       await apiRequest(`/Barbers/${encodeURIComponent(barber.id)}`, { method: 'DELETE' });
       fetchAll();
@@ -3048,7 +3590,13 @@ const App = () => {
 
   const handleDeleteService = async (service) => {
     if (!service?.id) return;
-    if (!window.confirm('Удалить услугу?')) return;
+    const confirmed = await requestConfirm({
+      title: 'Удалить услугу?',
+      message: `Услуга «${service.name || 'Без названия'}» будет удалена.`,
+      confirmLabel: 'Удалить',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     try {
       await apiRequest(`/services/full/${encodeURIComponent(service.id)}`, { method: 'DELETE' });
       fetchAll();
@@ -3143,7 +3691,13 @@ const App = () => {
 
   const handleRestoreBackup = async (filename) => {
     if (!filename) return;
-    if (!window.confirm(`Восстановить данные из ${filename}?`)) return;
+    const confirmed = await requestConfirm({
+      title: 'Восстановить резервную копию?',
+      message: `Текущие данные будут заменены содержимым ${filename}. Продолжить?`,
+      confirmLabel: 'Восстановить',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     try {
       await apiRequest('/backups/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename }) });
       fetchAll();
@@ -3153,7 +3707,13 @@ const App = () => {
   };
 
   const handleCreateBackup = async () => {
-    if (!window.confirm('Создать новую резервную копию?')) return;
+    const confirmed = await requestConfirm({
+      title: 'Создать резервную копию?',
+      message: 'Будет создан файл резервной копии текущей базы данных.',
+      confirmLabel: 'Создать',
+      tone: 'success',
+    });
+    if (!confirmed) return;
     try {
       await apiRequest('/backups/create', { method: 'POST' });
       fetchAll();
@@ -3188,9 +3748,15 @@ const App = () => {
   }, [apiRequest, optionsCache]);
 
   const handleOpenAppointment = useCallback(
-    async (appointment) => {
+    async (appointment, optionsConfig = {}) => {
       const options = await ensureOptions();
-      setAppointmentModal({ open: true, data: appointment, options, isNew: false });
+      setAppointmentModal({
+        open: true,
+        data: appointment,
+        options,
+        isNew: false,
+        allowDelete: !!optionsConfig.allowDelete,
+      });
     },
     [ensureOptions]
   );
@@ -3215,6 +3781,7 @@ const App = () => {
       },
       options,
       isNew: true,
+      allowDelete: false,
     });
   }, [ensureOptions, session?.displayName, session?.username]);
 
@@ -3225,10 +3792,28 @@ const App = () => {
       } else if (id) {
         await apiRequest(`/Appointments/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
       }
-      setAppointmentModal((prev) => ({ ...prev, open: false, data: null, isNew: false }));
+      setAppointmentModal((prev) => ({ ...prev, open: false, data: null, isNew: false, allowDelete: false }));
       fetchAll();
     } catch (error) {
       setGlobalError(error.message || 'Не удалось сохранить запись');
+    }
+  };
+
+  const handleDeleteAppointment = async (appointment) => {
+    if (!appointment?.id) return;
+    const confirmed = await requestConfirm({
+      title: 'Удалить запись?',
+      message: 'Запись будет удалена без возможности восстановления.',
+      confirmLabel: 'Удалить',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await apiRequest(`/Appointments/${encodeURIComponent(appointment.id)}`, { method: 'DELETE' });
+      setAppointmentModal({ open: false, data: null, options: null, isNew: false, allowDelete: false });
+      fetchAll();
+    } catch (error) {
+      setGlobalError(error.message || 'Не удалось удалить запись');
     }
   };
 
@@ -3245,7 +3830,13 @@ const App = () => {
   };
 
   const handleApplyUpdate = async () => {
-    if (!window.confirm('Обновить CRM и бота до последней версии?')) return;
+    const confirmed = await requestConfirm({
+      title: 'Обновить систему?',
+      message: 'CRM и бот будут обновлены до последней версии. Перезапуск может занять несколько минут.',
+      confirmLabel: 'Обновить',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     setSystemBusy(true);
     try {
       const result = await apiRequest('/system/update', { method: 'POST' });
@@ -3262,6 +3853,8 @@ const App = () => {
     return <LoginScreen onLogin={handleLogin} error={authError} />;
   }
 
+  const preferredTableTarget = activeTab === 'barbers' ? 'Barbers' : activeTab === 'services' ? 'Services' : pendingTableView;
+
   const renderActive = () => {
     if (loading) return <LoadingState />;
     switch (activeTab) {
@@ -3275,28 +3868,9 @@ const App = () => {
             liveMeta={realtimeSnapshot}
           />
         );
-      case 'barbers':
-        return (
-          <BarbersView
-            barbers={barbers}
-            onFieldChange={handleBarberFieldChange}
-            onSave={handleSaveBarber}
-            onAdd={handleAddBarber}
-            onDelete={handleDeleteBarber}
-          />
-        );
-      case 'services':
-        return (
-          <ServicesView
-            services={services}
-            barbers={barbers}
-            onFieldChange={handleServiceFieldChange}
-            onPriceChange={handleServicePriceChange}
-            onDelete={handleDeleteService}
-            onAdd={handleAddService}
-          />
-        );
       case 'tables':
+      case 'barbers':
+      case 'services':
         return (
           <TablesWorkspace
             apiRequest={apiRequest}
@@ -3307,6 +3881,19 @@ const App = () => {
             currentUser={session || null}
             liveAppointments={realtimeSnapshot?.rows || null}
             liveUpdatedAt={realtimeSnapshot?.updatedAt || null}
+            barbers={barbers}
+            services={services}
+            onBarberFieldChange={handleBarberFieldChange}
+            onSaveBarber={handleSaveBarber}
+            onAddBarber={handleAddBarber}
+            onDeleteBarber={handleDeleteBarber}
+            onServiceFieldChange={handleServiceFieldChange}
+            onServicePriceChange={handleServicePriceChange}
+            onDeleteService={handleDeleteService}
+            onAddService={handleAddService}
+            preferredTable={preferredTableTarget}
+            onPreferredTableConsumed={handlePreferredTableConsumed}
+            onRequestConfirm={requestConfirm}
           />
         );
       case 'bot':
@@ -3418,11 +4005,14 @@ const App = () => {
         open={appointmentModal.open}
         appointment={appointmentModal.data}
         options={appointmentModal.options || optionsCache || {}}
-        onClose={() => setAppointmentModal((prev) => ({ ...prev, open: false, data: null, isNew: false }))}
+        onClose={() => setAppointmentModal((prev) => ({ ...prev, open: false, data: null, isNew: false, allowDelete: false }))}
         onSave={handleSaveAppointment}
         isNew={appointmentModal.isNew}
         clients={dashboard?.clients || []}
+        canDelete={appointmentModal.allowDelete}
+        onDelete={appointmentModal.allowDelete ? handleDeleteAppointment : null}
       />
+      <ConfirmDialog {...confirmDialog} onResult={handleConfirmResult} />
     </div>
   );
 };
@@ -3485,7 +4075,6 @@ const renderApp = () => {
 };
 
 renderApp();
-
 
 
 

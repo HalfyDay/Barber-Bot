@@ -17,7 +17,9 @@
     <!-- Контейнер, в который монтируется React-приложение -->
     <div id="root"></div>
 
-    <script>window.__BARBER_API_BASE__ = 'http://localhost:3000/api';</script>
+    <script>
+        window.__BARBER_API_BASE__ = window.location.origin + '/api';
+    </script>
     <!-- Собранный фронтенд-бандл -->
     <script src="script.bundle.js" defer></script>
 </body>

@@ -148,3 +148,20 @@ body {
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     }
 }
+
+.upcoming-card-grid {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+}
+@media (min-width: 768px) {
+    .upcoming-card-grid {
+        grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    }
+}
+@media (max-width: 540px) {
+    .upcoming-card-grid {
+        gap: 0.75rem;
+    }
+    .upcoming-card {
+        border-radius: 1.5rem;
+    }
+}

@@ -87,6 +87,7 @@ const botScriptPath = path.join(__dirname, "BotBarberShop.py");
 app.use(cors());
 app.use(express.json({ limit: "4mb" }));
 app.use(express.static(path.join(__dirname)));
+app.use("/Image", express.static(IMAGE_DIR));
 const noCacheMiddleware = (req, res, next) => {
   res.setHeader(
     "Cache-Control",

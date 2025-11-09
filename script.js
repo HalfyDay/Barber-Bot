@@ -916,8 +916,8 @@ const MobileTabs = ({ session, activeTab, onChange, onLogout, liveUpdatedAt, liv
           </div>
         </div>
       </header>
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 px-4 py-2 backdrop-blur lg:hidden">
-        <div className="flex items-center gap-2">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur lg:hidden">
+        <div className="flex items-center gap-3">
           {VIEW_TABS.map((tab) => {
             const IconComponent = VIEW_TAB_ICONS[tab.id] || IconDots;
             const isActive = activeTab === tab.id;
@@ -926,12 +926,12 @@ const MobileTabs = ({ session, activeTab, onChange, onLogout, liveUpdatedAt, liv
                 key={tab.id}
                 onClick={() => handleSelect(tab.id)}
                 className={classNames(
-                  'flex-1 rounded-2xl px-3 py-2 text-center transition',
+                  'flex-1 rounded-3xl px-3 py-3 text-center text-sm font-semibold transition',
                   isActive ? 'bg-indigo-600/20 text-indigo-200' : 'text-slate-400 hover:text-white'
                 )}
                 aria-label={tab.label}
               >
-                <IconComponent className={classNames('mx-auto h-6 w-6', isActive ? 'text-indigo-300' : 'text-slate-400')} />
+                <IconComponent className={classNames('mx-auto h-7 w-7', isActive ? 'text-indigo-300' : 'text-slate-400')} />
                 <span className="sr-only">{tab.label}</span>
               </button>
             );
@@ -1721,20 +1721,38 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
           <div className="grid gap-3 md:grid-cols-2">
             {services.map((service) => {
               const summary = servicePriceSummary(service);
+              const isActiveService = service.isActive !== false;
               return (
                 <button
                   key={service.id}
                   onClick={() => openEditor('edit', service.id)}
-                  className="group flex w-full flex-col gap-3 rounded-2xl border border-slate-700/70 bg-slate-900/50 p-4 text-left transition hover:border-indigo-500/70 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className={classNames(
+                    'group flex w-full flex-col gap-3 rounded-2xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-indigo-500',
+                    isActiveService
+                      ? 'border-slate-700/70 bg-slate-900/50 hover:border-indigo-500/70 hover:bg-slate-900'
+                      : 'border-slate-800 bg-slate-900/30 opacity-80 hover:border-amber-400/60'
+                  )}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-base font-semibold text-white sm:text-lg">{service.name || 'Без названия'}</p>
-                    <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-300">
-                      {service.duration ? `${service.duration} мин` : '—'}
-                    </span>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className={classNames('text-base font-semibold sm:text-lg', isActiveService ? 'text-white' : 'text-slate-400')}>
+                      {service.name || 'Без названия'}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={classNames(
+                          'rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide',
+                          isActiveService ? 'border-emerald-500 bg-emerald-500/10 text-emerald-200' : 'border-slate-600 bg-slate-900/60 text-slate-400'
+                        )}
+                      >
+                        {isActiveService ? 'Активна' : 'Скрыта'}
+                      </span>
+                      <span className="rounded-full bg-slate-800/80 px-2 py-0.5 text-xs text-slate-300">
+                        {service.duration ? `${service.duration} мин` : '—'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-sm text-slate-100">{summary.label}</div>
-                  <p className="text-xs text-slate-400">{summary.details}</p>
+                  <div className={classNames('text-sm', isActiveService ? 'text-slate-100' : 'text-slate-500')}>{summary.label}</div>
+                  <p className={classNames('text-xs', isActiveService ? 'text-slate-400' : 'text-slate-500')}>{summary.details}</p>
                 </button>
               );
             })}
@@ -2208,8 +2226,12 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
       )}
       <div className="rounded-2xl border border-slate-700 bg-slate-900/60">
         <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-2">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 1016.65 16.65z" />
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
+            <path
+              fillRule="evenodd"
+              d="M9 3.5a5.5 5.5 0 013.995 9.315l3.095 3.095a.75.75 0 11-1.06 1.06l-3.095-3.094A5.5 5.5 0 119 3.5zm0 1.5a4 4 0 100 8 4 4 0 000-8z"
+              clipRule="evenodd"
+            />
           </svg>
           <input
             value={query}
@@ -2339,7 +2361,7 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset }) =
     <div className="relative w-full sm:w-auto">
       <button
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-center rounded-lg border border-slate-600 px-3 py-2 text-sm text-white sm:w-auto"
+        className="flex h-11 w-full items-center justify-center rounded-xl border border-slate-600 px-3 text-sm text-white sm:w-auto"
       >
         Статусы
       </button>
@@ -2392,7 +2414,7 @@ const TableToolbar = ({
 }) => {
   const chipClass = (active) =>
     classNames(
-      'rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition whitespace-nowrap text-center',
+      'inline-flex h-11 items-center justify-center rounded-xl border px-4 text-xs font-semibold uppercase tracking-wide transition whitespace-nowrap text-center',
       active ? 'border-indigo-400 bg-indigo-500/10 text-indigo-100' : 'border-slate-700 text-slate-300 hover:border-slate-500'
     );
   const allowManualRefresh = typeof onRefresh === 'function' && !['Appointments', 'Users'].includes(tableId);
@@ -2423,11 +2445,32 @@ const TableToolbar = ({
           </button>
         )
       : null;
+  const getBarberSelect = (extraClassName = '') => (
+    <select
+      value={selectedBarber}
+      onChange={(event) => setSelectedBarber(event.target.value)}
+      className={classNames(
+        'h-11 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-left text-sm text-white',
+        tableId !== 'Appointments' && 'sm:w-48',
+        extraClassName
+      )}
+    >
+      <option value="all">Все мастера</option>
+      {barbers.map((barber) => (
+        <option key={barber} value={barber}>
+          {barber}
+        </option>
+      ))}
+    </select>
+  );
   const controlOrder =
     tableId === 'Appointments'
       ? [
+          {
+            key: 'barber',
+            node: supportsBarberFilter ? <div className="lg:hidden">{getBarberSelect()}</div> : null,
+          },
           { key: 'status', node: statusControl },
-          { key: 'columns', node: columnControl },
           { key: 'past', node: pastControl },
           { key: 'group', node: groupingControl },
         ]
@@ -2442,9 +2485,14 @@ const TableToolbar = ({
     <div className="space-y-3 rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex-1 space-y-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="flex w-full items-stretch gap-2">
-              <label className="relative flex-1 min-w-[200px]">
+          <div className={classNames('flex flex-col gap-2 sm:flex-row sm:items-center', tableId === 'Appointments' ? 'lg:flex-row lg:items-center lg:gap-3' : '')}>
+            <div
+              className={classNames(
+                'flex w-full items-stretch gap-2',
+                tableId === 'Appointments' ? 'lg:flex-[2] lg:gap-3' : ''
+              )}
+            >
+              <label className="relative flex-1 min-w-[200px] lg:min-w-[260px]">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                     <path
@@ -2465,25 +2513,26 @@ const TableToolbar = ({
               {inlineCreateForMobile && (
                 <button
                   onClick={onOpenCreate}
-                  className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 hover:bg-emerald-500 sm:hidden"
+                  aria-label="Добавить запись"
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-lg font-semibold text-white shadow-sm shadow-emerald-900/20 hover:bg-emerald-500 sm:hidden"
                 >
-                  + Добавить
+                  +
                 </button>
               )}
             </div>
-            {supportsBarberFilter && (
-              <select
-                value={selectedBarber}
-                onChange={(event) => setSelectedBarber(event.target.value)}
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white sm:w-48"
-              >
-                <option value="all">Все мастера</option>
-                {barbers.map((barber) => (
-                  <option key={barber} value={barber}>
-                    {barber}
-                  </option>
-                ))}
-              </select>
+            {supportsBarberFilter && tableId !== 'Appointments' && getBarberSelect()}
+            {tableId === 'Appointments' && supportsBarberFilter && (
+              <div className="hidden w-full items-stretch gap-3 lg:flex lg:flex-1">
+                {getBarberSelect('lg:flex-1')}
+                {canCreate && (
+                  <button
+                    onClick={onOpenCreate}
+                    className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-6 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 hover:bg-emerald-500"
+                  >
+                    + Добавить
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -2510,7 +2559,8 @@ const TableToolbar = ({
               onClick={onOpenCreate}
               className={classNames(
                 'rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500',
-                inlineCreateForMobile ? 'hidden sm:inline-flex' : ''
+                inlineCreateForMobile ? 'hidden sm:inline-flex' : '',
+                tableId === 'Appointments' ? 'lg:hidden' : ''
               )}
             >
               <span className="hidden sm:inline">+ Добавить</span>
@@ -2727,17 +2777,21 @@ const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800/70 pb-3">
                     <div className="space-y-1">
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{formatDateBadgeLabel(record.Date)}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{formatDateBadgeLabel(record.Date)}</p>
                       <div className="flex items-baseline gap-2">
                         <p className="text-2xl font-semibold text-white sm:text-3xl">{start || record.Time || '-'}</p>
                         {end && <p className="text-xs text-slate-400 sm:text-sm">до {end}</p>}
                       </div>
                     </div>
-                    <div className="text-right space-y-1">
+                    <div className="flex flex-col items-end gap-2 text-right">
                       <span className={classNames('inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide', getStatusBadgeClasses(statusLabel))}>
-                        {statusLabel}
+                        {statusLabel || 'Без статуса'}
                       </span>
-                      {record.Barber && <p className="text-xs text-slate-400">{record.Barber}</p>}
+                      {record.Barber && (
+                        <p className="text-xs text-slate-400 sm:text-sm">
+                          Барбер: <span className="font-semibold text-white">{record.Barber}</span>
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="mt-3 flex flex-col gap-3 text-[13px] text-slate-300 sm:text-sm">
@@ -3413,9 +3467,6 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, on
               Удалить
             </button>
           )}
-          <button onClick={onClose} className={classNames(actionButtonClass, 'border border-slate-600 text-white')}>
-            Отмена
-          </button>
           {!isNew && (
             <button
               onClick={handleMarkCompleted}
@@ -3424,6 +3475,9 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, on
               Выполнено
             </button>
           )}
+          <button onClick={onClose} className={classNames(actionButtonClass, 'border border-slate-600 text-white')}>
+            Отмена
+          </button>
           <button onClick={handleSubmit} className={classNames(actionButtonClass, 'bg-emerald-600 text-white hover:bg-emerald-500')}>
             Сохранить
           </button>
@@ -3457,7 +3511,7 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, on
           ))}
         </select>
         <input type="date" value={draft.Date ? String(draft.Date).slice(0, 10) : ''} onChange={(event) => handleChange('Date', event.target.value)} className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white" />
-        <TimeRangePicker value={draft.Time || ''} onChange={(nextValue) => handleChange('Time', nextValue)} placeholder="Нажмите, чтобы выбрать" />
+        <TimeRangePicker value={draft.Time || ''} onChange={(nextValue) => handleChange('Time', nextValue)} placeholder="Выбрать время" />
         <select value={draft.Status || ''} onChange={(event) => handleChange('Status', event.target.value)} className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white">
           <option value="">Статус</option>
           {(options.statuses || []).map((status) => (

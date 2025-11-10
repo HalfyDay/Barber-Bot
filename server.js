@@ -26,6 +26,7 @@ const BACKUP_RETENTION_DAYS = 30;
 const DEFAULT_BOT_DESCRIPTION = "Telegram-       CRM-.";
 const DEFAULT_ABOUT_TEXT = "      CRM,      .";
 const IMAGE_DIR = path.join(__dirname, "Image");
+const MAX_AVATAR_FILE_SIZE = Number(process.env.MAX_AVATAR_FILE_SIZE || 5 * 1024 * 1024);
 const SUPPORTED_APPOINTMENT_STATUSES = [
   "Активная",
   "Завершена",
@@ -85,7 +86,7 @@ const pythonExecutable =
   (os.platform() === "win32" ? "python" : "python3");
 const botScriptPath = path.join(__dirname, "BotBarberShop.py");
 app.use(cors());
-app.use(express.json({ limit: "4mb" }));
+app.use(express.json({ limit: "12mb" }));
 app.use(express.static(path.join(__dirname)));
 app.use("/Image", express.static(IMAGE_DIR));
 const noCacheMiddleware = (req, res, next) => {
@@ -145,26 +146,62 @@ const IMAGE_EXTENSIONS = new Set([
   ".gif",
   ".svg",
 ]);
-const walkImageDir = async (dir, relative = "") => {
-  const entries = await fs.readdir(dir);
-  const assets = [];
-  for (const entry of entries) {
-    if (!entry) continue;
-    const fullPath = path.join(dir, entry);
-    const stats = await fs.stat(fullPath);
-    const relPath = relative ? path.join(relative, entry) : entry;
-    if (stats.isDirectory()) {
-      assets.push(...(await walkImageDir(fullPath, relPath)));
-    } else if (IMAGE_EXTENSIONS.has(path.extname(entry).toLowerCase())) {
-      assets.push(`/Image/${relPath.replace(/\\/g, "/")}`);
-    }
+const buildSafeImageFilename = (input = "", fallbackExt = ".png") => {
+  const normalized = normalizeText(input).replace(/\\/g, "/");
+  const candidate = path.basename(normalized) || `avatar-${Date.now()}`;
+  const extCandidate = path.extname(candidate);
+  const ext = (extCandidate || fallbackExt).toLowerCase();
+  if (!IMAGE_EXTENSIONS.has(ext)) {
+    return null;
   }
-  return assets;
+  const baseName =
+    (extCandidate ? candidate.slice(0, -extCandidate.length) : candidate) || `avatar-${Date.now()}`;
+  const safeBase = baseName
+    .normalize("NFKD")
+    .replace(/\s+/g, "-")
+    .replace(/[^\p{L}0-9._-]/gu, "")
+    .replace(/-+/g, "-")
+    .replace(/^[-_.]+|[-_.]+$/g, "");
+  return `${safeBase || `avatar-${Date.now()}`}${ext}`;
 };
+
+const getExistingImageFilename = (input = "") => {
+  const normalized = normalizeText(input).replace(/\\/g, "/");
+  const candidate = path.basename(normalized);
+  if (!candidate) return null;
+  const ext = path.extname(candidate).toLowerCase();
+  if (!IMAGE_EXTENSIONS.has(ext)) return null;
+  return candidate;
+};
+
+const decodeBase64Image = (input = "") => {
+  const normalized = normalizeText(input);
+  const payload = normalized.includes("base64,") ? normalized.split("base64,").pop() : normalized;
+  if (!payload) {
+    throw new Error("Пустое изображение");
+  }
+  return Buffer.from(payload, "base64");
+};
+
+const ensureUniqueImageName = async (filename) => {
+  let attempt = 0;
+  const ext = path.extname(filename);
+  const base = path.basename(filename, ext);
+  let candidate = filename;
+  while (await fs.pathExists(path.join(IMAGE_DIR, candidate))) {
+    attempt += 1;
+    candidate = `${base}-${attempt}${ext}`;
+  }
+  return candidate;
+};
+
 const listAvatarImages = async () => {
   try {
     if (!(await fs.pathExists(IMAGE_DIR))) return [];
-    const images = await walkImageDir(IMAGE_DIR);
+    const entries = await fs.readdir(IMAGE_DIR, { withFileTypes: true });
+    const images = entries
+      .filter((entry) => entry.isFile() && IMAGE_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
+      .map((entry) => `/Image/${entry.name.replace(/\\/g, "/")}`);
     return Array.from(new Set(images)).sort((a, b) => a.localeCompare(b, "ru"));
   } catch (error) {
     console.error("Avatar scan error:", error);
@@ -964,6 +1001,59 @@ app.get("/api/assets/avatars", authenticateToken, async (req, res) => {
   }
 });
 
+app.post("/api/assets/avatars/upload", authenticateToken, async (req, res) => {
+  try {
+    const { name, data } = req.body || {};
+    if (!data) {
+      return res.status(400).json({ error: "Не передано изображение" });
+    }
+    const sanitizedName = buildSafeImageFilename(name || `avatar-${Date.now()}.png`);
+    if (!sanitizedName) {
+      return res.status(400).json({ error: "Неподдерживаемый формат файла" });
+    }
+    await fs.ensureDir(IMAGE_DIR);
+    const buffer = decodeBase64Image(data);
+    if (!buffer.length) {
+      return res.status(400).json({ error: "Пустой файл" });
+    }
+    if (buffer.length > MAX_AVATAR_FILE_SIZE) {
+      return res
+        .status(400)
+        .json({ error: `Файл слишком большой (до ${Math.floor(MAX_AVATAR_FILE_SIZE / (1024 * 1024))} МБ)` });
+    }
+    const filename = await ensureUniqueImageName(sanitizedName);
+    await fs.writeFile(path.join(IMAGE_DIR, filename), buffer);
+    const images = await listAvatarImages();
+    res.json({ success: true, path: `/Image/${filename}`, images });
+  } catch (error) {
+    console.error("Avatar upload error:", error);
+    res.status(500).json({ error: "Не удалось загрузить изображение", details: error.message });
+  }
+});
+
+app.delete("/api/assets/avatars", authenticateToken, async (req, res) => {
+  try {
+    const { filename } = req.body || {};
+    if (!filename) {
+      return res.status(400).json({ error: "Не указано имя файла" });
+    }
+    const sanitizedName = getExistingImageFilename(filename);
+    if (!sanitizedName) {
+      return res.status(400).json({ error: "Неверное имя файла" });
+    }
+    const targetPath = path.join(IMAGE_DIR, sanitizedName);
+    if (!(await fs.pathExists(targetPath))) {
+      return res.status(404).json({ error: "Файл не найден" });
+    }
+    await fs.remove(targetPath);
+    const images = await listAvatarImages();
+    res.json({ success: true, images });
+  } catch (error) {
+    console.error("Avatar delete error:", error);
+    res.status(500).json({ error: "Не удалось удалить изображение", details: error.message });
+  }
+});
+
 app.get("/api/bot/messages", authenticateToken, async (req, res) => {
   try {
     const messages = await prisma.botMessages.findMany({
@@ -1151,9 +1241,42 @@ app.get("/api/:tableName", authenticateToken, async (req, res) => {
   if (tableName === "Schedules") {
     try {
       const barbersList = await getBarbers({ includeInactive: true });
+      const daysOfWeek = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
+      const windowDays = 14;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const formatDateKey = (dateObj) => {
+        const yyyy = dateObj.getFullYear();
+        const mm = String(dateObj.getMonth() + 1).padStart(2, "0");
+        const dd = String(dateObj.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+      };
+      const todayKey = formatDateKey(today);
+      const expiredSchedules = await prisma.schedules.findMany({
+        where: { Date: { lt: todayKey } },
+      });
+      for (const schedule of expiredSchedules) {
+        if (!schedule?.Barber || !schedule?.Date) continue;
+        const baseDate = new Date(`${schedule.Date}T00:00:00`);
+        if (Number.isNaN(baseDate.getTime())) continue;
+        let rollingDate = new Date(baseDate);
+        while (rollingDate < today) {
+          rollingDate.setDate(rollingDate.getDate() + windowDays);
+        }
+        const nextDateKey = formatDateKey(rollingDate);
+        const targetDayIndex = (rollingDate.getDay() + 6) % 7;
+        const existingTarget = await prisma.schedules.findFirst({
+          where: { Barber: schedule.Barber, Date: nextDateKey },
+        });
+        if (existingTarget) {
+          await prisma.schedules.delete({ where: { id: schedule.id } });
+        } else {
+          await prisma.schedules.update({
+            where: { id: schedule.id },
+            data: { Date: nextDateKey, DayOfWeek: daysOfWeek[targetDayIndex] },
+          });
+        }
+      }
       await prisma.schedules.deleteMany({
         where: {
           Date: { lt: todayKey },
@@ -1166,8 +1289,6 @@ app.get("/api/:tableName", authenticateToken, async (req, res) => {
         }
         return acc;
       }, new Map());
-      const daysOfWeek = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
-      const windowDays = 14;
       const fallbackNames = Array.from(new Set(allSchedules.map((item) => item.Barber).filter(Boolean)));
       const barberNames = (barbersList.map((barber) => barber.name).filter(Boolean).length ? barbersList.map((barber) => barber.name).filter(Boolean) : fallbackNames).sort((a, b) =>
         a.localeCompare(b, "ru")
@@ -1177,10 +1298,7 @@ app.get("/api/:tableName", authenticateToken, async (req, res) => {
         for (let offset = 0; offset < windowDays; offset += 1) {
           const date = new Date(today);
           date.setDate(today.getDate() + offset);
-          const yyyy = date.getFullYear();
-          const mm = String(date.getMonth() + 1).padStart(2, "0");
-          const dd = String(date.getDate()).padStart(2, "0");
-          const dateKey = `${yyyy}-${mm}-${dd}`;
+          const dateKey = formatDateKey(date);
           const dayIndex = (date.getDay() + 6) % 7;
           const mapKey = `${name}-${dateKey}`;
           const existing = schedulesMap.get(mapKey);

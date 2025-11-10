@@ -379,6 +379,30 @@ const formatLiveTimestamp = (value, nowTs = Date.now()) => {
   }
 };
 
+const normalizeUpdateInfo = (payload) => {
+  if (!payload) return null;
+  const available = payload.available ?? payload.updateAvailable ?? false;
+  const latestVersion = payload.latestVersion || payload.version || payload.targetVersion || null;
+  const currentVersion = payload.currentVersion || payload.version || null;
+  const details =
+    payload.details ||
+    payload.note ||
+    (available ? 'Доступно обновление' : 'Установлена актуальная версия');
+  return {
+    ...payload,
+    available,
+    updateAvailable: available,
+    version: latestVersion || currentVersion,
+    latestVersion: latestVersion || currentVersion,
+    currentVersion,
+    checkedAt: payload.checkedAt || payload.checked_at || null,
+    publishedAt: payload.publishedAt || null,
+    sourceUrl: payload.sourceUrl || payload.url || null,
+    details,
+    note: payload.note || null,
+  };
+};
+
 const STATUS_TRANSLATIONS = {
   active: 'Активная',
   'активная': 'Активная',
@@ -652,11 +676,11 @@ const VisitHistoryList = ({
 const SectionCard = ({ title, actions, children }) => (
   <div className="space-y-4 rounded-2xl border border-slate-700 bg-slate-800/70 p-6 shadow-lg">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex w-full flex-wrap items-center gap-3">
+      <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:flex-1 sm:min-w-0">
         <h2 className="text-xl font-semibold text-white">{title}</h2>
         {actions && <div className="ml-auto sm:hidden">{actions}</div>}
       </div>
-      {actions && <div className="hidden sm:block">{actions}</div>}
+      {actions && <div className="hidden sm:block sm:flex-shrink-0">{actions}</div>}
     </div>
     {children}
   </div>
@@ -1167,10 +1191,22 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
   );
 };
 
-const BarberAvatarPicker = ({ value, onChange, loadOptions }) => {
+const MAX_AVATAR_UPLOAD_BYTES = 5 * 1024 * 1024;
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+    reader.readAsDataURL(file);
+  });
+
+const BarberAvatarPicker = ({ value, onChange, loadOptions, onUpload, onDelete }) => {
   const [avatarOptions, setAvatarOptions] = useState(() => avatarOptionsCache || []);
   const [loading, setLoading] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const fileInputRef = useRef(null);
 
   const normalizedValue = normalizeImagePath(value);
 
@@ -1187,37 +1223,119 @@ const BarberAvatarPicker = ({ value, onChange, loadOptions }) => {
     return [normalizedValue, ...avatarOptions];
   }, [avatarOptions, normalizedValue]);
 
+  const requestAvatarOptions = useCallback(async () => {
+    const loader = typeof loadOptions === 'function' ? loadOptions : fetchAvatarOptions;
+    const assetsPayload = await loader();
+    const assets = Array.isArray(assetsPayload)
+      ? assetsPayload
+      : Array.isArray(assetsPayload?.images)
+        ? assetsPayload.images
+        : [];
+    return Array.from(new Set(assets.map((asset) => normalizeImagePath(asset)).filter(Boolean)));
+  }, [loadOptions]);
+
   useEffect(() => {
     let isMounted = true;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const loader = typeof loadOptions === 'function' ? loadOptions : fetchAvatarOptions;
-        const assetsPayload = await loader();
+    setLoading(true);
+    requestAvatarOptions()
+      .then((assets) => {
         if (!isMounted) return;
-        const assets = Array.isArray(assetsPayload)
-          ? assetsPayload
-          : Array.isArray(assetsPayload?.images)
-            ? assetsPayload.images
-            : [];
         avatarOptionsCache = assets;
         setAvatarOptions(assets);
-      } catch (error) {
+      })
+      .catch((error) => {
+        if (!isMounted) return;
         console.error('Avatar load error', error);
-      } finally {
+      })
+      .finally(() => {
         if (isMounted) setLoading(false);
-      }
-    };
-    load();
+      });
     return () => {
       isMounted = false;
     };
-  }, [loadOptions]);
+  }, [requestAvatarOptions]);
 
-  const previewSrc = resolveAssetUrl(normalizedValue || avatarOptions[0] || '');
+  const refreshAvatarOptions = useCallback(async () => {
+    setLoading(true);
+    try {
+      const assets = await requestAvatarOptions();
+      avatarOptionsCache = assets;
+      setAvatarOptions(assets);
+      return assets;
+    } finally {
+      setLoading(false);
+    }
+  }, [requestAvatarOptions]);
+
+  const handleUploadFile = useCallback(
+    async (file) => {
+      if (!file || typeof onUpload !== 'function') return;
+      if (!file.type.startsWith('image/')) {
+        setActionError('Можно загружать только изображения');
+        return;
+      }
+      if (file.size > MAX_AVATAR_UPLOAD_BYTES) {
+        setActionError('Файл больше 5 МБ');
+        return;
+      }
+      setActionError('');
+      setActionBusy(true);
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const result = await onUpload({ name: file.name, data: dataUrl });
+        await refreshAvatarOptions();
+        const uploadedPath = result?.path || result?.image || null;
+        if (uploadedPath) {
+          onChange?.(normalizeImagePath(uploadedPath));
+        }
+        setShowGallery(true);
+      } catch (error) {
+        console.error('Avatar upload error', error);
+        setActionError(error.message || 'Не удалось загрузить изображение');
+      } finally {
+        setActionBusy(false);
+      }
+    },
+    [onUpload, onChange, refreshAvatarOptions]
+  );
+
+  const handleFileInputChange = useCallback(
+    (event) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (file) {
+        handleUploadFile(file);
+      }
+    },
+    [handleUploadFile]
+  );
+
+  const handleDeleteImage = useCallback(
+    async (target) => {
+      if (!target || typeof onDelete !== 'function') return;
+      setActionError('');
+      setActionBusy(true);
+      try {
+        await onDelete(target);
+        await refreshAvatarOptions();
+        if (normalizeImagePath(target) === normalizedValue) {
+          onChange?.('');
+        }
+      } catch (error) {
+        console.error('Avatar delete error', error);
+        setActionError(error.message || 'Не удалось удалить изображение');
+      } finally {
+        setActionBusy(false);
+      }
+    },
+    [onDelete, refreshAvatarOptions, normalizedValue, onChange]
+  );
+
+  const previewSrc = resolveAssetUrl(normalizedValue || availableOptions[0] || '');
 
   return (
     <div className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 shadow-2xl">
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInputChange} />
       <div className="relative h-52 w-full bg-slate-900">
         {previewSrc ? (
           <img src={previewSrc} alt="avatar preview" className="h-full w-full object-cover" />
@@ -1227,12 +1345,6 @@ const BarberAvatarPicker = ({ value, onChange, loadOptions }) => {
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/10 to-transparent" />
       </div>
       <div className="space-y-4 p-5">
-        <div className="space-y-1">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Текущее фото</p>
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-200">
-            {normalizedValue ? normalizedValue.replace('/Image/', '') : 'Не выбрано'}
-          </div>
-        </div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -1240,19 +1352,21 @@ const BarberAvatarPicker = ({ value, onChange, loadOptions }) => {
             className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-indigo-200 transition hover:border-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
             disabled={loading || (!avatarOptions.length && !normalizedValue)}
           >
-            {loading ? 'Сканирую...' : showGallery ? 'Скрыть галерею' : 'Открыть галерею'}
+            {loading ? 'Загрузка...' : showGallery ? 'Скрыть галерею' : 'Галерея'}
           </button>
           <button
             type="button"
-            onClick={() => onChange('')}
-            className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-rose-400 hover:text-white"
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-2xl border border-emerald-600/60 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:border-emerald-400 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+            disabled={actionBusy}
           >
-            Без изображения
+            {actionBusy ? 'Обработка…' : 'Загрузить'}
           </button>
         </div>
-        {showGallery && avatarOptions.length > 0 && (
+        {actionError && <p className="text-xs text-rose-400">{actionError}</p>}
+        {showGallery && availableOptions.length > 0 && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {avatarOptions.map((preset) => {
+            {availableOptions.map((preset) => {
               const isSelected = preset === normalizedValue;
               return (
                 <button
@@ -1260,22 +1374,36 @@ const BarberAvatarPicker = ({ value, onChange, loadOptions }) => {
                   key={preset}
                   onClick={() => onChange(preset)}
                   className={classNames(
-                    'rounded-2xl border p-1.5 transition hover:border-indigo-400 hover:bg-slate-800',
+                    'group relative overflow-hidden rounded-2xl border p-1.5 transition hover:border-indigo-400 hover:bg-slate-800',
                     isSelected ? 'border-indigo-500 bg-indigo-500/15' : 'border-slate-700 bg-slate-900'
                   )}
                 >
                   <img src={resolveAssetUrl(preset)} alt="avatar preset" className="h-20 w-full rounded-xl object-cover" />
+                  {typeof onDelete === 'function' && (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleDeleteImage(preset);
+                      }}
+                      className="absolute right-1 top-1 rounded-full bg-slate-900/70 p-1 text-slate-200 opacity-0 transition hover:bg-rose-600/80 hover:text-white group-hover:opacity-100 disabled:cursor-not-allowed"
+                      disabled={actionBusy}
+                    >
+                      <IconTrash className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </button>
               );
             })}
           </div>
         )}
-        {!avatarOptions.length && !loading && <p className="text-sm text-slate-500">Добавьте изображения в папку /Image, чтобы выбрать аватар.</p>}
+        {!avatarOptions.length && !loading && (
+          <p className="text-sm text-slate-500">Изображения не найдены. Загрузите фото, чтобы использовать его как аватар.</p>
+        )}
       </div>
     </div>
   );
 };
-
 const DAY_INDEX_LOOKUP = (() => {
   const full = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
   const short = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
@@ -1372,6 +1500,8 @@ const BarbersView = ({
   barbers = [],
   schedules = [],
   loadAvatarOptions,
+  uploadAvatar,
+  deleteAvatar,
   onFieldChange,
   onSave,
   onAdd,
@@ -1393,6 +1523,21 @@ const BarbersView = ({
   const isCreateMode = editorState.mode === 'create';
   const activeBarber = barbers.find((barber) => barber.id === editorState.targetId) || null;
   const workingBarber = isCreateMode ? draftBarber : activeBarber;
+  const [pendingAvatar, setPendingAvatar] = useState('');
+
+  useEffect(() => {
+    if (!editorState.open) {
+      setPendingAvatar('');
+      return;
+    }
+    if (isCreateMode) {
+      setPendingAvatar(draftBarber.avatarUrl || '');
+    } else if (activeBarber) {
+      setPendingAvatar(activeBarber.avatarUrl || '');
+    } else {
+      setPendingAvatar('');
+    }
+  }, [editorState.open, isCreateMode, draftBarber.avatarUrl, activeBarber?.avatarUrl, activeBarber]);
 
   const workingBarberSchedule = useMemo(() => {
     if (!workingBarber?.name) return [];
@@ -1403,6 +1548,14 @@ const BarbersView = ({
   }, [workingBarber, schedules]);
 
   const handleFieldChange = (field, value) => {
+    if (field === 'avatarUrl') {
+      const normalized = value || '';
+      setPendingAvatar(normalized);
+      if (isCreateMode) {
+        setDraftBarber((prev) => ({ ...prev, avatarUrl: normalized }));
+      }
+      return;
+    }
     if (isCreateMode) {
       setDraftBarber((prev) => ({ ...prev, [field]: value }));
     } else if (activeBarber) {
@@ -1410,12 +1563,20 @@ const BarbersView = ({
     }
   };
 
+  const handleAvatarChange = useCallback(
+    (value) => {
+      handleFieldChange('avatarUrl', value);
+    },
+    [handleFieldChange]
+  );
+
   const handleSave = () => {
     if (isCreateMode) {
-      onAdd?.(draftBarber);
+      onAdd?.({ ...draftBarber, avatarUrl: pendingAvatar || '' });
       setDraftBarber(buildNewBarberState());
     } else if (activeBarber) {
-      onSave?.(activeBarber);
+      const nextBarber = pendingAvatar !== undefined ? { ...activeBarber, avatarUrl: pendingAvatar || '' } : activeBarber;
+      onSave?.(nextBarber);
     }
     closeEditor();
   };
@@ -1551,7 +1712,13 @@ const BarbersView = ({
       >
         {workingBarber ? (
           <div className="space-y-6">
-            <BarberAvatarPicker value={workingBarber.avatarUrl} onChange={(value) => handleFieldChange('avatarUrl', value)} loadOptions={loadAvatarOptions} />
+            <BarberAvatarPicker
+              value={pendingAvatar || ''}
+              onChange={handleAvatarChange}
+              loadOptions={loadAvatarOptions}
+              onUpload={uploadAvatar}
+              onDelete={deleteAvatar}
+            />
             <div className="space-y-5 rounded-3xl border border-slate-800 bg-slate-950/80 p-6 shadow-inner shadow-black/10">
               <div className="grid grid-cols-2 gap-4">
                 <input
@@ -1646,7 +1813,7 @@ const BarbersView = ({
                           <TimeRangePicker
                             value={timeValue}
                             onChange={(nextValue) => handleSchedulePickerChange(slot, nextValue)}
-                            buttonClassName="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-center text-sm text-white focus:ring-2 focus:ring-indigo-500"
+                            buttonClassName="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-center text-sm text-white whitespace-nowrap focus:ring-2 focus:ring-indigo-500"
                             title="Редактирование времени"
                             placeholder="Время"
                           />
@@ -2045,6 +2212,21 @@ const TimeRangePicker = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [{ start, end }, setDraft] = useState(() => parseTimeRangeValue(value));
+  const buttonStyle = useMemo(() => {
+    const label = value || placeholder || '';
+    const length = label.length;
+    const style = {};
+    if (length > 9 && length <= 14) {
+      style.fontSize = '0.8rem';
+    } else if (length > 14) {
+      style.fontSize = '0.7rem';
+      style.letterSpacing = '-0.01em';
+    }
+    if (buttonClassName.includes('text-center')) {
+      style.textAlign = 'center';
+    }
+    return Object.keys(style).length ? style : undefined;
+  }, [value, placeholder, buttonClassName]);
 
   const normalizeHourValue = (inputValue) => {
     if (!inputValue) return '';
@@ -2071,7 +2253,7 @@ const TimeRangePicker = ({
 
   return (
     <>
-      <button type="button" onClick={handleOpen} className={buttonClassName}>
+      <button type="button" onClick={handleOpen} className={buttonClassName} style={buttonStyle}>
         {value ? value : placeholder}
       </button>
       <Modal
@@ -3762,6 +3944,8 @@ const TablesWorkspace = ({
   preferredTable = null,
   onPreferredTableConsumed,
   onRequestConfirm = null,
+  uploadAvatar,
+  deleteAvatar,
 }) => {
   const [activeTable, setActiveTable] = useLocalStorage('tables.active', 'Appointments');
   const [tables, setTables] = useState(() => DATA_TABLES.reduce((acc, table) => ({ ...acc, [table]: [] }), {}));
@@ -4041,6 +4225,8 @@ const TablesWorkspace = ({
     [apiRequest]
   );
 
+  const loadAvatarAssets = useCallback(() => apiRequest('/assets/avatars'), [apiRequest]);
+
   const tableSettings = TABLE_CONFIG[activeTable] || {};
   const isCustomTable = tableSettings?.mode === 'custom';
 
@@ -4071,7 +4257,9 @@ const TablesWorkspace = ({
               onSave={onSaveBarber}
               onAdd={onAddBarber}
               onDelete={onDeleteBarber}
-              loadAvatarOptions={() => apiRequest('/assets/avatars')}
+              loadAvatarOptions={loadAvatarAssets}
+              uploadAvatar={uploadAvatar}
+              deleteAvatar={deleteAvatar}
               onScheduleUpdate={(recordId, payload) => handleUpdate(recordId, payload, { tableId: 'Schedules' })}
             />
           )}
@@ -4223,6 +4411,18 @@ const BotControlView = ({
     return () => cancelAnimationFrame(frame);
   }, [viewMode, description, about, autosizeTextArea]);
 
+  const updateAvailable = Boolean(updateInfo?.available ?? updateInfo?.updateAvailable);
+  const currentVersionLabel = updateInfo?.currentVersion || updateInfo?.version || '—';
+  const latestVersionLabel = updateInfo?.latestVersion || updateInfo?.version || '—';
+  const checkedAtLabel = updateInfo?.checkedAt ? formatDate(updateInfo.checkedAt) : '—';
+  const publishedAtLabel = updateInfo?.publishedAt ? formatDate(updateInfo.publishedAt) : null;
+  const updateStatusLabel =
+    updateInfo?.details ||
+    (updateAvailable ? 'Доступно обновление' : updateInfo ? 'Установлена актуальная версия' : 'Нет данных');
+  const updateSourceLabel = updateInfo?.source || null;
+  const updateSourceUrl = updateInfo?.sourceUrl || null;
+  const botRunning = Boolean(status?.running);
+
   if (viewMode === 'system') {
     return (
       <div className="space-y-6">
@@ -4233,16 +4433,29 @@ const BotControlView = ({
             <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
               <p className="font-semibold">Лицензия</p>
               <p className="mt-1">Статус: {licenseStatus?.valid ? 'Активна' : 'Не подтверждена'}</p>
-              <p>Комментарий: {licenseStatus?.message || 'Нет данных'}</p>
               {licenseStatus?.license?.owner && <p>Владелец: {licenseStatus.license.owner}</p>}
               {licenseStatus?.license?.expiresAt && <p>Действует до {formatDate(licenseStatus.license.expiresAt)}</p>}
               {licenseStatus?.license?.number && <p>Номер: {licenseStatus.license.number}</p>}
             </div>
             <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
               <p className="font-semibold">Обновления</p>
-              <p className="mt-1">Последняя версия: {updateInfo?.version || '—'}</p>
-              <p>Проверено: {updateInfo?.checkedAt ? formatDate(updateInfo.checkedAt) : '—'}</p>
-              <p>Статус: {updateInfo?.details || 'Нет данных'}</p>
+              <p className="mt-1">Текущая версия: {currentVersionLabel}</p>
+              <p>Доступная версия: {latestVersionLabel}</p>
+              <p>Проверено: {checkedAtLabel}</p>
+              {publishedAtLabel && <p>Релиз: {publishedAtLabel}</p>}
+              <p>Статус: {updateStatusLabel}</p>
+              {updateSourceLabel && (
+                <p>
+                  Источник:{' '}
+                  {updateSourceUrl ? (
+                    <a href={updateSourceUrl} className="text-indigo-300 hover:text-indigo-100" target="_blank" rel="noreferrer">
+                      {updateSourceLabel}
+                    </a>
+                  ) : (
+                    updateSourceLabel
+                  )}
+                </p>
+              )}
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   onClick={onRefreshUpdate}
@@ -4253,7 +4466,7 @@ const BotControlView = ({
                 </button>
                 <button
                   onClick={onApplyUpdate}
-                  disabled={systemBusy || !updateInfo?.available}
+                  disabled={systemBusy || !updateAvailable}
                   className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {systemBusy ? 'Обновление…' : 'Обновить'}
@@ -4273,19 +4486,23 @@ const BotControlView = ({
         title="Статус бота"
         actions={
           <div className="flex gap-2 text-sm">
-            <button onClick={onStart} className="rounded-lg bg-emerald-600 px-3 py-1 text-white">
-              Запустить
-            </button>
-            <button onClick={onStop} className="rounded-lg bg-rose-600 px-3 py-1 text-white">
-              Остановить
-            </button>
+            {!botRunning && (
+              <button onClick={onStart} className="rounded-lg bg-emerald-600 px-3 py-1 text-white">
+                Запустить
+              </button>
+            )}
+            {botRunning && (
+              <button onClick={onStop} className="rounded-lg bg-rose-600 px-3 py-1 text-white">
+                Остановить
+              </button>
+            )}
             <button onClick={onRestart} className="rounded-lg bg-slate-600 px-3 py-1 text-white">
               Перезапустить
             </button>
           </div>
         }
       >
-        <p className="text-slate-300">Состоя: {status?.running ? 'работает' : 'остановлен'}</p>
+        <p className="text-slate-300">Состояние: {status?.running ? 'работает' : 'остановлен'}</p>
         <label className="mt-3 inline-flex items-center gap-2 text-slate-300">
           <input type="checkbox" checked={settings?.isBotEnabled !== false} onChange={(event) => onToggleEnabled(event.target.checked)} />
           Автостарт вместе с CRM
@@ -4619,7 +4836,7 @@ const App = () => {
       setBotStatus(botState.status);
       setBotMessages(botMessagesPayload || []);
       setLicenseStatus(license);
-      setUpdateInfo(update);
+      setUpdateInfo(normalizeUpdateInfo(update));
       const normalizedOptions = { ...options, statuses: normalizeStatusList(options.statuses || []) };
       setOptionsCache(normalizedOptions);
     } catch (error) {
@@ -4904,6 +5121,32 @@ const App = () => {
     [services, scheduleServiceAutosave]
   );
 
+  const handleUploadAvatar = useCallback(
+    async ({ name, data }) => {
+      if (!name || !data) {
+        throw new Error('�� 㤠���� ���࠭��� ����');
+      }
+      return apiRequest('/assets/avatars/upload', {
+        method: 'POST',
+        body: JSON.stringify({ name, data }),
+      });
+    },
+    [apiRequest]
+  );
+
+  const handleDeleteAvatar = useCallback(
+    async (filename) => {
+      if (!filename) {
+        throw new Error('�� 㤠���� �롮��� ��� � ���');
+      }
+      return apiRequest('/assets/avatars', {
+        method: 'DELETE',
+        body: JSON.stringify({ filename }),
+      });
+    },
+    [apiRequest]
+  );
+
   const handleBotToggle = async (enabled) => {
     try {
       await apiRequest('/bot/status', { method: 'POST', body: JSON.stringify({ isBotEnabled: enabled }) });
@@ -5121,7 +5364,7 @@ const App = () => {
     setSystemBusy(true);
     try {
       const info = await apiRequest('/system/update?force=1');
-      setUpdateInfo(info);
+      setUpdateInfo(normalizeUpdateInfo(info));
     } catch (error) {
       setGlobalError(error.message || 'Не удалось проверить обновления');
     } finally {
@@ -5140,7 +5383,7 @@ const App = () => {
     setSystemBusy(true);
     try {
       const result = await apiRequest('/system/update', { method: 'POST' });
-      setUpdateInfo(result.info || result);
+      setUpdateInfo(normalizeUpdateInfo(result.info || result));
       fetchAll();
     } catch (error) {
       setGlobalError(error.message || 'Не удалось применить обновление');
@@ -5197,6 +5440,8 @@ const App = () => {
             preferredTable={preferredTableTarget}
             onPreferredTableConsumed={handlePreferredTableConsumed}
             onRequestConfirm={requestConfirm}
+            uploadAvatar={handleUploadAvatar}
+            deleteAvatar={handleDeleteAvatar}
           />
         );
       case 'bot':

@@ -10,6 +10,7 @@ const fetch =
 
 const UPDATE_REPO = process.env.UPDATE_REPO || 'HalfyDay/Barber-Bot';
 const UPDATE_BRANCH = process.env.UPDATE_BRANCH || 'main';
+const UPDATE_REMOTE = process.env.UPDATE_REMOTE || 'origin';
 const UPDATE_CACHE_SECONDS = Number(process.env.UPDATE_CACHE_SECONDS || 600);
 
 let cachedUpdate = null;
@@ -46,6 +47,9 @@ const fetchLatestRelease = async () => {
   const response = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
     headers: { 'User-Agent': 'BarberBot-Updater' },
   });
+  if (response.status === 404) {
+    return null;
+  }
   if (!response.ok) {
     throw new Error(`GitHub API error: ${response.status}`);
   }
@@ -58,6 +62,7 @@ const fetchLatestRelease = async () => {
     publishedAt: payload.published_at,
     url: payload.html_url,
     source: 'release',
+    commit: payload.target_commitish || null,
   };
 };
 
@@ -74,7 +79,17 @@ const fetchBranchHead = async () => {
     publishedAt: payload.commit?.author?.date,
     url: payload.html_url,
     source: 'branch',
+    commit: payload.sha || null,
   };
+};
+
+const getLocalCommitHash = async () => {
+  try {
+    const { stdout } = await runCommand('git rev-parse HEAD');
+    return stdout.trim();
+  } catch {
+    return null;
+  }
 };
 
 const checkForUpdates = async (force = false) => {
@@ -84,43 +99,65 @@ const checkForUpdates = async (force = false) => {
     return cachedUpdate.data;
   }
 
-  let latest;
+  let releaseInfo = null;
+  let branchInfo = null;
   let note = null;
 
   try {
-    latest = await fetchLatestRelease();
-  } catch (releaseError) {
-    note = '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u0440\u0435\u043b\u0438\u0437: ' + releaseError.message;
-    console.warn('[updates] ' + note);
-    try {
-      latest = await fetchBranchHead();
-    } catch (branchError) {
-      console.error('[updates] \u041e\u0448\u0438\u0431\u043a\u0430 \u043f\u0440\u0438 \u0437\u0430\u043f\u0440\u043e\u0441\u0435 \u0432\u0435\u0442\u043a\u0438:', branchError);
-      throw new Error(
-        branchError.message || '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f GitHub.',
-      );
+    releaseInfo = await fetchLatestRelease();
+    if (!releaseInfo) {
+      note = '\u0420\u0435\u043b\u0438\u0437\u044b \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u044b, \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u043c \u0432\u0435\u0442\u043a\u0443.';
     }
+  } catch (releaseError) {
+    note =
+      '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u0440\u0435\u043b\u0438\u0437: ' +
+      releaseError.message;
+    console.warn('[updates] ' + note);
   }
 
+  try {
+    branchInfo = await fetchBranchHead();
+  } catch (branchError) {
+    console.error('[updates] \u041e\u0448\u0438\u0431\u043a\u0430 \u043f\u0440\u0438 \u0437\u0430\u043f\u0440\u043e\u0441\u0435 \u0432\u0435\u0442\u043a\u0438:', branchError);
+    throw new Error(
+      branchError.message ||
+        '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f GitHub.',
+    );
+  }
+
+  const latestSnapshot = releaseInfo || branchInfo;
   const currentVersion = packageJson.version || '0.0.0';
-  const updateAvailable = compareVersions(currentVersion, latest.version) < 0;
+  const latestVersion = latestSnapshot?.version || currentVersion;
+  const currentCommit = await getLocalCommitHash();
+  const latestCommit = branchInfo?.commit || releaseInfo?.commit || null;
+  const versionComparison = compareVersions(currentVersion, latestVersion);
+  const commitDiff = Boolean(latestCommit && currentCommit && latestCommit !== currentCommit);
+  const updateAvailable = versionComparison < 0 || commitDiff;
   const info = {
     currentVersion,
-    latestVersion: latest.version,
+    latestVersion,
     updateAvailable,
+    commitChanged: commitDiff,
+    currentCommit,
+    latestCommit,
     checkedAt: new Date().toISOString(),
-    publishedAt: latest.publishedAt,
-    sourceUrl: latest.url,
-    source: latest.source,
+    publishedAt: latestSnapshot?.publishedAt || branchInfo?.publishedAt || null,
+    sourceUrl: latestSnapshot?.url || branchInfo?.url || null,
+    source: latestSnapshot?.source || branchInfo?.source || 'branch',
     note,
+    details: updateAvailable
+      ? commitDiff && versionComparison >= 0
+        ? '\u041d\u0430 \u0443\u0434\u0430\u043b\u0451\u043d\u043d\u043e\u0439 \u0432\u0435\u0442\u043a\u0435 \u0435\u0441\u0442\u044c \u043d\u043e\u0432\u044b\u0435 \u0444\u0430\u0439\u043b\u044b'
+        : '\u0414\u043e\u0441\u0442\u0443\u043f\u043d\u0430 \u043d\u043e\u0432\u0430\u044f \u0432\u0435\u0440\u0441\u0438\u044f'
+      : '\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439 \u043d\u0435 \u043e\u0431\u043d\u0430\u0440\u0443\u0436\u0435\u043d\u043e',
   };
   cachedUpdate = { timestamp: Date.now(), data: info };
   return info;
 };
 
 const applyUpdate = async () => {
-  await runCommand('git fetch --tags');
-  await runCommand(`git pull origin ${UPDATE_BRANCH}`);
+  await runCommand(`git fetch ${UPDATE_REMOTE} --tags`);
+  await runCommand(`git pull ${UPDATE_REMOTE} ${UPDATE_BRANCH}`);
   await runCommand('npm install --omit=dev');
   const python = process.env.BOT_PYTHON_PATH || (os.platform() === 'win32' ? 'python' : 'python3');
   if (fs.existsSync(path.join(process.cwd(), 'requirements.txt'))) {

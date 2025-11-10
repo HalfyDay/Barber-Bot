@@ -151,7 +151,7 @@ def load_bot_settings(force: bool = False) -> dict:
     return base_settings
 
 def load_barbers(include_inactive: bool = False, force: bool = False) -> list[dict]:
-    """���������� ������ �������� �� ������� Barbers (��� ��������)."""
+    """Возвращает список барберов из таблицы Barbers (без фильтров)."""
     now_ts = time.time()
     cache_entry = BARBER_CACHE[include_inactive]
     if not force and cache_entry["data"] and _cached(now_ts, cache_entry):
@@ -238,12 +238,12 @@ def load_services(force: bool = False) -> tuple[list[dict], str | None]:
                 cursor.execute(
                     """
                     SELECT
-                        "�?�?�>�?�?��" as Uslugi,
-                        "�"�>��'��>�?�?�?�?�'�?" as Dlitelnost,
-                        "����?�?�?" as Timur,
-                        "�'�>���?��?��?" as Vladimir,
-                        "�?�>��?��" as Alina,
-                        "�?�>���?���" as Aleksey
+                        "Услуги" as Uslugi,
+                        "Длительность" as Dlitelnost,
+                        "Тимур" as Timur,
+                        "Владимир" as Vladimir,
+                        "Алина" as Alina,
+                        "Алексей" as Aleksey
                     FROM Cost
                 """
                 )
@@ -433,7 +433,8 @@ def parse_appointment_start(
 async def safe_upsert_menu(
     ctx, chat_id, msg_id, photo_bytes: bytes, caption: str, reply_markup
 ):
-    """Безопасно обновляет или пересоздает сообщение с меню."""
+    """Safely updates the bot message or sends a new one if editing fails."""
+    target = (chat_id, msg_id)
     try:
         media = InputMediaPhoto(
             io.BytesIO(photo_bytes), caption=caption, parse_mode="HTML"
@@ -445,7 +446,7 @@ async def safe_upsert_menu(
         if "message to edit not found" in str(e) or "Message is not modified" in str(e):
             try:
                 await ctx.bot.delete_message(chat_id, msg_id)
-            except:
+            except Exception:
                 pass
             msg = await ctx.bot.send_photo(
                 chat_id,
@@ -454,9 +455,12 @@ async def safe_upsert_menu(
                 parse_mode="HTML",
                 reply_markup=reply_markup,
             )
-            ctx.user_data["bot_msg"] = (chat_id, msg.message_id)
+            target = (chat_id, msg.message_id)
         else:
-            logger.error(f"Ошибка при обновлении меню: {e}")
+            logger.error(f"Failed to update menu: {e}")
+    ctx.user_data["bot_msg"] = target
+    return target
+
 
 # --- Логика напоминаний ---
 
@@ -714,6 +718,32 @@ def can_fit(start_min: int, duration: int, intervals: list[tuple[int, int]]) -> 
             return False
     return end_min <= 24 * 60
 
+def has_future_slots(barber_name: str, duration_min: int) -> bool:
+    """Проверяет, есть ли у барбера свободные окна в ближайшие дни."""
+    duration = max(int(duration_min or 0), 15)
+    today = datetime.date.today()
+    now = datetime.datetime.now(tz=ZONE)
+    min_allowed = now + datetime.timedelta(hours=get_min_lead_hours())
+    max_days = get_max_days_ahead()
+    for offset in range(max_days):
+        date_obj = today + datetime.timedelta(days=offset)
+        date_str = date_obj.isoformat()
+        working_hours = get_working_hours(barber_name, date_str)
+        if not working_hours:
+            continue
+        start_day, end_day = working_hours
+        if end_day - start_day < duration:
+            continue
+        busy = get_busy_intervals(barber_name, date_str)
+        for minute in range(start_day, end_day - duration + 1, 60):
+            slot_dt_naive = datetime.datetime.fromisoformat(
+                f"{date_str}T{minute//60:02d}:{minute%60:02d}"
+            )
+            slot_dt = slot_dt_naive.replace(tzinfo=ZONE)
+            if slot_dt >= min_allowed and can_fit(minute, duration, busy):
+                return True
+    return False
+
 def main_menu_kb(user_id: int):
     """Генерирует клавиатуру главного меню в зависимости от состояния пользователя."""
     book_button = InlineKeyboardButton("✂️ Записаться", callback_data="menu_book")
@@ -881,7 +911,7 @@ async def show_profile(
                 ),
                 InlineKeyboardButton("✏️ Сменить номер", callback_data="profile_change"),
             ],
-            [InlineKeyboardButton("🔙 Главное меню", callback_data="menu_main")],
+            [InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")],
         ]
     )
     await safe_upsert_menu(
@@ -1037,7 +1067,7 @@ async def show_records(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                         callback_data=f"cancel|{f['id']}",
                     )
                 ])
-            kb.append([InlineKeyboardButton("🔙 Главное меню", callback_data="menu_main")])
+            kb.append([InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")])
             await safe_upsert_menu(
                 ctx, chat_id, msg_id, IMAGE_BYTES, text, InlineKeyboardMarkup(kb)
             )
@@ -1073,7 +1103,7 @@ async def show_records(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                     ]
                 )
             kb.append(
-                [InlineKeyboardButton("🔙 Главное меню", callback_data="menu_main")]
+                [InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")]
             )
             await safe_upsert_menu(
                 ctx, chat_id, msg_id, IMAGE_BYTES, text, InlineKeyboardMarkup(kb)
@@ -1168,34 +1198,23 @@ async def cancel_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def profile_change_name_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    last_changed = None
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT LastNameChanged FROM Users WHERE TelegramID = ?",
-            (query.from_user.id,),
-        )
-        rec = cursor.fetchone()
-        if rec:
-            last_changed = rec["LastNameChanged"]
-    if last_changed:
-        try:
-            last_date = datetime.date.fromisoformat(last_changed)
-            days = (datetime.date.today() - last_date).days
-            if days < 7:
-                await query.answer(
-                    f"Сменить имя можно не чаще раза в неделю.\nПрошло только {days} дн.",
-                    show_alert=True,
-                )
-                return MENU
-        except (ValueError, TypeError):
-            pass  # гнорируем некорректную дату
+    chat_id, msg_id = ctx.user_data.get(
+        "bot_msg", (query.message.chat_id, query.message.message_id)
+    )
+    ctx.user_data["bot_msg"] = (chat_id, msg_id)
     await safe_upsert_menu(
         ctx,
-        *ctx.user_data["bot_msg"],
+        chat_id,
+        msg_id,
         photo_bytes=IMAGE_BYTES,
-        caption="<b>Введите новое ФО:</b>",
-        reply_markup=None,
+        caption=(
+            "<b>\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043d\u043e\u0432\u043e\u0435 \u0424\u0418\u041e:</b>\n\n"
+            "\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u0438\u043c\u044f \u0438 \u0444\u0430\u043c\u0438\u043b\u0438\u044e \u043e\u0434\u043d\u0438\u043c \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435\u043c.\n"
+            "\u0415\u0441\u043b\u0438 \u043f\u0435\u0440\u0435\u0434\u0443\u043c\u0430\u043b\u0438, \u043d\u0430\u0436\u043c\u0438\u0442\u0435 \u043a\u043d\u043e\u043f\u043a\u0443 \u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c."
+        ),
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("\u274c \u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", callback_data="cancel_change_name")]]
+        ),
     )
     return CHANGE_NAME
 
@@ -1216,17 +1235,32 @@ async def change_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await show_profile(ctx, chat_id, msg_id, update.effective_user.id)
     return MENU
 
+async def cancel_change_name_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Отменяет смену имени и возвращает профиль."""
+    query = update.callback_query
+    await query.answer("Изменение имени отменено.")
+    fallback_target = (query.message.chat_id, query.message.message_id)
+    chat_id, msg_id = ctx.user_data.get("bot_msg", fallback_target)
+    await show_profile(ctx, chat_id, msg_id, query.from_user.id)
+    return MENU
+
 async def profile_change_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     chat_id, msg_id = query.message.chat_id, query.message.message_id
+    ctx.user_data["bot_msg"] = (chat_id, msg_id)
     await safe_upsert_menu(
         ctx,
         chat_id,
         msg_id,
         IMAGE_BYTES,
-        "<b>Сменить номер</b>\nПоделитесь контактом или введите вручную:",
-        None,
+        (
+            "<b>Сменить номер</b>\nПоделитесь контактом или введите вручную.\n"
+            "Если передумали, нажмите кнопку Отменить."
+        ),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("❌ Отменить", callback_data="cancel_change_phone")]]
+        ),
     )
     sent = await ctx.bot.send_message(
         chat_id, "Введите новый номер:", reply_markup=contact_kb()
@@ -1256,6 +1290,22 @@ async def change_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await ctx.bot.delete_message(chat_id, ctx.user_data.get("last_prompt"))
     chat_id, msg_id = ctx.user_data["bot_msg"]
     await show_profile(ctx, chat_id, msg_id, update.effective_user.id)
+    return MENU
+
+async def cancel_change_phone_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Отменяет смену номера телефона."""
+    query = update.callback_query
+    await query.answer("Изменение номера отменено.")
+    chat_id = query.message.chat_id
+    prompt_id = ctx.user_data.pop("last_prompt", None)
+    if prompt_id:
+        try:
+            await ctx.bot.delete_message(chat_id, prompt_id)
+        except BadRequest:
+            pass
+    fallback_target = (chat_id, query.message.message_id)
+    target_chat, target_msg = ctx.user_data.get("bot_msg", fallback_target)
+    await show_profile(ctx, target_chat, target_msg, query.from_user.id)
     return MENU
 
 def build_services_view(ctx) -> tuple[str, InlineKeyboardMarkup]:
@@ -1306,7 +1356,6 @@ def build_services_view(ctx) -> tuple[str, InlineKeyboardMarkup]:
 
 async def book_barber_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     _, barber_token = query.data.split("|", 1)
     barbers_lookup = ctx.user_data.get("barbers_lookup")
     if not barbers_lookup:
@@ -1324,7 +1373,7 @@ async def book_barber_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not selected:
         await query.answer("Барбер не найден. Обновите панель.", show_alert=True)
         return MENU
-    ctx.user_data["barber"] = selected
+    ctx.user_data.pop("barber", None)
     services, services_version = load_services(force=True)
     ctx.user_data["all_services"] = services
     ctx.user_data["services_version"] = services_version
@@ -1333,21 +1382,41 @@ async def book_barber_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data.pop("total_duration", None)
     ctx.user_data.pop("date", None)
     ctx.user_data.pop("time_range", None)
-    has_available = any(
-        (svc["prices"].get(selected["name"]) or 0) > 0 for svc in services
-    )
-    if not has_available:
+    available_services = [
+        svc for svc in services if (svc["prices"].get(selected["name"]) or 0) > 0
+    ]
+    if not available_services:
+        chat_id, msg_id = ctx.user_data.get(
+            "bot_msg", (query.message.chat_id, query.message.message_id)
+        )
+        ctx.user_data["bot_msg"] = (chat_id, msg_id)
         await safe_upsert_menu(
             ctx,
-            *ctx.user_data["bot_msg"],
+            chat_id,
+            msg_id,
             photo_bytes=IMAGE_BYTES,
             caption=f"❗ У барбера {selected['name']} пока нет доступных услуг.",
             reply_markup=main_menu_kb(query.from_user.id),
         )
+        await query.answer()
         return MENU
+    durations = [
+        int(svc.get("duration") or 0)
+        for svc in available_services
+        if int(svc.get("duration") or 0) > 0
+    ]
+    min_duration = min(durations, default=0) or 30
+    if not has_future_slots(selected["name"], min_duration):
+        await query.answer(
+            f"⚠️ У барбера {selected['name']} нет свободных слотов в ближайшие дни.",
+            show_alert=True,
+        )
+        return BOOK_BARBER
+    ctx.user_data["barber"] = selected
     caption, markup = build_services_view(ctx)
     chat_id, msg_id = query.message.chat_id, query.message.message_id
     img_bytes = get_barber_photo_bytes(selected)
+    await query.answer()
     await safe_upsert_menu(
         ctx,
         chat_id,
@@ -1430,11 +1499,16 @@ async def show_available_dates(query, ctx) -> int:
         if has_slot:
             available_dates.append(date_str)
     if not available_dates:
+        chat_id, msg_id = ctx.user_data.get(
+            "bot_msg", (query.message.chat_id, query.message.message_id)
+        )
+        ctx.user_data["bot_msg"] = (chat_id, msg_id)
         await safe_upsert_menu(
             ctx,
-            *ctx.user_data["bot_msg"],
+            chat_id,
+            msg_id,
             photo_bytes=IMAGE_BYTES,
-            caption="? На ближайшие дни свободных слотов нет.",
+            caption="❌ На ближайшие дни свободных слотов нет.",
             reply_markup=main_menu_kb(query.from_user.id),
         )
         return MENU
@@ -1449,8 +1523,8 @@ async def show_available_dates(query, ctx) -> int:
                 for d in chunk
             ]
         )
-    rows.append([InlineKeyboardButton("? Назад", callback_data="book_back_services")])
-    rows.append([InlineKeyboardButton("← Главное меню", callback_data="menu_main")])
+    rows.append([InlineKeyboardButton("⬅ Назад", callback_data="book_back_services")])
+    rows.append([InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")])
     caption = f"<b>3-й шаг: выберите дату:</b>\n\nДлительность: <b>{total_min} мин</b>"
     await query.answer()
     await ctx.bot.edit_message_caption(
@@ -1765,11 +1839,19 @@ def main():
                 CallbackQueryHandler(cancel_confirm_cb, pattern="^cancel_confirm"),
             ],
             CHANGE_PHONE: [
+                CallbackQueryHandler(
+                    cancel_change_phone_cb, pattern="^cancel_change_phone$"
+                ),
                 MessageHandler(
                     (filters.TEXT | filters.CONTACT) & ~filters.COMMAND, change_phone
                 )
             ],
-            CHANGE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, change_name)],
+            CHANGE_NAME: [
+                CallbackQueryHandler(
+                    cancel_change_name_cb, pattern="^cancel_change_name$"
+                ),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, change_name),
+            ],
         },
         fallbacks=[CommandHandler("start", start)],
         allow_reentry=True,

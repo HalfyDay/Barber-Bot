@@ -118,6 +118,14 @@ const defaultConfirmState = {
   cancelLabel: 'Отмена',
   tone: 'neutral',
 };
+const buildAppointmentModalState = () => ({
+  open: false,
+  data: null,
+  options: null,
+  isNew: false,
+  allowDelete: false,
+  context: { appointments: [], schedules: [] },
+});
 const getRecordId = (record = {}) => record.id || record.Id || record.ID || record.recordId || record.ID_Record || null;
 
 const classNames = (...classes) => classes.filter(Boolean).join(' ');
@@ -293,7 +301,11 @@ const formatTelegramHandle = (value) => {
 
 const buildTelegramLink = (value) => {
   const handle = normalizeText(value).replace(/^@+/, '').trim();
-  return handle ? `https://t.me/${handle}` : '';
+  if (!handle) return '';
+  if (/^\d+$/.test(handle)) {
+    return `tg://openmessage?user_id=${handle}`;
+  }
+  return `https://t.me/${handle}`;
 };
 
 const formatDateTime = (date, time) => {
@@ -513,6 +525,34 @@ const resolveAppointmentEndDate = (appointment = {}) => {
   return resolveAppointmentStartDate(appointment);
 };
 
+const ensureRangeEnd = (startDate, endDate, fallbackMinutes = 30) => {
+  if (!startDate) return null;
+  if (endDate && endDate.getTime() > startDate.getTime()) {
+    return endDate;
+  }
+  return new Date(startDate.getTime() + fallbackMinutes * 60000);
+};
+
+const rangesOverlap = (left, right) => {
+  if (!left?.start || !left?.end || !right?.start || !right?.end) return false;
+  return left.start < right.end && right.start < left.end;
+};
+
+const getDateOnlyValue = (value) => normalizeText(value).slice(0, 10);
+
+const getDateWeekdayIndex = (value) => {
+  const safeDate = getDateOnlyValue(value);
+  if (!safeDate) return 7;
+  try {
+    const parsed = new Date(`${safeDate}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return 7;
+    const label = new Intl.DateTimeFormat('ru-RU', { weekday: 'long' }).format(parsed);
+    return getDayIndex(label);
+  } catch {
+    return 7;
+  }
+};
+
 const isActiveAppointmentStatus = (status) => {
   const normalized = normalizeStatusValue(status).toLowerCase();
   if (!normalized) return false;
@@ -611,9 +651,12 @@ const VisitHistoryList = ({
 
 const SectionCard = ({ title, actions, children }) => (
   <div className="space-y-4 rounded-2xl border border-slate-700 bg-slate-800/70 p-6 shadow-lg">
-    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-      <h2 className="text-xl font-semibold text-white">{title}</h2>
-      {actions}
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex w-full flex-wrap items-center gap-3">
+        <h2 className="text-xl font-semibold text-white">{title}</h2>
+        {actions && <div className="ml-auto sm:hidden">{actions}</div>}
+      </div>
+      {actions && <div className="hidden sm:block">{actions}</div>}
     </div>
     {children}
   </div>
@@ -791,8 +834,7 @@ const ConfirmDialog = ({ open, title, message, confirmLabel = 'Подтверд�
         <div className="flex justify-end gap-3">
           <button onClick={() => onResult(false)} className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800">
             {cancelLabel}
-            </button>
-          )}
+          </button>
           <button onClick={() => onResult(true)} className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${confirmToneClass}`}>
             {confirmLabel}
           </button>
@@ -1002,8 +1044,12 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
   }, [formatGroupLabel, upcomingList]);
 
   const upcomingActions = onCreateAppointment ? (
-    <button onClick={onCreateAppointment} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500">
-      + {UI_TEXT.newAppointmentCta}
+    <button
+      onClick={onCreateAppointment}
+      className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500 sm:px-4 whitespace-nowrap"
+    >
+      <span className="sm:hidden">+ Запись</span>
+      <span className="hidden sm:inline">+ Новая запись</span>
     </button>
   ) : null;
 
@@ -3286,6 +3332,8 @@ const ProfileModal = ({ state, onClose }) => {
   const phoneHref = phoneLabel ? `tel:${phoneLabel.replace(/[^\d+]/g, '')}` : '';
   const telegramHandle = user?.TelegramID ? formatTelegramHandle(user.TelegramID) : '';
   const telegramHref = user?.TelegramID ? buildTelegramLink(user.TelegramID) : '';
+  const telegramTarget = telegramHref?.startsWith('tg://') ? '_self' : '_blank';
+  const telegramRel = telegramHref?.startsWith('tg://') ? undefined : 'noopener noreferrer';
 
   return (
     <Modal
@@ -3312,7 +3360,7 @@ const ProfileModal = ({ state, onClose }) => {
             <div>
               <span className="text-slate-400">Telegram:</span>{' '}
               {telegramHandle && telegramHref ? (
-                <a href={telegramHref} target="_blank" rel="noopener noreferrer" className="text-indigo-300 hover:text-indigo-100">
+                <a href={telegramHref} target={telegramTarget} rel={telegramRel} className="text-indigo-300 hover:text-indigo-100">
                   {telegramHandle}
                 </a>
               ) : (
@@ -3376,39 +3424,148 @@ const BackupsPanel = ({ backups = [], onRestore, onCreate, onDelete }) => (
   </SectionCard>
 );
 
-const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, onDelete, canDelete = false, isNew = false, clients = [] }) => {
+const AppointmentModal = ({
+  open,
+  appointment,
+  options = {},
+  appointments = [],
+  schedules = [],
+  onClose,
+  onSave,
+  onDelete,
+  canDelete = false,
+  isNew = false,
+  clients = [],
+}) => {
   const buildDraft = useCallback(
     (record) => (record ? { ...record, UserID: record.UserID || record.userId || '', Status: normalizeStatusValue(record.Status) } : null),
     []
   );
   const [draft, setDraft] = useState(buildDraft(appointment));
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [validationError, setValidationError] = useState('');
+  const [validationWarning, setValidationWarning] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setDraft(buildDraft(appointment));
     setDetailsOpen(false);
+    setValidationError('');
+    setValidationWarning('');
   }, [appointment, buildDraft, open]);
+
+  const currentAppointmentId = appointment ? getRecordId(appointment) : null;
+
+  const validateDraft = useCallback(
+    (nextDraft) => {
+      if (!nextDraft) {
+        return { error: 'Данные записи недоступны.', warning: '' };
+      }
+      const errors = [];
+      const warnings = [];
+      const missingFields = [];
+      const timeParts = parseTimeRangeParts(nextDraft.Time || '');
+      const hasTime = Boolean(timeParts.start);
+      const selectedServices = parseMultiValue(nextDraft.Services);
+      if (!normalizeText(nextDraft.CustomerName)) missingFields.push('клиент');
+      if (!normalizeText(nextDraft.Barber)) missingFields.push('барбер');
+      if (!getDateOnlyValue(nextDraft.Date)) missingFields.push('дата');
+      if (!hasTime) missingFields.push('время');
+      if (!normalizeStatusValue(nextDraft.Status)) missingFields.push('статус');
+      if (!selectedServices.length) missingFields.push('услуга');
+      if (missingFields.length) {
+        errors.push(`Заполните поля: ${missingFields.join(', ')}.`);
+      }
+      const normalizedBarber = normalizeText(nextDraft.Barber).toLowerCase();
+      const dateOnly = getDateOnlyValue(nextDraft.Date);
+      let draftRange = null;
+      if (normalizedBarber && dateOnly && hasTime) {
+        const start = getAppointmentStartDate(nextDraft.Date, nextDraft.Time, nextDraft.startDateTime);
+        if (start) {
+          const end = ensureRangeEnd(start, getAppointmentEndDate(nextDraft.Date, nextDraft.Time, nextDraft.startDateTime));
+          if (end) {
+            draftRange = { start, end };
+          }
+        }
+      }
+      if (draftRange) {
+        const currentId = getRecordId(nextDraft) || currentAppointmentId;
+        const conflictExists = (appointments || []).some((record) => {
+          if (!record) return false;
+          const recordId = getRecordId(record);
+          if (currentId && recordId && String(currentId) === String(recordId)) return false;
+          const recordBarber = normalizeText(record.Barber).toLowerCase();
+          if (recordBarber && normalizedBarber && recordBarber !== normalizedBarber) return false;
+          if (getDateOnlyValue(record.Date) !== dateOnly) return false;
+          if (!isActiveAppointmentStatus(record.Status)) return false;
+          const start = resolveAppointmentStartDate(record);
+          if (!start) return false;
+          const end = ensureRangeEnd(start, resolveAppointmentEndDate(record));
+          if (!end) return false;
+          return rangesOverlap(draftRange, { start, end });
+        });
+        if (conflictExists) {
+          errors.push('На это время уже есть другая запись для выбранного барбера.');
+        }
+      }
+      if (draftRange && (schedules || []).length && normalizedBarber && dateOnly) {
+        const relevantSlots = schedules.filter((slot) => normalizeText(slot.Barber).toLowerCase() === normalizedBarber);
+        if (relevantSlots.length) {
+          const dayIndex = getDateWeekdayIndex(dateOnly);
+          const daySlots = relevantSlots.filter((slot) => {
+            const slotDate = getDateOnlyValue(slot.Date);
+            if (slotDate) return slotDate === dateOnly;
+            return getDayIndex(slot.DayOfWeek) === dayIndex;
+          });
+          if (!daySlots.length) {
+            warnings.push('Барбер не работает в выбранный день. Запись будет вне графика.');
+          } else {
+            const fitsSchedule = daySlots.some((slot) => {
+              const slotTime = slot.Week || slot.Time || '';
+              if (!slotTime) return false;
+              const slotStart = getAppointmentStartDate(slot.Date || dateOnly, slotTime, slot.startDateTime);
+              if (!slotStart) return false;
+              const slotEnd = ensureRangeEnd(slotStart, getAppointmentEndDate(slot.Date || dateOnly, slotTime, slot.startDateTime));
+              if (!slotEnd) return false;
+              return draftRange.start >= slotStart && draftRange.end <= slotEnd;
+            });
+            if (!fitsSchedule) {
+              warnings.push('Выбранное время не входит в рабочую смену барбера. Запись будет создана вне графика.');
+            }
+          }
+        }
+      }
+      return {
+        error: errors.join(' ').trim(),
+        warning: warnings.join(' ').trim(),
+      };
+    },
+    [appointments, schedules, currentAppointmentId]
+  );
 
   if (!open || !draft) return null;
 
   const servicesSelection = parseMultiValue(draft.Services);
   const actionButtonClass = 'rounded-lg px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap sm:px-4 sm:py-2 sm:text-sm';
-  const handleChange = (field, value) => setDraft((prev) => ({ ...prev, [field]: value }));
+  const handleChange = (field, value) => {
+    setValidationError('');
+    setValidationWarning('');
+    setDraft((prev) => ({ ...prev, [field]: value }));
+  };
   const isReminderSent = (value) => value === true || value === 'true' || value === 1 || value === '1';
-  const getReminderLabel = (value) => (isReminderSent(value) ? 'Отправлено' : 'Не отправлено');
+  const getReminderLabel = (value) => (isReminderSent(value) ? 'Напомнено' : 'Не напомнено');
   const getReminderAccent = (value) => (isReminderSent(value) ? 'text-emerald-300' : 'text-slate-500');
   const recordDetails = [
-    { key: 'user', label: 'UserID', value: draft.UserID || '—', accent: draft.UserID ? 'text-white' : 'text-slate-500' },
+    { key: 'user', label: 'UserID', value: draft.UserID || '-', accent: draft.UserID ? 'text-white' : 'text-slate-500' },
     {
       key: 'clientReminder',
-      label: 'Клиенту отправлено (2ч)',
+      label: 'Напоминание клиенту (2ч)',
       value: getReminderLabel(draft.Reminder2hClientSent),
       accent: getReminderAccent(draft.Reminder2hClientSent),
     },
     {
       key: 'barberReminder',
-      label: 'Мастеру отправлено (2ч)',
+      label: 'Напоминание барберу (2ч)',
       value: getReminderLabel(draft.Reminder2hBarberSent),
       accent: getReminderAccent(draft.Reminder2hBarberSent),
     },
@@ -3432,10 +3589,21 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, on
     });
   };
 
-  const handleSubmit = () => submitDraft(draft);
+  const handleSubmit = () => {
+    const { error, warning } = validateDraft(draft);
+    setValidationWarning(warning || '');
+    if (error) {
+      setValidationError(error);
+      return;
+    }
+    setValidationError('');
+    submitDraft(draft);
+  };
 
   const handleMarkCompleted = () => {
     if (!draft) return;
+    setValidationError('');
+    setValidationWarning('');
     const nextDraft = { ...draft, Status: 'Выполнена' };
     setDraft(nextDraft);
     submitDraft(nextDraft);
@@ -3443,6 +3611,8 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, on
 
   const handleClientAutoFill = (client) => {
     if (!client) return;
+    setValidationError('');
+    setValidationWarning('');
     setDraft((prev) => {
       if (!prev) return prev;
       return {
@@ -3484,6 +3654,12 @@ const AppointmentModal = ({ open, appointment, options = {}, onClose, onSave, on
         </div>
       }
     >
+      {validationError && (
+        <div className="mb-4 rounded-xl border border-rose-600 bg-rose-500/10 px-4 py-2 text-sm text-rose-200">{validationError}</div>
+      )}
+      {validationWarning && (
+        <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-400/10 px-4 py-2 text-sm text-amber-200">{validationWarning}</div>
+      )}
       <div className="grid gap-3 mobile-grid-2 md:grid-cols-2">
         <ClientLookupInput
           label="Имя клиента"
@@ -4026,11 +4202,26 @@ const BotControlView = ({
 }) => {
   const [description, setDescription] = useState(settings?.botDescription || '');
   const [about, setAbout] = useState(settings?.aboutText || '');
+  const descriptionRef = useRef(null);
+  const aboutRef = useRef(null);
+  const autosizeTextArea = useCallback((element) => {
+    if (!element) return;
+    element.style.height = 'auto';
+    element.style.height = `${element.scrollHeight}px`;
+  }, []);
 
   useEffect(() => {
     setDescription(settings?.botDescription || '');
     setAbout(settings?.aboutText || '');
   }, [settings]);
+  useLayoutEffect(() => {
+    if (viewMode !== 'bot') return undefined;
+    const frame = requestAnimationFrame(() => {
+      autosizeTextArea(descriptionRef.current);
+      autosizeTextArea(aboutRef.current);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [viewMode, description, about, autosizeTextArea]);
 
   if (viewMode === 'system') {
     return (
@@ -4105,11 +4296,23 @@ const BotControlView = ({
         <div className="space-y-4">
           <div>
             <label className="text-sm text-slate-300">Описание лендинга</label>
-            <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
+            <textarea
+              ref={descriptionRef}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={1}
+              className="w-full resize-none rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+            />
           </div>
           <div>
             <label className="text-sm text-slate-300">Блок «О нас»</label>
-            <textarea value={about} onChange={(event) => setAbout(event.target.value)} rows={4} className="w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
+            <textarea
+              ref={aboutRef}
+              value={about}
+              onChange={(event) => setAbout(event.target.value)}
+              rows={1}
+              className="w-full resize-none rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+            />
           </div>
           <button onClick={() => onSaveSettings({ botDescription: description, aboutText: about })} className="rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-500">
             Сохранить тексты
@@ -4251,7 +4454,7 @@ const App = () => {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [optionsCache, setOptionsCache] = useState(null);
   const [profileModal, setProfileModal] = useState({ open: false, data: null, loading: false });
-  const [appointmentModal, setAppointmentModal] = useState({ open: false, data: null, options: null, isNew: false, allowDelete: false });
+  const [appointmentModal, setAppointmentModal] = useState(buildAppointmentModalState);
   const [loading, setLoading] = useState(false);
   const [globalError, setGlobalError] = useState('');
   const [authError, setAuthError] = useState('');
@@ -4826,43 +5029,61 @@ const App = () => {
     return normalized;
   }, [apiRequest, optionsCache]);
 
+  const fetchAppointmentContext = useCallback(async () => {
+    const [appointmentsList, schedulesList] = await Promise.all([apiRequest('/Appointments'), apiRequest('/Schedules')]);
+    return {
+      appointments: Array.isArray(appointmentsList) ? appointmentsList : [],
+      schedules: Array.isArray(schedulesList) ? schedulesList : [],
+    };
+  }, [apiRequest]);
+
   const handleOpenAppointment = useCallback(
     async (appointment, optionsConfig = {}) => {
-      const options = await ensureOptions();
-      setAppointmentModal({
-        open: true,
-        data: appointment,
-        options,
-        isNew: false,
-        allowDelete: !!optionsConfig.allowDelete,
-      });
+      try {
+        const [options, context] = await Promise.all([ensureOptions(), fetchAppointmentContext()]);
+        setAppointmentModal({
+          open: true,
+          data: appointment,
+          options,
+          context,
+          isNew: false,
+          allowDelete: !!optionsConfig.allowDelete,
+        });
+      } catch (error) {
+        setGlobalError(error.message || 'Не удалось открыть запись');
+      }
     },
-    [ensureOptions]
+    [ensureOptions, fetchAppointmentContext, setGlobalError]
   );
 
   const handleCreateAppointment = useCallback(async () => {
-    const options = await ensureOptions();
-    const today = new Date().toISOString().slice(0, 10);
-    const defaultStatus = normalizeStatusValue(options.statuses?.[0] || 'Активная');
-    const defaultBarber = pickBarberForUser(session, options.barbers || []);
-    setAppointmentModal({
-      open: true,
-      data: {
-        id: null,
-        CustomerName: '',
-        Phone: '',
-        Barber: defaultBarber,
-        Date: today,
-        Time: '',
-        Status: defaultStatus,
-        Services: '',
-        UserID: '',
-      },
-      options,
-      isNew: true,
-      allowDelete: false,
-    });
-  }, [ensureOptions, session?.displayName, session?.username]);
+    try {
+      const [options, context] = await Promise.all([ensureOptions(), fetchAppointmentContext()]);
+      const today = new Date().toISOString().slice(0, 10);
+      const defaultStatus = normalizeStatusValue(options.statuses?.[0] || 'Активная');
+      const defaultBarber = pickBarberForUser(session, options.barbers || []);
+      setAppointmentModal({
+        open: true,
+        data: {
+          id: null,
+          CustomerName: '',
+          Phone: '',
+          Barber: defaultBarber,
+          Date: today,
+          Time: '',
+          Status: defaultStatus,
+          Services: '',
+          UserID: '',
+        },
+        options,
+        context,
+        isNew: true,
+        allowDelete: false,
+      });
+    } catch (error) {
+      setGlobalError(error.message || 'Не удалось начать создание записи');
+    }
+  }, [ensureOptions, fetchAppointmentContext, session, setGlobalError]);
 
   const handleSaveAppointment = async ({ id, payload, isNew }) => {
     try {
@@ -4871,7 +5092,7 @@ const App = () => {
       } else if (id) {
         await apiRequest(`/Appointments/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
       }
-      setAppointmentModal((prev) => ({ ...prev, open: false, data: null, isNew: false, allowDelete: false }));
+      setAppointmentModal(buildAppointmentModalState());
       fetchAll();
     } catch (error) {
       setGlobalError(error.message || 'Не удалось сохранить запись');
@@ -4889,7 +5110,7 @@ const App = () => {
     if (!confirmed) return;
     try {
       await apiRequest(`/Appointments/${encodeURIComponent(appointment.id)}`, { method: 'DELETE' });
-      setAppointmentModal({ open: false, data: null, options: null, isNew: false, allowDelete: false });
+      setAppointmentModal(buildAppointmentModalState());
       fetchAll();
     } catch (error) {
       setGlobalError(error.message || 'Не удалось удалить запись');
@@ -5108,7 +5329,9 @@ const App = () => {
         open={appointmentModal.open}
         appointment={appointmentModal.data}
         options={appointmentModal.options || optionsCache || {}}
-        onClose={() => setAppointmentModal((prev) => ({ ...prev, open: false, data: null, isNew: false, allowDelete: false }))}
+        appointments={appointmentModal.context?.appointments || []}
+        schedules={appointmentModal.context?.schedules || []}
+        onClose={() => setAppointmentModal(buildAppointmentModalState())}
         onSave={handleSaveAppointment}
         isNew={appointmentModal.isNew}
         clients={dashboard?.clients || []}

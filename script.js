@@ -23,7 +23,6 @@ const VIEW_TABS_BY_ROLE = {
   [ROLE_OWNER]: [
     { id: 'dashboard', label: 'Обзор' },
     { id: 'tables', label: 'Данные' },
-    { id: 'bot', label: 'Бот' },
     { id: 'system', label: 'Система' },
   ],
   [ROLE_STAFF]: [
@@ -890,10 +889,13 @@ const IconDots = ({ className = 'h-5 w-5' }) => (
 const VIEW_TAB_ICONS = {
   dashboard: IconDashboard,
   tables: IconData,
-  bot: IconBot,
   system: IconSystem,
   profile: IconProfile,
 };
+const SYSTEM_SUB_SECTIONS = Object.freeze([
+  { id: 'bot', label: 'Бот' },
+  { id: 'system', label: 'Система' },
+]);
 
 const UI_TEXT = Object.freeze({
   accountTitle: 'Ваш аккаунт',
@@ -971,6 +973,8 @@ const Sidebar = ({
   onSelectTable,
   tabs,
   tableShortcuts,
+  systemSection = 'bot',
+  onSelectSystemSection,
 }) => {
   const username = session?.displayName || session?.username || '-';
   const sidebarTabs = Array.isArray(tabs) && tabs.length ? tabs : VIEW_TABS_BY_ROLE[ROLE_OWNER];
@@ -1032,6 +1036,30 @@ const Sidebar = ({
                   })}
                 </div>
               )}
+              {tab.id === 'system' && (
+                <div className="space-y-1 pl-4">
+                  {SYSTEM_SUB_SECTIONS.map((section) => {
+                    const isSectionActive = isActive && systemSection === section.id;
+                    return (
+                      <button
+                        key={section.id}
+                        onClick={() => {
+                          onChange?.('system');
+                          onSelectSystemSection?.(section.id);
+                        }}
+                        className={classNames(
+                          'w-full rounded-lg px-3 py-2 text-left text-xs font-semibold transition',
+                          isSectionActive
+                            ? 'bg-indigo-600/20 text-indigo-100'
+                            : 'text-slate-400 hover:bg-slate-900/60 hover:text-white'
+                        )}
+                      >
+                        {section.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
@@ -1050,8 +1078,17 @@ const MobileTabs = ({
   tabs,
 }) => {
   const username = session?.displayName || session?.username || '-';
+  const [showLogoutMenu, setShowLogoutMenu] = useState(false);
   const handleSelect = (tabId) => onChange?.(tabId);
   const availableTabs = Array.isArray(tabs) && tabs.length ? tabs : VIEW_TABS_BY_ROLE[ROLE_OWNER];
+  const handleToggleLogoutMenu = () => setShowLogoutMenu((prev) => !prev);
+  const handleLogoutClick = () => {
+    setShowLogoutMenu(false);
+    onLogout?.();
+  };
+  useEffect(() => {
+    setShowLogoutMenu(false);
+  }, [activeTab]);
   const renderLiveIndicator = () =>
     liveStatus === 'unknown' && !liveUpdatedAt ? (
       <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">{UI_TEXT.liveFallback}</span>
@@ -1062,20 +1099,48 @@ const MobileTabs = ({
   return (
     <>
       <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/80 backdrop-blur lg:hidden">
-        <div className="flex items-center justify-between gap-3 px-4 py-3">
-          <div className="flex min-w-[88px] justify-start">
-            {renderLiveIndicator()}
-          </div>
-          <div className="flex flex-1 items-center justify-end text-right">
-            <p className="text-base font-semibold text-white max-w-[60vw] truncate">{username}</p>
-          </div>
-          <div className="flex min-w-[96px] justify-end">
-            <button
-              onClick={onLogout}
-              className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-rose-200 hover:border-rose-400 hover:text-white whitespace-nowrap"
-            >
-              {UI_TEXT.logout}
-            </button>
+        <div className="relative px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-[88px] justify-start">
+              {renderLiveIndicator()}
+            </div>
+            <div className="flex flex-1 items-center justify-end">
+              <div className="relative inline-flex">
+                <button
+                  type="button"
+                  onClick={handleToggleLogoutMenu}
+                  aria-expanded={showLogoutMenu}
+                  className="flex items-center gap-2 rounded-2xl border border-slate-800/0 px-4 py-2 text-base font-semibold text-white transition hover:border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+                >
+                  <span className="max-w-[60vw] truncate text-right">{username}</span>
+                  <svg
+                    className={classNames(
+                      'h-4 w-4 text-slate-400 transition-transform',
+                      showLogoutMenu ? 'rotate-180' : 'rotate-0'
+                    )}
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <div
+                  className={classNames(
+                    'absolute left-0 right-0 top-full z-40 mt-1 translate-y-0 transition-all duration-150',
+                    showLogoutMenu ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={handleLogoutClick}
+                    className="w-full rounded-2xl border border-slate-600/80 bg-slate-900/95 px-4 py-2 text-base font-semibold text-rose-200 shadow-lg shadow-black/30 transition hover:border-rose-400 hover:text-white"
+                  >
+                    {UI_TEXT.logout}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </header>
@@ -2381,7 +2446,7 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
   );
 
   return (
-    <div className="space-y-6 overflow-hidden">
+    <div className="space-y-6">
       <SectionCard title="Расписание барберов">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
@@ -2399,7 +2464,6 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
               ))}
             </select>
           </div>
-          <p className="text-xs text-slate-500">Изменения автоматически сохраняются и отправляются в бота.</p>
         </div>
         {groupedWeeks.length ? (
           <div className="mt-4 space-y-4">
@@ -2416,12 +2480,16 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
                       {barberFilter === 'all' ? 'Все барберы' : `Барбер: ${barberFilter}`}
                     </span>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                  <div
+                    className="grid gap-3"
+                    style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}
+                  >
                     {slots.map((slot) => {
                       const slotId = getRecordId(slot) || `${slot.Barber}-${slot.Date}`;
                       const dayLabel = formatScheduleDayShort(slot.Date, slot.DayOfWeek);
                       const dateLabel = formatScheduleDateLabel(slot.Date);
                       const isTodaySlot = isTodayDate(slot.Date);
+                      const showBarberName = barberFilter === 'all';
                       return (
                         <div
                           key={slotId}
@@ -2430,11 +2498,13 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
                             isTodaySlot ? 'border-emerald-400/70 ring-1 ring-emerald-400/30' : 'border-slate-800'
                           )}
                         >
-                          <div className="flex flex-col text-xs uppercase tracking-[0.25em] text-slate-500">
+                          <div className="flex flex-col items-center text-center text-xs uppercase tracking-[0.25em] text-slate-500">
                             <span className="text-sm font-semibold tracking-normal text-white">
                               {[dayLabel, dateLabel].filter(Boolean).join(' · ')}
                             </span>
-                            <span className="text-[11px] font-medium text-slate-400">{slot.Barber || '—'}</span>
+                            {showBarberName && (
+                              <span className="text-[11px] font-medium text-slate-400">{slot.Barber || '—'}</span>
+                            )}
                           </div>
                           <TimeRangePicker
                             value={slot.Week === '0' ? '' : slot.Week || ''}
@@ -2617,14 +2687,14 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
             return (
               <div
                 key={position.id}
-                className="space-y-3 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-inner shadow-black/5"
+                className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-inner shadow-black/5"
               >
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
-            <div className="flex w-full max-w-full items-stretch gap-2 overflow-hidden md:flex-1 md:flex-nowrap">
+            <div className="flex w-full flex-wrap gap-3 md:flex-1">
               <input
                 value={draft.name}
                 onChange={(event) => handleDraftChange(position.id, 'name', event.target.value)}
-                className="min-w-0 flex-1 rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
+                className="min-w-[160px] flex-1 rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
               />
               <input
                 type="number"
@@ -2634,7 +2704,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
                 value={draft.rate}
                 onChange={(event) => handleDraftChange(position.id, 'rate', event.target.value)}
                 placeholder="Процент, %"
-                className="w-24 flex-none rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-sm text-white focus:border-indigo-400 focus:outline-none"
+                className="w-32 flex-none rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
               />
             </div>
             <div className="hidden w-full flex-wrap justify-end gap-2 md:flex md:w-auto md:flex-nowrap">
@@ -2642,7 +2712,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
                 type="button"
                 onClick={() => handleSave(position)}
                 disabled={savingKey === position.id}
-                className="rounded-2xl bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex-1 rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 md:flex-none"
               >
                 Сохранить
               </button>
@@ -2650,18 +2720,18 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
                 type="button"
                 onClick={() => handleDelete(position)}
                 disabled={savingKey === position.id}
-                className="rounded-2xl border border-rose-600 px-3 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-600/10 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex-1 rounded-2xl border border-rose-600 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-600/10 disabled:cursor-not-allowed disabled:opacity-50 md:flex-none"
               >
                 Удалить
               </button>
             </div>
           </div>
-          <div className="flex w-full flex-nowrap gap-2 overflow-hidden md:hidden">
+          <div className="flex w-full flex-nowrap gap-2 md:hidden">
             <button
               type="button"
               onClick={() => handleSave(position)}
               disabled={savingKey === position.id}
-              className="flex-1 min-w-0 shrink rounded-2xl bg-indigo-600 px-2 py-2 text-center text-xs font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-w-0 flex-1 rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Сохранить
             </button>
@@ -2669,7 +2739,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
               type="button"
               onClick={() => handleDelete(position)}
               disabled={savingKey === position.id}
-              className="flex-1 min-w-0 shrink rounded-2xl border border-rose-600 px-2 py-2 text-center text-xs font-semibold text-rose-200 hover:bg-rose-600/10 disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-w-0 flex-1 rounded-2xl border border-rose-600 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-600/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Удалить
             </button>
@@ -5248,13 +5318,6 @@ const BotControlView = ({
     return () => cancelAnimationFrame(frame);
   }, [viewMode, description, about, autosizeTextArea]);
 
-  const handleCopyToken = useCallback(() => {
-    const value = tokenDraft || token;
-    if (!value) return;
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(value).catch((error) => console.warn('Clipboard error', error));
-    }
-  }, [tokenDraft, token]);
   const handleTokenSave = useCallback(async () => {
     if (!onUpdateToken) return;
     const value = (tokenDraft || '').trim();
@@ -5283,7 +5346,6 @@ const BotControlView = ({
   const normalizedTokenDraft = (tokenDraft || '').trim();
   const currentTokenValue = token || '';
   const canSaveToken = Boolean(onUpdateToken && normalizedTokenDraft && normalizedTokenDraft !== currentTokenValue);
-  const canCopyToken = Boolean(tokenDraft || token);
 
   if (viewMode === 'system') {
     return (
@@ -5369,6 +5431,28 @@ const BotControlView = ({
           <input type="checkbox" checked={settings?.isBotEnabled !== false} onChange={(event) => onToggleEnabled(event.target.checked)} />
           Автостарт вместе с CRM
         </label>
+        <div className="mt-4">
+          <label className="text-sm text-slate-300">Telegram-токен</label>
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              type="text"
+              value={tokenDraft}
+              onChange={(event) => setTokenDraft(event.target.value)}
+              className="min-w-0 flex-1 rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 font-mono text-sm text-white"
+              placeholder="1234567890:ABC-DEF"
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <button
+              onClick={handleTokenSave}
+              disabled={!canSaveToken || savingToken}
+              className="flex-none rounded-lg border border-indigo-500 bg-indigo-600/30 px-4 py-2 text-sm font-semibold text-indigo-100 hover:bg-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {savingToken ? 'Сохранение...' : 'Сохранить'}
+            </button>
+          </div>
+          {!token && <p className="mt-2 text-xs text-slate-400">Укажите токен и сохраните изменения — файл config.py обновится автоматически.</p>}
+        </div>
       </SectionCard>
 
       <SectionCard title="Тексты бота">
@@ -5399,39 +5483,40 @@ const BotControlView = ({
         </div>
       </SectionCard>
 
-      <SectionCard title="Токен бота">
-        <div className="space-y-3">
-          <div>
-            <label className="text-sm text-slate-300">Telegram-токен</label>
-            <input
-              type="text"
-              value={tokenDraft}
-              onChange={(event) => setTokenDraft(event.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 font-mono text-sm text-white"
-              placeholder="1234567890:ABC-DEF"
-              spellCheck={false}
-              autoComplete="off"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
+    </div>
+  );
+};
+
+const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
+  const activeSection = SYSTEM_SUB_SECTIONS.some((tab) => tab.id === section) ? section : 'bot';
+
+  useEffect(() => {
+    if (activeSection !== section) {
+      onSectionChange?.('bot');
+    }
+  }, [activeSection, section, onSectionChange]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {SYSTEM_SUB_SECTIONS.map((tab) => {
+          const isActive = tab.id === activeSection;
+          return (
             <button
-              onClick={handleCopyToken}
-              disabled={!canCopyToken}
-              className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-100 hover:border-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
+              key={tab.id}
+              type="button"
+              onClick={() => onSectionChange?.(tab.id)}
+              className={classNames(
+                'rounded-2xl px-4 py-2 text-sm font-semibold transition',
+                isActive ? 'bg-indigo-600 text-white shadow shadow-indigo-900/40' : 'bg-slate-800/70 text-slate-300 hover:text-white'
+              )}
             >
-              Скопировать
+              {tab.label}
             </button>
-            <button
-              onClick={handleTokenSave}
-              disabled={!canSaveToken || savingToken}
-              className="rounded-lg border border-indigo-500 bg-indigo-600/30 px-3 py-1 text-xs font-semibold text-indigo-100 hover:bg-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {savingToken ? 'Сохранение...' : 'Сохранить'}
-            </button>
-          </div>
-          {!token && <p className="text-xs text-slate-400">Укажите токен и сохраните изменения — файл config.py обновится автоматически.</p>}
-        </div>
-      </SectionCard>
+          );
+        })}
+      </div>
+      <BotControlView {...props} viewMode={activeSection} />
     </div>
   );
 };
@@ -5547,6 +5632,7 @@ const App = () => {
     }
   });
   const [activeTab, setActiveTab] = useLocalStorage('barber.activeTab', 'dashboard');
+  const [systemSection, setSystemSection] = useLocalStorage('system.section', 'bot');
   const [pendingTableView, setPendingTableView] = useState(null);
   const [activeDataTable, setActiveDataTable] = useState(() => {
     try {
@@ -5586,6 +5672,7 @@ const App = () => {
   const canUseRealtime = role === ROLE_OWNER;
   const canAccessBot = role === ROLE_OWNER;
   const canAccessSystem = role === ROLE_OWNER;
+  const resolvedSystemSection = SYSTEM_SUB_SECTIONS.some((tab) => tab.id === systemSection) ? systemSection : 'bot';
 
   const requestConfirm = useCallback(
     (options = {}) =>
@@ -6450,39 +6537,6 @@ const App = () => {
             onSave={handleSaveBarber}
           />
         );
-      case 'bot':
-        if (!canAccessBot) {
-          return (
-            <SectionCard title="Недостаточно прав">
-              <p className="text-sm text-slate-400">Раздел доступен только владельцу.</p>
-            </SectionCard>
-          );
-        }
-        return (
-          <BotControlView
-            status={botStatus}
-            settings={botSettings}
-            backups={dashboard?.backups || []}
-            messages={botMessages}
-            onToggleEnabled={handleBotToggle}
-            onStart={() => handleBotAction('start')}
-            onStop={() => handleBotAction('stop')}
-            onRestart={() => handleBotAction('restart')}
-            onSaveSettings={handleSaveSettings}
-            onSaveMessage={(id, draft, persist) => handleSaveMessage(id, draft, persist)}
-            onRestoreBackup={handleRestoreBackup}
-            onCreateBackup={handleCreateBackup}
-            onDeleteBackup={handleDeleteBackup}
-            licenseStatus={licenseStatus}
-            updateInfo={updateInfo}
-            onRefreshUpdate={handleRefreshUpdate}
-            onApplyUpdate={handleApplyUpdate}
-            systemBusy={systemBusy}
-            token={botToken}
-            onUpdateToken={handleUpdateBotToken}
-            viewMode="bot"
-          />
-        );
       case 'system':
         if (!canAccessSystem) {
           return (
@@ -6492,7 +6546,7 @@ const App = () => {
           );
         }
         return (
-          <BotControlView
+          <SystemSettingsView
             status={botStatus}
             settings={botSettings}
             backups={dashboard?.backups || []}
@@ -6513,7 +6567,8 @@ const App = () => {
             systemBusy={systemBusy}
             token={botToken}
             onUpdateToken={handleUpdateBotToken}
-            viewMode="system"
+            section={resolvedSystemSection}
+            onSectionChange={setSystemSection}
           />
         );
       default:
@@ -6574,6 +6629,8 @@ const App = () => {
           onSelectTable={handleSidebarTableChange}
           tabs={viewTabs}
           tableShortcuts={sidebarShortcuts}
+          systemSection={resolvedSystemSection}
+          onSelectSystemSection={setSystemSection}
         />
         <main className={mainClassName}>
           {globalError && <ErrorBanner message={globalError} />}

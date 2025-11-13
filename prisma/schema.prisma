@@ -54,8 +54,13 @@ model Cost {
 
   @@map("Cost")
 }
+enum BarberRole {
+  owner
+  staff
+}
+
 model Barbers {
-  id          String   @id
+  id          String     @id
   name        String
   nickname    String?
   description String?
@@ -66,12 +71,26 @@ model Barbers {
   telegramId  String?
   login       String?
   password    String?
-  isActive    Boolean  @default(true)
-  orderIndex  Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive    Boolean    @default(true)
+  orderIndex  Int        @default(0)
+  role        BarberRole @default(owner)
+  positionId  String?
+  position    Positions? @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   services ServicePrices[]
+}
+
+model Positions {
+  id             String   @id
+  name           String   @unique
+  commissionRate Float?   @default(0)
+  orderIndex     Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  barbers Barbers[]
 }
 
 model Services {

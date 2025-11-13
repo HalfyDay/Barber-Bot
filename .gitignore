@@ -10,6 +10,8 @@
 /bot_persistence
 /data/*.db
 /prisma/*.db
+/prisma/*.db-shm
+/prisma/*.db-wal
 *.sqlite
 *.log
 __pycache__/

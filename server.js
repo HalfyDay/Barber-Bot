@@ -1,4 +1,4 @@
-require("dotenv").config();
+﻿require("dotenv").config();
 const express = require("express");
 const { PrismaClient } = require("@prisma/client");
 const cors = require("cors");
@@ -23,16 +23,25 @@ const JWT_SECRET = process.env.JWT_SECRET || "change-me-secret";
 const BACKUP_DIR = path.join(__dirname, "backups");
 const DB_PATH = path.join(__dirname, "prisma", "dev.db");
 const BACKUP_RETENTION_DAYS = 30;
-const DEFAULT_BOT_DESCRIPTION = "Telegram-       CRM-.";
-const DEFAULT_ABOUT_TEXT = "      CRM,      .";
+const DEFAULT_BOT_DESCRIPTION =
+  "Telegram-бот помогает синхронизировать записи и напоминания с CRM.";
+const DEFAULT_ABOUT_TEXT =
+  "Эта CRM автоматизирует работу барбершопа: расписание, уведомления и аналитику.";
 const IMAGE_DIR = path.join(__dirname, "Image");
 const MAX_AVATAR_FILE_SIZE = Number(process.env.MAX_AVATAR_FILE_SIZE || 5 * 1024 * 1024);
 const SUPPORTED_APPOINTMENT_STATUSES = [
+  "Новая запись",
+  "Подтверждена",
+  "В работе",
   "Активная",
+  "Выполнена",
   "Завершена",
-  "Неявка",
   "Отменена",
+  "done",
+  "active",
+  "cancelled",
 ];
+const COMPLETED_STATUS_TOKENS = ["выполн", "заверш", "done", "completed", "исполн", "готов"];
 const RESERVED_COST_FIELDS = new Set([
   "id",
   "Id",
@@ -41,14 +50,14 @@ const RESERVED_COST_FIELDS = new Set([
   "Dlitelnost",
 ]);
 const CONFIRMED_STATUS_TOKENS = [
-  "подтверждена",
-  "подтвержден",
+  "подтвержд",
+  "выполн",
+  "заверш",
   "done",
-  "завершена",
-  "отменена",
+  "completed",
 ];
-const ACTIVE_STATUS_TOKENS = ["актив", "active"];
-const BLOCKED_STATUS_TOKENS = ["блок", "block"];
+const ACTIVE_STATUS_TOKENS = ["active", "актив", "в работе"];
+const BLOCKED_STATUS_TOKENS = ["block", "заблок", "отмен"];
 const tableToModelMap = {
   Appointments: "appointments",
   Schedules: "schedules",
@@ -58,6 +67,10 @@ const tableToModelMap = {
   Services: "services",
   ServicePrices: "servicePrices",
   BotSettings: "botSettings",
+  Positions: "positions",
+};
+const TABLE_ORDERING = {
+  Positions: [{ orderIndex: "asc" }, { name: "asc" }],
 };
 const numericFields = {
   Users: [],
@@ -68,12 +81,15 @@ const numericFields = {
   Services: ["duration", "orderIndex"],
   ServicePrices: ["price"],
   BotSettings: ["bookingLimit", "minLeadHours", "maxDaysAhead"],
+  Positions: ["commissionRate", "orderIndex"],
 };
 const booleanFields = {
   Barbers: ["isActive"],
   Services: ["isActive"],
   BotSettings: ["isBotEnabled"],
 };
+const ROLE_OWNER = "owner";
+const ROLE_STAFF = "staff";
 let botProcess = null;
 const botRuntime = {
   running: false,
@@ -85,6 +101,8 @@ const pythonExecutable =
   process.env.BOT_PYTHON_PATH ||
   (os.platform() === "win32" ? "python" : "python3");
 const botScriptPath = path.join(__dirname, "BotBarberShop.py");
+const BOT_CONFIG_PATH = path.join(__dirname, "config.py");
+const BOT_TOKEN_REGEX = /^(\s*TOKEN\s*=\s*)(['"])([^'"\r\n]+)(['"])/m;
 app.use(cors());
 app.use(express.json({ limit: "12mb" }));
 app.use(express.static(path.join(__dirname)));
@@ -113,6 +131,66 @@ const normalizePhone = (phone) => {
 const normalizeLogin = (value) => normalizeText(value);
 const toLower = (value) => normalizeText(value).toLowerCase();
 const canonicalizeKey = (value) => normalizeText(value).toLowerCase();
+const normalizeRole = (value) =>
+  value === ROLE_STAFF ? ROLE_STAFF : ROLE_OWNER;
+const resolveUserIdentity = (payload = {}) => ({
+  username: payload.username || payload.login || null,
+  role: normalizeRole(payload.role),
+  barberId: payload.barberId || payload.id || null,
+  barberName: normalizeText(
+    payload.barberName || payload.displayName || payload.name || "",
+  ),
+});
+const resolveRequestIdentity = (req) =>
+  req?.identity ? req.identity : resolveUserIdentity(req?.user || {});
+const isOwnerIdentity = (identity) => identity.role === ROLE_OWNER;
+const isOwnerRequest = (req) => isOwnerIdentity(resolveRequestIdentity(req));
+const staffOwnsValue = (identity, value) =>
+  identity?.barberName &&
+  canonicalizeKey(value) === canonicalizeKey(identity.barberName);
+const requireOwner = (req, res, next) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для выполнения действия." });
+  }
+  return next();
+};
+const isStaffIdentity = (identity) => identity?.role === ROLE_STAFF;
+const getIdentityBarberName = (identity) =>
+  normalizeText(identity?.barberName || identity?.username || "");
+const getIdentityBarberKey = (identity) =>
+  canonicalizeKey(getIdentityBarberName(identity));
+const matchesIdentityBarber = (value, identity) => {
+  if (!isStaffIdentity(identity)) return true;
+  const target = getIdentityBarberKey(identity);
+  return target && canonicalizeKey(value) === target;
+};
+const filterAppointmentsForIdentity = (rows = [], identity) => {
+  if (!isStaffIdentity(identity)) return rows;
+  return rows.filter((row) => matchesIdentityBarber(row.Barber, identity));
+};
+const filterBarbersForIdentity = (barbers = [], identity) => {
+  if (!isStaffIdentity(identity)) return barbers;
+  if (!identity?.barberId) return [];
+  return barbers.filter((barber) => barber.id === identity.barberId);
+};
+const filterServicesForIdentity = (services = [], identity) => {
+  if (!isStaffIdentity(identity) || !identity?.barberId) return services;
+  return services
+    .map((service) => {
+      const price = service.prices?.[identity.barberId];
+      if (price === undefined || price === null) return null;
+      return {
+        ...service,
+        prices: { [identity.barberId]: price },
+      };
+    })
+    .filter(Boolean);
+};
+const STAFF_READ_TABLES = new Set(["Appointments", "Services"]);
+const STAFF_WRITE_TABLES = new Set(["Appointments"]);
+const STAFF_DELETE_TABLES = new Set(["Appointments"]);
 const buildBarberLookup = (records = []) => {
   const lookup = new Map();
   records.forEach((barber) => {
@@ -178,7 +256,7 @@ const decodeBase64Image = (input = "") => {
   const normalized = normalizeText(input);
   const payload = normalized.includes("base64,") ? normalized.split("base64,").pop() : normalized;
   if (!payload) {
-    throw new Error("Пустое изображение");
+    throw new Error("Пустые данные изображения.");
   }
   return Buffer.from(payload, "base64");
 };
@@ -220,12 +298,94 @@ const isBlockedStatus = (status) => {
   const lowered = toLower(status);
   return BLOCKED_STATUS_TOKENS.some((token) => lowered.includes(token));
 };
+const isCompletedStatus = (status) => {
+  const lowered = toLower(status);
+  return COMPLETED_STATUS_TOKENS.some((token) => lowered.includes(token));
+};
 const parseDateTime = (dateStr, timeRange) => {
   if (!dateStr) return null;
   const timeStart = normalizeText(timeRange).split("-")[0]?.trim() || "00:00";
   const isoCandidate = `${dateStr}T${timeStart}:00`;
   const parsed = new Date(isoCandidate);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+const formatDateOnly = (dateObj) => {
+  if (!(dateObj instanceof Date)) return "";
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+const parseDateFilter = (value, fallbackDate) => {
+  const normalized = normalizeText(value);
+  if (!normalized) return new Date(fallbackDate);
+  const parsed = new Date(`${normalized}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return new Date(fallbackDate);
+  return parsed;
+};
+const getDefaultRevenueRange = () => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now);
+  return { start, end };
+};
+const splitServiceList = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === "string") return normalizeText(item);
+        if (item && typeof item === "object") {
+          return normalizeText(item.name || item.title || item.Service || "");
+        }
+        return "";
+      })
+      .filter(Boolean);
+  }
+  const normalized = normalizeText(value);
+  if (!normalized) return [];
+  if (normalized.startsWith("[") && normalized.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(normalized);
+      if (Array.isArray(parsed)) {
+        return splitServiceList(parsed);
+      }
+    } catch (error) {
+      // ignore malformed JSON
+    }
+  }
+  return normalized
+    .split(/[,;\n]/)
+    .map((item) => normalizeText(item))
+    .filter(Boolean);
+};
+const buildServiceLookup = (services = []) => {
+  const map = new Map();
+  services.forEach((service) => {
+    const key = canonicalizeKey(service.name);
+    if (key && !map.has(key)) {
+      map.set(key, service);
+    }
+  });
+  return map;
+};
+const getServicePriceForBarber = (service, barberId) => {
+  if (!service || !barberId) return null;
+  const prices = service.prices || {};
+  const direct = prices[barberId] ?? prices[String(barberId)];
+  return direct ?? null;
+};
+const buildBarberNameLookup = (barbers = []) => {
+  const map = new Map();
+  barbers.forEach((barber) => {
+    [barber.name, barber.login, barber.nickname].forEach((name) => {
+      const key = canonicalizeKey(name);
+      if (key && barber && !map.has(key)) {
+        map.set(key, barber);
+      }
+    });
+  });
+  return map;
 };
 const mapAppointment = (record) => {
   const startDate = parseDateTime(record.Date, record.Time);
@@ -265,7 +425,9 @@ const authenticateToken = (req, res, next) => {
   if (!token) return res.sendStatus(401);
   return jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) return res.sendStatus(403);
-    req.user = user;
+    const identity = resolveUserIdentity(user || {});
+    req.user = identity;
+    req.identity = identity;
     return next();
   });
 };
@@ -277,7 +439,9 @@ const authenticateStream = (req, res, next) => {
   if (!token) return res.sendStatus(401);
   return jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) return res.sendStatus(403);
-    req.user = user;
+    const identity = resolveUserIdentity(user || {});
+    req.user = identity;
+    req.identity = identity;
     return next();
   });
 };
@@ -369,6 +533,7 @@ const getBarbers = async ({ includeInactive = false } = {}) => {
   const barbers = await prisma.barbers.findMany({
     where,
     orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+    include: { position: true },
   });
   return barbers;
 };
@@ -376,7 +541,7 @@ const getBotSettings = async () => {
   const record = await prisma.botSettings.findFirst();
   return record;
 };
-const getServiceCatalog = async (includeInactive = true) => {
+const getServiceCatalog = async (includeInactive = true, identity = null) => {
   const where = includeInactive ? {} : { isActive: true };
   let services = await prisma.services.findMany({
     where,
@@ -402,7 +567,7 @@ const getServiceCatalog = async (includeInactive = true) => {
     ]),
   );
   const barbers = await getBarbers({ includeInactive: true });
-  return services.map((service) => ({
+  const mapped = services.map((service) => ({
     ...service,
     prices: barbers.reduce((acc, barber) => {
       const key = `${service.id}:${barber.id}`;
@@ -410,6 +575,7 @@ const getServiceCatalog = async (includeInactive = true) => {
       return acc;
     }, {}),
   }));
+  return filterServicesForIdentity(mapped, identity);
 };
 const buildClientRows = (users, appointments) => {
   const now = new Date();
@@ -483,7 +649,7 @@ const buildClientRows = (users, appointments) => {
         : 0;
     clients.push({
       id: clientId,
-      name: appt.CustomerName || "Гость",
+      name: appt.CustomerName || "Без имени",
       phone: appt.Phone || "",
       normalizedPhone: appt.normalizedPhone,
       telegramId: null,
@@ -513,7 +679,7 @@ const buildClientRows = (users, appointments) => {
     return bDate - aDate;
   });
 };
-const buildDashboardSnapshot = async () => {
+const buildDashboardSnapshot = async (identity = null) => {
   const [
     appointmentsRaw,
     users,
@@ -525,7 +691,7 @@ const buildDashboardSnapshot = async () => {
     prisma.appointments.findMany(),
     prisma.users.findMany(),
     getBarbers({ includeInactive: true }),
-    getServiceCatalog(true),
+    getServiceCatalog(true, identity),
     getBotSettings(),
     listBackups(),
   ]);
@@ -559,7 +725,7 @@ const buildDashboardSnapshot = async () => {
     confirmedYear,
     blockedClients,
   };
-  return {
+  const snapshot = {
     stats,
     appointments: { upcoming, history },
     clients,
@@ -571,6 +737,53 @@ const buildDashboardSnapshot = async () => {
     },
     backups: backups.slice(0, 20),
   };
+  if (isStaffIdentity(identity)) {
+    const staffAppointments = filterAppointmentsForIdentity(
+      appointments,
+      identity,
+    );
+    const staffUpcoming = staffAppointments
+      .filter((appt) => appt.isActive)
+      .sort((a, b) => a.sortKey - b.sortKey);
+    const staffHistory = staffAppointments
+      .filter((appt) => !appt.isActive && appt.sortKey)
+      .sort((a, b) => b.sortKey - a.sortKey)
+      .slice(0, 400);
+    const staffConfirmedYear = staffAppointments.filter(
+      (appt) =>
+        appt.isConfirmed &&
+        appt.startDateTime &&
+        new Date(appt.startDateTime) >= yearAgo,
+    ).length;
+    const staffTodays = staffUpcoming.filter(
+      (appt) => appt.Date === todayKey,
+    ).length;
+    const staffBlocked = staffAppointments.filter((appt) => appt.isBlocked)
+      .length;
+    const staffUsers = users.filter((user) =>
+      matchesIdentityBarber(user.Barber, identity),
+    );
+    const staffClients = buildClientRows(staffUsers, staffAppointments);
+    return {
+      stats: {
+        totalUsers: staffUsers.length,
+        activeAppointments: staffUpcoming.length,
+        todaysAppointments: staffTodays,
+        confirmedYear: staffConfirmedYear,
+        blockedClients: staffBlocked,
+      },
+      appointments: { upcoming: staffUpcoming, history: staffHistory },
+      clients: staffClients,
+      barbers: filterBarbersForIdentity(barbers, identity),
+      services,
+      bot: {
+        settings,
+        status: botRuntime,
+      },
+      backups: [],
+    };
+  }
+  return snapshot;
 };
 const serializeBotRuntime = () => ({
   running: botRuntime.running,
@@ -765,7 +978,45 @@ const ensureBotProcessState = async () => {
     await stopBotProcess();
   }
 };
-app.get("/api/login/options", async (req, res) => {
+const readBotToken = async () => {
+  try {
+    const raw = await fs.readFile(BOT_CONFIG_PATH, "utf8");
+    const match = raw.match(BOT_TOKEN_REGEX);
+    return match ? match[3] : null;
+  } catch (error) {
+    console.warn("Bot token read error:", error.message);
+    return null;
+  }
+};
+const writeBotToken = async (nextToken) => {
+  const sanitized = normalizeText(nextToken || "");
+  if (!sanitized) {
+    throw new Error("Bot token is required");
+  }
+  if (/[\r\n]/.test(sanitized)) {
+    throw new Error("Bot token contains invalid characters");
+  }
+  let raw = "";
+  try {
+    raw = await fs.readFile(BOT_CONFIG_PATH, "utf8");
+  } catch {
+    raw = "";
+  }
+  const match = raw.match(BOT_TOKEN_REGEX);
+  if (match && match[3] === sanitized) {
+    return sanitized;
+  }
+  const updated = match
+    ? raw.replace(
+        BOT_TOKEN_REGEX,
+        (_, prefix, quoteStart, _value, quoteEnd) =>
+          `${prefix}${quoteStart}${sanitized}${quoteEnd}`,
+      )
+    : `TOKEN = "${sanitized}"${os.EOL}${raw}`;
+  await fs.writeFile(BOT_CONFIG_PATH, updated, "utf8");
+  return sanitized;
+};
+const handleLoginOptions = async (req, res) => {
   try {
     const barbers = await prisma.barbers.findMany({
       where: { isActive: true, login: { not: null }, password: { not: null } },
@@ -795,8 +1046,8 @@ app.get("/api/login/options", async (req, res) => {
     console.error("Login options error:", error);
     res.status(500).json({ error: "Не удалось получить список барберов" });
   }
-});
-app.post("/api/login", async (req, res) => {
+};
+const handleLogin = async (req, res) => {
   try {
     const username = normalizeLogin(req.body?.username);
     const password = normalizeText(req.body?.password);
@@ -807,22 +1058,36 @@ app.post("/api/login", async (req, res) => {
     }
     const barber = await prisma.barbers.findFirst({
       where: { login: username, isActive: true },
-      select: { id: true, name: true, login: true, password: true },
+      select: {
+        id: true,
+        name: true,
+        login: true,
+        password: true,
+        role: true,
+      },
     });
     if (!barber || !barber.password || barber.password !== password) {
       return res
         .status(401)
         .json({ success: false, message: "Неверный логин или пароль." });
     }
-    const token = jwt.sign({ username: barber.login }, JWT_SECRET, {
+    const identity = resolveUserIdentity({
+      username: barber.login,
+      barberId: barber.id,
+      barberName: barber.name || barber.login,
+      role: barber.role,
+    });
+    const token = jwt.sign(identity, JWT_SECRET, {
       expiresIn: "7d",
     });
     return res.json({
       success: true,
       token,
-      username: barber.login,
-      displayName: barber.name || barber.login,
-      barberId: barber.id,
+      username: identity.username,
+      displayName: identity.barberName || identity.username,
+      barberId: identity.barberId,
+      role: identity.role,
+      barberName: identity.barberName,
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -830,91 +1095,44 @@ app.post("/api/login", async (req, res) => {
       .status(500)
       .json({ success: false, message: "Ошибка входа. Попробуйте позже." });
   }
-});
+};
+app.get("/api/login/options", handleLoginOptions);
+app.post("/api/login", handleLogin);
 app.use("/api", licenseMiddleware);
-app.get("/api/login/options", async (req, res) => {
-  try {
-    const barbers = await prisma.barbers.findMany({
-      where: { isActive: true, login: { not: null }, password: { not: null } },
-      select: {
-        id: true,
-        name: true,
-        login: true,
-        color: true,
-        orderIndex: true,
-        password: true,
-      },
-      orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
-    });
-    const options = barbers
-      .filter(
-        (barber) =>
-          normalizeLogin(barber.login) && normalizeText(barber.password),
-      )
-      .map((barber) => ({
-        id: barber.id,
-        login: barber.login,
-        label: barber.name || barber.login,
-        color: barber.color || null,
-      }));
-    res.json(options);
-  } catch (error) {
-    console.error("Login options error:", error);
-    res.status(500).json({ error: "Не удалось получить список барберов" });
-  }
-});
-app.post("/api/login", async (req, res) => {
-  try {
-    const username = normalizeLogin(req.body?.username);
-    const password = normalizeText(req.body?.password);
-    if (!username || !password) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Укажите логин и пароль." });
-    }
-    const barber = await prisma.barbers.findFirst({
-      where: { login: username, isActive: true },
-      select: { id: true, name: true, login: true, password: true },
-    });
-    if (!barber || !barber.password || barber.password !== password) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Неверный логин или пароль." });
-    }
-    const token = jwt.sign({ username: barber.login }, JWT_SECRET, {
-      expiresIn: "7d",
-    });
-    return res.json({
-      success: true,
-      token,
-      username: barber.login,
-      displayName: barber.name || barber.login,
-      barberId: barber.id,
-    });
-  } catch (error) {
-    console.error("Login error:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Ошибка входа. Попробуйте позже." });
-  }
-});
+
 app.get("/api/license/status", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для доступа к лицензии." });
+  }
   try {
     const status = await ensureLicenseValid();
     res.json(status);
   } catch (error) {
     res.status(403).json({
-      error: "Лицензия недействительна",
+      error: "Лицензия недействительна. Проверьте ключ и повторите попытку.",
       details: error.message,
       status: getLicenseStatus(),
     });
   }
 });
 app.get("/api/bot/status", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для управления ботом." });
+  }
   const settings = await getBotSettings();
-  res.json({ status: serializeBotRuntime(), settings });
+  const token = await readBotToken();
+  res.json({ status: serializeBotRuntime(), settings, token });
 });
 app.post("/api/bot/status", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для управления ботом." });
+  }
   const { action, isBotEnabled } = req.body || {};
   try {
     if (typeof isBotEnabled === "boolean") {
@@ -941,11 +1159,41 @@ app.post("/api/bot/status", authenticateToken, async (req, res) => {
     res.json({ status: serializeBotRuntime(), settings });
   } catch (error) {
     console.error("Bot status update failed:", error);
-    res.status(500).json({ error: "�� ������� �������� ��������� ����." });
+    res.status(500).json({ error: "Не удалось изменить статус бота." });
+  }
+});
+
+app.put("/api/bot/token", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для изменения токена." });
+  }
+  const candidate = normalizeText(req.body?.token);
+  if (!candidate) {
+    return res.status(400).json({ error: "Укажите токен бота." });
+  }
+  try {
+    const token = await writeBotToken(candidate);
+    if (botRuntime.running) {
+      await stopBotProcess();
+      await startBotProcess();
+    }
+    res.json({ token });
+  } catch (error) {
+    console.error("Bot token update failed:", error);
+    res
+      .status(500)
+      .json({ error: "Не удалось обновить токен бота." });
   }
 });
 
 app.get("/api/system/update", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для проверки обновлений." });
+  }
   try {
     const force = req.query.force === "1" || req.query.force === "true";
     const info = await checkForUpdates(force);
@@ -953,12 +1201,17 @@ app.get("/api/system/update", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Update check error:", error);
     res.status(500).json({
-      error: "Не удалось проверить обновления",
+      error: "Не удалось проверить обновления.",
       details: error.message,
     });
   }
 });
 app.post("/api/system/update", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для установки обновлений." });
+  }
   try {
     const result = await applyUpdate();
     await ensureBotProcessState();
@@ -967,28 +1220,35 @@ app.post("/api/system/update", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Update apply error:", error);
     res.status(500).json({
-      error: "Не удалось применить обновление",
+      error: "Не удалось применить обновление.",
       details: error.message,
     });
   }
 });
 app.get("/api/dashboard/overview", authenticateToken, async (req, res) => {
   try {
-    const snapshot = await buildDashboardSnapshot();
+    const snapshot = await buildDashboardSnapshot(req.identity);
     res.json(snapshot);
   } catch (error) {
     console.error("Dashboard snapshot error:", error);
-    res.status(500).json({ error: "Не удалось собрать сводку." });
+    res
+      .status(500)
+      .json({ error: "Не удалось загрузить обзор дашборда." });
   }
 });
 app.get("/api/services/full", authenticateToken, async (req, res) => {
   try {
-    const services = await getServiceCatalog(true);
-    const barbers = await getBarbers({ includeInactive: true });
+    const services = await getServiceCatalog(true, req.identity);
+    const barbers = filterBarbersForIdentity(
+      await getBarbers({ includeInactive: true }),
+      req.identity,
+    );
     res.json({ services, barbers });
   } catch (error) {
     console.error("Services fetch error:", error);
-    res.status(500).json({ error: "Не удалось получить список услуг." });
+    res
+      .status(500)
+      .json({ error: "Не удалось получить список услуг." });
   }
 });
 app.get("/api/assets/avatars", authenticateToken, async (req, res) => {
@@ -997,7 +1257,9 @@ app.get("/api/assets/avatars", authenticateToken, async (req, res) => {
     res.json({ images });
   } catch (error) {
     console.error("Avatar assets error:", error);
-    res.status(500).json({ error: "    ." });
+    res
+      .status(500)
+      .json({ error: "Не удалось получить список изображений." });
   }
 });
 
@@ -1005,21 +1267,25 @@ app.post("/api/assets/avatars/upload", authenticateToken, async (req, res) => {
   try {
     const { name, data } = req.body || {};
     if (!data) {
-      return res.status(400).json({ error: "Не передано изображение" });
+      return res
+        .status(400)
+        .json({ error: "Не переданы данные изображения." });
     }
     const sanitizedName = buildSafeImageFilename(name || `avatar-${Date.now()}.png`);
     if (!sanitizedName) {
-      return res.status(400).json({ error: "Неподдерживаемый формат файла" });
+      return res.status(400).json({ error: "Некорректное имя файла." });
     }
     await fs.ensureDir(IMAGE_DIR);
     const buffer = decodeBase64Image(data);
     if (!buffer.length) {
-      return res.status(400).json({ error: "Пустой файл" });
+      return res.status(400).json({ error: "Файл пуст." });
     }
     if (buffer.length > MAX_AVATAR_FILE_SIZE) {
       return res
         .status(400)
-        .json({ error: `Файл слишком большой (до ${Math.floor(MAX_AVATAR_FILE_SIZE / (1024 * 1024))} МБ)` });
+        .json({
+          error: `Файл слишком большой (до ${Math.floor(MAX_AVATAR_FILE_SIZE / (1024 * 1024))} МБ).`,
+        });
     }
     const filename = await ensureUniqueImageName(sanitizedName);
     await fs.writeFile(path.join(IMAGE_DIR, filename), buffer);
@@ -1027,7 +1293,10 @@ app.post("/api/assets/avatars/upload", authenticateToken, async (req, res) => {
     res.json({ success: true, path: `/Image/${filename}`, images });
   } catch (error) {
     console.error("Avatar upload error:", error);
-    res.status(500).json({ error: "Не удалось загрузить изображение", details: error.message });
+    res.status(500).json({
+      error: "Не удалось загрузить изображение.",
+      details: error.message,
+    });
   }
 });
 
@@ -1035,26 +1304,34 @@ app.delete("/api/assets/avatars", authenticateToken, async (req, res) => {
   try {
     const { filename } = req.body || {};
     if (!filename) {
-      return res.status(400).json({ error: "Не указано имя файла" });
+      return res.status(400).json({ error: "Не указано имя файла." });
     }
     const sanitizedName = getExistingImageFilename(filename);
     if (!sanitizedName) {
-      return res.status(400).json({ error: "Неверное имя файла" });
+      return res.status(400).json({ error: "Файл не найден." });
     }
     const targetPath = path.join(IMAGE_DIR, sanitizedName);
     if (!(await fs.pathExists(targetPath))) {
-      return res.status(404).json({ error: "Файл не найден" });
+      return res.status(404).json({ error: "Файл отсутствует на сервере." });
     }
     await fs.remove(targetPath);
     const images = await listAvatarImages();
     res.json({ success: true, images });
   } catch (error) {
     console.error("Avatar delete error:", error);
-    res.status(500).json({ error: "Не удалось удалить изображение", details: error.message });
+    res.status(500).json({
+      error: "Не удалось удалить изображение.",
+      details: error.message,
+    });
   }
 });
 
 app.get("/api/bot/messages", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для изменения сообщений бота." });
+  }
   try {
     const messages = await prisma.botMessages.findMany({
       orderBy: [{ code: "asc" }, { title: "asc" }],
@@ -1062,11 +1339,18 @@ app.get("/api/bot/messages", authenticateToken, async (req, res) => {
     res.json(messages);
   } catch (error) {
     console.error("Bot messages fetch error:", error);
-    res.status(500).json({ error: "Не удалось загрузить сообщения бота." });
+    res
+      .status(500)
+      .json({ error: "Не удалось загрузить сообщения бота." });
   }
 });
 
 app.put("/api/bot/messages/:id", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для изменения сообщений бота." });
+  }
   const { id } = req.params;
   const payload = req.body || {};
   try {
@@ -1076,7 +1360,9 @@ app.put("/api/bot/messages/:id", authenticateToken, async (req, res) => {
       text: payload.text ?? "",
     };
     if (!data.text.trim()) {
-      return res.status(400).json({ error: "Текст сообщения не может быть пустым." });
+      return res
+        .status(400)
+        .json({ error: "Текст сообщения не может быть пустым." });
     }
     const updated = await prisma.botMessages.update({
       where: { id },
@@ -1088,10 +1374,16 @@ app.put("/api/bot/messages/:id", authenticateToken, async (req, res) => {
     if (error.code === "P2025") {
       return res.status(404).json({ error: "Сообщение не найдено." });
     }
-    res.status(500).json({ error: "Не удалось сохранить сообщение." });
+    res
+      .status(500)
+      .json({ error: "Не удалось обновить сообщение." });
   }
 });
 app.get("/api/events/stream", authenticateStream, (req, res) => {
+  if (isStaffIdentity(req.identity)) {
+    res.status(403).end();
+    return;
+  }
   res.set({
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
@@ -1167,26 +1459,45 @@ const upsertServiceWithPrices = async (serviceId, payload) => {
   return savedService;
 };
 app.post("/api/services/full", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для создания услуг." });
+  }
   try {
     await upsertServiceWithPrices(null, req.body || {});
     const services = await getServiceCatalog(true);
     res.status(201).json({ services });
   } catch (error) {
     console.error("Create service error:", error);
-    res.status(500).json({ error: "Не удалось создать услугу." });
+    res
+      .status(500)
+      .json({ error: "Не удалось создать услугу." });
   }
 });
 app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для изменения услуг." });
+  }
   try {
     await upsertServiceWithPrices(req.params.id, req.body || {});
     const services = await getServiceCatalog(true);
     res.json({ services });
   } catch (error) {
     console.error("Update service error:", error);
-    res.status(500).json({ error: "Не удалось обновить услугу." });
+    res
+      .status(500)
+      .json({ error: "Не удалось обновить услугу." });
   }
 });
 app.delete("/api/services/full/:id", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для удаления услуг." });
+  }
   try {
     await prisma.$transaction([
       prisma.servicePrices.deleteMany({ where: { serviceId: req.params.id } }),
@@ -1196,7 +1507,9 @@ app.delete("/api/services/full/:id", authenticateToken, async (req, res) => {
     res.json({ services });
   } catch (error) {
     console.error("Delete service error:", error);
-    res.status(500).json({ error: "Не удалось удалить услугу." });
+    res
+      .status(500)
+      .json({ error: "Не удалось удалить услугу." });
   }
 });
 app.get("/api/barbers/full", authenticateToken, async (req, res) => {
@@ -1227,21 +1540,37 @@ app.get("/api/barbers/full", authenticateToken, async (req, res) => {
         },
       };
     });
-    res.json(hydrated);
+    res.json(filterBarbersForIdentity(hydrated, req.identity));
   } catch (error) {
     console.error("Barbers list error:", error);
-    res.status(500).json({ error: "Не удалось получить список барберов." });
+    res
+      .status(500)
+      .json({ error: "Не удалось загрузить список барберов." });
   }
 });
 app.get("/api/:tableName", authenticateToken, async (req, res) => {
   const { tableName } = req.params;
   const modelName = tableToModelMap[tableName];
   if (!modelName || !prisma[modelName])
-    return res.status(404).json({ error: "Неизвестная таблица." });
+    return res.status(404).json({ error: "Запрошенная таблица не найдена." });
+  if (isStaffIdentity(req.identity) && !STAFF_READ_TABLES.has(tableName)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для доступа к этому разделу." });
+  }
+
   if (tableName === "Schedules") {
     try {
       const barbersList = await getBarbers({ includeInactive: true });
-      const daysOfWeek = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
+      const daysOfWeek = [
+        "Понедельник",
+        "Вторник",
+        "Среда",
+        "Четверг",
+        "Пятница",
+        "Суббота",
+        "Воскресенье",
+      ];
       const windowDays = 14;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -1315,22 +1644,42 @@ app.get("/api/:tableName", authenticateToken, async (req, res) => {
       return res.json(fullSchedule);
     } catch (error) {
       console.error("Schedules fetch error:", error);
-      return res.status(500).json({ error: "Не удалось получить расписание." });
+      return res
+        .status(500)
+        .json({ error: "Не удалось загрузить расписание." });
     }
   }
   try {
-    const records = await prisma[modelName].findMany();
-    return res.json(records);
+    const queryOptions = {};
+    if (TABLE_ORDERING[tableName]) {
+      queryOptions.orderBy = TABLE_ORDERING[tableName];
+    }
+    const records = await prisma[modelName].findMany(queryOptions);
+    const filteredRecords =
+      tableName === "Appointments"
+        ? filterAppointmentsForIdentity(records, req.identity)
+        : records;
+    return res.json(filteredRecords);
   } catch (error) {
     console.error("Generic fetch error:", error);
-    return res.status(500).json({ error: "Ошибка при получении данных." });
+    return res
+      .status(500)
+      .json({ error: "Не удалось загрузить данные." });
   }
 });
 app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
   const { tableName, id } = req.params;
   const modelName = tableToModelMap[tableName];
   if (!modelName || !prisma[modelName])
-    return res.status(404).json({ error: "Неизвестная таблица." });
+    return res.status(404).json({ error: "Запрошенная таблица не найдена." });
+  if (isStaffIdentity(req.identity)) {
+    const allowedTables = new Set(["Appointments", "Barbers"]);
+    if (!allowedTables.has(tableName)) {
+      return res
+        .status(403)
+        .json({ error: "Недостаточно прав для изменения этого раздела." });
+    }
+  }
   const data = coercePayload(tableName, { ...req.body });
   if (tableName === "Users" && data.TelegramID !== undefined) {
     if (data.TelegramID === null || data.TelegramID === "") {
@@ -1349,6 +1698,30 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
   }
   if (tableName === "Schedules") {
     try {
+    if (isStaffIdentity(req.identity)) {
+      if (tableName === "Appointments") {
+        const existing = await prisma[modelName].findUnique({ where: { id } });
+        if (!existing || !matchesIdentityBarber(existing.Barber, req.identity)) {
+          return res
+            .status(403)
+            .json({ error: "Недостаточно прав для изменения этой записи." });
+        }
+        const staffBarber = getIdentityBarberName(req.identity);
+        if (!staffBarber) {
+          return res
+            .status(400)
+            .json({ error: "В профиле сотрудника не указано имя барбера." });
+        }
+        data.Barber = staffBarber;
+      } else if (tableName === "Barbers") {
+        if (id !== req.identity.barberId) {
+          return res
+            .status(403)
+            .json({ error: "Можно редактировать только свой профиль." });
+        }
+      }
+    }
+
       const { Barber, Week = "", Date: date } = data;
       const existing = await prisma.schedules.findFirst({
         where: { Barber, Date: date },
@@ -1373,7 +1746,9 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
       return res.json(result);
     } catch (error) {
       console.error("Schedule update error:", error);
-      return res.status(500).json({ error: "Не удалось обновить смену." });
+      return res
+        .status(500)
+        .json({ error: "Не удалось обновить расписание." });
     }
   }
   if (tableName === "Cost") {
@@ -1393,19 +1768,35 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
     requestRealtimePush(true);
   } catch (error) {
     console.error("Record update error:", error);
-    res.status(500).json({ error: "Не удалось сохранить запись." });
+    res
+      .status(500)
+      .json({ error: "Не удалось обновить запись." });
   }
 });
 app.post("/api/:tableName", authenticateToken, async (req, res) => {
   const { tableName } = req.params;
   const modelName = tableToModelMap[tableName];
   if (!modelName || !prisma[modelName])
-    return res.status(404).json({ error: "Неизвестная таблица." });
+    return res.status(404).json({ error: "Запрошенная таблица не найдена." });
+  if (isStaffIdentity(req.identity) && !STAFF_WRITE_TABLES.has(tableName)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для создания записей в этом разделе." });
+  }
   const payload = coercePayload(tableName, { ...req.body });
+  if (isStaffIdentity(req.identity) && tableName === "Appointments") {
+    const staffBarber = getIdentityBarberName(req.identity);
+    if (!staffBarber) {
+      return res
+        .status(400)
+        .json({ error: "В профиле сотрудника не указано имя барбера." });
+    }
+    payload.Barber = staffBarber;
+  }
   if (tableName === "Appointments" && !normalizeText(payload.Barber)) {
     return res
       .status(400)
-      .json({ error: "Нельзя создать запись без выбора барбера." });
+      .json({ error: "Для записи нужно указать барбера." });
   }
   if (tableName === "Appointments" && payload.UserID !== undefined) {
     if (payload.UserID === null || payload.UserID === "") {
@@ -1430,61 +1821,133 @@ app.post("/api/:tableName", authenticateToken, async (req, res) => {
     requestRealtimePush(true);
   } catch (error) {
     console.error("Record create error:", error);
-    res.status(500).json({ error: "Не удалось создать запись." });
+    res
+      .status(500)
+      .json({ error: "Не удалось создать запись." });
   }
 });
 app.delete("/api/:tableName/:id", authenticateToken, async (req, res) => {
   const { tableName, id } = req.params;
   const modelName = tableToModelMap[tableName];
   if (!modelName || !prisma[modelName])
-    return res.status(404).json({ error: "Неизвестная таблица." });
+    return res.status(404).json({ error: "Запрошенная таблица не найдена." });
+  if (isStaffIdentity(req.identity) && !STAFF_DELETE_TABLES.has(tableName)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для удаления этого раздела." });
+  }
   try {
+    if (isStaffIdentity(req.identity) && tableName === "Appointments") {
+      const existing = await prisma[modelName].findUnique({ where: { id } });
+      if (!existing || !matchesIdentityBarber(existing.Barber, req.identity)) {
+        return res
+          .status(403)
+          .json({ error: "Недостаточно прав для удаления этой записи." });
+      }
+    }
+
     await prisma[modelName].delete({ where: { id } });
     res.status(204).send();
     requestRealtimePush(true);
   } catch (error) {
     console.error("Record delete error:", error);
-    res.status(500).json({ error: "Не удалось удалить запись." });
+    res
+      .status(500)
+      .json({ error: "Не удалось удалить запись." });
   }
 });
 app.post("/api/backups/create", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для создания бэкапов." });
+  }
   try {
     await createBackup();
-    res.json({ success: true, message: "Бэкап создан." });
+    res.json({ success: true, message: "Резервная копия создана." });
   } catch (error) {
     console.error("Backup create error:", error);
-    res.status(500).json({ error: "Не удалось создать бэкап." });
+    res
+      .status(500)
+      .json({ error: "Не удалось создать бэкап." });
   }
 });
 app.get("/api/backups/list", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для просмотра бэкапов." });
+  }
   try {
     const files = await listBackups();
     res.json(files);
   } catch (error) {
-    res.status(500).json({ error: "Не удалось получить список бэкапов." });
+    res
+      .status(500)
+      .json({ error: "Не удалось получить список бэкапов." });
   }
 });
 app.post("/api/backups/restore", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для восстановления из бэкапа." });
+  }
   try {
     const { filename } = req.body || {};
     if (!filename)
-      return res.status(400).json({ error: "Не указано имя файла." });
+      return res.status(400).json({ error: "Не указано имя файла бэкапа." });
     const backupPath = path.join(BACKUP_DIR, filename);
     if (!(await fs.pathExists(backupPath))) {
       return res.status(404).json({ error: "Бэкап не найден." });
     }
     await prisma.$disconnect();
     await fs.copyFile(backupPath, DB_PATH);
-    res.json({ success: true, message: `Восстановлено из ${filename}` });
+    res.json({
+      success: true,
+      message: `Бэкап ${filename} восстановлен.`,
+    });
   } catch (error) {
     console.error("Backup restore error:", error);
-    res.status(500).json({ error: "Не удалось восстановить базу." });
+    res
+      .status(500)
+      .json({ error: "Не удалось восстановить бэкап." });
+  }
+});
+app.post("/api/backups/delete", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для удаления бэкапов." });
+  }
+  try {
+    const { filename } = req.body || {};
+    if (!filename) {
+      return res
+        .status(400)
+        .json({ error: "Не указано имя файла бэкапа." });
+    }
+    const safeName = path.basename(filename);
+    const backupPath = path.join(BACKUP_DIR, safeName);
+    if (!(await fs.pathExists(backupPath))) {
+      return res.status(404).json({ error: "Бэкап не найден." });
+    }
+    await fs.remove(backupPath);
+    res.json({
+      success: true,
+      message: `Бэкап ${safeName} удален.`,
+    });
+  } catch (error) {
+    console.error("Backup delete error:", error);
+    res
+      .status(500)
+      .json({ error: "Не удалось удалить бэкап." });
   }
 });
 app.get("/api/options/appointments", authenticateToken, async (req, res) => {
   try {
     const [services, barbers, appointments] = await Promise.all([
-      getServiceCatalog(false),
+      getServiceCatalog(false, req.identity),
       getBarbers({ includeInactive: false }),
       prisma.appointments.findMany({ select: { Status: true } }),
     ]);
@@ -1495,19 +1958,135 @@ app.get("/api/options/appointments", authenticateToken, async (req, res) => {
     });
     res.json({
       services: services.map((svc) => svc.name),
-      barbers: barbers.map((barber) => barber.name),
+      barbers: filterBarbersForIdentity(barbers, req.identity).map(
+        (barber) => barber.name,
+      ),
       statuses: Array.from(statuses),
     });
   } catch (error) {
     console.error("Options fetch error:", error);
-    res.status(500).json({ error: "Не удалось получить опции." });
+    res
+      .status(500)
+      .json({ error: "Не удалось получить справочные данные." });
+  }
+});
+app.get("/api/revenue/summary", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для просмотра доходов." });
+  }
+  try {
+    const defaultRange = getDefaultRevenueRange();
+    let startDate = parseDateFilter(req.query.start, defaultRange.start);
+    let endDate = parseDateFilter(req.query.end, defaultRange.end);
+    if (startDate.getTime() > endDate.getTime()) {
+      [startDate, endDate] = [endDate, startDate];
+    }
+    const startKey = formatDateOnly(startDate);
+    const endKey = formatDateOnly(endDate);
+    const requestedBarberId = normalizeText(req.query.barberId);
+    const [barbersList, servicesCatalog, appointments] = await Promise.all([
+      getBarbers({ includeInactive: true }),
+      getServiceCatalog(true),
+      prisma.appointments.findMany({
+        where: {
+          Date: {
+            gte: startKey,
+            lte: endKey,
+          },
+        },
+      }),
+    ]);
+    const targetBarber =
+      requestedBarberId &&
+      barbersList.find((barber) => normalizeText(barber.id) === requestedBarberId);
+    const barberFilterId = targetBarber ? targetBarber.id : null;
+    const barberLookup = buildBarberNameLookup(barbersList);
+    const serviceLookup = buildServiceLookup(servicesCatalog);
+    const summaryMap = new Map();
+    const timelineMap = new Map();
+    let totalGross = 0;
+    let totalCommission = 0;
+    appointments.forEach((appointment) => {
+      if (!isCompletedStatus(appointment.Status)) return;
+      const barber = barberLookup.get(
+        canonicalizeKey(appointment.Barber),
+      );
+      if (!barber) return;
+      if (barberFilterId && barber.id !== barberFilterId) return;
+      const serviceNames = splitServiceList(appointment.Services);
+      if (!serviceNames.length) return;
+      let appointmentGross = 0;
+      serviceNames.forEach((serviceName) => {
+        const service = serviceLookup.get(canonicalizeKey(serviceName));
+        const price = getServicePriceForBarber(service, barber.id);
+        if (price === null || price === undefined) return;
+        const numericPrice = Number(price);
+        if (!Number.isFinite(numericPrice) || numericPrice <= 0) return;
+        appointmentGross += numericPrice;
+      });
+      if (!appointmentGross) return;
+      const commissionRate = Number(barber.position?.commissionRate ?? 0);
+      const commissionValue = appointmentGross * (commissionRate / 100);
+      totalGross += appointmentGross;
+      totalCommission += commissionValue;
+      const existing = summaryMap.get(barber.id) || {
+        id: barber.id,
+        name: barber.name,
+        color: barber.color,
+        commissionRate,
+        appointments: 0,
+        gross: 0,
+        commission: 0,
+      };
+      existing.appointments += 1;
+      existing.gross += appointmentGross;
+      existing.commission += commissionValue;
+      summaryMap.set(barber.id, existing);
+      const dateKey = appointment.Date || startKey;
+      const timelineEntry = timelineMap.get(dateKey) || {
+        date: dateKey,
+        gross: 0,
+        commission: 0,
+      };
+      timelineEntry.gross += appointmentGross;
+      timelineEntry.commission += commissionValue;
+      timelineMap.set(dateKey, timelineEntry);
+    });
+    const items = Array.from(summaryMap.values())
+      .map((item) => ({
+        ...item,
+        net: item.gross - item.commission,
+      }))
+      .sort((a, b) => b.gross - a.gross);
+    const timeline = Array.from(timelineMap.values()).sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
+    res.json({
+      start: startKey,
+      end: endKey,
+      barberId: barberFilterId,
+      totalGross,
+      totalCommission,
+      totalNet: totalGross - totalCommission,
+      items,
+      timeline,
+    });
+  } catch (error) {
+    console.error("Revenue summary error:", error);
+    res.status(500).json({
+      error: "Не удалось рассчитать доходы.",
+      details: error.message,
+    });
   }
 });
 app.get("/api/user-profile/:name", authenticateToken, async (req, res) => {
   try {
     const { name } = req.params;
     const user = await prisma.users.findFirst({ where: { Name: name } });
-    if (!user) return res.status(404).json({ error: "Клиент не найден." });
+    if (!user)
+      return res.status(404).json({ error: "Пользователь не найден." });
     const appointmentsRaw = await prisma.appointments.findMany({
       where: { CustomerName: name },
     });
@@ -1517,7 +2096,9 @@ app.get("/api/user-profile/:name", authenticateToken, async (req, res) => {
     res.json({ user, appointments });
   } catch (error) {
     console.error("Profile fetch error:", error);
-    res.status(500).json({ error: "Не удалось загрузить профиль." });
+    res
+      .status(500)
+      .json({ error: "Не удалось загрузить профиль пользователя." });
   }
 });
 cron.schedule("0 3 * * *", async () => {
@@ -1571,3 +2152,9 @@ const bootstrap = async () => {
   }
 };
 bootstrap();
+
+
+
+
+
+

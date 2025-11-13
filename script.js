@@ -12,28 +12,59 @@ const DEFAULT_API_BASE_URL = resolveDefaultApiBaseUrl();
 const API_BASE_URL = window.__BARBER_API_BASE__ || DEFAULT_API_BASE_URL;
 window.__BARBER_API_BASE__ = API_BASE_URL;
 
-const VIEW_TABS = [
-  { id: 'dashboard', label: 'Обзор' },
-  { id: 'tables', label: 'Данные' },
-  { id: 'bot', label: 'Бот' },
-  { id: 'system', label: 'Система' },
+const ROLE_OWNER = 'owner';
+const ROLE_STAFF = 'staff';
+const ROLE_OPTIONS = [
+  { value: ROLE_OWNER, label: 'Владелец' },
+  { value: ROLE_STAFF, label: 'Сотрудник' },
 ];
 
-const TABLE_ORDER = ['Appointments', 'Schedules', 'Users', 'Barbers', 'Services'];
-const VISIBLE_TABLE_ORDER = TABLE_ORDER.filter((table) => table !== 'Schedules');
-const DATA_TABLES = ['Appointments', 'Schedules', 'Users'];
+const VIEW_TABS_BY_ROLE = {
+  [ROLE_OWNER]: [
+    { id: 'dashboard', label: 'Обзор' },
+    { id: 'tables', label: 'Данные' },
+    { id: 'bot', label: 'Бот' },
+    { id: 'system', label: 'Система' },
+  ],
+  [ROLE_STAFF]: [
+    { id: 'dashboard', label: 'Обзор' },
+    { id: 'tables', label: 'Данные' },
+    { id: 'profile', label: 'Профиль' },
+  ],
+};
+
+const TABLE_ORDER = ['Appointments', 'Schedules', 'Users', 'Barbers', 'Services', 'Positions', 'Revenue'];
+const DATA_TABLES_BY_ROLE = {
+  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Users', 'Positions'],
+  [ROLE_STAFF]: ['Appointments', 'Services'],
+};
+const VISIBLE_TABLE_ORDER_BY_ROLE = {
+  [ROLE_OWNER]: ['Appointments', 'Users', 'Barbers', 'Schedules', 'Services', 'Positions', 'Revenue'],
+  [ROLE_STAFF]: ['Appointments', 'Services'],
+};
 
 const TABLE_CONFIG = {
   Appointments: { label: 'Записи', mode: 'data', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'asc' } },
-  Schedules: { label: 'Расписание', mode: 'data', canCreate: false, supportsBarberFilter: true, defaultSort: { key: 'Date', direction: 'asc' } },
+  Schedules: { label: 'Расписание', mode: 'custom' },
   Users: { label: 'Клиенты', mode: 'data', canCreate: true, defaultSort: { key: 'Name', direction: 'asc' } },
   Barbers: { label: 'Барберы', mode: 'custom' },
   Services: { label: 'Услуги', mode: 'custom' },
+  Positions: { label: 'Должности', mode: 'custom' },
+  Revenue: { label: 'Доходы', mode: 'custom' },
 };
-const DATA_SHORTCUTS = ['Appointments', 'Users', 'Barbers', 'Services'].map((tableId) => ({
-  id: tableId,
-  label: TABLE_CONFIG[tableId]?.label || tableId,
-}));
+const DATA_SHORTCUTS_BY_ROLE = {
+  [ROLE_OWNER]: ['Appointments', 'Users', 'Barbers', 'Schedules', 'Services', 'Positions', 'Revenue'].map((tableId) => ({
+    id: tableId,
+    label: TABLE_CONFIG[tableId]?.label || tableId,
+  })),
+  [ROLE_STAFF]: ['Appointments', 'Services'].map((tableId) => ({
+    id: tableId,
+    label: TABLE_CONFIG[tableId]?.label || tableId,
+  })),
+};
+const DEFAULT_DATA_TABLES = DATA_TABLES_BY_ROLE[ROLE_OWNER];
+const DEFAULT_TABLE_SHORTCUTS = DATA_SHORTCUTS_BY_ROLE[ROLE_OWNER];
+const DEFAULT_VISIBLE_TABLE_ORDER = VISIBLE_TABLE_ORDER_BY_ROLE[ROLE_OWNER];
 
 const TABLE_COLUMNS = {
   Appointments: [
@@ -78,6 +109,8 @@ const buildNewBarberState = () => ({
   phone: '',
   telegramId: '',
   isActive: true,
+  role: ROLE_OWNER,
+  positionId: null,
 });
 const buildNewServiceState = () => ({
   name: '',
@@ -214,6 +247,38 @@ const formatCurrency = (value) => {
   if (!Number.isFinite(numeric)) return '';
   return `${numberFormatter.format(numeric)} \u20BD`;
 };
+const formatPercent = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '0%';
+  const digits = Number.isInteger(numeric) ? 0 : 1;
+  return `${numeric.toFixed(digits)}%`;
+};
+const toInputDate = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+const parseInputDate = (value) => {
+  const normalized = normalizeText(value);
+  if (!normalized) return null;
+  const parsed = new Date(`${normalized}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+const getCurrentMonthRange = () => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return { start, end };
+};
+const formatShortDateLabel = (value) => {
+  const parsed = parseInputDate(value);
+  if (!parsed) return value || '';
+  const day = String(parsed.getDate()).padStart(2, '0');
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  return `${day}.${month}`;
+};
 const pluralize = (count, [one, few, many]) => {
   const mod10 = count % 10;
   const mod100 = count % 100;
@@ -226,6 +291,8 @@ const canonicalizeName = (value) => normalizeText(value).replace(/[^a-z0-9а-я�
 
 const resolveLogin = (value) => normalizeText(value);
 
+const normalizeRoleValue = (value) => (value === ROLE_STAFF ? ROLE_STAFF : ROLE_OWNER);
+
 const buildSessionPayload = (payload = {}) => {
   const normalizedLogin = resolveLogin(payload.username || payload.login);
   return {
@@ -233,6 +300,8 @@ const buildSessionPayload = (payload = {}) => {
     username: normalizedLogin,
     displayName: payload.displayName || payload.name || normalizedLogin,
     barberId: payload.barberId || payload.id || null,
+    role: normalizeRoleValue(payload.role),
+    barberName: payload.barberName || payload.displayName || payload.name || normalizedLogin,
   };
 };
 
@@ -797,6 +866,19 @@ const IconSystem = ({ className = 'h-5 w-5' }) => (
   </svg>
 );
 
+const IconProfile = ({ className = 'h-5 w-5' }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    strokeWidth="1.6"
+    stroke="currentColor"
+    className={className}
+  >
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 14c-3.866 0-7 1.791-7 4v1h14v-1c0-2.209-3.134-4-7-4Zm0-2a4 4 0 1 0-0.001-8.001A4 4 0 0 0 12 12Z" />
+  </svg>
+);
+
 const IconDots = ({ className = 'h-5 w-5' }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
     <circle cx="5" cy="12" r="1.5" />
@@ -810,6 +892,7 @@ const VIEW_TAB_ICONS = {
   tables: IconData,
   bot: IconBot,
   system: IconSystem,
+  profile: IconProfile,
 };
 
 const UI_TEXT = Object.freeze({
@@ -886,8 +969,13 @@ const Sidebar = ({
   liveStatus = 'unknown',
   activeDataTable = 'Appointments',
   onSelectTable,
+  tabs,
+  tableShortcuts,
 }) => {
   const username = session?.displayName || session?.username || '-';
+  const sidebarTabs = Array.isArray(tabs) && tabs.length ? tabs : VIEW_TABS_BY_ROLE[ROLE_OWNER];
+  const sidebarShortcuts =
+    Array.isArray(tableShortcuts) && tableShortcuts.length ? tableShortcuts : DEFAULT_TABLE_SHORTCUTS;
 
   return (
     <aside className="hidden w-72 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950/90 p-5 lg:sticky lg:top-0 lg:flex lg:h-screen lg:overflow-y-auto">
@@ -907,7 +995,7 @@ const Sidebar = ({
         )}
       </div>
       <nav className="mt-6 flex-1 space-y-2 overflow-y-auto">
-        {VIEW_TABS.map((tab) => {
+        {sidebarTabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
             <div key={tab.id} className="space-y-1">
@@ -924,7 +1012,7 @@ const Sidebar = ({
               </button>
               {tab.id === 'tables' && (
                 <div className="space-y-1 pl-4">
-                  {DATA_SHORTCUTS.map((shortcut) => {
+                  {sidebarShortcuts.map((shortcut) => {
                     const isShortcutActive = activeDataTable === shortcut.id && activeTab === 'tables';
                     return (
                       <button
@@ -952,9 +1040,18 @@ const Sidebar = ({
   );
 };
 
-const MobileTabs = ({ session, activeTab, onChange, onLogout, liveUpdatedAt, liveStatus = 'unknown' }) => {
+const MobileTabs = ({
+  session,
+  activeTab,
+  onChange,
+  onLogout,
+  liveUpdatedAt,
+  liveStatus = 'unknown',
+  tabs,
+}) => {
   const username = session?.displayName || session?.username || '-';
   const handleSelect = (tabId) => onChange?.(tabId);
+  const availableTabs = Array.isArray(tabs) && tabs.length ? tabs : VIEW_TABS_BY_ROLE[ROLE_OWNER];
   const renderLiveIndicator = () =>
     liveStatus === 'unknown' && !liveUpdatedAt ? (
       <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">{UI_TEXT.liveFallback}</span>
@@ -984,7 +1081,7 @@ const MobileTabs = ({ session, activeTab, onChange, onLogout, liveUpdatedAt, liv
       </header>
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur lg:hidden">
         <div className="flex items-center gap-3">
-          {VIEW_TABS.map((tab) => {
+          {availableTabs.map((tab) => {
             const IconComponent = VIEW_TAB_ICONS[tab.id] || IconDots;
             const isActive = activeTab === tab.id;
             return (
@@ -1087,6 +1184,10 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
           <StatCard label="Сегодня" value={stats.todaysAppointments ?? 0} accent="text-cyan-300" />
         </div>
       </SectionCard>
+
+      
+
+      
 
       <SectionCard title="Ближайшие записи" actions={upcomingActions}>
         {groupedUpcoming.length === 0 ? (
@@ -1498,7 +1599,7 @@ const RatingSlider = ({ value, onChange, dense = false }) => {
 
 const BarbersView = ({
   barbers = [],
-  schedules = [],
+  positions = [],
   loadAvatarOptions,
   uploadAvatar,
   deleteAvatar,
@@ -1506,7 +1607,6 @@ const BarbersView = ({
   onSave,
   onAdd,
   onDelete,
-  onScheduleUpdate,
 }) => {
   const [editorState, setEditorState] = useState({ open: false, mode: 'edit', targetId: null });
   const [draftBarber, setDraftBarber] = useState(buildNewBarberState);
@@ -1524,6 +1624,19 @@ const BarbersView = ({
   const activeBarber = barbers.find((barber) => barber.id === editorState.targetId) || null;
   const workingBarber = isCreateMode ? draftBarber : activeBarber;
   const [pendingAvatar, setPendingAvatar] = useState('');
+  const sortedPositions = useMemo(() => {
+    if (!Array.isArray(positions) || !positions.length) return [];
+    return [...positions].sort((a, b) => {
+      const leftOrder = Number(a?.orderIndex) || 0;
+      const rightOrder = Number(b?.orderIndex) || 0;
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+      return normalizeText(a?.name).localeCompare(normalizeText(b?.name), 'ru');
+    });
+  }, [positions]);
+  const activePosition = useMemo(
+    () => sortedPositions.find((item) => item.id === workingBarber?.positionId) || null,
+    [sortedPositions, workingBarber?.positionId]
+  );
 
   useEffect(() => {
     if (!editorState.open) {
@@ -1538,14 +1651,6 @@ const BarbersView = ({
       setPendingAvatar('');
     }
   }, [editorState.open, isCreateMode, draftBarber.avatarUrl, activeBarber?.avatarUrl, activeBarber]);
-
-  const workingBarberSchedule = useMemo(() => {
-    if (!workingBarber?.name) return [];
-    const target = normalizeText(workingBarber.name).toLowerCase();
-    return schedules
-      .filter((slot) => normalizeText(slot.Barber).toLowerCase() === target)
-      .sort((a, b) => getScheduleSortValue(a) - getScheduleSortValue(b));
-  }, [workingBarber, schedules]);
 
   const handleFieldChange = (field, value) => {
     if (field === 'avatarUrl') {
@@ -1606,19 +1711,6 @@ const BarbersView = ({
 
   const canSubmit = isCreateMode ? Boolean(workingBarber?.name?.trim() && workingBarber?.password?.trim()) : Boolean(workingBarber);
 
-  const handleSchedulePickerChange = async (slot, nextValue) => {
-    if (typeof onScheduleUpdate !== 'function') return;
-    const slotId = getRecordId(slot);
-    if (!slotId) return;
-    await onScheduleUpdate(slotId, {
-      Barber: slot.Barber,
-      Date: slot.Date,
-      DayOfWeek: slot.DayOfWeek,
-      Week: nextValue,
-      Time: nextValue,
-    });
-  };
-
   return (
     <div className="space-y-6">
       <SectionCard
@@ -1640,6 +1732,10 @@ const BarbersView = ({
               const avatarSrc = resolveAssetUrl(barber.avatarUrl);
               const phoneLabel = barber.phone ? formatPhoneInput(barber.phone) : '';
               const ratingLabel = Number(barber.rating || RATING_MAX).toFixed(1);
+              const positionName = normalizeText(barber.position?.name);
+              const commissionRate =
+                typeof barber.position?.commissionRate === 'number' ? barber.position.commissionRate : null;
+              const commissionLabel = commissionRate !== null ? formatPercent(commissionRate) : null;
               return (
                 <button
                   key={barber.id}
@@ -1670,6 +1766,12 @@ const BarbersView = ({
                       <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-200">
                         ★ {ratingLabel}
                       </span>
+                      {positionName && (
+                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-200">
+                          {positionName}
+                          {commissionLabel ? ` · ${commissionLabel}` : ''}
+                        </span>
+                      )}
                       {phoneLabel && <span className="text-slate-300">{phoneLabel}</span>}
                       {barber.telegramId && <span className="text-slate-400">@{barber.telegramId}</span>}
                     </div>
@@ -1746,6 +1848,49 @@ const BarbersView = ({
                     className="h-10 w-16 cursor-pointer rounded-xl border border-slate-500 bg-transparent"
                   />
                 </label>
+                <div className="col-span-2 grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">Права доступа</label>
+                    <select
+                      value={normalizeRoleValue(workingBarber.role)}
+                      onChange={(event) => handleFieldChange('role', normalizeRoleValue(event.target.value))}
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white focus:border-indigo-400 focus:outline-none"
+                    >
+                      {ROLE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500">Владелец видит все разделы, сотрудник — только свои записи и услуги.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">Должность</label>
+                    <select
+                      value={workingBarber.positionId || ''}
+                      onChange={(event) => handleFieldChange('positionId', event.target.value || null)}
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white focus:border-indigo-400 focus:outline-none"
+                    >
+                      <option value="">Без должности</option>
+                      {sortedPositions.map((position) => (
+                        <option key={position.id} value={position.id}>
+                          {position.name}
+                          {typeof position.commissionRate === 'number' ? ` · ${formatPercent(position.commissionRate)}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500">
+                      {activePosition
+                        ? `Процент: ${
+                            typeof activePosition.commissionRate === 'number'
+                              ? formatPercent(activePosition.commissionRate)
+                              : 'не указан'
+                          }.`
+                        : 'Не влияет на доступы, используется для аналитики.'}
+                    </p>
+                  </div>
+                </div>
+
                 <textarea
                   value={workingBarber.description || ''}
                   onChange={(event) => handleFieldChange('description', event.target.value)}
@@ -1783,47 +1928,9 @@ const BarbersView = ({
                       workingBarber.isActive !== false ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100' : 'border-slate-600 text-slate-500'
                     )}
                   >
-                    {workingBarber.isActive !== false ? '✓' : ''}
+                    {workingBarber.isActive !== false ? '?' : ''}
                   </span>
                 </button>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-slate-400">Расписание</p>
-                {workingBarberSchedule.length ? (
-                  <div className="grid gap-2 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-                    {workingBarberSchedule.map((slot) => {
-                      const slotId = getRecordId(slot) || `${slot.Barber}-${slot.Date}-${slot.Week}`;
-                      const timeValue = slot.Week || '';
-                      const dayLabel = formatScheduleDayShort(slot.Date, slot.DayOfWeek);
-                      const dateLabel = formatScheduleDateLabel(slot.Date);
-                      const isTodaySlot = isTodayDate(slot.Date);
-                      return (
-                        <div
-                          key={slotId}
-                          className={classNames(
-                            'space-y-2 rounded-2xl border bg-slate-900/60 p-3',
-                            isTodaySlot ? 'border-emerald-400/70 ring-1 ring-emerald-400/30' : 'border-slate-800'
-                          )}
-                        >
-                          <div className="flex flex-col items-center justify-center gap-1 text-center text-xs uppercase tracking-[0.3em] text-slate-500">
-                            <span className="text-slate-200 text-sm font-semibold tracking-wide">
-                              {[dayLabel, dateLabel].filter(Boolean).join(' · ')}
-                            </span>
-                          </div>
-                          <TimeRangePicker
-                            value={timeValue}
-                            onChange={(nextValue) => handleSchedulePickerChange(slot, nextValue)}
-                            buttonClassName="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-center text-sm text-white whitespace-nowrap focus:ring-2 focus:ring-indigo-500"
-                            title="Редактирование времени"
-                            placeholder="Время"
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-500">Для этого барбера нет запланированных слотов.</p>
-                )}
               </div>
             </div>
           </div>
@@ -1831,6 +1938,117 @@ const BarbersView = ({
           <p className="text-slate-300">Выберите барбера, чтобы изменить данные.</p>
         )}
       </Modal>
+    </div>
+  );
+};
+
+const BarberProfileView = ({
+  barber = null,
+  loadAvatarOptions,
+  uploadAvatar,
+  deleteAvatar,
+  onFieldChange,
+  onSave,
+}) => {
+  const [pendingAvatar, setPendingAvatar] = useState(barber?.avatarUrl || '');
+
+  useEffect(() => {
+    setPendingAvatar(barber?.avatarUrl || '');
+  }, [barber?.avatarUrl]);
+
+  if (!barber) {
+    return (
+      <SectionCard title="Профиль сотрудника">
+        <p className="text-sm text-slate-400">Данные профиля недоступны. Обратитесь к администратору.</p>
+      </SectionCard>
+    );
+  }
+
+  const handleFieldChange = (field, value) => {
+    onFieldChange?.(barber.id, field, value);
+  };
+
+  const handleSave = () => {
+    onSave?.({ ...barber, avatarUrl: pendingAvatar || '' });
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionCard title="Мой профиль">
+        <div className="space-y-6">
+          <BarberAvatarPicker
+            value={pendingAvatar || ''}
+            onChange={setPendingAvatar}
+            loadOptions={loadAvatarOptions}
+            onUpload={uploadAvatar}
+            onDelete={deleteAvatar}
+          />
+          <div className="space-y-5 rounded-3xl border border-slate-800 bg-slate-950/80 p-6 shadow-inner shadow-black/10">
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                value={barber.name || ''}
+                onChange={(event) => handleFieldChange('name', event.target.value)}
+                placeholder="Имя"
+                className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+              />
+              <div className="w-full">
+                <RatingSlider dense value={barber.rating} onChange={(event) => handleFieldChange('rating', event.target.value)} />
+              </div>
+              <input
+                type="password"
+                value={barber.password || ''}
+                onChange={(event) => handleFieldChange('password', event.target.value)}
+                placeholder="Пароль"
+                className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+              />
+              <label className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm text-white">
+                Цвет
+                <input
+                  type="color"
+                  value={/^#/.test(barber.color || '') ? barber.color : '#6d28d9'}
+                  onChange={(event) => handleFieldChange('color', event.target.value)}
+                  className="h-10 w-16 cursor-pointer rounded-xl border border-slate-500 bg-transparent"
+                />
+              </label>
+              <div className="col-span-2 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3">
+                <p className="text-sm text-slate-300">Должность</p>
+                <p className="text-base font-semibold text-white">{normalizeText(barber.position?.name) || 'Не назначена'}</p>
+                {typeof barber.position?.commissionRate === 'number' && (
+                  <p className="text-xs text-slate-500">Процент: {formatPercent(barber.position.commissionRate)}</p>
+                )}
+              </div>
+              <textarea
+                value={barber.description || ''}
+                onChange={(event) => handleFieldChange('description', event.target.value)}
+                placeholder="Описание"
+                rows={4}
+                className="col-span-2 w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+              />
+              <input
+                type="tel"
+                value={barber.phone || ''}
+                onChange={(event) => handleFieldChange('phone', event.target.value)}
+                placeholder="Телефон"
+                className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+              />
+              <input
+                value={barber.telegramId || ''}
+                onChange={(event) => handleFieldChange('telegramId', event.target.value)}
+                placeholder="Telegram"
+                className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+              />
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={handleSave}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      </SectionCard>
     </div>
   );
 };
@@ -2074,6 +2292,574 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
           <p className="text-slate-300">Выберите услугу для редактирования.</p>
         )}
       </Modal>
+    </div>
+  );
+};
+
+const parseScheduleDate = (value) => {
+  const normalized = normalizeText(value);
+  if (!normalized) return null;
+  const parsed = new Date(`${normalized}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const resolveWeekBucket = (dateValue) => {
+  const parsed = parseScheduleDate(dateValue);
+  if (!parsed) return null;
+  const start = new Date(parsed);
+  const offset = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - offset);
+  return { key: start.toISOString().slice(0, 10), start };
+};
+
+const formatWeekRangeLabel = (startDate) => {
+  const formatter = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' });
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + 6);
+  const startLabel = formatter.format(startDate).replace('.', '');
+  const endLabel = formatter.format(endDate).replace('.', '');
+  return `${startLabel} – ${endLabel}`;
+};
+
+const groupSchedulesByWeek = (slots = []) => {
+  const buckets = new Map();
+  slots.forEach((slot) => {
+    const bucket = resolveWeekBucket(slot.Date);
+    if (!bucket) return;
+    const current = buckets.get(bucket.key) || { key: bucket.key, start: bucket.start, slots: [] };
+    current.slots.push(slot);
+    buckets.set(bucket.key, current);
+  });
+  return Array.from(buckets.values()).sort((a, b) => a.start.getTime() - b.start.getTime());
+};
+
+const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onScheduleUpdate }) => {
+  const normalizedUserKey = useMemo(() => {
+    const baseName = canonicalizeName(
+      currentUser?.barberName || currentUser?.displayName || currentUser?.username || '',
+    );
+    return baseName.toLowerCase();
+  }, [currentUser?.barberName, currentUser?.displayName, currentUser?.username]);
+  const defaultBarberFilter = useMemo(() => {
+    if (!normalizedUserKey) return 'all';
+    const match = barbers.find(
+      (barber) => canonicalizeName(barber.name || '').toLowerCase() === normalizedUserKey,
+    );
+    return match?.name || 'all';
+  }, [barbers, normalizedUserKey]);
+  const [barberFilter, setBarberFilter] = useState(defaultBarberFilter);
+  useEffect(() => {
+    setBarberFilter(defaultBarberFilter);
+  }, [defaultBarberFilter]);
+  const normalizedSchedules = Array.isArray(schedules) ? schedules : [];
+  const filteredSchedules = useMemo(() => {
+    if (barberFilter === 'all') return normalizedSchedules;
+    const target = normalizeText(barberFilter).toLowerCase();
+    return normalizedSchedules.filter((slot) => normalizeText(slot.Barber).toLowerCase() === target);
+  }, [normalizedSchedules, barberFilter]);
+  const groupedWeeks = useMemo(() => groupSchedulesByWeek(filteredSchedules), [filteredSchedules]);
+  const barberOptions = useMemo(
+    () =>
+      (Array.isArray(barbers) ? barbers : [])
+        .map((barber) => normalizeText(barber.name))
+        .filter(Boolean),
+    [barbers]
+  );
+  const handleTimeChange = useCallback(
+    (slot, nextValue) => {
+      if (typeof onScheduleUpdate !== 'function') return;
+      const recordId = getRecordId(slot) || `${slot.Barber}-${slot.Date}`;
+      onScheduleUpdate(recordId, {
+        Barber: slot.Barber,
+        Date: slot.Date,
+        DayOfWeek: slot.DayOfWeek,
+        Week: nextValue,
+        Time: nextValue,
+      });
+    },
+    [onScheduleUpdate]
+  );
+
+  return (
+    <div className="space-y-6 overflow-hidden">
+      <SectionCard title="Расписание барберов">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <label className="text-sm text-slate-400">Барбер</label>
+            <select
+              value={barberFilter}
+              onChange={(event) => setBarberFilter(event.target.value)}
+              className="w-64 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-white focus:border-indigo-400 focus:outline-none"
+            >
+              <option value="all">Все барберы</option>
+              {barberOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-xs text-slate-500">Изменения автоматически сохраняются и отправляются в бота.</p>
+        </div>
+        {groupedWeeks.length ? (
+          <div className="mt-4 space-y-4">
+            {groupedWeeks.map((group) => {
+              const slots = [...group.slots].sort((a, b) => getScheduleSortValue(a) - getScheduleSortValue(b));
+              return (
+                <div
+                  key={group.key}
+                  className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900/60 p-4 shadow-inner shadow-black/5"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-100">{formatWeekRangeLabel(group.start)}</p>
+                    <span className="text-xs text-slate-500">
+                      {barberFilter === 'all' ? 'Все барберы' : `Барбер: ${barberFilter}`}
+                    </span>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                    {slots.map((slot) => {
+                      const slotId = getRecordId(slot) || `${slot.Barber}-${slot.Date}`;
+                      const dayLabel = formatScheduleDayShort(slot.Date, slot.DayOfWeek);
+                      const dateLabel = formatScheduleDateLabel(slot.Date);
+                      const isTodaySlot = isTodayDate(slot.Date);
+                      return (
+                        <div
+                          key={slotId}
+                          className={classNames(
+                            'space-y-3 rounded-2xl border bg-slate-900/60 p-3',
+                            isTodaySlot ? 'border-emerald-400/70 ring-1 ring-emerald-400/30' : 'border-slate-800'
+                          )}
+                        >
+                          <div className="flex flex-col text-xs uppercase tracking-[0.25em] text-slate-500">
+                            <span className="text-sm font-semibold tracking-normal text-white">
+                              {[dayLabel, dateLabel].filter(Boolean).join(' · ')}
+                            </span>
+                            <span className="text-[11px] font-medium text-slate-400">{slot.Barber || '—'}</span>
+                          </div>
+                          <TimeRangePicker
+                            value={slot.Week === '0' ? '' : slot.Week || ''}
+                            onChange={(nextValue) => handleTimeChange(slot, nextValue)}
+                            buttonClassName="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-center text-sm text-white whitespace-nowrap focus:ring-2 focus:ring-indigo-500"
+                            title="Редактирование времени"
+                            placeholder="Выходной"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-slate-400">Нет расписания для выбранных условий.</p>
+        )}
+      </SectionCard>
+    </div>
+  );
+};
+
+const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestConfirm }) => {
+  const [newPosition, setNewPosition] = useState({ name: '', rate: '' });
+  const [drafts, setDrafts] = useState({});
+  const [error, setError] = useState('');
+  const [savingKey, setSavingKey] = useState(null);
+
+  useEffect(() => {
+    setDrafts({});
+  }, [positions]);
+
+  const sortedPositions = useMemo(() => {
+    if (!Array.isArray(positions) || !positions.length) return [];
+    return [...positions].sort((a, b) => {
+      const leftOrder = Number(a?.orderIndex) || 0;
+      const rightOrder = Number(b?.orderIndex) || 0;
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+      return normalizeText(a?.name).localeCompare(normalizeText(b?.name), 'ru');
+    });
+  }, [positions]);
+
+  const normalizeCommissionValue = (value) => {
+    if (value === '' || value === null || value === undefined) return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    const clamped = Math.min(Math.max(parsed, 0), 100);
+    return clamped;
+  };
+
+  const handleCreate = async (event) => {
+    event.preventDefault();
+    if (!newPosition.name.trim()) {
+      setError('Введите название должности.');
+      return;
+    }
+    try {
+      setSavingKey('new');
+      setError('');
+      await onCreate?.({
+        name: newPosition.name.trim(),
+        commissionRate: normalizeCommissionValue(newPosition.rate),
+        orderIndex: sortedPositions.length,
+      });
+      setNewPosition({ name: '', rate: '' });
+    } catch (createError) {
+      setError(createError.message || 'Не удалось создать должность.');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const handleDraftChange = (id, field, value) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), [field]: value },
+    }));
+  };
+
+  const getDraft = (position) => {
+    const draft = drafts[position.id];
+    const resolvedRate =
+      draft?.rate ?? draft?.commissionRate ?? position.commissionRate;
+    return {
+      name: draft?.name ?? position.name ?? '',
+      rate: resolvedRate === undefined || resolvedRate === null ? '' : String(resolvedRate),
+    };
+  };
+
+  const handleSave = async (position) => {
+    if (!position?.id) return;
+    const draft = getDraft(position);
+    if (!draft.name.trim()) {
+      setError('Название должности не может быть пустым.');
+      return;
+    }
+    try {
+      setSavingKey(position.id);
+      setError('');
+      await onUpdate?.(position.id, {
+        name: draft.name.trim(),
+        commissionRate: normalizeCommissionValue(draft.rate),
+      });
+      setDrafts((prev) => {
+        const next = { ...prev };
+        delete next[position.id];
+        return next;
+      });
+    } catch (updateError) {
+      setError(updateError.message || 'Не удалось сохранить должность.');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const handleDelete = async (position) => {
+    if (!position?.id) return;
+    const confirmed = requestConfirm
+      ? await requestConfirm({
+          title: 'Удалить должность?',
+          message: `«${position.name}» будет удалена без возможности восстановления.`,
+          confirmLabel: 'Удалить',
+          tone: 'danger',
+        })
+      : true;
+    if (!confirmed) return;
+    try {
+      setSavingKey(position.id);
+      setError('');
+      await onDelete?.(position.id);
+    } catch (deleteError) {
+      setError(deleteError.message || 'Не удалось удалить должность.');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionCard title="Должности">
+        <form onSubmit={handleCreate} className="grid gap-3 md:grid-cols-3">
+          <input
+            value={newPosition.name}
+            onChange={(event) => setNewPosition((prev) => ({ ...prev, name: event.target.value }))}
+            placeholder="Название должности"
+            className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
+          />
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="0.1"
+            value={newPosition.rate}
+            onChange={(event) => setNewPosition((prev) => ({ ...prev, rate: event.target.value }))}
+            placeholder="Процент, %"
+            className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={savingKey === 'new'}
+            className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow shadow-emerald-900/30 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Добавить
+          </button>
+        </form>
+        <p className="mt-2 text-xs text-slate-500">
+          Процент применяется к стоимости услуг выбранного барбера и определяет его выплату.
+        </p>
+        {error && (
+          <div className="mt-4">
+            <ErrorBanner message={error} />
+          </div>
+        )}
+        <div className="mt-6 space-y-3">
+          {sortedPositions.length === 0 && <p className="text-sm text-slate-400">Должности еще не созданы.</p>}
+          {sortedPositions.map((position) => {
+            const draft = getDraft(position);
+            return (
+              <div
+                key={position.id}
+                className="space-y-3 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-inner shadow-black/5"
+              >
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+            <div className="flex w-full max-w-full items-stretch gap-2 overflow-hidden md:flex-1 md:flex-nowrap">
+              <input
+                value={draft.name}
+                onChange={(event) => handleDraftChange(position.id, 'name', event.target.value)}
+                className="min-w-0 flex-1 rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
+              />
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={draft.rate}
+                onChange={(event) => handleDraftChange(position.id, 'rate', event.target.value)}
+                placeholder="Процент, %"
+                className="w-24 flex-none rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-sm text-white focus:border-indigo-400 focus:outline-none"
+              />
+            </div>
+            <div className="hidden w-full flex-wrap justify-end gap-2 md:flex md:w-auto md:flex-nowrap">
+              <button
+                type="button"
+                onClick={() => handleSave(position)}
+                disabled={savingKey === position.id}
+                className="rounded-2xl bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Сохранить
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(position)}
+                disabled={savingKey === position.id}
+                className="rounded-2xl border border-rose-600 px-3 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-600/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+          <div className="flex w-full flex-nowrap gap-2 overflow-hidden md:hidden">
+            <button
+              type="button"
+              onClick={() => handleSave(position)}
+              disabled={savingKey === position.id}
+              className="flex-1 min-w-0 shrink rounded-2xl bg-indigo-600 px-2 py-2 text-center text-xs font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Сохранить
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDelete(position)}
+              disabled={savingKey === position.id}
+              className="flex-1 min-w-0 shrink rounded-2xl border border-rose-600 px-2 py-2 text-center text-xs font-semibold text-rose-200 hover:bg-rose-600/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Удалить
+            </button>
+          </div>
+              </div>
+            );
+          })}
+        </div>
+      </SectionCard>
+    </div>
+  );
+};
+
+const RevenueView = ({ apiRequest, barbers = [] }) => {
+  const defaultRange = useMemo(() => getCurrentMonthRange(), []);
+  const [filters, setFilters] = useState(() => ({
+    start: toInputDate(defaultRange.start),
+    end: toInputDate(defaultRange.end),
+    barberId: 'all',
+  }));
+  const [state, setState] = useState({ loading: true, error: '', data: null });
+
+  const barberOptions = useMemo(
+    () =>
+      barbers
+        .filter((barber) => barber?.id && barber?.name)
+        .map((barber) => ({ id: barber.id, name: barber.name })),
+    [barbers]
+  );
+
+  useEffect(() => {
+    if (filters.barberId === 'all') return;
+    if (!barberOptions.some((option) => option.id === filters.barberId)) {
+      setFilters((prev) => ({ ...prev, barberId: 'all' }));
+    }
+  }, [filters.barberId, barberOptions]);
+
+  const fetchRevenue = useCallback(async () => {
+    setState((prev) => ({ ...prev, loading: true, error: '' }));
+    try {
+      const params = new URLSearchParams();
+      if (filters.start) params.append('start', filters.start);
+      if (filters.end) params.append('end', filters.end);
+      if (filters.barberId && filters.barberId !== 'all') params.append('barberId', filters.barberId);
+      const query = params.toString();
+      const payload = await apiRequest(`/revenue/summary${query ? `?${query}` : ''}`);
+      setState({ loading: false, error: '', data: payload });
+    } catch (error) {
+      setState({
+        loading: false,
+        error: error.message || 'Не удалось загрузить доходы.',
+        data: null,
+      });
+    }
+  }, [apiRequest, filters.start, filters.end, filters.barberId]);
+
+  useEffect(() => {
+    fetchRevenue();
+  }, [fetchRevenue]);
+
+  const handleFilterChange = (field, value) => {
+    setFilters((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const summary = state.data;
+  const items = summary?.items || [];
+  const timeline = summary?.timeline || [];
+  const totalGross = summary?.totalGross ?? 0;
+  const totalCommission = summary?.totalCommission ?? 0;
+  const totalNet = summary?.totalNet ?? totalGross - totalCommission;
+  const chartMax = timeline.reduce((max, point) => Math.max(max, point.gross), 0);
+
+  return (
+    <div className="space-y-6">
+      <SectionCard title="Доходы барберов">
+        <div className="grid gap-4 md:grid-cols-4">
+          <div className="space-y-1">
+            <label className="text-xs uppercase tracking-wide text-slate-400">Дата с</label>
+            <input
+              type="date"
+              value={filters.start}
+              onChange={(event) => handleFilterChange('start', event.target.value)}
+              className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs uppercase tracking-wide text-slate-400">Дата по</label>
+            <input
+              type="date"
+              value={filters.end}
+              onChange={(event) => handleFilterChange('end', event.target.value)}
+              className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs uppercase tracking-wide text-slate-400">Барбер</label>
+            <select
+              value={filters.barberId}
+              onChange={(event) => handleFilterChange('barberId', event.target.value)}
+              className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="all">Все сотрудники</option>
+              {barberOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={fetchRevenue}
+              className="w-full rounded-2xl border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-100 hover:border-indigo-400 hover:text-white"
+            >
+              Обновить
+            </button>
+          </div>
+        </div>
+        {state.error && <ErrorBanner message={state.error} />}
+        {state.loading ? (
+          <LoadingState label="Считаю доходы..." />
+        ) : (
+          <>
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              <StatCard label="Общая выручка" value={formatCurrency(totalGross)} />
+              <StatCard label="Начислено сотрудникам" value={formatCurrency(totalCommission)} accent="text-rose-300" />
+              <StatCard label="В кассу" value={formatCurrency(totalNet)} accent="text-emerald-300" />
+            </div>
+            <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-800">
+              {items.length === 0 ? (
+                <p className="p-4 text-sm text-slate-400">Нет выполненных услуг за выбранный период.</p>
+              ) : (
+                <table className="min-w-full divide-y divide-slate-800 text-sm">
+                  <thead className="bg-slate-900/40 text-slate-400">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold">Барбер</th>
+                      <th className="px-4 py-3 text-right font-semibold">Записей</th>
+                      <th className="px-4 py-3 text-right font-semibold">Выручка</th>
+                      <th className="px-4 py-3 text-right font-semibold">Процент</th>
+                      <th className="px-4 py-3 text-right font-semibold">Выплата</th>
+                      <th className="px-4 py-3 text-right font-semibold">В кассу</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {items.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-900/40">
+                        <td className="px-4 py-3 text-white">{item.name}</td>
+                        <td className="px-4 py-3 text-right text-slate-300">{item.appointments}</td>
+                        <td className="px-4 py-3 text-right text-slate-100">{formatCurrency(item.gross)}</td>
+                        <td className="px-4 py-3 text-right text-slate-300">{formatPercent(item.commissionRate)}</td>
+                        <td className="px-4 py-3 text-right text-emerald-300">{formatCurrency(item.commission)}</td>
+                        <td className="px-4 py-3 text-right text-indigo-300">{formatCurrency(item.net)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>
+        )}
+      </SectionCard>
+      <SectionCard title="Динамика выручки">
+        {state.loading ? (
+          <LoadingState label="Строю график..." />
+        ) : timeline.length === 0 ? (
+          <p className="text-sm text-slate-400">Нет данных для отображения графика.</p>
+        ) : (
+          <div className="mt-2 flex h-56 items-end gap-3">
+            {timeline.map((point) => {
+              const height = chartMax ? Math.max((point.gross / chartMax) * 100, 5) : 0;
+              return (
+                <div key={point.date} className="flex-1">
+                  <div className="relative flex items-end justify-center">
+                    <div
+                      className="w-full rounded-t-xl bg-indigo-500/80 shadow-inner shadow-indigo-900/40"
+                      style={{ height: `${height}%` }}
+                    >
+                      <span className="absolute -top-6 text-xs font-semibold text-indigo-100">
+                        {formatCurrency(point.gross)}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-center text-xs text-slate-400">{formatShortDateLabel(point.date)}</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 };
@@ -2493,7 +3279,7 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
                     <span className="truncate">{option}</span>
                     {isActive && (
                       <span className="text-xs font-semibold text-indigo-300" aria-hidden="true">
-                        ✓
+                        ?
                       </span>
                     )}
                   </button>
@@ -2776,9 +3562,9 @@ const TableToolbar = ({
             <button
               onClick={onRefresh}
               className="rounded-full border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800 sm:px-5"
-              title="�������� ������"
+              title="Обновить данные"
             >
-              <span className="hidden sm:inline">��������</span>
+              <span className="hidden sm:inline">Обновить</span>
               <span className="sm:hidden">?</span>
             </button>
           )}
@@ -3940,15 +4726,33 @@ const TablesWorkspace = ({
   onServicePriceChange,
   onDeleteService,
   onAddService,
+  onCreatePosition,
+  onUpdatePosition,
+  onDeletePosition,
   onActiveTableChange,
   preferredTable = null,
   onPreferredTableConsumed,
   onRequestConfirm = null,
   uploadAvatar,
   deleteAvatar,
+  loadAvatarOptions,
+  dataTables = DEFAULT_DATA_TABLES,
+  visibleTableOrder = DEFAULT_VISIBLE_TABLE_ORDER,
+  role = ROLE_OWNER,
 }) => {
+  const resolvedDataTables = useMemo(
+    () => (Array.isArray(dataTables) && dataTables.length ? dataTables : DEFAULT_DATA_TABLES),
+    [dataTables]
+  );
+  const resolvedVisibleTables = useMemo(
+    () =>
+      Array.isArray(visibleTableOrder) && visibleTableOrder.length
+        ? visibleTableOrder
+        : DEFAULT_VISIBLE_TABLE_ORDER,
+    [visibleTableOrder]
+  );
   const [activeTable, setActiveTable] = useLocalStorage('tables.active', 'Appointments');
-  const [tables, setTables] = useState(() => DATA_TABLES.reduce((acc, table) => ({ ...acc, [table]: [] }), {}));
+  const [tables, setTables] = useState(() => resolvedDataTables.reduce((acc, table) => ({ ...acc, [table]: [] }), {}));
   const [dropdownOptions, setDropdownOptions] = useState(sharedOptions || { barbers: [], services: [], statuses: [] });
   const [tableError, setTableError] = useState('');
   const [isFetching, setIsFetching] = useState(false);
@@ -3959,10 +4763,11 @@ const TablesWorkspace = ({
     Appointments: ['UserID'],
     Schedules: [],
     Users: [],
+    Positions: [],
   });
   const [sortConfigs, setSortConfigs] = useLocalStorage(
     'tables.sortConfigs',
-    DATA_TABLES.reduce((acc, table) => ({ ...acc, [table]: TABLE_CONFIG[table]?.defaultSort || null }), {})
+    DEFAULT_DATA_TABLES.reduce((acc, table) => ({ ...acc, [table]: TABLE_CONFIG[table]?.defaultSort || null }), {})
   );
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [showPastAppointments, setShowPastAppointments] = useLocalStorage('tables.showPastAppointments', true);
@@ -3983,6 +4788,12 @@ const TablesWorkspace = ({
   );
 
   useEffect(() => {
+    setTables((prev) =>
+      resolvedDataTables.reduce((acc, table) => ({ ...acc, [table]: prev[table] || [] }), {})
+    );
+  }, [resolvedDataTables]);
+
+  useEffect(() => {
     if (sharedOptions) {
       setDropdownOptions({
         ...sharedOptions,
@@ -3992,14 +4803,10 @@ const TablesWorkspace = ({
   }, [sharedOptions]);
 
   useEffect(() => {
-    if (activeTable === 'Schedules') {
-      setActiveTable('Barbers');
-      return;
+    if (!TABLE_CONFIG[activeTable] || !resolvedVisibleTables.includes(activeTable)) {
+      setActiveTable(resolvedVisibleTables[0] || 'Appointments');
     }
-    if (!TABLE_CONFIG[activeTable]) {
-      setActiveTable('Appointments');
-    }
-  }, [activeTable, setActiveTable]);
+  }, [activeTable, resolvedVisibleTables, setActiveTable]);
 
   useEffect(() => {
     onActiveTableChange?.(activeTable);
@@ -4007,12 +4814,12 @@ const TablesWorkspace = ({
 
   useEffect(() => {
     if (!preferredTable) return;
-    const nextTable = preferredTable === 'Schedules' ? 'Barbers' : preferredTable;
-    if (TABLE_ORDER.includes(nextTable)) {
+    const nextTable = preferredTable;
+    if (resolvedVisibleTables.includes(nextTable)) {
       setActiveTable(nextTable);
     }
     onPreferredTableConsumed?.();
-  }, [preferredTable, setActiveTable, onPreferredTableConsumed]);
+  }, [preferredTable, resolvedVisibleTables, setActiveTable, onPreferredTableConsumed]);
 
   useEffect(() => {
     setHiddenStatuses((prev) => {
@@ -4029,15 +4836,15 @@ const TablesWorkspace = ({
     setTableError('');
     try {
       const responses = await Promise.all([
-        ...DATA_TABLES.map((table) => apiRequest(`/${table}`)),
+        ...resolvedDataTables.map((table) => apiRequest(`/${table}`)),
         apiRequest('/options/appointments'),
       ]);
       const nextTables = {};
-      DATA_TABLES.forEach((table, index) => {
+      resolvedDataTables.forEach((table, index) => {
         const records = responses[index] || [];
         nextTables[table] = table === 'Appointments' ? records.map((row) => ({ ...row, Status: normalizeStatusValue(row.Status) })) : records;
       });
-      const rawOptions = responses[DATA_TABLES.length] || { barbers: [], services: [], statuses: [] };
+      const rawOptions = responses[resolvedDataTables.length] || { barbers: [], services: [], statuses: [] };
       const normalizedOptions = {
         ...rawOptions,
         statuses: normalizeStatusList(rawOptions.statuses || []),
@@ -4051,7 +4858,7 @@ const TablesWorkspace = ({
     } finally {
       setIsFetching(false);
     }
-  }, [apiRequest, onOptionsUpdate]);
+  }, [apiRequest, onOptionsUpdate, resolvedDataTables]);
 
   useEffect(() => {
     fetchTables();
@@ -4072,6 +4879,7 @@ const TablesWorkspace = ({
   const hiddenColumns = hiddenColumnsMap[activeTable] || [];
   const visibleColumns = currentColumns.filter((column) => !hiddenColumns.includes(column.key));
   const sortConfig = sortConfigs[activeTable] || TABLE_CONFIG[activeTable]?.defaultSort || null;
+  const positions = tables.Positions || [];
 
   const processedRows = useMemo(() => {
     const source = tables[activeTable] || [];
@@ -4225,7 +5033,10 @@ const TablesWorkspace = ({
     [apiRequest]
   );
 
-  const loadAvatarAssets = useCallback(() => apiRequest('/assets/avatars'), [apiRequest]);
+  const loadAvatarAssets = useCallback(
+    () => (typeof loadAvatarOptions === 'function' ? loadAvatarOptions() : apiRequest('/assets/avatars')),
+    [apiRequest, loadAvatarOptions]
+  );
 
   const tableSettings = TABLE_CONFIG[activeTable] || {};
   const isCustomTable = tableSettings?.mode === 'custom';
@@ -4233,7 +5044,7 @@ const TablesWorkspace = ({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        {VISIBLE_TABLE_ORDER.map((table) => (
+        {resolvedVisibleTables.map((table) => (
           <button
             key={table}
             onClick={() => setActiveTable(table)}
@@ -4252,7 +5063,7 @@ const TablesWorkspace = ({
           {activeTable === 'Barbers' && (
             <BarbersView
               barbers={barbers}
-              schedules={tables.Schedules || []}
+              positions={positions}
               onFieldChange={onBarberFieldChange}
               onSave={onSaveBarber}
               onAdd={onAddBarber}
@@ -4260,6 +5071,13 @@ const TablesWorkspace = ({
               loadAvatarOptions={loadAvatarAssets}
               uploadAvatar={uploadAvatar}
               deleteAvatar={deleteAvatar}
+            />
+          )}
+          {activeTable === 'Schedules' && (
+            <SchedulesView
+              schedules={tables.Schedules || []}
+              barbers={barbers}
+              currentUser={currentUser}
               onScheduleUpdate={(recordId, payload) => handleUpdate(recordId, payload, { tableId: 'Schedules' })}
             />
           )}
@@ -4272,6 +5090,18 @@ const TablesWorkspace = ({
               onDelete={onDeleteService}
               onAdd={onAddService}
             />
+          )}
+          {activeTable === 'Positions' && (
+            <PositionsView
+              positions={positions}
+              onCreate={onCreatePosition}
+              onUpdate={onUpdatePosition}
+              onDelete={onDeletePosition}
+              requestConfirm={onRequestConfirm}
+            />
+          )}
+          {activeTable === 'Revenue' && (
+            <RevenueView apiRequest={apiRequest} barbers={barbers} />
           )}
         </div>
       ) : (
@@ -4386,10 +5216,14 @@ const BotControlView = ({
   onRefreshUpdate,
   onApplyUpdate,
   systemBusy,
+  onUpdateToken = null,
   viewMode = 'bot',
+  token = null,
 }) => {
   const [description, setDescription] = useState(settings?.botDescription || '');
   const [about, setAbout] = useState(settings?.aboutText || '');
+  const [tokenDraft, setTokenDraft] = useState(token || '');
+  const [savingToken, setSavingToken] = useState(false);
   const descriptionRef = useRef(null);
   const aboutRef = useRef(null);
   const autosizeTextArea = useCallback((element) => {
@@ -4402,6 +5236,9 @@ const BotControlView = ({
     setDescription(settings?.botDescription || '');
     setAbout(settings?.aboutText || '');
   }, [settings]);
+  useEffect(() => {
+    setTokenDraft(token || '');
+  }, [token]);
   useLayoutEffect(() => {
     if (viewMode !== 'bot') return undefined;
     const frame = requestAnimationFrame(() => {
@@ -4410,6 +5247,27 @@ const BotControlView = ({
     });
     return () => cancelAnimationFrame(frame);
   }, [viewMode, description, about, autosizeTextArea]);
+
+  const handleCopyToken = useCallback(() => {
+    const value = tokenDraft || token;
+    if (!value) return;
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(value).catch((error) => console.warn('Clipboard error', error));
+    }
+  }, [tokenDraft, token]);
+  const handleTokenSave = useCallback(async () => {
+    if (!onUpdateToken) return;
+    const value = (tokenDraft || '').trim();
+    if (!value) return;
+    setSavingToken(true);
+    try {
+      await onUpdateToken(value);
+    } catch (error) {
+      console.warn('Bot token update failed', error);
+    } finally {
+      setSavingToken(false);
+    }
+  }, [onUpdateToken, tokenDraft]);
 
   const updateAvailable = Boolean(updateInfo?.available ?? updateInfo?.updateAvailable);
   const currentVersionLabel = updateInfo?.currentVersion || updateInfo?.version || '—';
@@ -4422,6 +5280,10 @@ const BotControlView = ({
   const updateSourceLabel = updateInfo?.source || null;
   const updateSourceUrl = updateInfo?.sourceUrl || null;
   const botRunning = Boolean(status?.running);
+  const normalizedTokenDraft = (tokenDraft || '').trim();
+  const currentTokenValue = token || '';
+  const canSaveToken = Boolean(onUpdateToken && normalizedTokenDraft && normalizedTokenDraft !== currentTokenValue);
+  const canCopyToken = Boolean(tokenDraft || token);
 
   if (viewMode === 'system') {
     return (
@@ -4537,6 +5399,39 @@ const BotControlView = ({
         </div>
       </SectionCard>
 
+      <SectionCard title="Токен бота">
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm text-slate-300">Telegram-токен</label>
+            <input
+              type="text"
+              value={tokenDraft}
+              onChange={(event) => setTokenDraft(event.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 font-mono text-sm text-white"
+              placeholder="1234567890:ABC-DEF"
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleCopyToken}
+              disabled={!canCopyToken}
+              className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-100 hover:border-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Скопировать
+            </button>
+            <button
+              onClick={handleTokenSave}
+              disabled={!canSaveToken || savingToken}
+              className="rounded-lg border border-indigo-500 bg-indigo-600/30 px-3 py-1 text-xs font-semibold text-indigo-100 hover:bg-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {savingToken ? 'Сохранение...' : 'Сохранить'}
+            </button>
+          </div>
+          {!token && <p className="text-xs text-slate-400">Укажите токен и сохраните изменения — файл config.py обновится автоматически.</p>}
+        </div>
+      </SectionCard>
     </div>
   );
 };
@@ -4667,6 +5562,7 @@ const App = () => {
   const [botStatus, setBotStatus] = useState(null);
   const [botSettings, setBotSettings] = useState(null);
   const [botMessages, setBotMessages] = useState([]);
+  const [botToken, setBotToken] = useState(null);
   const [licenseStatus, setLicenseStatus] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [optionsCache, setOptionsCache] = useState(null);
@@ -4682,6 +5578,14 @@ const App = () => {
   const [confirmDialog, setConfirmDialog] = useState(defaultConfirmState);
   const [connectionStatus, setConnectionStatus] = useState('unknown');
   const confirmResolverRef = useRef(null);
+  const role = normalizeRoleValue(session?.role);
+  const viewTabs = VIEW_TABS_BY_ROLE[role] || VIEW_TABS_BY_ROLE[ROLE_OWNER];
+  const dataTables = DATA_TABLES_BY_ROLE[role] || DEFAULT_DATA_TABLES;
+  const visibleTableOrder = VISIBLE_TABLE_ORDER_BY_ROLE[role] || DEFAULT_VISIBLE_TABLE_ORDER;
+  const sidebarShortcuts = DATA_SHORTCUTS_BY_ROLE[role] || DEFAULT_TABLE_SHORTCUTS;
+  const canUseRealtime = role === ROLE_OWNER;
+  const canAccessBot = role === ROLE_OWNER;
+  const canAccessSystem = role === ROLE_OWNER;
 
   const requestConfirm = useCallback(
     (options = {}) =>
@@ -4704,12 +5608,19 @@ const App = () => {
   );
 
   useEffect(() => {
-    if (activeTab === 'barbers' || activeTab === 'services') {
-      const target = activeTab === 'barbers' ? 'Barbers' : 'Services';
-      setPendingTableView(target);
-      setActiveTab('tables');
+    if (!viewTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(viewTabs[0]?.id || 'dashboard');
     }
-  }, [activeTab, setActiveTab]);
+  }, [viewTabs, activeTab, setActiveTab]);
+
+  const currentBarber = useMemo(() => {
+    if (!barbers?.length) return null;
+    if (session?.barberId) {
+      const match = barbers.find((item) => item.id === session.barberId);
+      if (match) return match;
+    }
+    return barbers[0] || null;
+  }, [barbers, session?.barberId]);
 
   const handleSidebarTableChange = useCallback(
     (tableId) => {
@@ -4763,7 +5674,7 @@ const App = () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [session?.token]);
+  }, [session?.token, canUseRealtime]);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('barber-session');
@@ -4771,6 +5682,18 @@ const App = () => {
     setDashboard(null);
     setGlobalError('');
     setRealtimeSnapshot(null);
+    setServices([]);
+    setBarbers([]);
+    setBotStatus(null);
+    setBotSettings(null);
+    setBotMessages([]);
+    setBotToken(null);
+    setLicenseStatus(null);
+    setUpdateInfo(null);
+    setOptionsCache(null);
+    setPendingTableView(null);
+    setActiveDataTable('Appointments');
+    setConnectionStatus('unknown');
   }, []);
 
   const apiRequest = useCallback(
@@ -4797,6 +5720,11 @@ const App = () => {
     [session?.token, handleLogout]
   );
 
+  const handleLoadAvatarOptions = useCallback(
+    () => apiRequest('/assets/avatars'),
+    [apiRequest]
+  );
+
   const fetchAll = useCallback(async () => {
     if (!session?.token) return;
     setLoading(true);
@@ -4809,6 +5737,25 @@ const App = () => {
           console.warn(`${label} fetch skipped:`, error?.message || error);
           return fallback;
         });
+      const servicesPromise = withFallback(apiRequest('/services/full'), { services: [] }, 'Services');
+      const barbersPromise = withFallback(apiRequest('/barbers/full'), [], 'Barbers');
+      const botStatusPromise = canAccessBot
+        ? withFallback(apiRequest('/bot/status'), { status: null, settings: null, token: null }, 'Bot status')
+        : Promise.resolve({ status: null, settings: null, token: null });
+      const botMessagesPromise = canAccessBot
+        ? withFallback(apiRequest('/bot/messages'), [], 'Bot messages')
+        : Promise.resolve([]);
+      const licensePromise = canAccessSystem
+        ? withFallback(apiRequest('/license/status'), null, 'License')
+        : Promise.resolve(null);
+      const updatePromise = canAccessSystem
+        ? withFallback(apiRequest('/system/update'), null, 'Updates')
+        : Promise.resolve(null);
+      const optionsPromise = withFallback(
+        apiRequest('/options/appointments'),
+        { statuses: [], barbers: [], services: [] },
+        'Options',
+      );
       const [
         servicesFull,
         barbersFull,
@@ -4818,34 +5765,31 @@ const App = () => {
         update,
         options,
       ] = await Promise.all([
-        withFallback(apiRequest('/services/full'), { services: [] }, 'Services'),
-        withFallback(apiRequest('/barbers/full'), [], 'Barbers'),
-        withFallback(apiRequest('/bot/status'), { status: null, settings: null }, 'Bot status'),
-        withFallback(apiRequest('/bot/messages'), [], 'Bot messages'),
-        withFallback(apiRequest('/license/status'), null, 'License'),
-        withFallback(apiRequest('/system/update'), null, 'Updates'),
-        withFallback(
-          apiRequest('/options/appointments'),
-          { statuses: [], barbers: [], services: [] },
-          'Options',
-        ),
+        servicesPromise,
+        barbersPromise,
+        botStatusPromise,
+        botMessagesPromise,
+        licensePromise,
+        updatePromise,
+        optionsPromise,
       ]);
       setServices(servicesFull.services || []);
       setBarbers(barbersFull || overview.barbers || []);
       setBotSettings(botState.settings || overview.bot?.settings || null);
       setBotStatus(botState.status);
-      setBotMessages(botMessagesPayload || []);
-      setLicenseStatus(license);
-      setUpdateInfo(normalizeUpdateInfo(update));
+      setBotToken(botState.token || null);
+      setBotMessages(canAccessBot ? botMessagesPayload || [] : []);
+      setLicenseStatus(canAccessSystem ? license : null);
+      setUpdateInfo(canAccessSystem ? normalizeUpdateInfo(update) : null);
       const normalizedOptions = { ...options, statuses: normalizeStatusList(options.statuses || []) };
       setOptionsCache(normalizedOptions);
     } catch (error) {
       console.error(error);
-      setGlobalError(error.message || 'Не удалось загрузить данные');
+      setGlobalError(error.message || 'Не удалось загрузить данные.');
     } finally {
       setLoading(false);
     }
-  }, [apiRequest, session?.token]);
+  }, [apiRequest, canAccessBot, canAccessSystem, session?.token]);
 
   useEffect(() => {
     if (session?.token) {
@@ -4854,7 +5798,7 @@ const App = () => {
   }, [session?.token, fetchAll]);
 
   useEffect(() => {
-    if (!session?.token) {
+    if (!session?.token || !canUseRealtime) {
       setRealtimeSnapshot(null);
       return undefined;
     }
@@ -4887,6 +5831,33 @@ const App = () => {
       eventSource.close();
     };
   }, [session?.token]);
+
+  const handleCreatePosition = useCallback(
+    async (payload) => {
+      await apiRequest('/Positions', { method: 'POST', body: JSON.stringify(payload) });
+      await fetchAll();
+    },
+    [apiRequest, fetchAll]
+  );
+
+  const handleUpdatePosition = useCallback(
+    async (id, payload) => {
+      await apiRequest(`/Positions/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      await fetchAll();
+    },
+    [apiRequest, fetchAll]
+  );
+
+  const handleDeletePosition = useCallback(
+    async (id) => {
+      await apiRequest(`/Positions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      await fetchAll();
+    },
+    [apiRequest, fetchAll]
+  );
 
   useEffect(() => {
     if (!realtimeSnapshot) return;
@@ -4981,6 +5952,8 @@ const App = () => {
       telegramId: barberData.telegramId || '',
       isActive: barberData.isActive !== false,
       orderIndex: Number(barberData.orderIndex ?? fallbackOrder) || 0,
+      role: normalizeRoleValue(barberData.role),
+      positionId: barberData.positionId || null,
     };
     if (barberData.id) {
       payload.id = barberData.id;
@@ -5124,7 +6097,7 @@ const App = () => {
   const handleUploadAvatar = useCallback(
     async ({ name, data }) => {
       if (!name || !data) {
-        throw new Error('�� 㤠���� ���࠭��� ����');
+        throw new Error('Укажите имя и данные изображения.');
       }
       return apiRequest('/assets/avatars/upload', {
         method: 'POST',
@@ -5137,7 +6110,7 @@ const App = () => {
   const handleDeleteAvatar = useCallback(
     async (filename) => {
       if (!filename) {
-        throw new Error('�� 㤠���� �롮��� ��� � ���');
+        throw new Error('Не передан файл для удаления.');
       }
       return apiRequest('/assets/avatars', {
         method: 'DELETE',
@@ -5164,6 +6137,23 @@ const App = () => {
       setGlobalError(error.message || 'Не удалось выполнить действие');
     }
   };
+
+
+  const handleUpdateBotToken = useCallback(
+    async (nextToken) => {
+      try {
+        const response = await apiRequest('/bot/token', { method: 'PUT', body: JSON.stringify({ token: nextToken }) });
+        const normalized = response?.token || nextToken;
+        setBotToken(normalized);
+        await fetchAll();
+        return normalized;
+      } catch (error) {
+        setGlobalError(error.message || 'Не удалось обновить токен бота');
+        throw error;
+      }
+    },
+    [apiRequest, fetchAll]
+  );
 
   const handleSaveSettings = async (payload) => {
     if (!botSettings?.id) return;
@@ -5396,7 +6386,7 @@ const App = () => {
     return <LoginScreen onLogin={handleLogin} error={authError} />;
   }
 
-  const preferredTableTarget = activeTab === 'barbers' ? 'Barbers' : activeTab === 'services' ? 'Services' : pendingTableView;
+    const preferredTableTarget = pendingTableView;
   const liveUpdatedAt = realtimeSnapshot?.updatedAt || null;
   const mainClassName = classNames('flex-1 space-y-4 p-4 md:p-8', isMobile ? 'pb-24' : '');
 
@@ -5413,8 +6403,6 @@ const App = () => {
           />
         );
       case 'tables':
-      case 'barbers':
-      case 'services':
         return (
           <TablesWorkspace
             apiRequest={apiRequest}
@@ -5436,15 +6424,40 @@ const App = () => {
             onServicePriceChange={handleServicePriceChange}
             onDeleteService={handleDeleteService}
             onAddService={handleAddService}
+            onCreatePosition={handleCreatePosition}
+            onUpdatePosition={handleUpdatePosition}
+            onDeletePosition={handleDeletePosition}
             onActiveTableChange={handleActiveTableSync}
             preferredTable={preferredTableTarget}
             onPreferredTableConsumed={handlePreferredTableConsumed}
             onRequestConfirm={requestConfirm}
             uploadAvatar={handleUploadAvatar}
             deleteAvatar={handleDeleteAvatar}
+            loadAvatarOptions={handleLoadAvatarOptions}
+            dataTables={dataTables}
+            visibleTableOrder={visibleTableOrder}
+            role={role}
+          />
+        );
+      case 'profile':
+        return (
+          <BarberProfileView
+            barber={currentBarber}
+            loadAvatarOptions={handleLoadAvatarOptions}
+            uploadAvatar={handleUploadAvatar}
+            deleteAvatar={handleDeleteAvatar}
+            onFieldChange={handleBarberFieldChange}
+            onSave={handleSaveBarber}
           />
         );
       case 'bot':
+        if (!canAccessBot) {
+          return (
+            <SectionCard title="Недостаточно прав">
+              <p className="text-sm text-slate-400">Раздел доступен только владельцу.</p>
+            </SectionCard>
+          );
+        }
         return (
           <BotControlView
             status={botStatus}
@@ -5465,10 +6478,19 @@ const App = () => {
             onRefreshUpdate={handleRefreshUpdate}
             onApplyUpdate={handleApplyUpdate}
             systemBusy={systemBusy}
+            token={botToken}
+            onUpdateToken={handleUpdateBotToken}
             viewMode="bot"
           />
         );
       case 'system':
+        if (!canAccessSystem) {
+          return (
+            <SectionCard title="Недостаточно прав">
+              <p className="text-sm text-slate-400">Раздел доступен только владельцу.</p>
+            </SectionCard>
+          );
+        }
         return (
           <BotControlView
             status={botStatus}
@@ -5489,36 +6511,22 @@ const App = () => {
             onRefreshUpdate={handleRefreshUpdate}
             onApplyUpdate={handleApplyUpdate}
             systemBusy={systemBusy}
+            token={botToken}
+            onUpdateToken={handleUpdateBotToken}
             viewMode="system"
           />
         );
       default:
         return (
-          <BotControlView
-            status={botStatus}
-            settings={botSettings}
-            backups={dashboard?.backups || []}
-            messages={botMessages}
-            onToggleEnabled={handleBotToggle}
-            onStart={() => handleBotAction('start')}
-            onStop={() => handleBotAction('stop')}
-            onRestart={() => handleBotAction('restart')}
-            onSaveSettings={handleSaveSettings}
-            onSaveMessage={(id, draft, persist) => handleSaveMessage(id, draft, persist)}
-            onRestoreBackup={handleRestoreBackup}
-            onCreateBackup={handleCreateBackup}
-            onDeleteBackup={handleDeleteBackup}
-            licenseStatus={licenseStatus}
-            updateInfo={updateInfo}
-            onRefreshUpdate={handleRefreshUpdate}
-            onApplyUpdate={handleApplyUpdate}
-            systemBusy={systemBusy}
-            viewMode="bot"
+          <DashboardView
+            data={dashboard}
+            onOpenAppointment={handleOpenAppointment}
+            onOpenProfile={openProfile}
+            onCreateAppointment={handleCreateAppointment}
           />
         );
     }
   };
-
   if (fatalError) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950 p-6 text-center text-white">
@@ -5551,6 +6559,7 @@ const App = () => {
           onLogout={handleLogout}
           liveUpdatedAt={liveUpdatedAt}
           liveStatus={connectionStatus}
+          tabs={viewTabs}
         />
       )}
       <div className="flex">
@@ -5563,6 +6572,8 @@ const App = () => {
           liveStatus={connectionStatus}
           activeDataTable={activeDataTable}
           onSelectTable={handleSidebarTableChange}
+          tabs={viewTabs}
+          tableShortcuts={sidebarShortcuts}
         />
         <main className={mainClassName}>
           {globalError && <ErrorBanner message={globalError} />}
@@ -5646,6 +6657,8 @@ const renderApp = () => {
 };
 
 renderApp();
+
+
 
 
 

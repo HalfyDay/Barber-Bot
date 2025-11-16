@@ -177,18 +177,13 @@ const filterBarbersForIdentity = (barbers = [], identity) => {
 };
 const filterServicesForIdentity = (services = [], identity) => {
   if (!isStaffIdentity(identity) || !identity?.barberId) return services;
-  return services
-    .map((service) => {
-      const price = service.prices?.[identity.barberId];
-      if (price === undefined || price === null) return null;
-      return {
-        ...service,
-        prices: { [identity.barberId]: price },
-      };
-    })
-    .filter(Boolean);
+  const staffBarberId = identity.barberId;
+  return services.map((service) => ({
+    ...service,
+    prices: { [staffBarberId]: service.prices?.[staffBarberId] ?? null },
+  }));
 };
-const STAFF_READ_TABLES = new Set(["Appointments", "Services"]);
+const STAFF_READ_TABLES = new Set(["Appointments", "Schedules", "Services"]);
 const STAFF_WRITE_TABLES = new Set(["Appointments"]);
 const STAFF_DELETE_TABLES = new Set(["Appointments"]);
 const buildBarberLookup = (records = []) => {
@@ -763,7 +758,6 @@ const buildDashboardSnapshot = async (identity = null) => {
     const staffUsers = users.filter((user) =>
       matchesIdentityBarber(user.Barber, identity),
     );
-    const staffClients = buildClientRows(staffUsers, staffAppointments);
     return {
       stats: {
         totalUsers: staffUsers.length,
@@ -773,7 +767,7 @@ const buildDashboardSnapshot = async (identity = null) => {
         blockedClients: staffBlocked,
       },
       appointments: { upcoming: staffUpcoming, history: staffHistory },
-      clients: staffClients,
+      clients,
       barbers: filterBarbersForIdentity(barbers, identity),
       services,
       bot: {
@@ -1380,10 +1374,6 @@ app.put("/api/bot/messages/:id", authenticateToken, async (req, res) => {
   }
 });
 app.get("/api/events/stream", authenticateStream, (req, res) => {
-  if (isStaffIdentity(req.identity)) {
-    res.status(403).end();
-    return;
-  }
   res.set({
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
@@ -1476,22 +1466,185 @@ app.post("/api/services/full", authenticateToken, async (req, res) => {
   }
 });
 app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
-  if (!isOwnerRequest(req)) {
+
+  const isOwner = isOwnerRequest(req);
+
+  const isStaff = isStaffIdentity(req.identity);
+
+  if (!isOwner && !isStaff) {
+
     return res
+
       .status(403)
-      .json({ error: "Недостаточно прав для изменения услуг." });
+
+      .json({ error: "�������筮 �ࠢ ��� ��������� ���." });
+
   }
+
+  if (isOwner) {
+
+    try {
+
+      await upsertServiceWithPrices(req.params.id, req.body || {});
+
+      const services = await getServiceCatalog(true);
+
+      return res.json({ services });
+
+    } catch (error) {
+
+      console.error("Update service error:", error);
+
+      return res
+
+        .status(500)
+
+        .json({ error: "�� 㤠���� �������� ����." });
+
+    }
+
+  }
+
+  const staffBarberId = req.identity?.barberId;
+
+  if (!staffBarberId) {
+
+    return res
+
+      .status(403)
+
+      .json({ error: "��묨 �᭮� �� ���ᮢ���� ������." });
+
+  }
+
+  const payload = req.body || {};
+
+  const pricesInput = payload.prices || {};
+
+  const hasOwnPrice =
+
+    Object.prototype.hasOwnProperty.call(pricesInput, staffBarberId) ||
+
+    Object.prototype.hasOwnProperty.call(pricesInput, String(staffBarberId));
+
+  if (!hasOwnPrice) {
+
+    return res.status(400).json({ error: "�� �������� ���ᮢ��� ���." });
+
+  }
+
+  const rawValue =
+
+    pricesInput[staffBarberId] ?? pricesInput[String(staffBarberId)];
+
+  let normalizedPrice = null;
+
+  if (!(rawValue === "" || rawValue === null)) {
+
+    const numeric = Number(rawValue);
+
+    if (!Number.isFinite(numeric) || numeric < 0) {
+
+      return res.status(400).json({ error: "�� �������� ���ᮢ��� ���." });
+
+    }
+
+    normalizedPrice = numeric;
+
+  }
+
   try {
-    await upsertServiceWithPrices(req.params.id, req.body || {});
-    const services = await getServiceCatalog(true);
-    res.json({ services });
+
+    await prisma.$transaction(async (tx) => {
+
+      const existingService = await tx.services.findUnique({
+
+        where: { id: req.params.id },
+
+        select: { id: true },
+
+      });
+
+      if (!existingService) {
+
+        throw new Error("SERVICE_NOT_FOUND");
+
+      }
+
+      if (normalizedPrice === null) {
+
+        await tx.servicePrices.deleteMany({
+
+          where: { serviceId: existingService.id, barberId: staffBarberId },
+
+        });
+
+      } else {
+
+        await tx.servicePrices.upsert({
+
+          where: {
+
+            serviceId_barberId: {
+
+              serviceId: existingService.id,
+
+              barberId: staffBarberId,
+
+            },
+
+          },
+
+          update: { price: normalizedPrice },
+
+          create: {
+
+            id: randomUUID(),
+
+            serviceId: existingService.id,
+
+            barberId: staffBarberId,
+
+            price: normalizedPrice,
+
+          },
+
+        });
+
+      }
+
+    });
+
+    const services = filterServicesForIdentity(
+
+      await getServiceCatalog(true),
+
+      req.identity,
+
+    );
+
+    return res.json({ services });
+
   } catch (error) {
-    console.error("Update service error:", error);
-    res
+
+    if (error.message === "SERVICE_NOT_FOUND") {
+
+      return res.status(404).json({ error: "������ �� ������." });
+
+    }
+
+    console.error("Staff service price update error:", error);
+
+    return res
+
       .status(500)
-      .json({ error: "Не удалось обновить услугу." });
+
+      .json({ error: "�� 㤠���� �������� ����." });
+
   }
+
 });
+
 app.delete("/api/services/full/:id", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
@@ -1672,12 +1825,13 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
   const modelName = tableToModelMap[tableName];
   if (!modelName || !prisma[modelName])
     return res.status(404).json({ error: "Запрошенная таблица не найдена." });
-  if (isStaffIdentity(req.identity)) {
-    const allowedTables = new Set(["Appointments", "Barbers"]);
+  const isStaff = isStaffIdentity(req.identity);
+  if (isStaff) {
+    const allowedTables = new Set(["Appointments", "Barbers", "Schedules"]);
     if (!allowedTables.has(tableName)) {
       return res
         .status(403)
-        .json({ error: "Недостаточно прав для изменения этого раздела." });
+        .json({ error: "�������筮 �ࠢ ��� ��������� �⮣� ࠧ����." });
     }
   }
   const data = coercePayload(tableName, { ...req.body });
@@ -1696,48 +1850,66 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
       data.UserID = String(data.UserID);
     }
   }
+  if (isStaff && tableName === "Appointments") {
+    const existing = await prisma[modelName].findUnique({ where: { id } });
+    if (!existing || !matchesIdentityBarber(existing.Barber, req.identity)) {
+      return res
+        .status(403)
+        .json({ error: "???????? ?? ??? ????????? ?? ?????." });
+    }
+    const staffBarber = getIdentityBarberName(req.identity);
+    if (!staffBarber) {
+      return res
+        .status(400)
+        .json({ error: "? ???? ??????? ?? ????? ??? ????." });
+    }
+    data.Barber = staffBarber;
+  } else if (isStaff && tableName === "Barbers") {
+    if (id !== req.identity.barberId) {
+      return res
+        .status(403)
+        .json({ error: "????? ???????? ?? ?? ????." });
+    }
+  }
   if (tableName === "Schedules") {
     try {
-    if (isStaffIdentity(req.identity)) {
-      if (tableName === "Appointments") {
-        const existing = await prisma[modelName].findUnique({ where: { id } });
-        if (!existing || !matchesIdentityBarber(existing.Barber, req.identity)) {
-          return res
-            .status(403)
-            .json({ error: "Недостаточно прав для изменения этой записи." });
-        }
+      let targetBarber = data.Barber;
+      if (isStaff) {
         const staffBarber = getIdentityBarberName(req.identity);
         if (!staffBarber) {
           return res
             .status(400)
-            .json({ error: "В профиле сотрудника не указано имя барбера." });
+            .json({ error: "? ???? ??????? ?? ????? ??? ????." });
         }
-        data.Barber = staffBarber;
-      } else if (tableName === "Barbers") {
-        if (id !== req.identity.barberId) {
-          return res
-            .status(403)
-            .json({ error: "Можно редактировать только свой профиль." });
-        }
+        targetBarber = staffBarber;
       }
-    }
-
-      const { Barber, Week = "", Date: date } = data;
+      if (!normalizeText(targetBarber)) {
+        return res
+          .status(400)
+          .json({ error: "??? ????? ??? ????? ????." });
+      }
+      const date = data.Date;
+      if (!date) {
+        return res
+          .status(400)
+          .json({ error: "????? ???????? ???." });
+      }
+      const weekValue = data.Week ?? "";
       const existing = await prisma.schedules.findFirst({
-        where: { Barber, Date: date },
+        where: { Barber: targetBarber, Date: date },
       });
       let result;
       if (existing) {
         result = await prisma.schedules.update({
           where: { id: existing.id },
-          data: { Week },
+          data: { Week: weekValue },
         });
       } else {
         result = await prisma.schedules.create({
           data: {
             id: randomUUID(),
-            Barber,
-            Week,
+            Barber: targetBarber,
+            Week: weekValue,
             DayOfWeek: data.DayOfWeek,
             Date: date,
           },
@@ -1748,7 +1920,7 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
       console.error("Schedule update error:", error);
       return res
         .status(500)
-        .json({ error: "Не удалось обновить расписание." });
+        .json({ error: "?? ????? ???????? ?????." });
     }
   }
   if (tableName === "Cost") {
@@ -2152,6 +2324,7 @@ const bootstrap = async () => {
   }
 };
 bootstrap();
+
 
 
 

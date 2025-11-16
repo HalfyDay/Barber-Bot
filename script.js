@@ -15,48 +15,48 @@ window.__BARBER_API_BASE__ = API_BASE_URL;
 const ROLE_OWNER = 'owner';
 const ROLE_STAFF = 'staff';
 const ROLE_OPTIONS = [
-  { value: ROLE_OWNER, label: 'Владелец' },
-  { value: ROLE_STAFF, label: 'Сотрудник' },
+  { value: ROLE_OWNER, label: 'Р’Р»Р°РґРµР»РµС†' },
+  { value: ROLE_STAFF, label: 'РЎРѕС‚СЂСѓРґРЅРёРє' },
 ];
 
 const VIEW_TABS_BY_ROLE = {
   [ROLE_OWNER]: [
-    { id: 'dashboard', label: 'Обзор' },
-    { id: 'tables', label: 'Данные' },
-    { id: 'system', label: 'Система' },
+    { id: 'dashboard', label: 'РћР±Р·РѕСЂ' },
+    { id: 'tables', label: 'Р”Р°РЅРЅС‹Рµ' },
+    { id: 'system', label: 'РЎРёСЃС‚РµРјР°' },
   ],
   [ROLE_STAFF]: [
-    { id: 'dashboard', label: 'Обзор' },
-    { id: 'tables', label: 'Данные' },
-    { id: 'profile', label: 'Профиль' },
+    { id: 'dashboard', label: 'РћР±Р·РѕСЂ' },
+    { id: 'tables', label: 'Р”Р°РЅРЅС‹Рµ' },
+    { id: 'profile', label: 'РџСЂРѕС„РёР»СЊ' },
   ],
 };
 
 const TABLE_ORDER = ['Appointments', 'Schedules', 'Users', 'Barbers', 'Services', 'Positions', 'Revenue'];
 const DATA_TABLES_BY_ROLE = {
   [ROLE_OWNER]: ['Appointments', 'Schedules', 'Users', 'Positions'],
-  [ROLE_STAFF]: ['Appointments', 'Services'],
+  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Services'],
 };
 const VISIBLE_TABLE_ORDER_BY_ROLE = {
   [ROLE_OWNER]: ['Appointments', 'Users', 'Barbers', 'Schedules', 'Services', 'Positions', 'Revenue'],
-  [ROLE_STAFF]: ['Appointments', 'Services'],
+  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Services'],
 };
 
 const TABLE_CONFIG = {
-  Appointments: { label: 'Записи', mode: 'data', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'asc' } },
-  Schedules: { label: 'Расписание', mode: 'custom' },
-  Users: { label: 'Клиенты', mode: 'data', canCreate: true, defaultSort: { key: 'Name', direction: 'asc' } },
-  Barbers: { label: 'Барберы', mode: 'custom' },
-  Services: { label: 'Услуги', mode: 'custom' },
-  Positions: { label: 'Должности', mode: 'custom' },
-  Revenue: { label: 'Доходы', mode: 'custom' },
+  Appointments: { label: 'Р—Р°РїРёСЃРё', mode: 'data', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'asc' } },
+  Schedules: { label: 'Р Р°СЃРїРёСЃР°РЅРёРµ', mode: 'custom' },
+  Users: { label: 'РљР»РёРµРЅС‚С‹', mode: 'data', canCreate: true, defaultSort: { key: 'Name', direction: 'asc' } },
+  Barbers: { label: 'Р‘Р°СЂР±РµСЂС‹', mode: 'custom' },
+  Services: { label: 'РЈСЃР»СѓРіРё', mode: 'custom' },
+  Positions: { label: 'Р”РѕР»Р¶РЅРѕСЃС‚Рё', mode: 'custom' },
+  Revenue: { label: 'Р”РѕС…РѕРґС‹', mode: 'custom' },
 };
 const DATA_SHORTCUTS_BY_ROLE = {
   [ROLE_OWNER]: ['Appointments', 'Users', 'Barbers', 'Schedules', 'Services', 'Positions', 'Revenue'].map((tableId) => ({
     id: tableId,
     label: TABLE_CONFIG[tableId]?.label || tableId,
   })),
-  [ROLE_STAFF]: ['Appointments', 'Services'].map((tableId) => ({
+  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Services'].map((tableId) => ({
     id: tableId,
     label: TABLE_CONFIG[tableId]?.label || tableId,
   })),
@@ -67,34 +67,41 @@ const DEFAULT_VISIBLE_TABLE_ORDER = VISIBLE_TABLE_ORDER_BY_ROLE[ROLE_OWNER];
 
 const TABLE_COLUMNS = {
   Appointments: [
-    { key: 'CustomerName', label: 'Клиент', editable: true, type: 'text', isProfileLink: true, minWidth: 'w-48' },
-    { key: 'Phone', label: 'Телефон', editable: true, type: 'text', minWidth: 'w-36' },
-    { key: 'Barber', label: 'Барбер', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-32' },
-    { key: 'Date', label: 'Дата', editable: true, type: 'date', minWidth: 'w-32' },
-    { key: 'Time', label: 'Время', editable: true, type: 'text', minWidth: 'w-28', noWrap: true },
-    { key: 'Status', label: 'Статус', editable: true, type: 'select', optionsKey: 'statuses', align: 'center', minWidth: 'w-28' },
-    { key: 'Services', label: 'Услуги', editable: true, type: 'multi-select', optionsKey: 'services', minWidth: 'w-56' },
-    { key: 'UserID', label: 'ID клиента', editable: true, type: 'text', minWidth: 'w-24' },
-    { key: 'Reminder2hClientSent', label: 'Напоминание клиенту', editable: true, type: 'boolean', align: 'center' },
-    { key: 'Reminder2hBarberSent', label: 'Напоминание барберу', editable: true, type: 'boolean', align: 'center' },
+    { key: 'CustomerName', label: 'РљР»РёРµРЅС‚', editable: true, type: 'text', isProfileLink: true, minWidth: 'w-48' },
+    { key: 'Phone', label: 'РўРµР»РµС„РѕРЅ', editable: true, type: 'text', minWidth: 'w-36' },
+    { key: 'Barber', label: 'Р‘Р°СЂР±РµСЂ', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-32' },
+    { key: 'Date', label: 'Р”Р°С‚Р°', editable: true, type: 'date', minWidth: 'w-32' },
+    { key: 'Time', label: 'Р’СЂРµРјСЏ', editable: true, type: 'text', minWidth: 'w-28', noWrap: true },
+    { key: 'Status', label: 'РЎС‚Р°С‚СѓСЃ', editable: true, type: 'select', optionsKey: 'statuses', align: 'center', minWidth: 'w-28' },
+    { key: 'Services', label: 'РЈСЃР»СѓРіРё', editable: true, type: 'multi-select', optionsKey: 'services', minWidth: 'w-56' },
+    { key: 'UserID', label: 'ID РєР»РёРµРЅС‚Р°', editable: true, type: 'text', minWidth: 'w-24' },
+    { key: 'Reminder2hClientSent', label: 'РќР°РїРѕРјРёРЅР°РЅРёРµ РєР»РёРµРЅС‚Сѓ', editable: true, type: 'boolean', align: 'center' },
+    { key: 'Reminder2hBarberSent', label: 'РќР°РїРѕРјРёРЅР°РЅРёРµ Р±Р°СЂР±РµСЂСѓ', editable: true, type: 'boolean', align: 'center' },
   ],
   Schedules: [
-    { key: 'Barber', label: 'Барбер', editable: false, minWidth: 'w-40' },
-    { key: 'DayOfWeek', label: 'День недели', editable: false, minWidth: 'w-32' },
-    { key: 'Date', label: 'Дата', editable: false, minWidth: 'w-32' },
-    { key: 'Week', label: 'Слоты', editable: true, type: 'text', align: 'center', minWidth: 'w-40' },
+    { key: 'Barber', label: 'Р‘Р°СЂР±РµСЂ', editable: false, minWidth: 'w-40' },
+    { key: 'DayOfWeek', label: 'Р”РµРЅСЊ РЅРµРґРµР»Рё', editable: false, minWidth: 'w-32' },
+    { key: 'Date', label: 'Р”Р°С‚Р°', editable: false, minWidth: 'w-32' },
+    { key: 'Week', label: 'РЎР»РѕС‚С‹', editable: true, type: 'text', align: 'center', minWidth: 'w-40' },
   ],
   Users: [
-    { key: 'Name', label: 'Имя', editable: true, type: 'text', isProfileLink: true, minWidth: 'w-40' },
-    { key: 'Phone', label: 'Телефон', editable: true, type: 'text', minWidth: 'w-36' },
+    { key: 'Name', label: 'РРјСЏ', editable: true, type: 'text', isProfileLink: true, minWidth: 'w-40' },
+    { key: 'Phone', label: 'РўРµР»РµС„РѕРЅ', editable: true, type: 'text', minWidth: 'w-36' },
     { key: 'TelegramID', label: 'Telegram', editable: true, type: 'text', minWidth: 'w-32' },
-    { key: 'Barber', label: 'Любимый мастер', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-40' },
+    { key: 'Barber', label: 'Р›СЋР±РёРјС‹Р№ РјР°СЃС‚РµСЂ', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-40' },
   ],
 };
 
 const RATING_MIN = 3;
 const RATING_MAX = 5;
-const RATING_STEP = 0.5;
+const RATING_STEP = 1;
+const clampRatingValue = (value) => {
+  if (value === '' || value == null) return RATING_MAX;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return RATING_MAX;
+  return Math.min(RATING_MAX, Math.max(RATING_MIN, Math.round(numeric)));
+};
+const formatRatingValue = (value) => String(clampRatingValue(value));
 let avatarOptionsCache = null;
 const YEAR_IN_MS = 365 * 24 * 60 * 60 * 1000;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -146,8 +153,8 @@ const defaultConfirmState = {
   open: false,
   title: '',
   message: '',
-  confirmLabel: 'Подтвердить',
-  cancelLabel: 'Отмена',
+  confirmLabel: 'РџРѕРґС‚РІРµСЂРґРёС‚СЊ',
+  cancelLabel: 'РћС‚РјРµРЅР°',
   tone: 'neutral',
 };
 const buildAppointmentModalState = () => ({
@@ -217,7 +224,7 @@ const useOutsideClick = (ref, handler) => {
 
 const fetchAvatarOptions = async () => {
   const response = await fetch(`${API_BASE_URL}/assets/avatars`);
-  if (!response.ok) throw new Error('Не удалось получить список аватаров');
+  if (!response.ok) throw new Error('РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ СЃРїРёСЃРѕРє Р°РІР°С‚Р°СЂРѕРІ');
   const payload = await response.json();
   const images = Array.isArray(payload.images) ? payload.images.filter(Boolean).map(normalizeImagePath) : [];
   return Array.from(new Set(images));
@@ -286,7 +293,7 @@ const pluralize = (count, [one, few, many]) => {
   return many;
 };
 
-const canonicalizeName = (value) => normalizeText(value).replace(/[^a-z0-9а-яё\s]/gi, '').trim();
+const canonicalizeName = (value) => normalizeText(value).replace(/[^a-z0-9Р°-СЏС‘\s]/gi, '').trim();
 
 const resolveLogin = (value) => normalizeText(value);
 
@@ -407,7 +414,7 @@ const formatBackupLabel = (filename = '') => {
   return parsed ? backupDateFormatter.format(parsed) : filename;
 };
 const formatDateHeading = (value, options = { weekday: 'long', day: 'numeric', month: 'long' }) => {
-  if (!value) return 'Без даты';
+  if (!value) return 'Р‘РµР· РґР°С‚С‹';
   try {
     const parsed = new Date(`${value}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return value;
@@ -424,17 +431,17 @@ const formatLiveTimestamp = (value, nowTs = Date.now()) => {
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return '';
     const diffMs = Math.max(0, nowTs - parsed.getTime());
-    if (diffMs < 1000) return 'только что';
-    if (diffMs < 60_000) return `${Math.floor(diffMs / 1000)} сек`;
+    if (diffMs < 1000) return 'С‚РѕР»СЊРєРѕ С‡С‚Рѕ';
+    if (diffMs < 60_000) return `${Math.floor(diffMs / 1000)} СЃРµРє`;
     if (diffMs < 3_600_000) {
       const minutes = Math.floor(diffMs / 60_000);
       const seconds = Math.floor((diffMs % 60_000) / 1000);
-      return `${minutes} мин ${seconds.toString().padStart(2, '0')} сек`;
+      return `${minutes} РјРёРЅ ${seconds.toString().padStart(2, '0')} СЃРµРє`;
     }
     if (diffMs < 86_400_000) {
       const hours = Math.floor(diffMs / 3_600_000);
       const minutes = Math.floor((diffMs % 3_600_000) / 60_000);
-      return `${hours} ч ${minutes.toString().padStart(2, '0')} мин`;
+      return `${hours} С‡ ${minutes.toString().padStart(2, '0')} РјРёРЅ`;
     }
     return parsed.toLocaleString('ru-RU', {
       day: '2-digit',
@@ -455,7 +462,7 @@ const normalizeUpdateInfo = (payload) => {
   const details =
     payload.details ||
     payload.note ||
-    (available ? 'Доступно обновление' : 'Установлена актуальная версия');
+    (available ? 'Р”РѕСЃС‚СѓРїРЅРѕ РѕР±РЅРѕРІР»РµРЅРёРµ' : 'РЈСЃС‚Р°РЅРѕРІР»РµРЅР° Р°РєС‚СѓР°Р»СЊРЅР°СЏ РІРµСЂСЃРёСЏ');
   return {
     ...payload,
     available,
@@ -472,38 +479,38 @@ const normalizeUpdateInfo = (payload) => {
 };
 
 const STATUS_TRANSLATIONS = {
-  active: 'Активная',
-  'активная': 'Активная',
-  confirm: 'Подтверждена',
-  confirmed: 'Подтверждена',
-  'подтверждено': 'Подтверждена',
-  'подтверждена': 'Подтверждена',
-  done: 'Выполнена',
-  complete: 'Выполнена',
-  completed: 'Выполнена',
-  finished: 'Выполнена',
-  'выполнена': 'Выполнена',
-  'завершена': 'Выполнена',
-  cancel: 'Отменено',
-  canceled: 'Отменено',
-  cancelled: 'Отменено',
-  'отмена': 'Отменено',
-  'отменено': 'Отменено',
-  'no show': 'Не пришёл',
-  'no-show': 'Не пришёл',
-  noshow: 'Не пришёл',
-  missed: 'Не пришёл',
-  pending: 'В обработке',
-  wait: 'В обработке',
-  waiting: 'В обработке',
-  processing: 'В обработке',
+  active: 'РђРєС‚РёРІРЅР°СЏ',
+  'Р°РєС‚РёРІРЅР°СЏ': 'РђРєС‚РёРІРЅР°СЏ',
+  confirm: 'РџРѕРґС‚РІРµСЂР¶РґРµРЅР°',
+  confirmed: 'РџРѕРґС‚РІРµСЂР¶РґРµРЅР°',
+  'РїРѕРґС‚РІРµСЂР¶РґРµРЅРѕ': 'РџРѕРґС‚РІРµСЂР¶РґРµРЅР°',
+  'РїРѕРґС‚РІРµСЂР¶РґРµРЅР°': 'РџРѕРґС‚РІРµСЂР¶РґРµРЅР°',
+  done: 'Р’С‹РїРѕР»РЅРµРЅР°',
+  complete: 'Р’С‹РїРѕР»РЅРµРЅР°',
+  completed: 'Р’С‹РїРѕР»РЅРµРЅР°',
+  finished: 'Р’С‹РїРѕР»РЅРµРЅР°',
+  'РІС‹РїРѕР»РЅРµРЅР°': 'Р’С‹РїРѕР»РЅРµРЅР°',
+  'Р·Р°РІРµСЂС€РµРЅР°': 'Р’С‹РїРѕР»РЅРµРЅР°',
+  cancel: 'РћС‚РјРµРЅРµРЅРѕ',
+  canceled: 'РћС‚РјРµРЅРµРЅРѕ',
+  cancelled: 'РћС‚РјРµРЅРµРЅРѕ',
+  'РѕС‚РјРµРЅР°': 'РћС‚РјРµРЅРµРЅРѕ',
+  'РѕС‚РјРµРЅРµРЅРѕ': 'РћС‚РјРµРЅРµРЅРѕ',
+  'no show': 'РќРµ РїСЂРёС€С‘Р»',
+  'no-show': 'РќРµ РїСЂРёС€С‘Р»',
+  noshow: 'РќРµ РїСЂРёС€С‘Р»',
+  missed: 'РќРµ РїСЂРёС€С‘Р»',
+  pending: 'Р’ РѕР±СЂР°Р±РѕС‚РєРµ',
+  wait: 'Р’ РѕР±СЂР°Р±РѕС‚РєРµ',
+  waiting: 'Р’ РѕР±СЂР°Р±РѕС‚РєРµ',
+  processing: 'Р’ РѕР±СЂР°Р±РѕС‚РєРµ',
 };
 const STATUS_BADGE_MAP = {
-  Активная: 'border border-sky-500/30 bg-sky-500/10 text-sky-100',
-  Подтверждена: 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-100',
-  Завершена: 'border border-indigo-500/30 bg-indigo-500/10 text-indigo-100',
-  Отменена: 'border border-rose-500/30 bg-rose-500/10 text-rose-100',
-  'Не пришёл': 'border border-amber-500/30 bg-amber-500/10 text-amber-100',
+  РђРєС‚РёРІРЅР°СЏ: 'border border-sky-500/30 bg-sky-500/10 text-sky-100',
+  РџРѕРґС‚РІРµСЂР¶РґРµРЅР°: 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-100',
+  Р—Р°РІРµСЂС€РµРЅР°: 'border border-indigo-500/30 bg-indigo-500/10 text-indigo-100',
+  РћС‚РјРµРЅРµРЅР°: 'border border-rose-500/30 bg-rose-500/10 text-rose-100',
+  'РќРµ РїСЂРёС€С‘Р»': 'border border-amber-500/30 bg-amber-500/10 text-amber-100',
 };
 const getStatusBadgeClasses = (status) => {
   const normalized = normalizeStatusValue(status);
@@ -512,9 +519,9 @@ const getStatusBadgeClasses = (status) => {
   );
 };
 
-const INACTIVE_STATUS_TOKENS = ['выполн', 'заверш', 'done', 'cancel', 'отмен', 'не приш', 'noshow', 'no-show', 'missed', 'проср', 'expired'];
-const ACTIVE_STATUS_TOKENS = ['актив', 'active', 'подтверж', 'confirm', 'ожид', 'pending', 'wait', 'ждем', 'ждём', 'нов', 'new'];
-const COMPLETED_STATUS_TOKENS = ['выполн', 'заверш', 'done', 'complete', 'готов'];
+const INACTIVE_STATUS_TOKENS = ['РІС‹РїРѕР»РЅ', 'Р·Р°РІРµСЂС€', 'done', 'cancel', 'РѕС‚РјРµРЅ', 'РЅРµ РїСЂРёС€', 'noshow', 'no-show', 'missed', 'РїСЂРѕСЃСЂ', 'expired'];
+const ACTIVE_STATUS_TOKENS = ['Р°РєС‚РёРІ', 'active', 'РїРѕРґС‚РІРµСЂР¶', 'confirm', 'РѕР¶РёРґ', 'pending', 'wait', 'Р¶РґРµРј', 'Р¶РґС‘Рј', 'РЅРѕРІ', 'new'];
+const COMPLETED_STATUS_TOKENS = ['РІС‹РїРѕР»РЅ', 'Р·Р°РІРµСЂС€', 'done', 'complete', 'РіРѕС‚РѕРІ'];
 
 const normalizeStatusValue = (status) => {
   const normalized = normalizeText(status).trim();
@@ -550,7 +557,7 @@ const sanitizeTimeToken = (value) => {
 };
 
 const parseTimeRangeValue = (value) => {
-  const safe = normalizeText(value).replace(/[—–]/g, '-');
+  const safe = normalizeText(value).replace(/[вЂ”вЂ“]/g, '-');
   if (!safe) return { start: '', end: '' };
   const [rawStart, rawEnd = ''] = safe.split('-').map((part) => part.trim());
   return {
@@ -677,7 +684,7 @@ const parseMultiValue = (value) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
-const LoadingState = ({ label = 'Загружаю данные...' } = {}) => (
+const LoadingState = ({ label = 'Р—Р°РіСЂСѓР¶Р°СЋ РґР°РЅРЅС‹Рµ...' } = {}) => (
   <div className="flex items-center justify-center py-12 text-slate-300">
     <span className="animate-pulse">{label}</span>
   </div>
@@ -691,12 +698,12 @@ const VisitHistoryList = ({
   visits = [],
   loading = false,
   error = '',
-  emptyMessage = 'История визитов пуста.',
+  emptyMessage = 'РСЃС‚РѕСЂРёСЏ РІРёР·РёС‚РѕРІ РїСѓСЃС‚Р°.',
   maxHeightClass = 'max-h-64',
   showSummary = true,
 }) => {
   if (loading) {
-    return <p className="text-sm text-slate-500">Загружаем историю...</p>;
+    return <p className="text-sm text-slate-500">Р—Р°РіСЂСѓР¶Р°РµРј РёСЃС‚РѕСЂРёСЋ...</p>;
   }
   if (error) {
     return <ErrorBanner message={error} />;
@@ -706,9 +713,9 @@ const VisitHistoryList = ({
       {showSummary && (
         <div className="flex items-center justify-between text-xs text-slate-400">
           <span>
-            Записей за 12 месяцев: <span className="font-semibold text-white">{visits.length}</span>
+            Р—Р°РїРёСЃРµР№ Р·Р° 12 РјРµСЃСЏС†РµРІ: <span className="font-semibold text-white">{visits.length}</span>
           </span>
-          <span>Последние визиты</span>
+          <span>РџРѕСЃР»РµРґРЅРёРµ РІРёР·РёС‚С‹</span>
         </div>
       )}
       <div className={classNames('space-y-2 overflow-auto', maxHeightClass)}>
@@ -724,11 +731,11 @@ const VisitHistoryList = ({
                 )}
               >
                 <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-slate-400">
-                  <span className="font-semibold text-white">Визит №{visit.orderNumber || '—'}</span>
+                  <span className="font-semibold text-white">Р’РёР·РёС‚ в„–{visit.orderNumber || 'вЂ”'}</span>
                   <span>{visit.dateLabel}</span>
                 </div>
-                <p className="mt-1 text-sm text-slate-100">{visit.Barber || '—'}</p>
-                <p className="text-slate-400">{visit.Services || '—'}</p>
+                <p className="mt-1 text-sm text-slate-100">{visit.Barber || 'вЂ”'}</p>
+                <p className="text-slate-400">{visit.Services || 'вЂ”'}</p>
                 {visit.Status && <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-slate-500">{visit.Status}</p>}
               </div>
             );
@@ -751,6 +758,18 @@ const SectionCard = ({ title, actions, children }) => (
       {actions && <div className="hidden sm:block sm:flex-shrink-0">{actions}</div>}
     </div>
     {children}
+  </div>
+);
+const DefaultProfileIcon = ({ className = '', iconClassName = 'h-10 w-10 text-slate-500' }) => (
+  <div className={classNames('flex items-center justify-center bg-slate-800 text-slate-500', className)}>
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={classNames('h-10 w-10', iconClassName)}
+    >
+      <path d="M12 12.75a4.5 4.5 0 10-4.5-4.5 4.5 4.5 0 004.5 4.5zM5.25 20.25a6.75 6.75 0 0113.5 0v.75a.75.75 0 01-.75.75h-12a.75.75 0 01-.75-.75z" />
+    </svg>
   </div>
 );
 const LiveBadge = ({ timestamp, status = 'unknown' }) => {
@@ -893,14 +912,14 @@ const VIEW_TAB_ICONS = {
   profile: IconProfile,
 };
 const SYSTEM_SUB_SECTIONS = Object.freeze([
-  { id: 'bot', label: 'Бот' },
-  { id: 'system', label: 'Система' },
+  { id: 'bot', label: 'Р‘РѕС‚' },
+  { id: 'system', label: 'РЎРёСЃС‚РµРјР°' },
 ]);
 
 const UI_TEXT = Object.freeze({
-  accountTitle: 'Ваш аккаунт',
-  logout: 'Выйти',
-  newAppointmentCta: 'Новая запись',
+  accountTitle: 'Р’Р°С€ Р°РєРєР°СѓРЅС‚',
+  logout: 'Р’С‹Р№С‚Рё',
+  newAppointmentCta: 'РќРѕРІР°СЏ Р·Р°РїРёСЃСЊ',
   liveFallback: 'LIVE',
 });
 
@@ -921,7 +940,7 @@ const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-
   );
 };
 
-const ConfirmDialog = ({ open, title, message, confirmLabel = 'Подтвердить', cancelLabel = 'Отмена', tone = 'neutral', onResult }) => {
+const ConfirmDialog = ({ open, title, message, confirmLabel = 'РџРѕРґС‚РІРµСЂРґРёС‚СЊ', cancelLabel = 'РћС‚РјРµРЅР°', tone = 'neutral', onResult }) => {
   if (!open) return null;
   const confirmToneClass = (() => {
     switch (tone) {
@@ -936,7 +955,7 @@ const ConfirmDialog = ({ open, title, message, confirmLabel = 'Подтверд�
   return (
     <Modal
       isOpen={open}
-      title={title || 'Подтвердите действие'}
+      title={title || 'РџРѕРґС‚РІРµСЂРґРёС‚Рµ РґРµР№СЃС‚РІРёРµ'}
       onClose={() => onResult(false)}
       maxWidthClass="max-w-md"
       footer={
@@ -950,17 +969,29 @@ const ConfirmDialog = ({ open, title, message, confirmLabel = 'Подтверд�
         </div>
       }
     >
-      <p className="text-sm text-slate-200">{message || 'Вы уверены, что хотите продолжить?'}</p>
+      <p className="text-sm text-slate-200">{message || 'Р’С‹ СѓРІРµСЂРµРЅС‹, С‡С‚Рѕ С…РѕС‚РёС‚Рµ РїСЂРѕРґРѕР»Р¶РёС‚СЊ?'}</p>
     </Modal>
   );
 };
 
-const StatCard = ({ label, value, accent = 'text-indigo-300' }) => (
-  <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-3 sm:p-4">
-    <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
-    <p className={classNames('mt-1 text-2xl font-semibold sm:mt-2 sm:text-3xl', accent)}>{value}</p>
-  </div>
-);
+const StatCard = ({ label, value, accent = 'text-indigo-300', onClick }) => {
+  const interactive = typeof onClick === 'function';
+  const Wrapper = interactive ? 'button' : 'div';
+  return (
+    <Wrapper
+      type={interactive ? 'button' : undefined}
+      onClick={onClick}
+      className={classNames(
+        'rounded-xl border border-slate-700 bg-slate-900/40 p-3 text-left sm:p-4',
+        interactive &&
+          'cursor-pointer transition hover:border-indigo-400/70 hover:bg-slate-900/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/60'
+      )}
+    >
+      <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
+      <p className={classNames('mt-1 text-2xl font-semibold sm:mt-2 sm:text-3xl', accent)}>{value}</p>
+    </Wrapper>
+  );
+};
 
 const Sidebar = ({
   session,
@@ -1076,10 +1107,34 @@ const MobileTabs = ({
   liveUpdatedAt,
   liveStatus = 'unknown',
   tabs,
+  activeDataTable,
+  onSelectTable,
+  tableShortcuts,
+  systemSection,
+  onSelectSystemSection,
 }) => {
   const username = session?.displayName || session?.username || '-';
   const [showLogoutMenu, setShowLogoutMenu] = useState(false);
-  const handleSelect = (tabId) => onChange?.(tabId);
+  const [showSubmenus, setShowSubmenus] = useState(true);
+  const submenusVisibleRef = useRef(showSubmenus);
+  const lastScrollRef = useRef(typeof window !== 'undefined' ? window.scrollY : 0);
+  const handleSelect = (tabId, options = {}) => {
+    const { preserveSubmenus = false } = options;
+    if (tabId === activeTab) {
+      if (preserveSubmenus) {
+        submenusVisibleRef.current = true;
+        setShowSubmenus(true);
+        return;
+      }
+      const next = !submenusVisibleRef.current;
+      submenusVisibleRef.current = next;
+      setShowSubmenus(next);
+      return;
+    }
+    submenusVisibleRef.current = true;
+    setShowSubmenus(true);
+    onChange?.(tabId);
+  };
   const availableTabs = Array.isArray(tabs) && tabs.length ? tabs : VIEW_TABS_BY_ROLE[ROLE_OWNER];
   const handleToggleLogoutMenu = () => setShowLogoutMenu((prev) => !prev);
   const handleLogoutClick = () => {
@@ -1089,6 +1144,33 @@ const MobileTabs = ({
   useEffect(() => {
     setShowLogoutMenu(false);
   }, [activeTab]);
+  useEffect(() => {
+    submenusVisibleRef.current = showSubmenus;
+  }, [showSubmenus]);
+  useEffect(() => {
+    const handleScroll = () => {
+      const current = window.scrollY || 0;
+      const last = lastScrollRef.current || 0;
+      const scrollingDown = current > last + 4;
+      const scrollingUp = current < last - 4;
+      const nearTop = current < 16;
+      if (scrollingDown && current > 4 && submenusVisibleRef.current) {
+        setShowSubmenus(false);
+      } else if ((scrollingUp || nearTop) && !submenusVisibleRef.current) {
+        setShowSubmenus(true);
+      }
+      lastScrollRef.current = current;
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+  const resolvedShortcuts = useMemo(
+    () => (Array.isArray(tableShortcuts) && tableShortcuts.length ? tableShortcuts : DEFAULT_TABLE_SHORTCUTS),
+    [tableShortcuts]
+  );
+  const canRenderTableSubmenu = activeTab === 'tables' && resolvedShortcuts.length > 0;
+  const canRenderSystemSubmenu = activeTab === 'system' && SYSTEM_SUB_SECTIONS.length > 0;
+  const hasVisibleSubmenus = showSubmenus && (canRenderTableSubmenu || canRenderSystemSubmenu);
   const renderLiveIndicator = () =>
     liveStatus === 'unknown' && !liveUpdatedAt ? (
       <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">{UI_TEXT.liveFallback}</span>
@@ -1144,33 +1226,130 @@ const MobileTabs = ({
           </div>
         </div>
       </header>
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur lg:hidden">
-        <div className="flex items-center gap-3">
-          {availableTabs.map((tab) => {
-            const IconComponent = VIEW_TAB_ICONS[tab.id] || IconDots;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => handleSelect(tab.id)}
+      <nav className="fixed inset-x-0 bottom-0 z-30 px-4 pb-6 pt-4 lg:hidden">
+        <div className="mx-auto max-w-md">
+          <div className="relative">
+            <div
+              className={classNames(
+                'pointer-events-none absolute inset-x-3 bottom-0 rounded-[32px] bg-gradient-to-b from-transparent via-[#0a1120]/85 to-[#02040c]/95 shadow-[0_-14px_40px_rgba(0,0,0,0.65)] transition-all duration-300',
+                hasVisibleSubmenus ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+              )}
+              aria-hidden="true"
+            />
+            <div className="relative rounded-[32px] bg-[#050916] px-4 py-3">
+              <div
                 className={classNames(
-                  'flex-1 rounded-3xl px-3 py-3 text-center text-sm font-semibold transition',
-                  isActive ? 'bg-indigo-600/20 text-indigo-200' : 'text-slate-400 hover:text-white'
+                  'space-y-2 overflow-hidden transition-[max-height,opacity,transform,padding] duration-300 ease-out',
+                  hasVisibleSubmenus
+                    ? 'max-h-32 pb-2 opacity-100 translate-y-0'
+                    : 'max-h-0 pb-0 opacity-0 -translate-y-2 pointer-events-none'
                 )}
-                aria-label={tab.label}
               >
-                <IconComponent className={classNames('mx-auto h-7 w-7', isActive ? 'text-indigo-300' : 'text-slate-400')} />
-                <span className="sr-only">{tab.label}</span>
-              </button>
-            );
-          })}
+                {canRenderTableSubmenu && (
+                  <div
+                    className={classNames(
+                      'no-scrollbar flex gap-2 overflow-x-auto px-1.5 py-1 transition-all duration-300',
+                      showSubmenus ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1'
+                    )}
+                  >
+                    {resolvedShortcuts.map((shortcut) => {
+                      const isShortcutActive = activeDataTable === shortcut.id;
+                      const canSelectTable = typeof onSelectTable === 'function';
+                      return (
+                        <button
+                          key={shortcut.id}
+                          type="button"
+                          onClick={() => {
+                            handleSelect('tables', { preserveSubmenus: true });
+                            onSelectTable?.(shortcut.id);
+                          }}
+                          disabled={!canSelectTable}
+                          className={classNames(
+                            'flex-shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors',
+                            isShortcutActive
+                              ? 'bg-[#5a57ff] text-white'
+                              : 'bg-white/10 text-slate-200/80 hover:bg-white/15 hover:text-white',
+                            !canSelectTable && 'opacity-50'
+                          )}
+                        >
+                          {shortcut.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {canRenderSystemSubmenu && (
+                  <div
+                    className={classNames(
+                      'no-scrollbar flex gap-2 overflow-x-auto px-1.5 py-1 transition-all duration-300',
+                      showSubmenus ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1'
+                    )}
+                  >
+                    {SYSTEM_SUB_SECTIONS.map((section) => {
+                      const isSectionActive = systemSection === section.id;
+                      const canSelect = typeof onSelectSystemSection === 'function';
+                      return (
+                        <button
+                          key={section.id}
+                          type="button"
+                          onClick={() => {
+                            handleSelect('system', { preserveSubmenus: true });
+                            onSelectSystemSection?.(section.id);
+                          }}
+                          disabled={!canSelect}
+                          className={classNames(
+                            'flex-shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors',
+                            isSectionActive
+                              ? 'bg-[#5a57ff] text-white'
+                              : 'bg-white/10 text-slate-200/80 hover:bg-white/15 hover:text-white',
+                            !canSelect && 'opacity-50'
+                          )}
+                        >
+                          {section.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="flex w-full items-center gap-3 rounded-[32px] bg-[#050916] px-4 py-3 transition-all duration-300">
+                {availableTabs.map((tab) => {
+                  const IconComponent = VIEW_TAB_ICONS[tab.id] || IconDots;
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => handleSelect(tab.id)}
+                      className={classNames(
+                        'flex-1 rounded-full px-3 py-2 text-center text-sm font-semibold transition-colors',
+                        isActive ? 'bg-[#37267a] text-[#ebe9ff]' : 'text-slate-500/80 hover:text-white'
+                      )}
+                      aria-label={tab.label}
+                    >
+                      <IconComponent
+                        className={classNames('mx-auto h-6 w-6', isActive ? 'text-[#ebe9ff]' : 'text-slate-500/80')}
+                      />
+                      <span className="sr-only">{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
       </nav>
     </>
   );
 };
 
-const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppointment }) => {
+const DashboardView = ({
+  data,
+  onOpenAppointment,
+  onOpenProfile,
+  onCreateAppointment,
+  onNavigateTable,
+  availableTables = [],
+}) => {
   if (!data) return <LoadingState />;
   const stats = data.stats || {};
 
@@ -1199,7 +1378,7 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
   }, [upcomingRaw]);
 
   const formatGroupLabel = useCallback((dateValue) => {
-    if (!dateValue || dateValue === 'Без даты') return 'Без даты';
+    if (!dateValue || dateValue === 'Р‘РµР· РґР°С‚С‹') return 'Р‘РµР· РґР°С‚С‹';
     try {
       const parsed = new Date(`${dateValue}T00:00:00`);
       if (Number.isNaN(parsed.getTime())) return dateValue;
@@ -1212,7 +1391,7 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
   const groupedUpcoming = useMemo(() => {
     const groups = new Map();
     upcomingList.forEach((appt) => {
-      const key = appt.Date || 'Без даты';
+      const key = appt.Date || 'Р‘РµР· РґР°С‚С‹';
       const bucket = groups.get(key) || [];
       bucket.push(appt);
       groups.set(key, bucket);
@@ -1234,19 +1413,50 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
       onClick={onCreateAppointment}
       className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500 sm:px-4 whitespace-nowrap"
     >
-      <span className="sm:hidden">+ Запись</span>
-      <span className="hidden sm:inline">+ Новая запись</span>
+      <span className="sm:hidden">+ Р—Р°РїРёСЃСЊ</span>
+      <span className="hidden sm:inline">+ РќРѕРІР°СЏ Р·Р°РїРёСЃСЊ</span>
     </button>
   ) : null;
 
+  const handleStatNavigate = useCallback(
+    (preferredTable) => {
+      if (typeof onNavigateTable !== 'function' || !preferredTable) return;
+      const allowedTables = Array.isArray(availableTables) ? availableTables.filter(Boolean) : [];
+      if (allowedTables.length && !allowedTables.includes(preferredTable)) {
+        onNavigateTable(allowedTables[0]);
+        return;
+      }
+      onNavigateTable(preferredTable);
+    },
+    [onNavigateTable, availableTables]
+  );
+
+  const resolveStatHandler = (tableId) =>
+    typeof onNavigateTable === 'function' ? () => handleStatNavigate(tableId) : undefined;
+
   return (
     <div className="space-y-6">
-      <SectionCard title="Ключевые показатели">
+      <SectionCard title="РљР»СЋС‡РµРІС‹Рµ РїРѕРєР°Р·Р°С‚РµР»Рё">
         <div className="grid gap-4 stat-grid">
-          <StatCard label="Всего клиентов" value={stats.totalUsers ?? 0} />
-          <StatCard label="Активные записи" value={stats.activeAppointments ?? 0} accent="text-emerald-300" />
-          <StatCard label="Подтверждено за год" value={stats.confirmedYear ?? 0} accent="text-fuchsia-300" />
-          <StatCard label="Сегодня" value={stats.todaysAppointments ?? 0} accent="text-cyan-300" />
+          <StatCard label="Р’СЃРµРіРѕ РєР»РёРµРЅС‚РѕРІ" value={stats.totalUsers ?? 0} onClick={resolveStatHandler('Users')} />
+          <StatCard
+            label="РђРєС‚РёРІРЅС‹С… Р·Р°РїРёСЃРµР№"
+            value={stats.activeAppointments ?? 0}
+            accent="text-emerald-300"
+            onClick={resolveStatHandler('Appointments')}
+          />
+          <StatCard
+            label="РџРѕРґС‚РІРµСЂР¶РґРµРЅРѕ Р·Р° РіРѕРґ"
+            value={stats.confirmedYear ?? 0}
+            accent="text-fuchsia-300"
+            onClick={resolveStatHandler('Appointments')}
+          />
+          <StatCard
+            label="РќР° СЃРµРіРѕРґРЅСЏ"
+            value={stats.todaysAppointments ?? 0}
+            accent="text-cyan-300"
+            onClick={resolveStatHandler('Appointments')}
+          />
         </div>
       </SectionCard>
 
@@ -1254,9 +1464,9 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
 
       
 
-      <SectionCard title="Ближайшие записи" actions={upcomingActions}>
+      <SectionCard title="Р‘Р»РёР¶Р°Р№С€РёРµ Р·Р°РїРёСЃРё" actions={upcomingActions}>
         {groupedUpcoming.length === 0 ? (
-          <p className="text-slate-400">Нет ближайших записей.</p>
+          <p className="text-slate-400">РќРµС‚ Р±Р»РёР¶Р°Р№С€РёС… Р·Р°РїРёСЃРµР№.</p>
         ) : (
           <div className="space-y-5">
             {groupedUpcoming.map((group) => (
@@ -1290,8 +1500,8 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
                               {formatDateBadgeLabel(appt.Date)}
                             </p>
                             <div className="flex items-baseline gap-3">
-                              <p className="text-3xl font-bold leading-none text-white sm:text-4xl">{start || '—'}</p>
-                              {end && <p className="text-sm text-slate-400 sm:text-base">до {end}</p>}
+                              <p className="text-3xl font-bold leading-none text-white sm:text-4xl">{start || 'вЂ”'}</p>
+                              {end && <p className="text-sm text-slate-400 sm:text-base">РґРѕ {end}</p>}
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-2 text-right">
@@ -1301,11 +1511,11 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
                                 getStatusBadgeClasses(statusLabel),
                               )}
                             >
-                              {statusLabel || 'Без статуса'}
+                              {statusLabel || 'Р‘РµР· СЃС‚Р°С‚СѓСЃР°'}
                             </span>
                             {appt.Barber && (
                               <p className="text-xs text-slate-400 sm:text-sm">
-                                Барбер:{' '}
+                                Р‘Р°СЂР±РµСЂ:{' '}
                                 <span className="font-semibold text-white">{appt.Barber}</span>
                               </p>
                             )}
@@ -1325,7 +1535,7 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
                                 {appt.CustomerName}
                               </button>
                             ) : (
-                              <p className="text-base font-semibold text-white sm:text-lg">Без имени</p>
+                              <p className="text-base font-semibold text-white sm:text-lg">Р‘РµР· РёРјРµРЅРё</p>
                             )}
                           </div>
                           {servicesList.length ? (
@@ -1340,7 +1550,7 @@ const DashboardView = ({ data, onOpenAppointment, onOpenProfile, onCreateAppoint
                               ))}
                             </div>
                           ) : (
-                            <p className="text-xs text-slate-400 sm:text-sm">Нет выбранных услуг</p>
+                            <p className="text-xs text-slate-400 sm:text-sm">РќРµС‚ РІС‹Р±СЂР°РЅРЅС‹С… СѓСЃР»СѓРі</p>
                           )}
 
                         </div>
@@ -1362,7 +1572,7 @@ const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+    reader.onerror = () => reject(new Error('РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ С„Р°Р№Р»'));
     reader.readAsDataURL(file);
   });
 
@@ -1437,11 +1647,11 @@ const BarberAvatarPicker = ({ value, onChange, loadOptions, onUpload, onDelete }
     async (file) => {
       if (!file || typeof onUpload !== 'function') return;
       if (!file.type.startsWith('image/')) {
-        setActionError('Можно загружать только изображения');
+        setActionError('РњРѕР¶РЅРѕ Р·Р°РіСЂСѓР¶Р°С‚СЊ С‚РѕР»СЊРєРѕ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ');
         return;
       }
       if (file.size > MAX_AVATAR_UPLOAD_BYTES) {
-        setActionError('Файл больше 5 МБ');
+        setActionError('Р¤Р°Р№Р» Р±РѕР»СЊС€Рµ 5 РњР‘');
         return;
       }
       setActionError('');
@@ -1457,7 +1667,7 @@ const BarberAvatarPicker = ({ value, onChange, loadOptions, onUpload, onDelete }
         setShowGallery(true);
       } catch (error) {
         console.error('Avatar upload error', error);
-        setActionError(error.message || 'Не удалось загрузить изображение');
+        setActionError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ');
       } finally {
         setActionBusy(false);
       }
@@ -1489,7 +1699,7 @@ const BarberAvatarPicker = ({ value, onChange, loadOptions, onUpload, onDelete }
         }
       } catch (error) {
         console.error('Avatar delete error', error);
-        setActionError(error.message || 'Не удалось удалить изображение');
+        setActionError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ');
       } finally {
         setActionBusy(false);
       }
@@ -1497,7 +1707,7 @@ const BarberAvatarPicker = ({ value, onChange, loadOptions, onUpload, onDelete }
     [onDelete, refreshAvatarOptions, normalizedValue, onChange]
   );
 
-  const previewSrc = resolveAssetUrl(normalizedValue || availableOptions[0] || '');
+  const previewSrc = normalizedValue ? resolveAssetUrl(normalizedValue) : '';
 
   return (
     <div className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 shadow-2xl">
@@ -1506,7 +1716,7 @@ const BarberAvatarPicker = ({ value, onChange, loadOptions, onUpload, onDelete }
         {previewSrc ? (
           <img src={previewSrc} alt="avatar preview" className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.4em] text-slate-500">нет фото</div>
+          <DefaultProfileIcon className="h-full w-full bg-slate-900/70 text-slate-500" iconClassName="h-16 w-16" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/10 to-transparent" />
       </div>
@@ -1518,7 +1728,7 @@ const BarberAvatarPicker = ({ value, onChange, loadOptions, onUpload, onDelete }
             className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-indigo-200 transition hover:border-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
             disabled={loading || (!avatarOptions.length && !normalizedValue)}
           >
-            {loading ? 'Загрузка...' : showGallery ? 'Скрыть галерею' : 'Галерея'}
+            {loading ? 'Р—Р°РіСЂСѓР·РєР°...' : showGallery ? 'РЎРєСЂС‹С‚СЊ РіР°Р»РµСЂРµСЋ' : 'Р“Р°Р»РµСЂРµСЏ'}
           </button>
           <button
             type="button"
@@ -1526,7 +1736,7 @@ const BarberAvatarPicker = ({ value, onChange, loadOptions, onUpload, onDelete }
             className="rounded-2xl border border-emerald-600/60 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:border-emerald-400 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
             disabled={actionBusy}
           >
-            {actionBusy ? 'Обработка…' : 'Загрузить'}
+            {actionBusy ? 'РћР±СЂР°Р±РѕС‚РєР°вЂ¦' : 'Р—Р°РіСЂСѓР·РёС‚СЊ'}
           </button>
         </div>
         {actionError && <p className="text-xs text-rose-400">{actionError}</p>}
@@ -1564,15 +1774,15 @@ const BarberAvatarPicker = ({ value, onChange, loadOptions, onUpload, onDelete }
           </div>
         )}
         {!avatarOptions.length && !loading && (
-          <p className="text-sm text-slate-500">Изображения не найдены. Загрузите фото, чтобы использовать его как аватар.</p>
+          <p className="text-sm text-slate-500">РР·РѕР±СЂР°Р¶РµРЅРёСЏ РЅРµ РЅР°Р№РґРµРЅС‹. Р—Р°РіСЂСѓР·РёС‚Рµ С„РѕС‚Рѕ, С‡С‚РѕР±С‹ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РµРіРѕ РєР°Рє Р°РІР°С‚Р°СЂ.</p>
         )}
       </div>
     </div>
   );
 };
 const DAY_INDEX_LOOKUP = (() => {
-  const full = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
-  const short = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+  const full = ['РїРѕРЅРµРґРµР»СЊРЅРёРє', 'РІС‚РѕСЂРЅРёРє', 'СЃСЂРµРґР°', 'С‡РµС‚РІРµСЂРі', 'РїСЏС‚РЅРёС†Р°', 'СЃСѓР±Р±РѕС‚Р°', 'РІРѕСЃРєСЂРµСЃРµРЅСЊРµ'];
+  const short = ['РїРЅ', 'РІС‚', 'СЃСЂ', 'С‡С‚', 'РїС‚', 'СЃР±', 'РІСЃ'];
   const map = {};
   full.forEach((name, index) => {
     map[name] = index;
@@ -1643,7 +1853,7 @@ const getScheduleSortValue = (slot) => {
 };
 
 const RatingSlider = ({ value, onChange, dense = false }) => {
-  const ratingValue = Number(value || RATING_MAX).toFixed(1);
+  const ratingValue = clampRatingValue(value ?? RATING_MAX);
   const wrapperClass = dense
     ? 'space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-1.5'
     : 'space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2';
@@ -1653,10 +1863,18 @@ const RatingSlider = ({ value, onChange, dense = false }) => {
   return (
     <div className={wrapperClass}>
       <label className={labelClass}>
-        <span>Рейтинг</span>
+        <span>Р РµР№С‚РёРЅРі</span>
         <span className="font-semibold text-white">{ratingValue}</span>
       </label>
-      <input type="range" min={RATING_MIN} max={RATING_MAX} step={RATING_STEP} value={Number(value) || RATING_MAX} onChange={onChange} className="w-full accent-indigo-500" />
+      <input
+        type="range"
+        min={RATING_MIN}
+        max={RATING_MAX}
+        step={RATING_STEP}
+        value={ratingValue}
+        onChange={onChange}
+        className="w-full accent-indigo-500"
+      />
     </div>
   );
 };
@@ -1718,8 +1936,9 @@ const BarbersView = ({
   }, [editorState.open, isCreateMode, draftBarber.avatarUrl, activeBarber?.avatarUrl, activeBarber]);
 
   const handleFieldChange = (field, value) => {
+    const nextValue = field === 'rating' ? formatRatingValue(value) : value;
     if (field === 'avatarUrl') {
-      const normalized = value || '';
+      const normalized = nextValue || '';
       setPendingAvatar(normalized);
       if (isCreateMode) {
         setDraftBarber((prev) => ({ ...prev, avatarUrl: normalized }));
@@ -1727,9 +1946,9 @@ const BarbersView = ({
       return;
     }
     if (isCreateMode) {
-      setDraftBarber((prev) => ({ ...prev, [field]: value }));
+      setDraftBarber((prev) => ({ ...prev, [field]: nextValue }));
     } else if (activeBarber) {
-      onFieldChange?.(activeBarber.id, field, value);
+      onFieldChange?.(activeBarber.id, field, nextValue);
     }
   };
 
@@ -1779,24 +1998,24 @@ const BarbersView = ({
   return (
     <div className="space-y-6">
       <SectionCard
-        title="Барберы"
+        title="Р‘Р°СЂР±РµСЂС‹"
         actions={
           <button
             onClick={() => openEditor('create')}
             className="rounded-full bg-emerald-600/90 px-4 py-2 text-sm font-semibold text-white shadow shadow-emerald-900/40 hover:bg-emerald-500"
           >
-            + Добавить барбера
+            + Р”РѕР±Р°РІРёС‚СЊ Р±Р°СЂР±РµСЂР°
           </button>
         }
       >
         {barbers.length === 0 ? (
-          <p className="text-slate-400">Список барберов пока пуст. Добавьте первого сотрудника.</p>
+          <p className="text-slate-400">РЎРїРёСЃРѕРє Р±Р°СЂР±РµСЂРѕРІ РїРѕРєР° РїСѓСЃС‚. Р”РѕР±Р°РІСЊС‚Рµ РїРµСЂРІРѕРіРѕ СЃРѕС‚СЂСѓРґРЅРёРєР°.</p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {barbers.map((barber) => {
               const avatarSrc = resolveAssetUrl(barber.avatarUrl);
               const phoneLabel = barber.phone ? formatPhoneInput(barber.phone) : '';
-              const ratingLabel = Number(barber.rating || RATING_MAX).toFixed(1);
+              const ratingLabel = clampRatingValue(barber.rating || RATING_MAX);
               const positionName = normalizeText(barber.position?.name);
               const commissionRate =
                 typeof barber.position?.commissionRate === 'number' ? barber.position.commissionRate : null;
@@ -1811,9 +2030,7 @@ const BarbersView = ({
                     {avatarSrc ? (
                       <img src={avatarSrc} alt={barber.name || 'avatar'} className="h-16 w-16 rounded-2xl object-cover" />
                     ) : (
-                      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800 text-lg font-semibold text-slate-200">
-                        {(barber.name || 'B').slice(0, 1)}
-                      </div>
+                      <DefaultProfileIcon className="h-16 w-16 rounded-2xl border border-slate-700/70 text-slate-400" iconClassName="h-8 w-8" />
                     )}
                     <span
                       className={classNames(
@@ -1824,17 +2041,17 @@ const BarbersView = ({
                   </div>
                   <div className="flex-1 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-base font-semibold text-white sm:text-lg">{barber.name || 'Без имени'}</p>
+                      <p className="text-base font-semibold text-white sm:text-lg">{barber.name || 'Р‘РµР· РёРјРµРЅРё'}</p>
                       {renderStatusBadge(barber)}
                     </div>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 sm:text-sm">
                       <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-200">
-                        ★ {ratingLabel}
+                        в… {ratingLabel}
                       </span>
                       {positionName && (
                         <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-200">
                           {positionName}
-                          {commissionLabel ? ` · ${commissionLabel}` : ''}
+                          {commissionLabel ? ` В· ${commissionLabel}` : ''}
                         </span>
                       )}
                       {phoneLabel && <span className="text-slate-300">{phoneLabel}</span>}
@@ -1850,7 +2067,7 @@ const BarbersView = ({
       </SectionCard>
 
       <Modal
-        title={isCreateMode ? 'Добавить барбера' : workingBarber?.name || 'Редактирование барбера'}
+        title={isCreateMode ? 'Р”РѕР±Р°РІРёС‚СЊ Р±Р°СЂР±РµСЂР°' : workingBarber?.name || 'Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ Р±Р°СЂР±РµСЂР°'}
         isOpen={editorState.open}
         onClose={closeEditor}
         maxWidthClass="max-w-4xl"
@@ -1858,11 +2075,11 @@ const BarbersView = ({
           <>
             {!isCreateMode && (
               <button onClick={handleDelete} className="rounded-lg border border-rose-600 px-4 py-2 text-sm text-rose-200 hover:bg-rose-500/10">
-                Удалить
+                РЈРґР°Р»РёС‚СЊ
               </button>
             )}
             <button onClick={closeEditor} className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800">
-              Отмена
+              РћС‚РјРµРЅР°
             </button>
             <button
               onClick={handleSave}
@@ -1872,7 +2089,7 @@ const BarbersView = ({
                 canSubmit ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-slate-700 text-slate-300'
               )}
             >
-              {isCreateMode ? 'Добавить' : 'Сохранить'}
+              {isCreateMode ? 'Р”РѕР±Р°РІРёС‚СЊ' : 'РЎРѕС…СЂР°РЅРёС‚СЊ'}
             </button>
           </>
         }
@@ -1891,7 +2108,7 @@ const BarbersView = ({
                 <input
                   value={workingBarber.name || ''}
                   onChange={(event) => handleFieldChange('name', event.target.value)}
-                  placeholder="Имя"
+                  placeholder="РРјСЏ"
                   className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
                 />
                 <div className="w-full">
@@ -1901,11 +2118,11 @@ const BarbersView = ({
                   type="password"
                   value={workingBarber.password || ''}
                   onChange={(event) => handleFieldChange('password', event.target.value)}
-                  placeholder="Пароль"
+                  placeholder="РџР°СЂРѕР»СЊ"
                   className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
                 />
                 <label className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm text-white">
-                  Цвет
+                  Р¦РІРµС‚
                   <input
                     type="color"
                     value={/^#/.test(workingBarber.color || '') ? workingBarber.color : '#6d28d9'}
@@ -1915,7 +2132,7 @@ const BarbersView = ({
                 </label>
                 <div className="col-span-2 grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
-                    <label className="text-sm text-slate-300">Права доступа</label>
+                    <label className="text-sm text-slate-300">РџСЂР°РІР° РґРѕСЃС‚СѓРїР°</label>
                     <select
                       value={normalizeRoleValue(workingBarber.role)}
                       onChange={(event) => handleFieldChange('role', normalizeRoleValue(event.target.value))}
@@ -1927,31 +2144,31 @@ const BarbersView = ({
                         </option>
                       ))}
                     </select>
-                    <p className="text-xs text-slate-500">Владелец видит все разделы, сотрудник — только свои записи и услуги.</p>
+                    <p className="text-xs text-slate-500">Р’Р»Р°РґРµР»РµС† РІРёРґРёС‚ РІСЃРµ СЂР°Р·РґРµР»С‹, СЃРѕС‚СЂСѓРґРЅРёРє вЂ” С‚РѕР»СЊРєРѕ СЃРІРѕРё Р·Р°РїРёСЃРё Рё СѓСЃР»СѓРіРё.</p>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm text-slate-300">Должность</label>
+                    <label className="text-sm text-slate-300">Р”РѕР»Р¶РЅРѕСЃС‚СЊ</label>
                     <select
                       value={workingBarber.positionId || ''}
                       onChange={(event) => handleFieldChange('positionId', event.target.value || null)}
                       className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white focus:border-indigo-400 focus:outline-none"
                     >
-                      <option value="">Без должности</option>
+                      <option value="">Р‘РµР· РґРѕР»Р¶РЅРѕСЃС‚Рё</option>
                       {sortedPositions.map((position) => (
                         <option key={position.id} value={position.id}>
                           {position.name}
-                          {typeof position.commissionRate === 'number' ? ` · ${formatPercent(position.commissionRate)}` : ''}
+                          {typeof position.commissionRate === 'number' ? ` В· ${formatPercent(position.commissionRate)}` : ''}
                         </option>
                       ))}
                     </select>
                     <p className="text-xs text-slate-500">
                       {activePosition
-                        ? `Процент: ${
+                        ? `РџСЂРѕС†РµРЅС‚: ${
                             typeof activePosition.commissionRate === 'number'
                               ? formatPercent(activePosition.commissionRate)
-                              : 'не указан'
+                              : 'РЅРµ СѓРєР°Р·Р°РЅ'
                           }.`
-                        : 'Не влияет на доступы, используется для аналитики.'}
+                        : 'РќРµ РІР»РёСЏРµС‚ РЅР° РґРѕСЃС‚СѓРїС‹, РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РґР»СЏ Р°РЅР°Р»РёС‚РёРєРё.'}
                     </p>
                   </div>
                 </div>
@@ -1959,7 +2176,7 @@ const BarbersView = ({
                 <textarea
                   value={workingBarber.description || ''}
                   onChange={(event) => handleFieldChange('description', event.target.value)}
-                  placeholder="Описание"
+                  placeholder="РћРїРёСЃР°РЅРёРµ"
                   rows={4}
                   className="col-span-2 w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
                 />
@@ -1967,7 +2184,7 @@ const BarbersView = ({
                   type="tel"
                   value={workingBarber.phone || ''}
                   onChange={(event) => handleFieldChange('phone', event.target.value)}
-                  placeholder="Телефон"
+                  placeholder="РўРµР»РµС„РѕРЅ"
                   className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
                 />
                 <input
@@ -1987,20 +2204,20 @@ const BarbersView = ({
                   )}
                 >
                   <span>{workingBarber.isActive !== false ? ACTIVE_BARBER_LABEL : HIDDEN_BARBER_LABEL}</span>
-                  <span
-                    className={classNames(
-                      'flex h-5 w-5 items-center justify-center rounded-full border',
-                      workingBarber.isActive !== false ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100' : 'border-slate-600 text-slate-500'
-                    )}
-                  >
-                    {workingBarber.isActive !== false ? '?' : ''}
-                  </span>
-                </button>
+                <span
+                  className={classNames(
+                    'flex h-5 w-5 items-center justify-center rounded-full border',
+                    workingBarber.isActive !== false ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100' : 'border-slate-600 text-slate-500'
+                  )}
+                >
+                  {workingBarber.isActive !== false ? '\u2713' : '\u2715'}
+                </span>
+              </button>
               </div>
             </div>
           </div>
         ) : (
-          <p className="text-slate-300">Выберите барбера, чтобы изменить данные.</p>
+          <p className="text-slate-300">Р’С‹Р±РµСЂРёС‚Рµ Р±Р°СЂР±РµСЂР°, С‡С‚РѕР±С‹ РёР·РјРµРЅРёС‚СЊ РґР°РЅРЅС‹Рµ.</p>
         )}
       </Modal>
     </div>
@@ -2016,30 +2233,81 @@ const BarberProfileView = ({
   onSave,
 }) => {
   const [pendingAvatar, setPendingAvatar] = useState(barber?.avatarUrl || '');
+  const profileSnapshot = useMemo(
+    () => (barber ? JSON.stringify({ ...barber, avatarUrl: pendingAvatar || '' }) : null),
+    [barber, pendingAvatar],
+  );
+  const [autoSaveState, setAutoSaveState] = useState('idle');
+  const autoSaveTimerRef = useRef(null);
+  const autoSaveResetRef = useRef(null);
+  const initialSnapshotRef = useRef(true);
+  const lastSnapshotRef = useRef(null);
 
   useEffect(() => {
     setPendingAvatar(barber?.avatarUrl || '');
   }, [barber?.avatarUrl]);
+  useEffect(() => {
+    initialSnapshotRef.current = true;
+    lastSnapshotRef.current = null;
+  }, [barber?.id]);
+  useEffect(
+    () => () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      if (autoSaveResetRef.current) {
+        clearTimeout(autoSaveResetRef.current);
+        autoSaveResetRef.current = null;
+      }
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!barber || !profileSnapshot || typeof onSave !== 'function') return undefined;
+    if (initialSnapshotRef.current) {
+      initialSnapshotRef.current = false;
+      lastSnapshotRef.current = profileSnapshot;
+      return undefined;
+    }
+    if (profileSnapshot === lastSnapshotRef.current) return undefined;
+    setAutoSaveState('pending');
+    const timer = setTimeout(async () => {
+      try {
+        await onSave({ ...barber, avatarUrl: pendingAvatar || '' });
+        lastSnapshotRef.current = profileSnapshot;
+        setAutoSaveState('saved');
+        if (autoSaveResetRef.current) {
+          clearTimeout(autoSaveResetRef.current);
+        }
+        autoSaveResetRef.current = setTimeout(() => setAutoSaveState('idle'), 2000);
+      } catch (error) {
+        console.error('Barber profile autosave error:', error);
+        setAutoSaveState('error');
+      }
+    }, 800);
+    autoSaveTimerRef.current = timer;
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [barber, profileSnapshot, onSave, pendingAvatar]);
 
   if (!barber) {
     return (
-      <SectionCard title="Профиль сотрудника">
-        <p className="text-sm text-slate-400">Данные профиля недоступны. Обратитесь к администратору.</p>
+      <SectionCard title="РџСЂРѕС„РёР»СЊ СЃРѕС‚СЂСѓРґРЅРёРєР°">
+        <p className="text-sm text-slate-400">Р”Р°РЅРЅС‹Рµ РїСЂРѕС„РёР»СЏ РЅРµРґРѕСЃС‚СѓРїРЅС‹. РћР±СЂР°С‚РёС‚РµСЃСЊ Рє Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂСѓ.</p>
       </SectionCard>
     );
   }
 
   const handleFieldChange = (field, value) => {
-    onFieldChange?.(barber.id, field, value);
-  };
-
-  const handleSave = () => {
-    onSave?.({ ...barber, avatarUrl: pendingAvatar || '' });
+    const nextValue = field === 'rating' ? formatRatingValue(value) : value;
+    onFieldChange?.(barber.id, field, nextValue);
   };
 
   return (
     <div className="space-y-6">
-      <SectionCard title="Мой профиль">
+      <SectionCard title="РњРѕР№ РїСЂРѕС„РёР»СЊ">
         <div className="space-y-6">
           <BarberAvatarPicker
             value={pendingAvatar || ''}
@@ -2053,7 +2321,7 @@ const BarberProfileView = ({
               <input
                 value={barber.name || ''}
                 onChange={(event) => handleFieldChange('name', event.target.value)}
-                placeholder="Имя"
+                placeholder="РРјСЏ"
                 className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
               />
               <div className="w-full">
@@ -2063,11 +2331,11 @@ const BarberProfileView = ({
                 type="password"
                 value={barber.password || ''}
                 onChange={(event) => handleFieldChange('password', event.target.value)}
-                placeholder="Пароль"
+                placeholder="РџР°СЂРѕР»СЊ"
                 className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
               />
               <label className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm text-white">
-                Цвет
+                Р¦РІРµС‚
                 <input
                   type="color"
                   value={/^#/.test(barber.color || '') ? barber.color : '#6d28d9'}
@@ -2076,16 +2344,16 @@ const BarberProfileView = ({
                 />
               </label>
               <div className="col-span-2 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3">
-                <p className="text-sm text-slate-300">Должность</p>
-                <p className="text-base font-semibold text-white">{normalizeText(barber.position?.name) || 'Не назначена'}</p>
+                <p className="text-sm text-slate-300">Р”РѕР»Р¶РЅРѕСЃС‚СЊ</p>
+                <p className="text-base font-semibold text-white">{normalizeText(barber.position?.name) || 'РќРµ РЅР°Р·РЅР°С‡РµРЅР°'}</p>
                 {typeof barber.position?.commissionRate === 'number' && (
-                  <p className="text-xs text-slate-500">Процент: {formatPercent(barber.position.commissionRate)}</p>
+                  <p className="text-xs text-slate-500">РџСЂРѕС†РµРЅС‚: {formatPercent(barber.position.commissionRate)}</p>
                 )}
               </div>
               <textarea
                 value={barber.description || ''}
                 onChange={(event) => handleFieldChange('description', event.target.value)}
-                placeholder="Описание"
+                placeholder="РћРїРёСЃР°РЅРёРµ"
                 rows={4}
                 className="col-span-2 w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
               />
@@ -2093,7 +2361,7 @@ const BarberProfileView = ({
                 type="tel"
                 value={barber.phone || ''}
                 onChange={(event) => handleFieldChange('phone', event.target.value)}
-                placeholder="Телефон"
+                placeholder="РўРµР»РµС„РѕРЅ"
                 className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
               />
               <input
@@ -2103,13 +2371,12 @@ const BarberProfileView = ({
                 className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
               />
             </div>
-            <div className="flex justify-end">
-              <button
-                onClick={handleSave}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-              >
-                Сохранить
-              </button>
+            <div className="flex justify-end text-xs text-slate-500">
+              {autoSaveState === 'pending'
+                ? 'РЎРѕС…СЂР°РЅСЏРµРј РёР·РјРµРЅРµРЅРёСЏ...'
+                : autoSaveState === 'error'
+                  ? 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РёР·РјРµРЅРµРЅРёСЏ'
+                  : 'РР·РјРµРЅРµРЅРёСЏ СЃРѕС…СЂР°РЅСЏСЋС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё'}
             </div>
           </div>
         </div>
@@ -2118,11 +2385,22 @@ const BarberProfileView = ({
   );
 };
 
-const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChange, onDelete, onAdd }) => {
+const ServicesView = ({
+  services = [],
+  barbers = [],
+  onFieldChange,
+  onPriceChange,
+  onDelete,
+  onAdd,
+  canManageCatalog = true,
+  canEditPricing = true,
+  isStaff = false,
+}) => {
   const [editorState, setEditorState] = useState({ open: false, mode: 'edit', targetId: null });
   const [draftService, setDraftService] = useState(buildNewServiceState);
 
   const openEditor = (mode, targetId = null) => {
+    if (mode === 'create' && !canManageCatalog) return;
     if (mode === 'create') {
       setDraftService(buildNewServiceState());
     }
@@ -2136,6 +2414,7 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
   const workingService = isCreateMode ? draftService : activeService;
 
   const handleFieldChange = (field, value) => {
+    if (!canManageCatalog) return;
     if (isCreateMode) {
       setDraftService((prev) => ({ ...prev, [field]: value }));
     } else if (activeService) {
@@ -2144,6 +2423,7 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
   };
 
   const handlePriceChange = (barberId, value) => {
+    if (!canEditPricing) return;
     if (isCreateMode) {
       setDraftService((prev) => ({
         ...prev,
@@ -2155,6 +2435,10 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
   };
 
   const handleSave = () => {
+    if (!canManageCatalog) {
+      closeEditor();
+      return;
+    }
     if (isCreateMode) {
       if (!workingService?.name?.trim()) return;
       onAdd?.(draftService);
@@ -2164,6 +2448,7 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
   };
 
   const handleDeleteLocal = () => {
+    if (!canManageCatalog) return;
     if (!isCreateMode && activeService) {
       const result = onDelete?.(activeService);
       if (result && typeof result.finally === 'function') {
@@ -2176,23 +2461,23 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
 
   const servicePriceSummary = (service) => {
     if (!service) {
-      return { label: '—', details: '' };
+      return { label: 'вЂ”', details: '' };
     }
     const values = barbers
       .map((barber) => Number(service.prices?.[barber.id]))
       .filter((price) => Number.isFinite(price) && price >= 0);
     if (!values.length) {
       return {
-        label: 'Цены не заданы',
-        details: barbers.length ? 'Нажмите, чтобы добавить' : 'Нет барберов для назначения',
+        label: 'Р¦РµРЅС‹ РЅРµ Р·Р°РґР°РЅС‹',
+        details: barbers.length ? 'РќР°Р¶РјРёС‚Рµ, С‡С‚РѕР±С‹ РґРѕР±Р°РІРёС‚СЊ' : 'РќРµС‚ Р±Р°СЂР±РµСЂРѕРІ РґР»СЏ РЅР°Р·РЅР°С‡РµРЅРёСЏ',
       };
     }
     const min = Math.min(...values);
     const max = Math.max(...values);
     const count = values.length;
     return {
-      label: min === max ? formatCurrency(min) : `${formatCurrency(min)} – ${formatCurrency(max)}`,
-      details: `Для ${count} ${pluralize(count, ['барбера', 'барбера', 'барберов'])}`,
+      label: min === max ? formatCurrency(min) : `${formatCurrency(min)} вЂ“ ${formatCurrency(max)}`,
+      details: `Р”Р»СЏ ${count} ${pluralize(count, ['Р±Р°СЂР±РµСЂР°', 'Р±Р°СЂР±РµСЂР°', 'Р±Р°СЂР±РµСЂРѕРІ'])}`,
     };
   };
 
@@ -2201,18 +2486,18 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
   return (
     <div className="space-y-6">
       <SectionCard
-        title="Услуги"
+        title="РЈСЃР»СѓРіРё"
         actions={
           <button
             onClick={() => openEditor('create')}
             className="rounded-full bg-emerald-600/90 px-4 py-2 text-sm font-semibold text-white shadow shadow-emerald-900/40 hover:bg-emerald-500"
           >
-            + Добавить услугу
+            + Р”РѕР±Р°РІРёС‚СЊ СѓСЃР»СѓРіСѓ
           </button>
         }
       >
         {services.length === 0 ? (
-          <p className="text-slate-400">Список услуг пуст. Добавьте первую услугу.</p>
+          <p className="text-slate-400">РЎРїРёСЃРѕРє СѓСЃР»СѓРі РїСѓСЃС‚. Р”РѕР±Р°РІСЊС‚Рµ РїРµСЂРІСѓСЋ СѓСЃР»СѓРіСѓ.</p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {services.map((service) => {
@@ -2229,21 +2514,26 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
                       : 'border-slate-800 bg-slate-900/30 opacity-80 hover:border-amber-400/60'
                   )}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className={classNames('text-base font-semibold sm:text-lg', isActiveService ? 'text-white' : 'text-slate-400')}>
-                      {service.name || 'Без названия'}
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <p
+                      className={classNames(
+                        'text-base font-semibold sm:text-lg',
+                        isActiveService ? 'text-white' : 'text-slate-400'
+                      )}
+                    >
+                      {service.name || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'}
                     </p>
-                    <div className="flex items-center gap-2">
+                    <div className="flex w-full flex-wrap items-center gap-2 text-sm sm:w-auto sm:justify-end">
                       <span
                         className={classNames(
                           'rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide',
                           isActiveService ? 'border-emerald-500 bg-emerald-500/10 text-emerald-200' : 'border-slate-600 bg-slate-900/60 text-slate-400'
                         )}
                       >
-                        {isActiveService ? 'Активна' : 'Скрыта'}
+                        {isActiveService ? 'РђРєС‚РёРІРЅР°' : 'РЎРєСЂС‹С‚Р°'}
                       </span>
                       <span className="rounded-full bg-slate-800/80 px-2 py-0.5 text-xs text-slate-300">
-                        {service.duration ? `${service.duration} мин` : '—'}
+                        {service.duration ? `${service.duration} РјРёРЅ` : 'вЂ”'}
                       </span>
                     </div>
                   </div>
@@ -2265,11 +2555,11 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
           <>
             {!isCreateMode && (
               <button onClick={handleDeleteLocal} className="rounded-lg border border-rose-600 px-4 py-2 text-sm text-rose-200 hover:bg-rose-500/10">
-                Удалить
+                РЈРґР°Р»РёС‚СЊ
               </button>
             )}
             <button onClick={closeEditor} className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800">
-              Отмена
+              РћС‚РјРµРЅР°
             </button>
             <button
               onClick={handleSave}
@@ -2279,7 +2569,7 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
                 canSubmit ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-slate-700 text-slate-300'
               )}
             >
-              {isCreateMode ? 'Добавить' : 'Готово'}
+              {isCreateMode ? 'Р”РѕР±Р°РІРёС‚СЊ' : 'Р“РѕС‚РѕРІРѕ'}
             </button>
           </>
         }
@@ -2288,16 +2578,16 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
-                <label className="block text-sm text-slate-300">Название</label>
+                <label className="block text-sm text-slate-300">РќР°Р·РІР°РЅРёРµ</label>
                 <input
                   value={workingService.name || ''}
                   onChange={(event) => handleFieldChange('name', event.target.value)}
-                  placeholder="Например, стрижка"
+                  placeholder="РќР°РїСЂРёРјРµСЂ, СЃС‚СЂРёР¶РєР°"
                   className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
                 />
               </div>
               <div className="space-y-1">
-                <label className="block text-sm text-slate-300">Длительность, мин</label>
+                <label className="block text-sm text-slate-300">Р”Р»РёС‚РµР»СЊРЅРѕСЃС‚СЊ, РјРёРЅ</label>
                 <input
                   type="number"
                   min={5}
@@ -2331,12 +2621,12 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
               </button>
             </div>
             <div className="space-y-2">
-              <p className="text-sm text-slate-300">Цены по барберам</p>
+              <p className="text-sm text-slate-300">Р¦РµРЅС‹ РїРѕ Р±Р°СЂР±РµСЂР°Рј</p>
               {barbers.length ? (
                 <div className="grid gap-2 sm:grid-cols-2">
                   {barbers.map((barber) => (
                     <label key={barber.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-white">
-                      <span className="truncate">{barber.name || 'Без имени'}</span>
+                      <span className="truncate">{barber.name || 'Р‘РµР· РёРјРµРЅРё'}</span>
                       <input
                         type="number"
                         min={0}
@@ -2349,12 +2639,12 @@ const ServicesView = ({ services = [], barbers = [], onFieldChange, onPriceChang
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">Добавьте барберов, чтобы назначать цены.</p>
+                <p className="text-sm text-slate-500">Р”РѕР±Р°РІСЊС‚Рµ Р±Р°СЂР±РµСЂРѕРІ, С‡С‚РѕР±С‹ РЅР°Р·РЅР°С‡Р°С‚СЊ С†РµРЅС‹.</p>
               )}
             </div>
           </div>
         ) : (
-          <p className="text-slate-300">Выберите услугу для редактирования.</p>
+          <p className="text-slate-300">Р’С‹Р±РµСЂРёС‚Рµ СѓСЃР»СѓРіСѓ РґР»СЏ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ.</p>
         )}
       </Modal>
     </div>
@@ -2383,7 +2673,7 @@ const formatWeekRangeLabel = (startDate) => {
   endDate.setDate(endDate.getDate() + 6);
   const startLabel = formatter.format(startDate).replace('.', '');
   const endLabel = formatter.format(endDate).replace('.', '');
-  return `${startLabel} – ${endLabel}`;
+  return `${startLabel} вЂ“ ${endLabel}`;
 };
 
 const groupSchedulesByWeek = (slots = []) => {
@@ -2399,6 +2689,7 @@ const groupSchedulesByWeek = (slots = []) => {
 };
 
 const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onScheduleUpdate }) => {
+  const isStaffUser = currentUser?.role === ROLE_STAFF;
   const normalizedUserKey = useMemo(() => {
     const baseName = canonicalizeName(
       currentUser?.barberName || currentUser?.displayName || currentUser?.username || '',
@@ -2417,22 +2708,45 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
     setBarberFilter(defaultBarberFilter);
   }, [defaultBarberFilter]);
   const normalizedSchedules = Array.isArray(schedules) ? schedules : [];
+  const staffPreferredBarber = useMemo(() => {
+    if (!isStaffUser) return null;
+    if (defaultBarberFilter && defaultBarberFilter !== 'all') return defaultBarberFilter;
+    const fallback = normalizeText(
+      currentUser?.barberName || currentUser?.displayName || currentUser?.username || '',
+    );
+    return fallback || null;
+  }, [
+    isStaffUser,
+    defaultBarberFilter,
+    currentUser?.barberName,
+    currentUser?.displayName,
+    currentUser?.username,
+  ]);
+  const staffDisplayName =
+    staffPreferredBarber ||
+    normalizeText(currentUser?.barberName || currentUser?.displayName || currentUser?.username || '') ||
+    'вЂ”';
+  const activeBarberFilter = useMemo(
+    () => (isStaffUser ? staffPreferredBarber || defaultBarberFilter || 'all' : barberFilter),
+    [isStaffUser, staffPreferredBarber, defaultBarberFilter, barberFilter],
+  );
   const filteredSchedules = useMemo(() => {
-    if (barberFilter === 'all') return normalizedSchedules;
-    const target = normalizeText(barberFilter).toLowerCase();
+    if (!activeBarberFilter || activeBarberFilter === 'all') return normalizedSchedules;
+    const target = normalizeText(activeBarberFilter).toLowerCase();
     return normalizedSchedules.filter((slot) => normalizeText(slot.Barber).toLowerCase() === target);
-  }, [normalizedSchedules, barberFilter]);
+  }, [normalizedSchedules, activeBarberFilter]);
   const groupedWeeks = useMemo(() => groupSchedulesByWeek(filteredSchedules), [filteredSchedules]);
   const barberOptions = useMemo(
     () =>
       (Array.isArray(barbers) ? barbers : [])
         .map((barber) => normalizeText(barber.name))
         .filter(Boolean),
-    [barbers]
+    [barbers],
   );
+  const canEditSchedules = typeof onScheduleUpdate === 'function' && !isStaffUser;
   const handleTimeChange = useCallback(
     (slot, nextValue) => {
-      if (typeof onScheduleUpdate !== 'function') return;
+      if (!canEditSchedules || typeof onScheduleUpdate !== 'function') return;
       const recordId = getRecordId(slot) || `${slot.Barber}-${slot.Date}`;
       onScheduleUpdate(recordId, {
         Barber: slot.Barber,
@@ -2442,28 +2756,37 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
         Time: nextValue,
       });
     },
-    [onScheduleUpdate]
+    [canEditSchedules, onScheduleUpdate],
   );
 
   return (
     <div className="space-y-6">
-      <SectionCard title="Расписание барберов">
+      <SectionCard title="Р Р°СЃРїРёСЃР°РЅРёРµ РјР°СЃС‚РµСЂРѕРІ">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <label className="text-sm text-slate-400">Барбер</label>
-            <select
-              value={barberFilter}
-              onChange={(event) => setBarberFilter(event.target.value)}
-              className="w-64 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-white focus:border-indigo-400 focus:outline-none"
-            >
-              <option value="all">Все барберы</option>
-              {barberOptions.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {isStaffUser ? (
+            <div className="space-y-1">
+              <label className="text-sm text-slate-400">Р’Р°С€ РјР°СЃС‚РµСЂ</label>
+              <div className="w-64 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-white">
+                {staffDisplayName}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <label className="text-sm text-slate-400">РњР°СЃС‚РµСЂ</label>
+              <select
+                value={barberFilter}
+                onChange={(event) => setBarberFilter(event.target.value)}
+                className="w-64 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-white focus:border-indigo-400 focus:outline-none"
+              >
+                <option value="all">Р’СЃРµ РјР°СЃС‚РµСЂР°</option>
+                {barberOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         {groupedWeeks.length ? (
           <div className="mt-4 space-y-4">
@@ -2477,7 +2800,9 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-slate-100">{formatWeekRangeLabel(group.start)}</p>
                     <span className="text-xs text-slate-500">
-                      {barberFilter === 'all' ? 'Все барберы' : `Барбер: ${barberFilter}`}
+                      {!activeBarberFilter || activeBarberFilter === 'all'
+                        ? 'Р’СЃРµ РјР°СЃС‚РµСЂР°'
+                        : `РњР°СЃС‚РµСЂ: ${activeBarberFilter}`}
                     </span>
                   </div>
                   <div
@@ -2489,7 +2814,7 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
                       const dayLabel = formatScheduleDayShort(slot.Date, slot.DayOfWeek);
                       const dateLabel = formatScheduleDateLabel(slot.Date);
                       const isTodaySlot = isTodayDate(slot.Date);
-                      const showBarberName = barberFilter === 'all';
+                      const showBarberName = !isStaffUser && (!activeBarberFilter || activeBarberFilter === 'all');
                       return (
                         <div
                           key={slotId}
@@ -2500,19 +2825,25 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
                         >
                           <div className="flex flex-col items-center text-center text-xs uppercase tracking-[0.25em] text-slate-500">
                             <span className="text-sm font-semibold tracking-normal text-white">
-                              {[dayLabel, dateLabel].filter(Boolean).join(' · ')}
+                              {[dayLabel, dateLabel].filter(Boolean).join(' В· ')}
                             </span>
                             {showBarberName && (
-                              <span className="text-[11px] font-medium text-slate-400">{slot.Barber || '—'}</span>
+                              <span className="text-[11px] font-medium text-slate-400">{slot.Barber || 'вЂ”'}</span>
                             )}
                           </div>
-                          <TimeRangePicker
-                            value={slot.Week === '0' ? '' : slot.Week || ''}
-                            onChange={(nextValue) => handleTimeChange(slot, nextValue)}
-                            buttonClassName="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-center text-sm text-white whitespace-nowrap focus:ring-2 focus:ring-indigo-500"
-                            title="Редактирование времени"
-                            placeholder="Выходной"
-                          />
+                          {canEditSchedules ? (
+                            <TimeRangePicker
+                              value={slot.Week === '0' ? '' : slot.Week || ''}
+                              onChange={(nextValue) => handleTimeChange(slot, nextValue)}
+                              buttonClassName="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-center text-sm text-white whitespace-nowrap focus:ring-2 focus:ring-indigo-500"
+                              title="Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ РІСЂРµРјСЏ"
+                              placeholder="Р’С‹С…РѕРґРЅРѕР№"
+                            />
+                          ) : (
+                            <div className="w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-center text-sm text-slate-200">
+                              {slot.Week && slot.Week !== '0' ? slot.Week : '????????'}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -2522,7 +2853,7 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
             })}
           </div>
         ) : (
-          <p className="mt-4 text-sm text-slate-400">Нет расписания для выбранных условий.</p>
+          <p className="mt-4 text-sm text-slate-400">РќРµС‚ СЂР°СЃРїРёСЃР°РЅРёСЏ РґР»СЏ РІС‹Р±СЂР°РЅРЅС‹С… СѓСЃР»РѕРІРёР№.</p>
         )}
       </SectionCard>
     </div>
@@ -2560,7 +2891,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
   const handleCreate = async (event) => {
     event.preventDefault();
     if (!newPosition.name.trim()) {
-      setError('Введите название должности.');
+      setError('Р’РІРµРґРёС‚Рµ РЅР°Р·РІР°РЅРёРµ РґРѕР»Р¶РЅРѕСЃС‚Рё.');
       return;
     }
     try {
@@ -2573,7 +2904,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
       });
       setNewPosition({ name: '', rate: '' });
     } catch (createError) {
-      setError(createError.message || 'Не удалось создать должность.');
+      setError(createError.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ РґРѕР»Р¶РЅРѕСЃС‚СЊ.');
     } finally {
       setSavingKey(null);
     }
@@ -2600,7 +2931,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
     if (!position?.id) return;
     const draft = getDraft(position);
     if (!draft.name.trim()) {
-      setError('Название должности не может быть пустым.');
+      setError('РќР°Р·РІР°РЅРёРµ РґРѕР»Р¶РЅРѕСЃС‚Рё РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.');
       return;
     }
     try {
@@ -2616,7 +2947,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
         return next;
       });
     } catch (updateError) {
-      setError(updateError.message || 'Не удалось сохранить должность.');
+      setError(updateError.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РґРѕР»Р¶РЅРѕСЃС‚СЊ.');
     } finally {
       setSavingKey(null);
     }
@@ -2626,9 +2957,9 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
     if (!position?.id) return;
     const confirmed = requestConfirm
       ? await requestConfirm({
-          title: 'Удалить должность?',
-          message: `«${position.name}» будет удалена без возможности восстановления.`,
-          confirmLabel: 'Удалить',
+          title: 'РЈРґР°Р»РёС‚СЊ РґРѕР»Р¶РЅРѕСЃС‚СЊ?',
+          message: `В«${position.name}В» Р±СѓРґРµС‚ СѓРґР°Р»РµРЅР° Р±РµР· РІРѕР·РјРѕР¶РЅРѕСЃС‚Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ.`,
+          confirmLabel: 'РЈРґР°Р»РёС‚СЊ',
           tone: 'danger',
         })
       : true;
@@ -2638,7 +2969,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
       setError('');
       await onDelete?.(position.id);
     } catch (deleteError) {
-      setError(deleteError.message || 'Не удалось удалить должность.');
+      setError(deleteError.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ РґРѕР»Р¶РЅРѕСЃС‚СЊ.');
     } finally {
       setSavingKey(null);
     }
@@ -2646,12 +2977,12 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
 
   return (
     <div className="space-y-6">
-      <SectionCard title="Должности">
+      <SectionCard title="Р”РѕР»Р¶РЅРѕСЃС‚Рё">
         <form onSubmit={handleCreate} className="grid gap-3 md:grid-cols-3">
           <input
             value={newPosition.name}
             onChange={(event) => setNewPosition((prev) => ({ ...prev, name: event.target.value }))}
-            placeholder="Название должности"
+            placeholder="РќР°Р·РІР°РЅРёРµ РґРѕР»Р¶РЅРѕСЃС‚Рё"
             className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
           />
           <input
@@ -2661,7 +2992,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
             step="0.1"
             value={newPosition.rate}
             onChange={(event) => setNewPosition((prev) => ({ ...prev, rate: event.target.value }))}
-            placeholder="Процент, %"
+            placeholder="РџСЂРѕС†РµРЅС‚, %"
             className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
           />
           <button
@@ -2669,11 +3000,11 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
             disabled={savingKey === 'new'}
             className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow shadow-emerald-900/30 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Добавить
+            Р”РѕР±Р°РІРёС‚СЊ
           </button>
         </form>
         <p className="mt-2 text-xs text-slate-500">
-          Процент применяется к стоимости услуг выбранного барбера и определяет его выплату.
+          РџСЂРѕС†РµРЅС‚ РїСЂРёРјРµРЅСЏРµС‚СЃСЏ Рє СЃС‚РѕРёРјРѕСЃС‚Рё СѓСЃР»СѓРі РІС‹Р±СЂР°РЅРЅРѕРіРѕ Р±Р°СЂР±РµСЂР° Рё РѕРїСЂРµРґРµР»СЏРµС‚ РµРіРѕ РІС‹РїР»Р°С‚Сѓ.
         </p>
         {error && (
           <div className="mt-4">
@@ -2681,7 +3012,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
           </div>
         )}
         <div className="mt-6 space-y-3">
-          {sortedPositions.length === 0 && <p className="text-sm text-slate-400">Должности еще не созданы.</p>}
+          {sortedPositions.length === 0 && <p className="text-sm text-slate-400">Р”РѕР»Р¶РЅРѕСЃС‚Рё РµС‰Рµ РЅРµ СЃРѕР·РґР°РЅС‹.</p>}
           {sortedPositions.map((position) => {
             const draft = getDraft(position);
             return (
@@ -2703,7 +3034,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
                 step="0.1"
                 value={draft.rate}
                 onChange={(event) => handleDraftChange(position.id, 'rate', event.target.value)}
-                placeholder="Процент, %"
+                placeholder="РџСЂРѕС†РµРЅС‚, %"
                 className="w-32 flex-none rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
               />
             </div>
@@ -2714,7 +3045,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
                 disabled={savingKey === position.id}
                 className="flex-1 rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 md:flex-none"
               >
-                Сохранить
+                РЎРѕС…СЂР°РЅРёС‚СЊ
               </button>
               <button
                 type="button"
@@ -2722,7 +3053,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
                 disabled={savingKey === position.id}
                 className="flex-1 rounded-2xl border border-rose-600 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-600/10 disabled:cursor-not-allowed disabled:opacity-50 md:flex-none"
               >
-                Удалить
+                РЈРґР°Р»РёС‚СЊ
               </button>
             </div>
           </div>
@@ -2733,7 +3064,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
               disabled={savingKey === position.id}
               className="min-w-0 flex-1 rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Сохранить
+              РЎРѕС…СЂР°РЅРёС‚СЊ
             </button>
             <button
               type="button"
@@ -2741,7 +3072,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
               disabled={savingKey === position.id}
               className="min-w-0 flex-1 rounded-2xl border border-rose-600 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-600/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Удалить
+              РЈРґР°Р»РёС‚СЊ
             </button>
           </div>
               </div>
@@ -2790,7 +3121,7 @@ const RevenueView = ({ apiRequest, barbers = [] }) => {
     } catch (error) {
       setState({
         loading: false,
-        error: error.message || 'Не удалось загрузить доходы.',
+        error: error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РґРѕС…РѕРґС‹.',
         data: null,
       });
     }
@@ -2811,37 +3142,40 @@ const RevenueView = ({ apiRequest, barbers = [] }) => {
   const totalCommission = summary?.totalCommission ?? 0;
   const totalNet = summary?.totalNet ?? totalGross - totalCommission;
   const chartMax = timeline.reduce((max, point) => Math.max(max, point.gross), 0);
+  const chartMinWidth = Math.max(timeline.length * 72, 320);
 
   return (
     <div className="space-y-6">
-      <SectionCard title="Доходы барберов">
-        <div className="grid gap-4 md:grid-cols-4">
-          <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wide text-slate-400">Дата с</label>
-            <input
-              type="date"
-              value={filters.start}
-              onChange={(event) => handleFilterChange('start', event.target.value)}
-              className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
-            />
+      <SectionCard title="Р”РѕС…РѕРґС‹ Р±Р°СЂР±РµСЂРѕРІ">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:col-span-2 lg:col-span-2">
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-wide text-slate-400">Р”Р°С‚Р° СЃ</label>
+              <input
+                type="date"
+                value={filters.start}
+                onChange={(event) => handleFilterChange('start', event.target.value)}
+                className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-wide text-slate-400">Р”Р°С‚Р° РїРѕ</label>
+              <input
+                type="date"
+                value={filters.end}
+                onChange={(event) => handleFilterChange('end', event.target.value)}
+                className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
           </div>
-          <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wide text-slate-400">Дата по</label>
-            <input
-              type="date"
-              value={filters.end}
-              onChange={(event) => handleFilterChange('end', event.target.value)}
-              className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wide text-slate-400">Барбер</label>
+          <div className="space-y-1 sm:col-span-2 lg:col-span-1">
+            <label className="text-xs uppercase tracking-wide text-slate-400">Р‘Р°СЂР±РµСЂ</label>
             <select
               value={filters.barberId}
               onChange={(event) => handleFilterChange('barberId', event.target.value)}
               className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
             >
-              <option value="all">Все сотрудники</option>
+              <option value="all">Р’СЃРµ СЃРѕС‚СЂСѓРґРЅРёРєРё</option>
               {barberOptions.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.name}
@@ -2849,84 +3183,118 @@ const RevenueView = ({ apiRequest, barbers = [] }) => {
               ))}
             </select>
           </div>
-          <div className="flex items-end">
+          <div className="flex items-stretch sm:col-span-2 sm:items-end sm:justify-end lg:col-span-1">
             <button
               type="button"
               onClick={fetchRevenue}
-              className="w-full rounded-2xl border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-100 hover:border-indigo-400 hover:text-white"
+              className="w-full rounded-2xl border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-100 hover:border-indigo-400 hover:text-white sm:w-auto sm:px-6"
             >
-              Обновить
+              РћР±РЅРѕРІРёС‚СЊ
             </button>
           </div>
         </div>
         {state.error && <ErrorBanner message={state.error} />}
         {state.loading ? (
-          <LoadingState label="Считаю доходы..." />
+          <LoadingState label="РЎС‡РёС‚Р°СЋ РґРѕС…РѕРґС‹..." />
         ) : (
           <>
             <div className="mt-6 grid gap-3 md:grid-cols-3">
-              <StatCard label="Общая выручка" value={formatCurrency(totalGross)} />
-              <StatCard label="Начислено сотрудникам" value={formatCurrency(totalCommission)} accent="text-rose-300" />
-              <StatCard label="В кассу" value={formatCurrency(totalNet)} accent="text-emerald-300" />
+              <StatCard label="РћР±С‰Р°СЏ РІС‹СЂСѓС‡РєР°" value={formatCurrency(totalGross)} />
+              <StatCard label="РќР°С‡РёСЃР»РµРЅРѕ СЃРѕС‚СЂСѓРґРЅРёРєР°Рј" value={formatCurrency(totalCommission)} accent="text-rose-300" />
+              <StatCard label="Р’ РєР°СЃСЃСѓ" value={formatCurrency(totalNet)} accent="text-emerald-300" />
             </div>
-            <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-800">
+            <div className="mt-6">
               {items.length === 0 ? (
-                <p className="p-4 text-sm text-slate-400">Нет выполненных услуг за выбранный период.</p>
+                <p className="rounded-2xl border border-slate-800 p-4 text-sm text-slate-400">РќРµС‚ РІС‹РїРѕР»РЅРµРЅРЅС‹С… СѓСЃР»СѓРі Р·Р° РІС‹Р±СЂР°РЅРЅС‹Р№ РїРµСЂРёРѕРґ.</p>
               ) : (
-                <table className="min-w-full divide-y divide-slate-800 text-sm">
-                  <thead className="bg-slate-900/40 text-slate-400">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-semibold">Барбер</th>
-                      <th className="px-4 py-3 text-right font-semibold">Записей</th>
-                      <th className="px-4 py-3 text-right font-semibold">Выручка</th>
-                      <th className="px-4 py-3 text-right font-semibold">Процент</th>
-                      <th className="px-4 py-3 text-right font-semibold">Выплата</th>
-                      <th className="px-4 py-3 text-right font-semibold">В кассу</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
+                <>
+                  <div className="hidden overflow-x-auto rounded-2xl border border-slate-800 md:block">
+                    <table className="min-w-full divide-y divide-slate-800 text-sm">
+                      <thead className="bg-slate-900/40 text-slate-400">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold">Р‘Р°СЂР±РµСЂ</th>
+                          <th className="px-4 py-3 text-right font-semibold">Р—Р°РїРёСЃРµР№</th>
+                          <th className="px-4 py-3 text-right font-semibold">Р’С‹СЂСѓС‡РєР°</th>
+                          <th className="px-4 py-3 text-right font-semibold">РџСЂРѕС†РµРЅС‚</th>
+                          <th className="px-4 py-3 text-right font-semibold">Р’С‹РїР»Р°С‚Р°</th>
+                          <th className="px-4 py-3 text-right font-semibold">Р’ РєР°СЃСЃСѓ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {items.map((item) => (
+                          <tr key={item.id} className="hover:bg-slate-900/40">
+                            <td className="px-4 py-3 text-white">{item.name}</td>
+                            <td className="px-4 py-3 text-right text-slate-300">{item.appointments}</td>
+                            <td className="px-4 py-3 text-right text-slate-100">{formatCurrency(item.gross)}</td>
+                            <td className="px-4 py-3 text-right text-slate-300">{formatPercent(item.commissionRate)}</td>
+                            <td className="px-4 py-3 text-right text-emerald-300">{formatCurrency(item.commission)}</td>
+                            <td className="px-4 py-3 text-right text-indigo-300">{formatCurrency(item.net)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="space-y-4 md:hidden">
                     {items.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-900/40">
-                        <td className="px-4 py-3 text-white">{item.name}</td>
-                        <td className="px-4 py-3 text-right text-slate-300">{item.appointments}</td>
-                        <td className="px-4 py-3 text-right text-slate-100">{formatCurrency(item.gross)}</td>
-                        <td className="px-4 py-3 text-right text-slate-300">{formatPercent(item.commissionRate)}</td>
-                        <td className="px-4 py-3 text-right text-emerald-300">{formatCurrency(item.commission)}</td>
-                        <td className="px-4 py-3 text-right text-indigo-300">{formatCurrency(item.net)}</td>
-                      </tr>
+                      <div key={item.id} className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-inner shadow-black/20">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-base font-semibold text-white">{item.name}</p>
+                          <span className="text-xs uppercase tracking-wide text-slate-400">{item.appointments} Р·Р°РїРёСЃРµР№</span>
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-300">
+                          <div className="rounded-xl border border-slate-800/70 bg-slate-950/40 px-3 py-2">
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Р’С‹СЂСѓС‡РєР°</p>
+                            <p className="text-lg font-semibold text-white">{formatCurrency(item.gross)}</p>
+                          </div>
+                          <div className="rounded-xl border border-slate-800/70 bg-slate-950/40 px-3 py-2">
+                            <p className="text-xs uppercase tracking-wide text-slate-400">РџСЂРѕС†РµРЅС‚</p>
+                            <p className="text-lg font-semibold text-slate-100">{formatPercent(item.commissionRate)}</p>
+                          </div>
+                          <div className="rounded-xl border border-emerald-900/80 bg-emerald-500/5 px-3 py-2">
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Р’С‹РїР»Р°С‚Р°</p>
+                            <p className="text-lg font-semibold text-emerald-300">{formatCurrency(item.commission)}</p>
+                          </div>
+                          <div className="rounded-xl border border-indigo-900/80 bg-indigo-500/5 px-3 py-2">
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Р’ РєР°СЃСЃСѓ</p>
+                            <p className="text-lg font-semibold text-indigo-200">{formatCurrency(item.net)}</p>
+                          </div>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+                </>
               )}
             </div>
           </>
         )}
       </SectionCard>
-      <SectionCard title="Динамика выручки">
+      <SectionCard title="Р”РёРЅР°РјРёРєР° РІС‹СЂСѓС‡РєРё">
         {state.loading ? (
-          <LoadingState label="Строю график..." />
+          <LoadingState label="РЎС‚СЂРѕСЋ РіСЂР°С„РёРє..." />
         ) : timeline.length === 0 ? (
-          <p className="text-sm text-slate-400">Нет данных для отображения графика.</p>
+          <p className="text-sm text-slate-400">РќРµС‚ РґР°РЅРЅС‹С… РґР»СЏ РѕС‚РѕР±СЂР°Р¶РµРЅРёСЏ РіСЂР°С„РёРєР°.</p>
         ) : (
-          <div className="mt-2 flex h-56 items-end gap-3">
-            {timeline.map((point) => {
-              const height = chartMax ? Math.max((point.gross / chartMax) * 100, 5) : 0;
-              return (
-                <div key={point.date} className="flex-1">
-                  <div className="relative flex items-end justify-center">
-                    <div
-                      className="w-full rounded-t-xl bg-indigo-500/80 shadow-inner shadow-indigo-900/40"
-                      style={{ height: `${height}%` }}
-                    >
-                      <span className="absolute -top-6 text-xs font-semibold text-indigo-100">
-                        {formatCurrency(point.gross)}
-                      </span>
+          <div className="mt-2 overflow-x-auto pb-2">
+            <div className="flex h-56 items-end gap-3" style={{ minWidth: `${chartMinWidth}px` }}>
+              {timeline.map((point) => {
+                const height = chartMax ? Math.max((point.gross / chartMax) * 100, 5) : 0;
+                return (
+                  <div key={point.date} className="flex-1">
+                    <div className="relative flex items-end justify-center">
+                      <div
+                        className="w-full rounded-t-xl bg-indigo-500/80 shadow-inner shadow-indigo-900/40"
+                        style={{ height: `${height}%` }}
+                      >
+                        <span className="absolute -top-6 text-xs font-semibold text-indigo-100">
+                          {formatCurrency(point.gross)}
+                        </span>
+                      </div>
                     </div>
+                    <p className="mt-3 text-center text-xs text-slate-400">{formatShortDateLabel(point.date)}</p>
                   </div>
-                  <p className="mt-3 text-center text-xs text-slate-400">{formatShortDateLabel(point.date)}</p>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
       </SectionCard>
@@ -2978,7 +3346,7 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
     setOpen(false);
   };
 
-  const summary = draft.length ? draft.join(', ') : 'Выбрать услуги';
+  const summary = draft.length ? draft.join(', ') : 'Р’С‹Р±СЂР°С‚СЊ СѓСЃР»СѓРіРё';
 
   return (
     <>
@@ -2998,7 +3366,7 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between">
-                <p className="font-semibold">Услуги</p>
+                <p className="font-semibold">РЈСЃР»СѓРіРё</p>
                 <button
                   type="button"
                   className="rounded-full p-1 text-slate-400 hover:text-white"
@@ -3007,7 +3375,7 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
                     setOpen(false);
                   }}
                 >
-                  ?
+                  Г—
                 </button>
               </div>
               {draft.length > 0 && (
@@ -3020,13 +3388,13 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
                       onClick={() => toggleOption(service)}
                     >
                       {service}
-                      <span className="text-slate-400">?</span>
+                      <span className="text-slate-400">Г—</span>
                     </button>
                   ))}
                 </div>
               )}
               <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
-                {options.length === 0 && <p className="text-slate-400">Нет доступных услуг</p>}
+                {options.length === 0 && <p className="text-slate-400">РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… СѓСЃР»СѓРі</p>}
                 {options.map((option) => {
                   const isActive = draft.includes(option);
                   return (
@@ -3045,10 +3413,10 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
               </div>
               <div className="mt-3 flex items-center justify-between gap-2">
                 <button type="button" onClick={() => setDraft([])} className="text-xs text-slate-400 hover:text-white">
-                  Очистить
+                  РћС‡РёСЃС‚РёС‚СЊ
                 </button>
                 <button type="button" onClick={handleSave} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500">
-                  Готово
+                  Р“РѕС‚РѕРІРѕ
                 </button>
               </div>
             </div>
@@ -3062,8 +3430,8 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
 const TimeRangePicker = ({
   value,
   onChange,
-  title = 'Выбор времени',
-  placeholder = 'Нажмите, чтобы выбрать',
+  title = 'Р’С‹Р±РѕСЂ РІСЂРµРјРµРЅРё',
+  placeholder = 'Р’С‹Р±РµСЂРёС‚Рµ РёРЅС‚РµСЂРІР°Р»',
   buttonClassName = 'w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-left text-sm text-white whitespace-nowrap',
 }) => {
   const [open, setOpen] = useState(false);
@@ -3120,24 +3488,24 @@ const TimeRangePicker = ({
         footer={
           <>
             <button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-slate-600 px-4 py-2 text-white">
-              Закрыть
+              РћС‚РјРµРЅР°
             </button>
             <button type="button" onClick={handleSave} className="rounded-lg bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-500">
-              Сохранить
+              РЎРѕС…СЂР°РЅРёС‚СЊ
             </button>
           </>
         }
       >
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-300">Выберите время для начала и завершения</p>
+            <p className="text-sm text-slate-300">Р’С‹Р±РµСЂРёС‚Рµ РІСЂРµРјСЏ РЅР°С‡Р°Р»Р° Рё РѕРєРѕРЅС‡Р°РЅРёСЏ</p>
             <button type="button" onClick={handleClear} className="text-xs text-slate-400 hover:text-slate-100">
-              Очистить
+              РћС‡РёСЃС‚РёС‚СЊ
             </button>
           </div>
           <div className="flex flex-wrap items-center justify-around gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
             <div className="text-center">
-              <label className="block text-sm font-medium text-slate-400">Старт</label>
+              <label className="block text-sm font-medium text-slate-400">РќР°С‡Р°Р»Рѕ</label>
               <input
                 type="time"
                 step="3600"
@@ -3148,7 +3516,7 @@ const TimeRangePicker = ({
             </div>
             <span className="text-2xl font-light text-slate-500">-</span>
             <div className="text-center">
-              <label className="block text-sm font-medium text-slate-400">Финиш</label>
+              <label className="block text-sm font-medium text-slate-400">РћРєРѕРЅС‡Р°РЅРёРµ</label>
               <input
                 type="time"
                 step="3600"
@@ -3197,8 +3565,8 @@ const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableI
       <TimeRangePicker
         value={value || ''}
         onChange={(nextValue) => commit(nextValue)}
-        placeholder="—"
-        title={tableId === 'Schedules' ? 'Редактирование слотов' : 'Выбор времени'}
+        placeholder={tableId === 'Schedules' ? '????????' : '?'}
+        title={tableId === 'Schedules' ? 'Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ СЃР»РѕС‚РѕРІ' : 'Р’С‹Р±РѕСЂ РІСЂРµРјРµРЅРё'}
         buttonClassName="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-left text-sm text-white"
       />
     );
@@ -3248,7 +3616,7 @@ const ColumnMenu = ({ columns, hiddenColumns = [], onToggle }) => {
         onClick={() => setOpen((prev) => !prev)}
         className="flex w-full items-center justify-center rounded-lg border border-slate-600 px-3 py-2 text-sm text-white sm:w-auto"
       >
-        Поля
+        РџРѕР»СЏ
       </button>
       {open && (
         <div
@@ -3267,7 +3635,7 @@ const ColumnMenu = ({ columns, hiddenColumns = [], onToggle }) => {
   );
 };
 
-const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, placeholder = 'Нет данных' }) => {
+const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, placeholder = 'РќРµС‚ РґР°РЅРЅС‹С…' }) => {
   const [query, setQuery] = useState('');
   const selected = useMemo(() => (Array.isArray(value) ? value : parseMultiValue(value)), [value]);
   const normalizedQuery = query.trim().toLowerCase();
@@ -3288,7 +3656,7 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
       {label && (
         <div className="flex items-center justify-between text-sm">
           <label className="text-slate-300">{label}</label>
-          <span className="text-xs text-slate-400">{selected.length ? `${selected.length} выбрано` : 'Не выбрано'}</span>
+          <span className="text-xs text-slate-400">{selected.length ? `${selected.length} РІС‹Р±СЂР°РЅРѕ` : 'РќРµ РІС‹Р±СЂР°РЅРѕ'}</span>
         </div>
       )}
       {selected.length > 0 && (
@@ -3320,12 +3688,12 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Поиск услуги"
+            placeholder="РџРѕРёСЃРє СѓСЃР»СѓРіРё"
             className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none"
           />
           {query && (
             <button type="button" onClick={() => setQuery('')} className="text-xs text-slate-400 hover:text-white">
-              Очистить
+              РћС‡РёСЃС‚РёС‚СЊ
             </button>
           )}
         </div>
@@ -3349,7 +3717,7 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
                     <span className="truncate">{option}</span>
                     {isActive && (
                       <span className="text-xs font-semibold text-indigo-300" aria-hidden="true">
-                        ?
+                        вњ“
                       </span>
                     )}
                   </button>
@@ -3364,12 +3732,12 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
 };
 
 const ClientLookupInput = ({
-  label = 'Клиент',
+  label = 'РљР»РёРµРЅС‚',
   value = '',
   onChange,
   clients = [],
   onSelectClient,
-  placeholder = 'Начните вводить имя или телефон',
+  placeholder = 'РќР°С‡РЅРёС‚Рµ РІРІРѕРґРёС‚СЊ РёРјСЏ РёР»Рё С‚РµР»РµС„РѕРЅ',
 }) => {
   const [query, setQuery] = useState(value || '');
   const [open, setOpen] = useState(false);
@@ -3426,8 +3794,8 @@ const ClientLookupInput = ({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => handleSelect(client)}
             >
-              <span className="font-semibold">{client.name || 'Без имени'}</span>
-              <span className="text-xs text-slate-400">{client.phone || 'Телефон не указан'}</span>
+              <span className="font-semibold">{client.name || 'Р‘РµР· РёРјРµРЅРё'}</span>
+              <span className="text-xs text-slate-400">{client.phone || 'РўРµР»РµС„РѕРЅ РЅРµ СѓРєР°Р·Р°РЅ'}</span>
             </button>
           ))}
         </div>
@@ -3447,14 +3815,14 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset }) =
         onClick={() => setOpen((prev) => !prev)}
         className="flex h-11 w-full items-center justify-center rounded-xl border border-slate-600 px-3 text-sm text-white sm:w-auto"
       >
-        Статусы
+        РЎС‚Р°С‚СѓСЃС‹
       </button>
       {open && (
         <div
           ref={ref}
           className="absolute left-0 z-30 mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 shadow-2xl sm:left-auto sm:right-0"
         >
-          {statuses.length === 0 && <p className="text-sm text-slate-500">Нет статусов</p>}
+          {statuses.length === 0 && <p className="text-sm text-slate-500">РќРµС‚ СЃС‚Р°С‚СѓСЃРѕРІ</p>}
           {statuses.map((status) => (
             <label key={status} className="flex items-center gap-2 text-sm text-slate-200">
               <input type="checkbox" checked={!hiddenStatuses.includes(status)} onChange={() => onToggle(status)} />
@@ -3462,7 +3830,7 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset }) =
             </label>
           ))}
           <button onClick={onReset} className="text-sm text-indigo-300 hover:text-indigo-100">
-            Показать все
+            РџРѕРєР°Р·Р°С‚СЊ РІСЃРµ
           </button>
         </div>
       )}
@@ -3495,6 +3863,7 @@ const TableToolbar = ({
   supportsGrouping = false,
   groupByDate = false,
   setGroupByDate,
+  allowAllBarbersOption = true,
 }) => {
   const chipClass = (active) =>
     classNames(
@@ -3517,7 +3886,7 @@ const TableToolbar = ({
             onClick={() => setShowPastAppointments(!showPastAppointments)}
             className={classNames(chipClass(showPastAppointments), 'w-full sm:w-auto')}
           >
-            Прошедшие
+            РџСЂРѕС€РµРґС€РёРµ
           </button>
         )
       : null;
@@ -3525,7 +3894,7 @@ const TableToolbar = ({
     supportsGrouping && typeof setGroupByDate === 'function'
       ? (
           <button type="button" onClick={() => setGroupByDate(!groupByDate)} className={classNames(chipClass(groupByDate), 'w-full sm:w-auto')}>
-            По дням
+            РџРѕ РґРЅСЏРј
           </button>
         )
       : null;
@@ -3539,7 +3908,7 @@ const TableToolbar = ({
         extraClassName
       )}
     >
-      <option value="all">Все мастера</option>
+      {allowAllBarbersOption && <option value="all">Р’СЃРµ РјР°СЃС‚РµСЂР°</option>}
       {barbers.map((barber) => (
         <option key={barber} value={barber}>
           {barber}
@@ -3589,15 +3958,15 @@ const TableToolbar = ({
                 <input
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Поиск..."
-                  aria-label="Поиск по таблице"
+                  placeholder="РџРѕРёСЃРє..."
+                  aria-label="РџРѕРёСЃРє РїРѕ С‚Р°Р±Р»РёС†Рµ"
                   className="h-11 w-full rounded-xl border border-slate-700 bg-slate-900 pl-9 pr-3 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                 />
               </label>
               {inlineCreateForMobile && (
                 <button
                   onClick={onOpenCreate}
-                  aria-label="Добавить запись"
+                  aria-label="Р”РѕР±Р°РІРёС‚СЊ Р·Р°РїРёСЃСЊ"
                   className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-lg font-semibold text-white shadow-sm shadow-emerald-900/20 hover:bg-emerald-500 sm:hidden"
                 >
                   +
@@ -3613,7 +3982,7 @@ const TableToolbar = ({
                     onClick={onOpenCreate}
                     className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-6 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 hover:bg-emerald-500"
                   >
-                    + Добавить
+                    + Р”РѕР±Р°РІРёС‚СЊ
                   </button>
                 )}
               </div>
@@ -3632,9 +4001,9 @@ const TableToolbar = ({
             <button
               onClick={onRefresh}
               className="rounded-full border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800 sm:px-5"
-              title="Обновить данные"
+              title="РћР±РЅРѕРІРёС‚СЊ РґР°РЅРЅС‹Рµ"
             >
-              <span className="hidden sm:inline">Обновить</span>
+              <span className="hidden sm:inline">РћР±РЅРѕРІРёС‚СЊ</span>
               <span className="sm:hidden">?</span>
             </button>
           )}
@@ -3647,7 +4016,7 @@ const TableToolbar = ({
                 tableId === 'Appointments' ? 'lg:hidden' : ''
               )}
             >
-              <span className="hidden sm:inline">+ Добавить</span>
+              <span className="hidden sm:inline">+ Р”РѕР±Р°РІРёС‚СЊ</span>
               <span className="sm:hidden">+</span>
             </button>
           )}
@@ -3660,7 +4029,7 @@ const TableToolbar = ({
 const buildAppointmentGroups = (records = [], sortDirection = 'desc') => {
   const buckets = new Map();
   records.forEach((record) => {
-    const key = record.Date || 'Без даты';
+    const key = record.Date || 'Р‘РµР· РґР°С‚С‹';
     const bucket = buckets.get(key) || [];
     bucket.push(record);
     buckets.set(key, bucket);
@@ -3743,8 +4112,8 @@ const SchedulesBoard = ({ rows = [], columns = [], onUpdate, options }) => {
         const timestamp = key && !key.startsWith('barber-') ? new Date(key).getTime() : Number.NaN;
         return {
           key,
-          title: key && !key.startsWith('barber-') ? formatDateHeading(key) : reference.DayOfWeek || 'Без даты',
-          badge: key && !key.startsWith('barber-') ? formatDateBadgeLabel(key) : reference.DayOfWeek || '—',
+          title: key && !key.startsWith('barber-') ? formatDateHeading(key) : reference.DayOfWeek || 'Р‘РµР· РґР°С‚С‹',
+          badge: key && !key.startsWith('barber-') ? formatDateBadgeLabel(key) : reference.DayOfWeek || 'вЂ”',
           sortValue: Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER,
           slots: sortedSlots,
         };
@@ -3753,7 +4122,7 @@ const SchedulesBoard = ({ rows = [], columns = [], onUpdate, options }) => {
   }, [rows]);
 
   if (!groupedByDate.length) {
-    return <p className="text-slate-400">Расписание пусто.</p>;
+    return <p className="text-slate-400">Р Р°СЃРїРёСЃР°РЅРёРµ РїСѓСЃС‚Рѕ.</p>;
   }
 
   return (
@@ -3766,7 +4135,7 @@ const SchedulesBoard = ({ rows = [], columns = [], onUpdate, options }) => {
               <p className="text-base font-semibold text-white">{group.title}</p>
             </div>
             <span className="rounded-full border border-slate-700 px-2.5 py-0.5 text-[11px] text-slate-300">
-              {group.slots.length} {pluralize(group.slots.length, ['слот', 'слота', 'слотов'])}
+              {group.slots.length} {pluralize(group.slots.length, ['СЃР»РѕС‚', 'СЃР»РѕС‚Р°', 'СЃР»РѕС‚РѕРІ'])}
             </span>
           </div>
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -3777,12 +4146,12 @@ const SchedulesBoard = ({ rows = [], columns = [], onUpdate, options }) => {
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{slot.DayOfWeek || 'День не указан'}</p>
-                    <p className="text-base font-semibold text-white">{slot.Barber || 'Не назначен'}</p>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{slot.DayOfWeek || 'Р”РµРЅСЊ РЅРµ СѓРєР°Р·Р°РЅ'}</p>
+                    <p className="text-base font-semibold text-white">{slot.Barber || 'РќРµ РЅР°Р·РЅР°С‡РµРЅ'}</p>
                   </div>
                     <div className="text-right">
-                      <p className="text-lg font-semibold text-white">{slot.Week || '-'}</p>
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500">{slot.Date ? formatDate(slot.Date) : 'Без даты'}</p>
+                      <p className="text-lg font-semibold text-white">{slot.Week || '????????'}</p>
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">{slot.Date ? formatDate(slot.Date) : 'Р‘РµР· РґР°С‚С‹'}</p>
                   </div>
                 </div>
                 {editableColumns.length > 0 && (
@@ -3806,7 +4175,7 @@ const SchedulesBoard = ({ rows = [], columns = [], onUpdate, options }) => {
 
 const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [] }) => {
   if (!groups.length) {
-    return <p className="text-slate-400">Записей пока нет.</p>;
+    return <p className="text-slate-400">Р—Р°РїРёСЃРµР№ РїРѕРєР° РЅРµС‚.</p>;
   }
 
   const visibleColumns = useMemo(() => columns.filter((column) => !hiddenColumns.includes(column.key)), [columns, hiddenColumns]);
@@ -3814,24 +4183,24 @@ const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [
     const value = record[column.key];
     switch (column.key) {
       case 'Date':
-        return formatDate(value) || '—';
+        return formatDate(value) || 'вЂ”';
       case 'Time': {
         const { start, end } = parseTimeRangeParts(value);
-        return [start || value || '-', end ? `до ${end}` : ''].filter(Boolean).join(' ');
+        return [start || value || '-', end ? `РґРѕ ${end}` : ''].filter(Boolean).join(' ');
       }
       case 'Status':
-        return normalizeStatusValue(value) || '—';
+        return normalizeStatusValue(value) || 'вЂ”';
       case 'Services': {
         const items = parseMultiValue(value);
-        return items.length ? items.join(', ') : '—';
+        return items.length ? items.join(', ') : 'вЂ”';
       }
       case 'Phone':
-        return value ? formatPhoneInput(value) : '—';
+        return value ? formatPhoneInput(value) : 'вЂ”';
       case 'Reminder2hClientSent':
       case 'Reminder2hBarberSent':
-        return value === 'true' || value === true || value === 1 ? 'Отправлено' : '—';
+        return value === 'true' || value === true || value === 1 ? 'РћС‚РїСЂР°РІР»РµРЅРѕ' : 'вЂ”';
       default:
-        return value || '—';
+        return value || 'вЂ”';
     }
   };
 
@@ -3864,16 +4233,16 @@ const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{formatDateBadgeLabel(record.Date)}</p>
                       <div className="flex items-baseline gap-2">
                         <p className="text-2xl font-semibold text-white sm:text-3xl">{start || record.Time || '-'}</p>
-                        {end && <p className="text-xs text-slate-400 sm:text-sm">до {end}</p>}
+                        {end && <p className="text-xs text-slate-400 sm:text-sm">РґРѕ {end}</p>}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2 text-right">
                       <span className={classNames('inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide', getStatusBadgeClasses(statusLabel))}>
-                        {statusLabel || 'Без статуса'}
+                        {statusLabel || 'Р‘РµР· СЃС‚Р°С‚СѓСЃР°'}
                       </span>
                       {record.Barber && (
                         <p className="text-xs text-slate-400 sm:text-sm">
-                          Барбер: <span className="font-semibold text-white">{record.Barber}</span>
+                          Р‘Р°СЂР±РµСЂ: <span className="font-semibold text-white">{record.Barber}</span>
                         </p>
                       )}
                     </div>
@@ -3890,7 +4259,7 @@ const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [
                       </div>
                     ) : (
                       <>
-                        <p className="text-base font-semibold text-white sm:text-lg">{record.CustomerName || 'Без имени'}</p>
+                        <p className="text-base font-semibold text-white sm:text-lg">{record.CustomerName || 'Р‘РµР· РёРјРµРЅРё'}</p>
                         {servicesList.length ? (
                           <div className="flex flex-wrap gap-2">
                             {servicesList.slice(0, 3).map((service, index) => (
@@ -3901,7 +4270,7 @@ const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [
                             {servicesList.length > 3 && <span className="text-[11px] text-slate-500">+{servicesList.length - 3}</span>}
                           </div>
                         ) : (
-                          <p className="text-xs text-slate-500">Услуги не указаны</p>
+                          <p className="text-xs text-slate-500">РЈСЃР»СѓРіРё РЅРµ СѓРєР°Р·Р°РЅС‹</p>
                         )}
                       </>
                     )}
@@ -3931,7 +4300,7 @@ const DataTable = ({
   groupByDate = true,
 }) => {
   if (!rows.length) {
-    return <p className="text-slate-400">Нет записей.</p>;
+    return <p className="text-slate-400">РќРµС‚ Р·Р°РїРёСЃРµР№.</p>;
   }
 
   const visibleColumns = columns.filter((column) => !hiddenColumns.includes(column.key));
@@ -3962,7 +4331,7 @@ const DataTable = ({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
-                    {tableId === 'Users' ? 'Клиент' : tableId === 'Schedules' ? 'Расписание' : 'Запись'}
+                    {tableId === 'Users' ? 'РљР»РёРµРЅС‚' : tableId === 'Schedules' ? 'Р Р°СЃРїРёСЃР°РЅРёРµ' : 'Р—Р°РїРёСЃСЊ'}
                   </p>
                   <p className="text-base font-semibold text-white">{record[visibleColumns[0]?.key] || '-'}</p>
                 </div>
@@ -3970,7 +4339,7 @@ const DataTable = ({
                   <button
                     onClick={() => onDelete(record)}
                     className="rounded-full border border-rose-600/70 p-2 text-rose-200 hover:bg-rose-500/10"
-                    aria-label="Удалить запись"
+                    aria-label="РЈРґР°Р»РёС‚СЊ Р·Р°РїРёСЃСЊ"
                   >
                     <IconTrash className="h-4 w-4" />
                   </button>
@@ -4005,7 +4374,7 @@ const DataTable = ({
                   </div>
                 </th>
               ))}
-              {onDelete && <th className="px-2 py-1.5 text-right" aria-label="Действия" />}
+              {onDelete && <th className="px-2 py-1.5 text-right" aria-label="Р”РµР№СЃС‚РІРёСЏ" />}
             </tr>
           </thead>
           <tbody>
@@ -4041,7 +4410,7 @@ const DataTable = ({
                         <button
                           onClick={() => onDelete(record)}
                           className="inline-flex items-center rounded-lg border border-rose-500 px-2 py-1.5 text-xs text-rose-300 hover:bg-rose-500/10"
-                          aria-label="Удалить запись"
+                          aria-label="РЈРґР°Р»РёС‚СЊ Р·Р°РїРёСЃСЊ"
                         >
                           <IconTrash />
                         </button>
@@ -4075,7 +4444,7 @@ const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHist
         setModalState((prev) => ({ ...prev, loading: false, history: [] }));
       }
     } catch (error) {
-      setModalState((prev) => ({ ...prev, loading: false, error: error.message || 'Не удалось загрузить историю' }));
+      setModalState((prev) => ({ ...prev, loading: false, error: error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РёСЃС‚РѕСЂРёСЋ' }));
     }
   };
 
@@ -4102,9 +4471,9 @@ const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHist
   const handleDelete = async () => {
     if (!modalState.record || typeof onDelete !== 'function') return;
     const confirmed = await onRequestConfirm?.({
-      title: 'Удалить клиента?',
-      message: `Клиент «${modalState.record.Name || 'Без имени'}» будет удален без возможности восстановления.`,
-      confirmLabel: 'Удалить',
+      title: 'РЈРґР°Р»РёС‚СЊ РєР»РёРµРЅС‚Р°?',
+      message: `РљР»РёРµРЅС‚ В«${modalState.record.Name || 'Р‘РµР· РёРјРµРЅРё'}В» Р±СѓРґРµС‚ СѓРґР°Р»РµРЅ Р±РµР· РІРѕР·РјРѕР¶РЅРѕСЃС‚Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ.`,
+      confirmLabel: 'РЈРґР°Р»РёС‚СЊ',
       tone: 'danger',
     });
     if (onRequestConfirm && !confirmed) return;
@@ -4115,7 +4484,7 @@ const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHist
   return (
     <div className="space-y-6">
       {clients.length === 0 ? (
-        <p className="text-slate-400">Список клиентов пуст.</p>
+        <p className="text-slate-400">РЎРїРёСЃРѕРє РєР»РёРµРЅС‚РѕРІ РїСѓСЃС‚.</p>
       ) : (
         <div className="rounded-3xl border border-slate-800 bg-slate-950/40 shadow-inner shadow-black/10">
           <div className="divide-y divide-slate-900">
@@ -4137,8 +4506,8 @@ const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHist
                     <div className="flex flex-1 flex-col gap-1">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="space-y-1">
-                          <p className="text-base font-semibold text-white">{client.Name || 'Нет имени'}</p>
-                          {client.Barber && <p className="text-xs text-slate-400">Любимый барбер: {client.Barber}</p>}
+                          <p className="text-base font-semibold text-white">{client.Name || 'РќРµС‚ РёРјРµРЅРё'}</p>
+                          {client.Barber && <p className="text-xs text-slate-400">Р›СЋР±РёРјС‹Р№ Р±Р°СЂР±РµСЂ: {client.Barber}</p>}
                         </div>
                         <div className="hidden text-right text-sm text-slate-300 sm:block">
                           {phoneDisplay && <p>{phoneDisplay}</p>}
@@ -4155,7 +4524,7 @@ const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHist
       )}
 
       <Modal
-        title={modalState.record?.Name || 'Клиент'}
+        title={modalState.record?.Name || 'РљР»РёРµРЅС‚'}
         isOpen={modalState.open}
         onClose={closeClientModal}
         maxWidthClass="max-w-3xl"
@@ -4163,25 +4532,25 @@ const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHist
           <div className="flex flex-wrap justify-end gap-3">
             {modalState.record && (
               <button onClick={handleDelete} className="rounded-lg border border-rose-600 px-4 py-2 text-sm text-rose-200 hover:bg-rose-500/10">
-                Удалить
+                РЈРґР°Р»РёС‚СЊ
               </button>
             )}
             <button onClick={closeClientModal} className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800">
-              Отмена
+              РћС‚РјРµРЅР°
             </button>
             <button onClick={handleSave} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">
-              Сохранить
+              РЎРѕС…СЂР°РЅРёС‚СЊ
             </button>
           </div>
         }
       >
         {!modalState.record ? (
-          <p className="text-slate-400">Выберите клиента.</p>
+          <p className="text-slate-400">Р’С‹Р±РµСЂРёС‚Рµ РєР»РёРµРЅС‚Р°.</p>
         ) : (
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-1 text-sm text-slate-300">
-                Имя
+                РРјСЏ
                 <input
                   value={modalState.record.Name || ''}
                   onChange={(event) => handleFieldChange('Name', event.target.value)}
@@ -4189,7 +4558,7 @@ const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHist
                 />
               </label>
               <label className="space-y-1 text-sm text-slate-300">
-                Телефон
+                РўРµР»РµС„РѕРЅ
                 <input
                   value={modalState.record.Phone || ''}
                   onChange={(event) => handleFieldChange('Phone', event.target.value)}
@@ -4205,13 +4574,13 @@ const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHist
                 />
               </label>
               <label className="space-y-1 text-sm text-slate-300">
-                Любимый барбер
+                Р›СЋР±РёРјС‹Р№ Р±Р°СЂР±РµСЂ
                 <select
                   value={modalState.record.Barber || ''}
                   onChange={(event) => handleFieldChange('Barber', event.target.value)}
                   className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
                 >
-                  <option value="">Не выбран</option>
+                  <option value="">РќРµ РІС‹Р±СЂР°РЅ</option>
                   {barberOptions.map((barber) => (
                     <option key={barber} value={barber}>
                       {barber}
@@ -4221,12 +4590,12 @@ const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHist
               </label>
             </div>
             <div className="space-y-2">
-              <p className="text-sm text-slate-400">История визитов</p>
+              <p className="text-sm text-slate-400">РСЃС‚РѕСЂРёСЏ РІРёР·РёС‚РѕРІ</p>
               <VisitHistoryList
                 visits={modalState.history}
                 loading={modalState.loading}
                 error={modalState.error}
-                emptyMessage="История визитов пуста."
+                emptyMessage="РСЃС‚РѕСЂРёСЏ РІРёР·РёС‚РѕРІ РїСѓСЃС‚Р°."
                 maxHeightClass="max-h-56"
               />
             </div>
@@ -4280,16 +4649,16 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
 
   return (
     <Modal
-      title={`Новая запись: ${tableName}`}
+      title={`РќРѕРІР°СЏ Р·Р°РїРёСЃСЊ: ${tableName}`}
       isOpen={isOpen}
       onClose={onClose}
       footer={
         <>
           <button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">
-            Отмена
+            РћС‚РјРµРЅР°
           </button>
           <button onClick={handleSubmit} className="rounded-lg bg-emerald-600 px-4 py-2 text-white">
-            Сохранить
+            РЎРѕС…СЂР°РЅРёС‚СЊ
           </button>
         </>
       }
@@ -4333,7 +4702,7 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
                 options={options[column.optionsKey] || []}
                 value={selectedValues}
                 onChange={(selected) => setDraft((prev) => ({ ...prev, [column.key]: selected }))}
-                placeholder="Нет данных"
+                placeholder="РќРµС‚ РґР°РЅРЅС‹С…"
               />
             );
           }
@@ -4344,8 +4713,8 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
                 <TimeRangePicker
                   value={value || ''}
                   onChange={(nextValue) => setDraft((prev) => ({ ...prev, [column.key]: nextValue }))}
-                  placeholder={column.key === 'Week' ? '—' : 'Нажмите, чтобы выбрать'}
-                  title={column.key === 'Week' ? 'Редактирование слотов' : 'Выбор времени'}
+                  placeholder={column.key === 'Week' ? 'вЂ”' : 'РќР°Р¶РјРёС‚Рµ, С‡С‚РѕР±С‹ РІС‹Р±СЂР°С‚СЊ'}
+                  title={column.key === 'Week' ? 'Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ СЃР»РѕС‚РѕРІ' : 'Р’С‹Р±РѕСЂ РІСЂРµРјРµРЅРё'}
                 />
               </div>
             );
@@ -4375,24 +4744,24 @@ const ProfileModal = ({ state, onClose }) => {
 
   return (
     <Modal
-      title={state.data?.user?.Name || 'Профиль клиента'}
+      title={state.data?.user?.Name || 'РџСЂРѕС„РёР»СЊ РєР»РёРµРЅС‚Р°'}
       isOpen={state.open}
       onClose={onClose}
-      footer={<button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">Закрыть</button>}
+      footer={<button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">Р—Р°РєСЂС‹С‚СЊ</button>}
     >
-      {state.loading && <LoadingState label="Загружаю профиль..." />}
+      {state.loading && <LoadingState label="Р—Р°РіСЂСѓР¶Р°СЋ РїСЂРѕС„РёР»СЊ..." />}
       {!state.loading && state.data?.error && <ErrorBanner message={state.data.error} />}
       {!state.loading && user && (
         <div className="space-y-4">
           <div className="grid gap-2 text-sm text-slate-200">
             <div>
-              <span className="text-slate-400">Телефон:</span>{' '}
+              <span className="text-slate-400">РўРµР»РµС„РѕРЅ:</span>{' '}
               {phoneLabel && phoneHref ? (
                 <a href={phoneHref} className="text-indigo-300 hover:text-indigo-100">
                   {phoneLabel}
                 </a>
               ) : (
-                '—'
+                'вЂ”'
               )}
             </div>
             <div>
@@ -4402,15 +4771,15 @@ const ProfileModal = ({ state, onClose }) => {
                   {telegramHandle}
                 </a>
               ) : (
-                '—'
+                'вЂ”'
               )}
             </div>
-            <div><span className="text-slate-400">Любимый барбер:</span> {user.Barber || '—'}</div>
+            <div><span className="text-slate-400">Р›СЋР±РёРјС‹Р№ Р±Р°СЂР±РµСЂ:</span> {user.Barber || 'вЂ”'}</div>
           </div>
           <div>
-            <p className="text-sm text-slate-400">История визитов</p>
+            <p className="text-sm text-slate-400">РСЃС‚РѕСЂРёСЏ РІРёР·РёС‚РѕРІ</p>
             <div className="mt-2">
-              <VisitHistoryList visits={visitHistory} emptyMessage="Записей за последний год нет." />
+              <VisitHistoryList visits={visitHistory} emptyMessage="Р—Р°РїРёСЃРµР№ Р·Р° РїРѕСЃР»РµРґРЅРёР№ РіРѕРґ РЅРµС‚." />
             </div>
           </div>
         </div>
@@ -4421,15 +4790,15 @@ const ProfileModal = ({ state, onClose }) => {
 
 const BackupsPanel = ({ backups = [], onRestore, onCreate, onDelete }) => (
   <SectionCard
-    title="Резервные копии"
+    title="Р РµР·РµСЂРІРЅС‹Рµ РєРѕРїРёРё"
     actions={
       <button onClick={onCreate} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500">
-        Создать копию
+        РЎРѕР·РґР°С‚СЊ РєРѕРїРёСЋ
       </button>
     }
   >
     {backups.length === 0 ? (
-      <p className="text-slate-400">История пуста.</p>
+      <p className="text-slate-400">РСЃС‚РѕСЂРёСЏ РїСѓСЃС‚Р°.</p>
     ) : (
       <div className="space-y-2">
         {backups.map((backup) => {
@@ -4442,7 +4811,7 @@ const BackupsPanel = ({ backups = [], onRestore, onCreate, onDelete }) => (
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button onClick={() => onRestore(backup)} className="rounded-lg border border-slate-600 px-3 py-1 text-xs font-semibold text-indigo-200 hover:border-indigo-400 hover:text-white">
-                  Восстановить
+                  Р’РѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ
                 </button>
                 {onDelete && (
                   <button
@@ -4450,7 +4819,7 @@ const BackupsPanel = ({ backups = [], onRestore, onCreate, onDelete }) => (
                     className="inline-flex items-center rounded-lg border border-rose-600 px-3 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-500/10"
                   >
                     <IconTrash className="mr-1 h-3.5 w-3.5" />
-                    Удалить
+                    РЈРґР°Р»РёС‚СЊ
                   </button>
                 )}
               </div>
@@ -4497,7 +4866,7 @@ const AppointmentModal = ({
   const validateDraft = useCallback(
     (nextDraft) => {
       if (!nextDraft) {
-        return { error: 'Данные записи недоступны.', warning: '' };
+        return { error: 'Р”Р°РЅРЅС‹Рµ Р·Р°РїРёСЃРё РЅРµРґРѕСЃС‚СѓРїРЅС‹.', warning: '' };
       }
       const errors = [];
       const warnings = [];
@@ -4505,14 +4874,14 @@ const AppointmentModal = ({
       const timeParts = parseTimeRangeParts(nextDraft.Time || '');
       const hasTime = Boolean(timeParts.start);
       const selectedServices = parseMultiValue(nextDraft.Services);
-      if (!normalizeText(nextDraft.CustomerName)) missingFields.push('клиент');
-      if (!normalizeText(nextDraft.Barber)) missingFields.push('барбер');
-      if (!getDateOnlyValue(nextDraft.Date)) missingFields.push('дата');
-      if (!hasTime) missingFields.push('время');
-      if (!normalizeStatusValue(nextDraft.Status)) missingFields.push('статус');
-      if (!selectedServices.length) missingFields.push('услуга');
+      if (!normalizeText(nextDraft.CustomerName)) missingFields.push('РєР»РёРµРЅС‚');
+      if (!normalizeText(nextDraft.Barber)) missingFields.push('Р±Р°СЂР±РµСЂ');
+      if (!getDateOnlyValue(nextDraft.Date)) missingFields.push('РґР°С‚Р°');
+      if (!hasTime) missingFields.push('РІСЂРµРјСЏ');
+      if (!normalizeStatusValue(nextDraft.Status)) missingFields.push('СЃС‚Р°С‚СѓСЃ');
+      if (!selectedServices.length) missingFields.push('СѓСЃР»СѓРіР°');
       if (missingFields.length) {
-        errors.push(`Заполните поля: ${missingFields.join(', ')}.`);
+        errors.push(`Р—Р°РїРѕР»РЅРёС‚Рµ РїРѕР»СЏ: ${missingFields.join(', ')}.`);
       }
       const normalizedBarber = normalizeText(nextDraft.Barber).toLowerCase();
       const dateOnly = getDateOnlyValue(nextDraft.Date);
@@ -4543,7 +4912,7 @@ const AppointmentModal = ({
           return rangesOverlap(draftRange, { start, end });
         });
         if (conflictExists) {
-          errors.push('На это время уже есть другая запись для выбранного барбера.');
+          errors.push('РќР° СЌС‚Рѕ РІСЂРµРјСЏ СѓР¶Рµ РµСЃС‚СЊ РґСЂСѓРіР°СЏ Р·Р°РїРёСЃСЊ РґР»СЏ РІС‹Р±СЂР°РЅРЅРѕРіРѕ Р±Р°СЂР±РµСЂР°.');
         }
       }
       if (draftRange && (schedules || []).length && normalizedBarber && dateOnly) {
@@ -4556,7 +4925,7 @@ const AppointmentModal = ({
             return getDayIndex(slot.DayOfWeek) === dayIndex;
           });
           if (!daySlots.length) {
-            warnings.push('Барбер не работает в выбранный день. Запись будет вне графика.');
+            warnings.push('Р‘Р°СЂР±РµСЂ РЅРµ СЂР°Р±РѕС‚Р°РµС‚ РІ РІС‹Р±СЂР°РЅРЅС‹Р№ РґРµРЅСЊ. Р—Р°РїРёСЃСЊ Р±СѓРґРµС‚ РІРЅРµ РіСЂР°С„РёРєР°.');
           } else {
             const fitsSchedule = daySlots.some((slot) => {
               const slotTime = slot.Week || slot.Time || '';
@@ -4568,7 +4937,7 @@ const AppointmentModal = ({
               return draftRange.start >= slotStart && draftRange.end <= slotEnd;
             });
             if (!fitsSchedule) {
-              warnings.push('Выбранное время не входит в рабочую смену барбера. Запись будет создана вне графика.');
+              warnings.push('Р’С‹Р±СЂР°РЅРЅРѕРµ РІСЂРµРјСЏ РЅРµ РІС…РѕРґРёС‚ РІ СЂР°Р±РѕС‡СѓСЋ СЃРјРµРЅСѓ Р±Р°СЂР±РµСЂР°. Р—Р°РїРёСЃСЊ Р±СѓРґРµС‚ СЃРѕР·РґР°РЅР° РІРЅРµ РіСЂР°С„РёРєР°.');
             }
           }
         }
@@ -4591,19 +4960,19 @@ const AppointmentModal = ({
     setDraft((prev) => ({ ...prev, [field]: value }));
   };
   const isReminderSent = (value) => value === true || value === 'true' || value === 1 || value === '1';
-  const getReminderLabel = (value) => (isReminderSent(value) ? 'Напомнено' : 'Не напомнено');
+  const getReminderLabel = (value) => (isReminderSent(value) ? 'РќР°РїРѕРјРЅРµРЅРѕ' : 'РќРµ РЅР°РїРѕРјРЅРµРЅРѕ');
   const getReminderAccent = (value) => (isReminderSent(value) ? 'text-emerald-300' : 'text-slate-500');
   const recordDetails = [
     { key: 'user', label: 'UserID', value: draft.UserID || '-', accent: draft.UserID ? 'text-white' : 'text-slate-500' },
     {
       key: 'clientReminder',
-      label: 'Напоминание клиенту (2ч)',
+      label: 'РќР°РїРѕРјРёРЅР°РЅРёРµ РєР»РёРµРЅС‚Сѓ (2С‡)',
       value: getReminderLabel(draft.Reminder2hClientSent),
       accent: getReminderAccent(draft.Reminder2hClientSent),
     },
     {
       key: 'barberReminder',
-      label: 'Напоминание барберу (2ч)',
+      label: 'РќР°РїРѕРјРёРЅР°РЅРёРµ Р±Р°СЂР±РµСЂСѓ (2С‡)',
       value: getReminderLabel(draft.Reminder2hBarberSent),
       accent: getReminderAccent(draft.Reminder2hBarberSent),
     },
@@ -4642,7 +5011,7 @@ const AppointmentModal = ({
     if (!draft) return;
     setValidationError('');
     setValidationWarning('');
-    const nextDraft = { ...draft, Status: 'Выполнена' };
+    const nextDraft = { ...draft, Status: 'Р’С‹РїРѕР»РЅРµРЅР°' };
     setDraft(nextDraft);
     submitDraft(nextDraft);
   };
@@ -4665,14 +5034,14 @@ const AppointmentModal = ({
 
   return (
     <Modal
-      title={isNew ? 'Новая запись' : `Редактирование записи ${draft.CustomerName || ''}`}
+      title={isNew ? 'РќРѕРІР°СЏ Р·Р°РїРёСЃСЊ' : `Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ Р·Р°РїРёСЃРё ${draft.CustomerName || ''}`}
       isOpen={open}
       onClose={onClose}
       footer={
         <div className="flex flex-wrap justify-end gap-2 sm:gap-3">
           {!isNew && canDelete && (
             <button onClick={() => onDelete?.(draft)} className={classNames(actionButtonClass, 'border border-rose-600 text-rose-200 hover:bg-rose-500/10')}>
-              Удалить
+              РЈРґР°Р»РёС‚СЊ
             </button>
           )}
           {!isNew && (
@@ -4680,14 +5049,14 @@ const AppointmentModal = ({
               onClick={handleMarkCompleted}
               className={classNames(actionButtonClass, 'border border-emerald-500 text-emerald-200 hover:bg-emerald-500/10')}
             >
-              Выполнено
+              Р’С‹РїРѕР»РЅРµРЅРѕ
             </button>
           )}
           <button onClick={onClose} className={classNames(actionButtonClass, 'border border-slate-600 text-white')}>
-            Отмена
+            РћС‚РјРµРЅР°
           </button>
           <button onClick={handleSubmit} className={classNames(actionButtonClass, 'bg-emerald-600 text-white hover:bg-emerald-500')}>
-            Сохранить
+            РЎРѕС…СЂР°РЅРёС‚СЊ
           </button>
         </div>
       }
@@ -4700,14 +5069,14 @@ const AppointmentModal = ({
       )}
       <div className="grid gap-3 mobile-grid-2 md:grid-cols-2">
         <ClientLookupInput
-          label="Имя клиента"
+          label="РРјСЏ РєР»РёРµРЅС‚Р°"
           value={draft.CustomerName || ''}
           onChange={(nextValue) => handleChange('CustomerName', nextValue)}
           clients={clients}
           onSelectClient={handleClientAutoFill}
         />
         <div className="space-y-1">
-          <label className="text-sm text-slate-300">Телефон</label>
+          <label className="text-sm text-slate-300">РўРµР»РµС„РѕРЅ</label>
           <input
             type="tel"
             value={draft.Phone || ''}
@@ -4717,7 +5086,7 @@ const AppointmentModal = ({
           />
         </div>
         <select value={draft.Barber || ''} onChange={(event) => handleChange('Barber', event.target.value)} className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white">
-          <option value="">Барбер</option>
+          <option value="">Р‘Р°СЂР±РµСЂ</option>
           {(options.barbers || []).map((barber) => (
             <option key={barber} value={barber}>
               {barber}
@@ -4725,9 +5094,9 @@ const AppointmentModal = ({
           ))}
         </select>
         <input type="date" value={draft.Date ? String(draft.Date).slice(0, 10) : ''} onChange={(event) => handleChange('Date', event.target.value)} className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white" />
-        <TimeRangePicker value={draft.Time || ''} onChange={(nextValue) => handleChange('Time', nextValue)} placeholder="Выбрать время" />
+        <TimeRangePicker value={draft.Time || ''} onChange={(nextValue) => handleChange('Time', nextValue)} placeholder="Р’С‹Р±СЂР°С‚СЊ РІСЂРµРјСЏ" />
         <select value={draft.Status || ''} onChange={(event) => handleChange('Status', event.target.value)} className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white">
-          <option value="">Статус</option>
+          <option value="">РЎС‚Р°С‚СѓСЃ</option>
           {(options.statuses || []).map((status) => (
             <option key={status} value={status}>
               {status}
@@ -4736,11 +5105,11 @@ const AppointmentModal = ({
         </select>
         <div className="col-span-2">
           <MultiSelectCheckboxes
-            label="Услуги"
+            label="РЈСЃР»СѓРіРё"
             options={options.services || []}
             value={servicesSelection}
             onChange={(selected) => handleChange('Services', selected.join(', '))}
-            placeholder="Нет доступных услуг"
+            placeholder="РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… СѓСЃР»СѓРі"
           />
         </div>
       </div>
@@ -4750,7 +5119,7 @@ const AppointmentModal = ({
           onClick={() => setDetailsOpen((prev) => !prev)}
           className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left"
         >
-          <p className="text-sm font-semibold text-white">Данные о записи</p>
+          <p className="text-sm font-semibold text-white">Р”Р°РЅРЅС‹Рµ Рѕ Р·Р°РїРёСЃРё</p>
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
@@ -4842,6 +5211,8 @@ const TablesWorkspace = ({
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [showPastAppointments, setShowPastAppointments] = useLocalStorage('tables.showPastAppointments', true);
   const [groupAppointmentsByDate, setGroupAppointmentsByDate] = useLocalStorage('tables.groupAppointmentsByDate', true);
+  const restrictStaffBarberFilter = role === ROLE_STAFF && activeTable === 'Appointments';
+  const staffBarberId = currentUser?.barberId || null;
   const appointmentTemplate = useMemo(
     () => ({
       id: null,
@@ -4850,11 +5221,15 @@ const TablesWorkspace = ({
       Barber: pickBarberForUser(currentUser, dropdownOptions.barbers || []),
       Date: new Date().toISOString().slice(0, 10),
       Time: '',
-      Status: normalizeStatusValue((dropdownOptions.statuses && dropdownOptions.statuses[0]) || 'Новая запись'),
+      Status: normalizeStatusValue((dropdownOptions.statuses && dropdownOptions.statuses[0]) || 'РќРѕРІР°СЏ Р·Р°РїРёСЃСЊ'),
       Services: '',
       UserID: '',
     }),
     [dropdownOptions, currentUser?.displayName, currentUser?.username]
+  );
+  const staffBarberChoice = useMemo(
+    () => pickBarberForUser(currentUser, dropdownOptions.barbers || []),
+    [currentUser, dropdownOptions.barbers],
   );
 
   useEffect(() => {
@@ -4890,6 +5265,16 @@ const TablesWorkspace = ({
     }
     onPreferredTableConsumed?.();
   }, [preferredTable, resolvedVisibleTables, setActiveTable, onPreferredTableConsumed]);
+  useEffect(() => {
+    if (!restrictStaffBarberFilter) return;
+    if (selectedBarber && selectedBarber !== 'all') return;
+    const fallback =
+      staffBarberChoice ||
+      (Array.isArray(dropdownOptions.barbers) && dropdownOptions.barbers.length ? dropdownOptions.barbers[0] : '');
+    if (fallback) {
+      setSelectedBarber(fallback);
+    }
+  }, [restrictStaffBarberFilter, selectedBarber, staffBarberChoice, dropdownOptions.barbers, setSelectedBarber]);
 
   useEffect(() => {
     setHiddenStatuses((prev) => {
@@ -4924,7 +5309,7 @@ const TablesWorkspace = ({
       onOptionsUpdate?.(normalizedOptions);
     } catch (error) {
       console.error('Table fetch failed', error);
-      setTableError(error.message || 'Не удалось загрузить таблицы');
+      setTableError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С‚Р°Р±Р»РёС†С‹');
     } finally {
       setIsFetching(false);
     }
@@ -5033,7 +5418,7 @@ const TablesWorkspace = ({
       await apiRequest(`/${tableId}/${encodeURIComponent(recordId)}`, { method: 'PUT', body: JSON.stringify(payload) });
     } catch (error) {
       console.error('Update failed', error);
-      setTableError(error.message || 'Не удалось обновить запись');
+      setTableError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ Р·Р°РїРёСЃСЊ');
       setTables((prev) => ({ ...prev, [tableId]: original }));
     }
   };
@@ -5044,18 +5429,18 @@ const TablesWorkspace = ({
     const confirmCopy = (() => {
       switch (tableId) {
         case 'Users':
-          return { title: 'Удалить клиента?', message: 'Клиент будет удален без возможности восстановления.' };
+          return { title: 'РЈРґР°Р»РёС‚СЊ РєР»РёРµРЅС‚Р°?', message: 'РљР»РёРµРЅС‚ Р±СѓРґРµС‚ СѓРґР°Р»РµРЅ Р±РµР· РІРѕР·РјРѕР¶РЅРѕСЃС‚Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ.' };
         case 'Appointments':
-          return { title: 'Удалить запись?', message: 'Запись будет удалена без возможности восстановления.' };
+          return { title: 'РЈРґР°Р»РёС‚СЊ Р·Р°РїРёСЃСЊ?', message: 'Р—Р°РїРёСЃСЊ Р±СѓРґРµС‚ СѓРґР°Р»РµРЅР° Р±РµР· РІРѕР·РјРѕР¶РЅРѕСЃС‚Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ.' };
         default:
-          return { title: 'Удалить запись?', message: 'Запись будет удалена.' };
+          return { title: 'РЈРґР°Р»РёС‚СЊ Р·Р°РїРёСЃСЊ?', message: 'Р—Р°РїРёСЃСЊ Р±СѓРґРµС‚ СѓРґР°Р»РµРЅР°.' };
       }
     })();
     if (!skipConfirm) {
       const confirmed = onRequestConfirm
         ? await onRequestConfirm({
             ...confirmCopy,
-            confirmLabel: 'Удалить',
+            confirmLabel: 'РЈРґР°Р»РёС‚СЊ',
             tone: 'danger',
           })
         : true;
@@ -5070,7 +5455,7 @@ const TablesWorkspace = ({
       await apiRequest(`/${tableId}/${encodeURIComponent(record.id)}`, { method: 'DELETE' });
     } catch (error) {
       console.error('Delete failed', error);
-      setTableError(error.message || 'Не удалось удалить запись');
+      setTableError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ Р·Р°РїРёСЃСЊ');
       setTables((prev) => ({ ...prev, [tableId]: original }));
     }
   };
@@ -5091,7 +5476,7 @@ const TablesWorkspace = ({
       fetchTables();
     } catch (error) {
       console.error('Create failed', error);
-      setTableError(error.message || 'Не удалось создать запись');
+      setTableError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ Р·Р°РїРёСЃСЊ');
     }
   };
 
@@ -5113,7 +5498,7 @@ const TablesWorkspace = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
+      <div className="hidden flex-wrap gap-2 lg:flex">
         {resolvedVisibleTables.map((table) => (
           <button
             key={table}
@@ -5148,7 +5533,11 @@ const TablesWorkspace = ({
               schedules={tables.Schedules || []}
               barbers={barbers}
               currentUser={currentUser}
-              onScheduleUpdate={(recordId, payload) => handleUpdate(recordId, payload, { tableId: 'Schedules' })}
+              onScheduleUpdate={
+                role === ROLE_OWNER
+                  ? (recordId, payload) => handleUpdate(recordId, payload, { tableId: 'Schedules' })
+                  : null
+              }
             />
           )}
           {activeTable === 'Services' && (
@@ -5203,9 +5592,10 @@ const TablesWorkspace = ({
             supportsGrouping={activeTable === 'Appointments'}
             groupByDate={groupAppointmentsByDate}
             setGroupByDate={setGroupAppointmentsByDate}
+            allowAllBarbersOption={!restrictStaffBarberFilter}
           />
           {isFetching ? (
-            <LoadingState label="Обновляю таблицы..." />
+            <LoadingState label="РћР±РЅРѕРІР»СЏСЋ С‚Р°Р±Р»РёС†С‹..." />
           ) : (
             <div className="mt-4">
               {activeTable === 'Users' ? (
@@ -5333,13 +5723,13 @@ const BotControlView = ({
   }, [onUpdateToken, tokenDraft]);
 
   const updateAvailable = Boolean(updateInfo?.available ?? updateInfo?.updateAvailable);
-  const currentVersionLabel = updateInfo?.currentVersion || updateInfo?.version || '—';
-  const latestVersionLabel = updateInfo?.latestVersion || updateInfo?.version || '—';
-  const checkedAtLabel = updateInfo?.checkedAt ? formatDate(updateInfo.checkedAt) : '—';
+  const currentVersionLabel = updateInfo?.currentVersion || updateInfo?.version || 'вЂ”';
+  const latestVersionLabel = updateInfo?.latestVersion || updateInfo?.version || 'вЂ”';
+  const checkedAtLabel = updateInfo?.checkedAt ? formatDate(updateInfo.checkedAt) : 'вЂ”';
   const publishedAtLabel = updateInfo?.publishedAt ? formatDate(updateInfo.publishedAt) : null;
   const updateStatusLabel =
     updateInfo?.details ||
-    (updateAvailable ? 'Доступно обновление' : updateInfo ? 'Установлена актуальная версия' : 'Нет данных');
+    (updateAvailable ? 'Р”РѕСЃС‚СѓРїРЅРѕ РѕР±РЅРѕРІР»РµРЅРёРµ' : updateInfo ? 'РЈСЃС‚Р°РЅРѕРІР»РµРЅР° Р°РєС‚СѓР°Р»СЊРЅР°СЏ РІРµСЂСЃРёСЏ' : 'РќРµС‚ РґР°РЅРЅС‹С…');
   const updateSourceLabel = updateInfo?.source || null;
   const updateSourceUrl = updateInfo?.sourceUrl || null;
   const botRunning = Boolean(status?.running);
@@ -5352,25 +5742,25 @@ const BotControlView = ({
       <div className="space-y-6">
         <BackupsPanel backups={backups} onRestore={onRestoreBackup} onCreate={onCreateBackup} onDelete={onDeleteBackup} />
 
-        <SectionCard title="Лицензия и обновления">
+        <SectionCard title="Р›РёС†РµРЅР·РёСЏ Рё РѕР±РЅРѕРІР»РµРЅРёСЏ">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
-              <p className="font-semibold">Лицензия</p>
-              <p className="mt-1">Статус: {licenseStatus?.valid ? 'Активна' : 'Не подтверждена'}</p>
-              {licenseStatus?.license?.owner && <p>Владелец: {licenseStatus.license.owner}</p>}
-              {licenseStatus?.license?.expiresAt && <p>Действует до {formatDate(licenseStatus.license.expiresAt)}</p>}
-              {licenseStatus?.license?.number && <p>Номер: {licenseStatus.license.number}</p>}
+              <p className="font-semibold">Р›РёС†РµРЅР·РёСЏ</p>
+              <p className="mt-1">РЎС‚Р°С‚СѓСЃ: {licenseStatus?.valid ? 'РђРєС‚РёРІРЅР°' : 'РќРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅР°'}</p>
+              {licenseStatus?.license?.owner && <p>Р’Р»Р°РґРµР»РµС†: {licenseStatus.license.owner}</p>}
+              {licenseStatus?.license?.expiresAt && <p>Р”РµР№СЃС‚РІСѓРµС‚ РґРѕ {formatDate(licenseStatus.license.expiresAt)}</p>}
+              {licenseStatus?.license?.number && <p>РќРѕРјРµСЂ: {licenseStatus.license.number}</p>}
             </div>
             <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
-              <p className="font-semibold">Обновления</p>
-              <p className="mt-1">Текущая версия: {currentVersionLabel}</p>
-              <p>Доступная версия: {latestVersionLabel}</p>
-              <p>Проверено: {checkedAtLabel}</p>
-              {publishedAtLabel && <p>Релиз: {publishedAtLabel}</p>}
-              <p>Статус: {updateStatusLabel}</p>
+              <p className="font-semibold">РћР±РЅРѕРІР»РµРЅРёСЏ</p>
+              <p className="mt-1">РўРµРєСѓС‰Р°СЏ РІРµСЂСЃРёСЏ: {currentVersionLabel}</p>
+              <p>Р”РѕСЃС‚СѓРїРЅР°СЏ РІРµСЂСЃРёСЏ: {latestVersionLabel}</p>
+              <p>РџСЂРѕРІРµСЂРµРЅРѕ: {checkedAtLabel}</p>
+              {publishedAtLabel && <p>Р РµР»РёР·: {publishedAtLabel}</p>}
+              <p>РЎС‚Р°С‚СѓСЃ: {updateStatusLabel}</p>
               {updateSourceLabel && (
                 <p>
-                  Источник:{' '}
+                  РСЃС‚РѕС‡РЅРёРє:{' '}
                   {updateSourceUrl ? (
                     <a href={updateSourceUrl} className="text-indigo-300 hover:text-indigo-100" target="_blank" rel="noreferrer">
                       {updateSourceLabel}
@@ -5386,14 +5776,14 @@ const BotControlView = ({
                   disabled={systemBusy}
                   className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Проверить
+                  РџСЂРѕРІРµСЂРёС‚СЊ
                 </button>
                 <button
                   onClick={onApplyUpdate}
                   disabled={systemBusy || !updateAvailable}
                   className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {systemBusy ? 'Обновление…' : 'Обновить'}
+                  {systemBusy ? 'РћР±РЅРѕРІР»РµРЅРёРµвЂ¦' : 'РћР±РЅРѕРІРёС‚СЊ'}
                 </button>
               </div>
             </div>
@@ -5407,32 +5797,32 @@ const BotControlView = ({
   return (
     <div className="space-y-6">
       <SectionCard
-        title="Статус бота"
+        title="РЎС‚Р°С‚СѓСЃ Р±РѕС‚Р°"
         actions={
           <div className="flex gap-2 text-sm">
             {!botRunning && (
               <button onClick={onStart} className="rounded-lg bg-emerald-600 px-3 py-1 text-white">
-                Запустить
+                Р—Р°РїСѓСЃС‚РёС‚СЊ
               </button>
             )}
             {botRunning && (
               <button onClick={onStop} className="rounded-lg bg-rose-600 px-3 py-1 text-white">
-                Остановить
+                РћСЃС‚Р°РЅРѕРІРёС‚СЊ
               </button>
             )}
             <button onClick={onRestart} className="rounded-lg bg-slate-600 px-3 py-1 text-white">
-              Перезапустить
+              РџРµСЂРµР·Р°РїСѓСЃС‚РёС‚СЊ
             </button>
           </div>
         }
       >
-        <p className="text-slate-300">Состояние: {status?.running ? 'работает' : 'остановлен'}</p>
+        <p className="text-slate-300">РЎРѕСЃС‚РѕСЏРЅРёРµ: {status?.running ? 'СЂР°Р±РѕС‚Р°РµС‚' : 'РѕСЃС‚Р°РЅРѕРІР»РµРЅ'}</p>
         <label className="mt-3 inline-flex items-center gap-2 text-slate-300">
           <input type="checkbox" checked={settings?.isBotEnabled !== false} onChange={(event) => onToggleEnabled(event.target.checked)} />
-          Автостарт вместе с CRM
+          РђРІС‚РѕСЃС‚Р°СЂС‚ РІРјРµСЃС‚Рµ СЃ CRM
         </label>
         <div className="mt-4">
-          <label className="text-sm text-slate-300">Telegram-токен</label>
+          <label className="text-sm text-slate-300">Telegram-С‚РѕРєРµРЅ</label>
           <div className="mt-1 flex items-center gap-2">
             <input
               type="text"
@@ -5448,17 +5838,17 @@ const BotControlView = ({
               disabled={!canSaveToken || savingToken}
               className="flex-none rounded-lg border border-indigo-500 bg-indigo-600/30 px-4 py-2 text-sm font-semibold text-indigo-100 hover:bg-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {savingToken ? 'Сохранение...' : 'Сохранить'}
+              {savingToken ? 'РЎРѕС…СЂР°РЅРµРЅРёРµ...' : 'РЎРѕС…СЂР°РЅРёС‚СЊ'}
             </button>
           </div>
-          {!token && <p className="mt-2 text-xs text-slate-400">Укажите токен и сохраните изменения — файл config.py обновится автоматически.</p>}
+          {!token && <p className="mt-2 text-xs text-slate-400">РЈРєР°Р¶РёС‚Рµ С‚РѕРєРµРЅ Рё СЃРѕС…СЂР°РЅРёС‚Рµ РёР·РјРµРЅРµРЅРёСЏ вЂ” С„Р°Р№Р» config.py РѕР±РЅРѕРІРёС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.</p>}
         </div>
       </SectionCard>
 
-      <SectionCard title="Тексты бота">
+      <SectionCard title="РўРµРєСЃС‚С‹ Р±РѕС‚Р°">
         <div className="space-y-4">
           <div>
-            <label className="text-sm text-slate-300">Описание лендинга</label>
+            <label className="text-sm text-slate-300">РћРїРёСЃР°РЅРёРµ Р»РµРЅРґРёРЅРіР°</label>
             <textarea
               ref={descriptionRef}
               value={description}
@@ -5468,7 +5858,7 @@ const BotControlView = ({
             />
           </div>
           <div>
-            <label className="text-sm text-slate-300">Блок «О нас»</label>
+            <label className="text-sm text-slate-300">Р‘Р»РѕРє В«Рћ РЅР°СЃВ»</label>
             <textarea
               ref={aboutRef}
               value={about}
@@ -5478,7 +5868,7 @@ const BotControlView = ({
             />
           </div>
           <button onClick={() => onSaveSettings({ botDescription: description, aboutText: about })} className="rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-500">
-            Сохранить тексты
+            РЎРѕС…СЂР°РЅРёС‚СЊ С‚РµРєСЃС‚С‹
           </button>
         </div>
       </SectionCard>
@@ -5498,7 +5888,7 @@ const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
+      <div className="hidden flex-wrap gap-2 lg:flex">
         {SYSTEM_SUB_SECTIONS.map((tab) => {
           const isActive = tab.id === activeSection;
           return (
@@ -5548,7 +5938,7 @@ const LoginScreen = ({ onLogin, error }) => {
       } catch (fetchError) {
         if (!isMounted) return;
         setLoginOptions([]);
-        setOptionsError('Не удалось загрузить список барберов.');
+        setOptionsError('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ СЃРїРёСЃРѕРє СЃРѕС‚СЂСѓРґРЅРёРєРѕРІ.');
       } finally {
         if (isMounted) {
           setLoadingOptions(false);
@@ -5570,11 +5960,11 @@ const LoginScreen = ({ onLogin, error }) => {
   const handleSubmit = (event) => {
     event.preventDefault();
     if (!username) {
-      setValidationError('Выберите барбера из списка');
+      setValidationError('Р’С‹Р±РµСЂРёС‚Рµ СЃРѕС‚СЂСѓРґРЅРёРєР°');
       return;
     }
     if (!password) {
-      setValidationError('Введите пароль');
+      setValidationError('Р’РІРµРґРёС‚Рµ РїР°СЂРѕР»СЊ');
       return;
     }
     setValidationError('');
@@ -5588,7 +5978,7 @@ const LoginScreen = ({ onLogin, error }) => {
       <form onSubmit={handleSubmit} className="w-full max-w-md space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">
         <h1 className="text-center text-2xl font-semibold text-white">Barber Bot CRM</h1>
         <div>
-          <label className="text-sm text-slate-300">Выберите барбера (логин)</label>
+          <label className="text-sm text-slate-300">Р›РѕРіРёРЅ Р±Р°СЂР±РµСЂР° (РІС‹Р±РѕСЂ)</label>
           <select
             value={username}
             disabled={selectDisabled}
@@ -5598,7 +5988,7 @@ const LoginScreen = ({ onLogin, error }) => {
             }}
             className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
           >
-            <option value="">{loadingOptions ? 'Загрузка...' : 'Укажите барбера'}</option>
+            <option value="">{loadingOptions ? 'Р—Р°РіСЂСѓР·РєР°...' : 'Р’С‹Р±РµСЂРёС‚Рµ СЃРѕС‚СЂСѓРґРЅРёРєР°'}</option>
             {loginOptions.map((option) => (
               <option key={option.id || option.login} value={option.login}>
                 {option.label || option.login}
@@ -5606,17 +5996,22 @@ const LoginScreen = ({ onLogin, error }) => {
             ))}
           </select>
           <div className="mt-1 space-y-1">
-            <p className="text-xs text-slate-500">Доступны только активные аккаунты из раздела «Барберы».</p>
+            <p className="text-xs text-slate-500">Р›РѕРіРёРЅ Р±Р°СЂР±РµСЂР° РЅСѓР¶РµРЅ РґР»СЏ РІС…РѕРґР°.</p>
             {optionsError && <p className="text-xs text-rose-400">{optionsError}</p>}
           </div>
         </div>
         <div>
-          <label className="text-sm text-slate-300">Пароль</label>
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white" />
+          <label className="text-sm text-slate-300">РџР°СЂРѕР»СЊ</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
+          />
         </div>
         {(validationError || error) && <ErrorBanner message={validationError || error} />}
         <button type="submit" className="w-full rounded-lg bg-indigo-600 py-2 font-semibold text-white hover:bg-indigo-500" disabled={selectDisabled}>
-          Войти
+          Р’РѕР№С‚Рё
         </button>
       </form>
     </div>
@@ -5669,7 +6064,7 @@ const App = () => {
   const dataTables = DATA_TABLES_BY_ROLE[role] || DEFAULT_DATA_TABLES;
   const visibleTableOrder = VISIBLE_TABLE_ORDER_BY_ROLE[role] || DEFAULT_VISIBLE_TABLE_ORDER;
   const sidebarShortcuts = DATA_SHORTCUTS_BY_ROLE[role] || DEFAULT_TABLE_SHORTCUTS;
-  const canUseRealtime = role === ROLE_OWNER;
+  const canUseRealtime = role === ROLE_OWNER || role === ROLE_STAFF;
   const canAccessBot = role === ROLE_OWNER;
   const canAccessSystem = role === ROLE_OWNER;
   const resolvedSystemSection = SYSTEM_SUB_SECTIONS.some((tab) => tab.id === systemSection) ? systemSection : 'bot';
@@ -5785,7 +6180,7 @@ const App = () => {
 
   const apiRequest = useCallback(
     async (endpoint, options = {}) => {
-      if (!session?.token) throw new Error('Нет активной сессии');
+      if (!session?.token) throw new Error('РќРµС‚ Р°РєС‚РёРІРЅРѕР№ СЃРµСЃСЃРёРё');
       const headers = {
         Accept: 'application/json',
         Authorization: `Bearer ${session.token}`,
@@ -5793,13 +6188,14 @@ const App = () => {
         ...(options.headers || {}),
       };
       const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
-      if (response.status === 401 || response.status === 403) {
+      if (response.status === 401) {
         handleLogout();
-        throw new Error('Сессия истекла');
+        throw new Error('РЎРµСЃСЃРёСЏ Р·Р°РІРµСЂС€РµРЅР°, РІРѕР№РґРёС‚Рµ СЃРЅРѕРІР°');
       }
       if (!response.ok) {
         const message = await response.text();
-        throw new Error(message || 'Ошибка запроса');
+        const fallback = response.status === 403 ? 'РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РѕРїРµСЂР°С†РёРё' : 'РћС€РёР±РєР° Р·Р°РїСЂРѕСЃР°';
+        throw new Error(message || fallback);
       }
       if (response.status === 204) return null;
       return response.json();
@@ -5872,7 +6268,7 @@ const App = () => {
       setOptionsCache(normalizedOptions);
     } catch (error) {
       console.error(error);
-      setGlobalError(error.message || 'Не удалось загрузить данные.');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РґР°РЅРЅС‹Рµ.');
     } finally {
       setLoading(false);
     }
@@ -5917,7 +6313,7 @@ const App = () => {
       eventSource.removeEventListener('appointments', handleEvent);
       eventSource.close();
     };
-  }, [session?.token]);
+  }, [session?.token, canUseRealtime]);
 
   const handleCreatePosition = useCallback(
     async (payload) => {
@@ -5967,7 +6363,7 @@ const App = () => {
       const message =
         detail?.message ||
         event?.message ||
-        (typeof detail === 'string' ? detail : 'Неизвестная ошибка');
+        (typeof detail === 'string' ? detail : 'РќРµРёР·РІРµСЃС‚РЅР°СЏ РѕС€РёР±РєР°');
       console.error('Global UI error:', detail || event);
       setFatalError(message);
     };
@@ -5990,7 +6386,7 @@ const App = () => {
     setAuthError('');
     const normalizedUsername = resolveLogin(username);
     if (!normalizedUsername) {
-      setAuthError('Выберите барбера из списка');
+      setAuthError('Р’С‹Р±РµСЂРёС‚Рµ Р±Р°СЂР±РµСЂР° РёР· СЃРїРёСЃРєР°');
       return;
     }
     try {
@@ -6001,19 +6397,25 @@ const App = () => {
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
-        setAuthError(data.message || 'Неверный логин или пароль');
+        setAuthError(data.message || 'РќРµРІРµСЂРЅС‹Р№ Р»РѕРіРёРЅ РёР»Рё РїР°СЂРѕР»СЊ');
         return;
       }
       const sessionPayload = buildSessionPayload({ ...data, username: normalizedUsername });
       localStorage.setItem('barber-session', JSON.stringify(sessionPayload));
       setSession(sessionPayload);
     } catch (error) {
-      setAuthError('Сервер недоступен');
+      setAuthError('РЎРµСЂРІРµСЂ РЅРµРґРѕСЃС‚СѓРїРµРЅ');
     }
   };
 
   const handleBarberFieldChange = (id, field, value) => {
-    setBarbers((prev) => prev.map((barber) => (barber.id === id ? { ...barber, [field]: value } : barber)));
+    setBarbers((prev) =>
+      prev.map((barber) => {
+        if (barber.id !== id) return barber;
+        const nextValue = field === 'rating' ? formatRatingValue(value) : value;
+        return { ...barber, [field]: nextValue };
+      }),
+    );
   };
 
   const normalizeServicePayload = (service) => ({
@@ -6030,7 +6432,7 @@ const App = () => {
       name: barberData.name || '',
       nickname: null,
       description: barberData.description || '',
-      rating: barberData.rating || '',
+      rating: formatRatingValue(barberData.rating),
       avatarUrl: barberData.avatarUrl || '',
       color: barberData.color || '',
       login: deriveBarberLogin(barberData),
@@ -6062,9 +6464,9 @@ const App = () => {
   const handleDeleteBarber = async (barber) => {
     if (!barber?.id) return;
     const confirmed = await requestConfirm({
-      title: 'Удалить барбера?',
-      message: `Барбер «${barber.name || 'Без имени'}» будет удален без возможности восстановления.`,
-      confirmLabel: 'Удалить',
+      title: 'РЈРґР°Р»РёС‚СЊ Р±Р°СЂР±РµСЂР°?',
+      message: `Р‘Р°СЂР±РµСЂ В«${barber.name || 'Р‘РµР· РёРјРµРЅРё'}В» Р±СѓРґРµС‚ СѓРґР°Р»РµРЅ Р±РµР· РІРѕР·РјРѕР¶РЅРѕСЃС‚Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ.`,
+      confirmLabel: 'РЈРґР°Р»РёС‚СЊ',
       tone: 'danger',
     });
     if (!confirmed) return;
@@ -6072,13 +6474,13 @@ const App = () => {
       await apiRequest(`/Barbers/${encodeURIComponent(barber.id)}`, { method: 'DELETE' });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось удалить барбера');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ Р±Р°СЂР±РµСЂР°');
     }
   };
 
   const handleAddBarber = async (payload) => {
     if (!payload.name || !payload.password) {
-      setGlobalError('Заполните имя, логин и пароль барбера');
+      setGlobalError('Р—Р°РїРѕР»РЅРёС‚Рµ РёРјСЏ, Р»РѕРіРёРЅ Рё РїР°СЂРѕР»СЊ Р±Р°СЂР±РµСЂР°');
       return;
     }
     try {
@@ -6087,7 +6489,7 @@ const App = () => {
       await apiRequest('/Barbers', { method: 'POST', body: JSON.stringify(body) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось добавить барбера');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РґРѕР±Р°РІРёС‚СЊ Р±Р°СЂР±РµСЂР°');
     }
   };
 
@@ -6100,21 +6502,28 @@ const App = () => {
           body: JSON.stringify(normalizeServicePayload(service)),
         });
       } catch (error) {
-        setGlobalError(error.message || 'Не удалось сохранить услугу');
+        setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ СѓСЃР»СѓРіСѓ');
       }
     },
     [apiRequest]
   );
 
   const scheduleServiceAutosave = useCallback(
-    (service) => {
+    (service, customSaver) => {
       if (!service?.id) return;
       const timers = serviceSaveTimers.current;
       const existingTimer = timers.get(service.id);
       if (existingTimer) clearTimeout(existingTimer);
-      const timer = setTimeout(() => {
-        handleSaveService(service);
-        timers.delete(service.id);
+      const timer = setTimeout(async () => {
+        try {
+          if (typeof customSaver === 'function') {
+            await customSaver(service);
+          } else {
+            await handleSaveService(service);
+          }
+        } finally {
+          timers.delete(service.id);
+        }
       }, 400);
       timers.set(service.id, timer);
     },
@@ -6124,9 +6533,9 @@ const App = () => {
   const handleDeleteService = async (service) => {
     if (!service?.id) return;
     const confirmed = await requestConfirm({
-      title: 'Удалить услугу?',
-      message: `Услуга «${service.name || 'Без названия'}» будет удалена.`,
-      confirmLabel: 'Удалить',
+      title: 'РЈРґР°Р»РёС‚СЊ СѓСЃР»СѓРіСѓ?',
+      message: `РЈСЃР»СѓРіР° В«${service.name || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'}В» Р±СѓРґРµС‚ СѓРґР°Р»РµРЅР°.`,
+      confirmLabel: 'РЈРґР°Р»РёС‚СЊ',
       tone: 'danger',
     });
     if (!confirmed) return;
@@ -6134,9 +6543,25 @@ const App = () => {
       await apiRequest(`/services/full/${encodeURIComponent(service.id)}`, { method: 'DELETE' });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось удалить услугу');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ СѓСЃР»СѓРіСѓ');
     }
   };
+
+  const saveStaffServicePrice = useCallback(
+    async (service) => {
+      if (!service?.id || !staffBarberId) return;
+      const nextPrice = service.prices?.[staffBarberId];
+      try {
+        await apiRequest(`/services/full/${encodeURIComponent(service.id)}`, {
+          method: 'PUT',
+          body: JSON.stringify({ prices: { [staffBarberId]: nextPrice ?? null } }),
+        });
+      } catch (error) {
+        setGlobalError(error.message || 'пїЅ?пїЅпїЅ пїЅ?пїЅ?пїЅпїЅпїЅ>пїЅ?пїЅ?пїЅ? пїЅ?пїЅ?пїЅ>пїЅ?пїЅ?пїЅ?');
+      }
+    },
+    [apiRequest, staffBarberId]
+  );
 
   const handleAddService = async (payload) => {
     if (!payload.name) return;
@@ -6144,7 +6569,7 @@ const App = () => {
       await apiRequest('/services/full', { method: 'POST', body: JSON.stringify(normalizeServicePayload(payload)) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось добавить услугу');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РґРѕР±Р°РІРёС‚СЊ СѓСЃР»СѓРіСѓ');
     }
   };
 
@@ -6172,19 +6597,21 @@ const App = () => {
       );
       const target = services.find((service) => service.id === serviceId);
       if (target) {
-        scheduleServiceAutosave({
+        const nextService = {
           ...target,
           prices: { ...(target.prices || {}), [barberId]: value },
-        });
+        };
+        const saver = role === ROLE_STAFF ? saveStaffServicePrice : undefined;
+        scheduleServiceAutosave(nextService, saver);
       }
     },
-    [services, scheduleServiceAutosave]
+    [role, saveStaffServicePrice, scheduleServiceAutosave, services]
   );
 
   const handleUploadAvatar = useCallback(
     async ({ name, data }) => {
       if (!name || !data) {
-        throw new Error('Укажите имя и данные изображения.');
+        throw new Error('РЈРєР°Р¶РёС‚Рµ РёРјСЏ Рё РґР°РЅРЅС‹Рµ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ.');
       }
       return apiRequest('/assets/avatars/upload', {
         method: 'POST',
@@ -6197,7 +6624,7 @@ const App = () => {
   const handleDeleteAvatar = useCallback(
     async (filename) => {
       if (!filename) {
-        throw new Error('Не передан файл для удаления.');
+        throw new Error('РќРµ РїРµСЂРµРґР°РЅ С„Р°Р№Р» РґР»СЏ СѓРґР°Р»РµРЅРёСЏ.');
       }
       return apiRequest('/assets/avatars', {
         method: 'DELETE',
@@ -6212,7 +6639,7 @@ const App = () => {
       await apiRequest('/bot/status', { method: 'POST', body: JSON.stringify({ isBotEnabled: enabled }) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось обновить настройки бота');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ РЅР°СЃС‚СЂРѕР№РєРё Р±РѕС‚Р°');
     }
   };
 
@@ -6221,7 +6648,7 @@ const App = () => {
       await apiRequest('/bot/status', { method: 'POST', body: JSON.stringify({ action }) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось выполнить действие');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ РґРµР№СЃС‚РІРёРµ');
     }
   };
 
@@ -6235,7 +6662,7 @@ const App = () => {
         await fetchAll();
         return normalized;
       } catch (error) {
-        setGlobalError(error.message || 'Не удалось обновить токен бота');
+        setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ С‚РѕРєРµРЅ Р±РѕС‚Р°');
         throw error;
       }
     },
@@ -6248,7 +6675,7 @@ const App = () => {
       await apiRequest(`/BotSettings/${encodeURIComponent(botSettings.id)}`, { method: 'PUT', body: JSON.stringify(payload) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось сохранить настройки');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РЅР°СЃС‚СЂРѕР№РєРё');
     }
   };
 
@@ -6261,16 +6688,16 @@ const App = () => {
       await apiRequest(`/bot/messages/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ code: draft.code, title: draft.title, text: draft.text }) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось сохранить сообщение');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ');
     }
   };
 
   const handleRestoreBackup = async (filename) => {
     if (!filename) return;
     const confirmed = await requestConfirm({
-      title: 'Восстановить резервную копию?',
-      message: `Текущие данные будут заменены содержимым ${filename}. Продолжить?`,
-      confirmLabel: 'Восстановить',
+      title: 'Р’РѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ СЂРµР·РµСЂРІРЅСѓСЋ РєРѕРїРёСЋ?',
+      message: `РўРµРєСѓС‰РёРµ РґР°РЅРЅС‹Рµ Р±СѓРґСѓС‚ Р·Р°РјРµРЅРµРЅС‹ СЃРѕРґРµСЂР¶РёРјС‹Рј ${filename}. РџСЂРѕРґРѕР»Р¶РёС‚СЊ?`,
+      confirmLabel: 'Р’РѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ',
       tone: 'danger',
     });
     if (!confirmed) return;
@@ -6278,15 +6705,15 @@ const App = () => {
       await apiRequest('/backups/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename }) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось восстановить бэкап');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РІРѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ Р±СЌРєР°Рї');
     }
   };
 
   const handleCreateBackup = async () => {
     const confirmed = await requestConfirm({
-      title: 'Создать резервную копию?',
-      message: 'Будет создан файл резервной копии текущей базы данных.',
-      confirmLabel: 'Создать',
+      title: 'РЎРѕР·РґР°С‚СЊ СЂРµР·РµСЂРІРЅСѓСЋ РєРѕРїРёСЋ?',
+      message: 'Р‘СѓРґРµС‚ СЃРѕР·РґР°РЅ С„Р°Р№Р» СЂРµР·РµСЂРІРЅРѕР№ РєРѕРїРёРё С‚РµРєСѓС‰РµР№ Р±Р°Р·С‹ РґР°РЅРЅС‹С….',
+      confirmLabel: 'РЎРѕР·РґР°С‚СЊ',
       tone: 'success',
     });
     if (!confirmed) return;
@@ -6294,16 +6721,16 @@ const App = () => {
       await apiRequest('/backups/create', { method: 'POST' });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось создать бэкап');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ Р±СЌРєР°Рї');
     }
   };
 
   const handleDeleteBackup = async (filename) => {
     if (!filename) return;
     const confirmed = await requestConfirm({
-      title: 'Удалить резервную копию?',
-      message: `Файл ${filename} будет удален безвозвратно.`,
-      confirmLabel: 'Удалить',
+      title: 'РЈРґР°Р»РёС‚СЊ СЂРµР·РµСЂРІРЅСѓСЋ РєРѕРїРёСЋ?',
+      message: `Р¤Р°Р№Р» ${filename} Р±СѓРґРµС‚ СѓРґР°Р»РµРЅ Р±РµР·РІРѕР·РІСЂР°С‚РЅРѕ.`,
+      confirmLabel: 'РЈРґР°Р»РёС‚СЊ',
       tone: 'danger',
     });
     if (!confirmed) return;
@@ -6311,7 +6738,7 @@ const App = () => {
       await apiRequest('/backups/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename }) });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось удалить бэкап');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ Р±СЌРєР°Рї');
     }
   };
 
@@ -6332,7 +6759,7 @@ const App = () => {
         const payload = await apiRequest(`/user-profile/${encodeURIComponent(name)}`);
         setProfileModal({ open: true, data: payload, loading: false });
       } catch (error) {
-        setProfileModal({ open: true, data: { error: error.message || 'Не удалось загрузить профиль' }, loading: false });
+        setProfileModal({ open: true, data: { error: error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РїСЂРѕС„РёР»СЊ' }, loading: false });
       }
     },
     [apiRequest]
@@ -6370,7 +6797,7 @@ const App = () => {
           allowDelete: !!optionsConfig.allowDelete,
         });
       } catch (error) {
-        setGlobalError(error.message || 'Не удалось открыть запись');
+        setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ Р·Р°РїРёСЃСЊ');
       }
     },
     [ensureOptions, fetchAppointmentContext, setGlobalError]
@@ -6380,7 +6807,7 @@ const App = () => {
     try {
       const [options, context] = await Promise.all([ensureOptions(), fetchAppointmentContext()]);
       const today = new Date().toISOString().slice(0, 10);
-      const defaultStatus = normalizeStatusValue(options.statuses?.[0] || 'Активная');
+      const defaultStatus = normalizeStatusValue(options.statuses?.[0] || 'РђРєС‚РёРІРЅР°СЏ');
       const defaultBarber = pickBarberForUser(session, options.barbers || []);
       setAppointmentModal({
         open: true,
@@ -6401,7 +6828,7 @@ const App = () => {
         allowDelete: false,
       });
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось начать создание записи');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°С‡Р°С‚СЊ СЃРѕР·РґР°РЅРёРµ Р·Р°РїРёСЃРё');
     }
   }, [ensureOptions, fetchAppointmentContext, session, setGlobalError]);
 
@@ -6415,16 +6842,16 @@ const App = () => {
       setAppointmentModal(buildAppointmentModalState());
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось сохранить запись');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ Р·Р°РїРёСЃСЊ');
     }
   };
 
   const handleDeleteAppointment = async (appointment) => {
     if (!appointment?.id) return;
     const confirmed = await requestConfirm({
-      title: 'Удалить запись?',
-      message: 'Запись будет удалена без возможности восстановления.',
-      confirmLabel: 'Удалить',
+      title: 'РЈРґР°Р»РёС‚СЊ Р·Р°РїРёСЃСЊ?',
+      message: 'Р—Р°РїРёСЃСЊ Р±СѓРґРµС‚ СѓРґР°Р»РµРЅР° Р±РµР· РІРѕР·РјРѕР¶РЅРѕСЃС‚Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ.',
+      confirmLabel: 'РЈРґР°Р»РёС‚СЊ',
       tone: 'danger',
     });
     if (!confirmed) return;
@@ -6433,7 +6860,7 @@ const App = () => {
       setAppointmentModal(buildAppointmentModalState());
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось удалить запись');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ Р·Р°РїРёСЃСЊ');
     }
   };
 
@@ -6443,7 +6870,7 @@ const App = () => {
       const info = await apiRequest('/system/update?force=1');
       setUpdateInfo(normalizeUpdateInfo(info));
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось проверить обновления');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕРІРµСЂРёС‚СЊ РѕР±РЅРѕРІР»РµРЅРёСЏ');
     } finally {
       setSystemBusy(false);
     }
@@ -6451,9 +6878,9 @@ const App = () => {
 
   const handleApplyUpdate = async () => {
     const confirmed = await requestConfirm({
-      title: 'Обновить систему?',
-      message: 'CRM и бот будут обновлены до последней версии. Перезапуск может занять несколько минут.',
-      confirmLabel: 'Обновить',
+      title: 'РћР±РЅРѕРІРёС‚СЊ СЃРёСЃС‚РµРјСѓ?',
+      message: 'CRM Рё Р±РѕС‚ Р±СѓРґСѓС‚ РѕР±РЅРѕРІР»РµРЅС‹ РґРѕ РїРѕСЃР»РµРґРЅРµР№ РІРµСЂСЃРёРё. РџРµСЂРµР·Р°РїСѓСЃРє РјРѕР¶РµС‚ Р·Р°РЅСЏС‚СЊ РЅРµСЃРєРѕР»СЊРєРѕ РјРёРЅСѓС‚.',
+      confirmLabel: 'РћР±РЅРѕРІРёС‚СЊ',
       tone: 'danger',
     });
     if (!confirmed) return;
@@ -6463,7 +6890,7 @@ const App = () => {
       setUpdateInfo(normalizeUpdateInfo(result.info || result));
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось применить обновление');
+      setGlobalError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРёРјРµРЅРёС‚СЊ РѕР±РЅРѕРІР»РµРЅРёРµ');
     } finally {
       setSystemBusy(false);
     }
@@ -6487,6 +6914,8 @@ const App = () => {
             onOpenAppointment={handleOpenAppointment}
             onOpenProfile={openProfile}
             onCreateAppointment={handleCreateAppointment}
+            onNavigateTable={handleSidebarTableChange}
+            availableTables={visibleTableOrder}
           />
         );
       case 'tables':
@@ -6540,8 +6969,8 @@ const App = () => {
       case 'system':
         if (!canAccessSystem) {
           return (
-            <SectionCard title="Недостаточно прав">
-              <p className="text-sm text-slate-400">Раздел доступен только владельцу.</p>
+            <SectionCard title="РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ">
+              <p className="text-sm text-slate-400">Р Р°Р·РґРµР» РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІР»Р°РґРµР»СЊС†Сѓ.</p>
             </SectionCard>
           );
         }
@@ -6578,6 +7007,8 @@ const App = () => {
             onOpenAppointment={handleOpenAppointment}
             onOpenProfile={openProfile}
             onCreateAppointment={handleCreateAppointment}
+            onNavigateTable={handleSidebarTableChange}
+            availableTables={visibleTableOrder}
           />
         );
     }
@@ -6586,9 +7017,9 @@ const App = () => {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950 p-6 text-center text-white">
         <div className="max-w-lg space-y-3 rounded-2xl border border-rose-500/50 bg-slate-900/80 p-6 shadow-2xl">
-          <p className="text-lg font-semibold text-rose-200">Критическая ошибка интерфейса</p>
+          <p className="text-lg font-semibold text-rose-200">РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° РёРЅС‚РµСЂС„РµР№СЃР°</p>
           <p className="text-sm text-slate-300">
-            Сообщение ниже можно переслать разработчику. После исправления перезагрузите страницу.
+            РЎРѕРѕР±С‰РµРЅРёРµ РЅРёР¶Рµ РјРѕР¶РЅРѕ РїРµСЂРµСЃР»Р°С‚СЊ СЂР°Р·СЂР°Р±РѕС‚С‡РёРєСѓ. РџРѕСЃР»Рµ РёСЃРїСЂР°РІР»РµРЅРёСЏ РїРµСЂРµР·Р°РіСЂСѓР·РёС‚Рµ СЃС‚СЂР°РЅРёС†Сѓ.
           </p>
           <pre className="overflow-x-auto rounded-xl bg-slate-950/80 p-4 text-left text-xs text-rose-200">
             {fatalError}
@@ -6598,7 +7029,7 @@ const App = () => {
           onClick={() => window.location.reload()}
           className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800"
         >
-          Перезагрузить страницу
+          РџРµСЂРµР·Р°РіСЂСѓР·РёС‚СЊ СЃС‚СЂР°РЅРёС†Сѓ
         </button>
       </div>
     );
@@ -6615,6 +7046,11 @@ const App = () => {
           liveUpdatedAt={liveUpdatedAt}
           liveStatus={connectionStatus}
           tabs={viewTabs}
+          activeDataTable={activeDataTable}
+          onSelectTable={handleSidebarTableChange}
+          tableShortcuts={sidebarShortcuts}
+          systemSection={resolvedSystemSection}
+          onSelectSystemSection={setSystemSection}
         />
       )}
       <div className="flex">
@@ -6661,7 +7097,7 @@ const renderApp = () => {
   const rootElement = document.getElementById('root');
   try {
     if (!rootElement) {
-      throw new Error('Не найден контейнер #root');
+      throw new Error('РќРµ РЅР°Р№РґРµРЅ РєРѕРЅС‚РµР№РЅРµСЂ #root');
     }
     if (!reactAppRoot) {
       reactAppRoot =
@@ -6691,10 +7127,10 @@ const renderApp = () => {
         ">
           <div style="max-width:480px;border:1px solid rgba(248,113,113,0.4);background:rgba(15,23,42,0.85);border-radius:16px;padding:24px;">
             <p style="font-size:18px;font-weight:600;color:#fecaca;margin-bottom:12px;">
-              Ошибка инициализации интерфейса
+              РћС€РёР±РєР° РёРЅРёС†РёР°Р»РёР·Р°С†РёРё РёРЅС‚РµСЂС„РµР№СЃР°
             </p>
             <p style="font-size:14px;color:#cbd5f5;white-space:pre-wrap;">
-              ${error?.message || 'Смотрите консоль браузера (F12)'}
+              ${error?.message || 'РЎРјРѕС‚СЂРёС‚Рµ РєРѕРЅСЃРѕР»СЊ Р±СЂР°СѓР·РµСЂР° (F12)'}
             </p>
           </div>
           <button style="
@@ -6705,7 +7141,7 @@ const renderApp = () => {
             padding:8px 20px;
             cursor:pointer;
           " onclick="window.location.reload()">
-            Перезагрузить
+            РџРµСЂРµР·Р°РіСЂСѓР·РёС‚СЊ
           </button>
         </div>
       `;
@@ -6714,6 +7150,13 @@ const renderApp = () => {
 };
 
 renderApp();
+
+
+
+
+
+
+
 
 
 

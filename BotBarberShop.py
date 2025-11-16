@@ -42,7 +42,10 @@ DB_PATH = BASE_DIR / "prisma" / "dev.db"  # Путь к базе данных SQ
 IMAGE_FILE = BASE_DIR / "Image" / "bot.jpg"
 MENU_IMAGE_PATH = BASE_DIR / "Image" / "menu_barber.jpg"
 CACHE_TTL_SECONDS = 120
-BARBER_CACHE = {True: {"data": [], "ts": 0.0}, False: {"data": [], "ts": 0.0}}
+BARBER_CACHE = {
+    True: {"data": [], "ts": 0.0, "version": None},
+    False: {"data": [], "ts": 0.0, "version": None},
+}
 SERVICE_CACHE = {"data": [], "ts": 0.0, "version": None}
 SETTINGS_CACHE = {"data": None, "ts": 0.0}
 STATUS_ACTIVE_TOKENS = ("актив", "active")
@@ -154,26 +157,53 @@ def load_barbers(include_inactive: bool = False, force: bool = False) -> list[di
     """Возвращает список барберов из таблицы Barbers (без фильтров)."""
     now_ts = time.time()
     cache_entry = BARBER_CACHE[include_inactive]
-    if not force and cache_entry["data"] and _cached(now_ts, cache_entry):
+    conn = get_db_connection()
+    if not conn:
         return cache_entry["data"]
     barbers: list[dict] = []
-    conn = get_db_connection()
-    if conn:
+    version_token: str | None = None
+    try:
+        cursor = conn.cursor()
         try:
-            cursor = conn.cursor()
-            query = (
-                "SELECT id, name, nickname, description, rating, avatarUrl, color, "
-                "isActive, telegramId FROM Barbers "
+            cursor.execute(
+                "SELECT MAX(updatedAt) as version, COUNT(*) as total FROM Barbers"
             )
-            if not include_inactive:
-                query += "WHERE isActive = 1 "
-            query += "ORDER BY orderIndex, name"
-            cursor.execute(query)
-            barbers = [dict(row) for row in cursor.fetchall()]
-        finally:
-            conn.close()
+            version_meta = dict(cursor.fetchone() or {})
+            version_token = (
+                f"{version_meta.get('version') or 'none'}|"
+                f"{version_meta.get('total') or 0}"
+            )
+        except sqlite3.Error as meta_error:
+            logger.warning(f"Не удалось получить версию списка барберов: {meta_error}")
+        if (
+            not force
+            and version_token
+            and cache_entry["data"]
+            and cache_entry.get("version") == version_token
+        ):
+            cache_entry["ts"] = now_ts
+            return cache_entry["data"]
+        if (
+            not force
+            and not version_token
+            and cache_entry["data"]
+            and _cached(now_ts, cache_entry)
+        ):
+            return cache_entry["data"]
+        query = (
+            "SELECT id, name, nickname, description, rating, avatarUrl, color, "
+            "isActive, telegramId FROM Barbers "
+        )
+        if not include_inactive:
+            query += "WHERE isActive = 1 "
+        query += "ORDER BY orderIndex, name"
+        cursor.execute(query)
+        barbers = [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
     cache_entry["data"] = barbers
     cache_entry["ts"] = now_ts
+    cache_entry["version"] = version_token
     return barbers
 
 def load_services(force: bool = False) -> tuple[list[dict], str | None]:
@@ -355,12 +385,8 @@ def format_rating_stars(value) -> str:
         rating = float(str(value).replace(",", "."))
     except (ValueError, TypeError):
         return ""
-    rating = max(0.0, min(5.0, rating))
-    full = int(rating)
-    has_half = rating - full >= 0.5 and full < 5
-    stars = "⭐" * full
-    if has_half:
-        stars += "✩"
+    rating = int(round(max(0.0, min(5.0, rating))))
+    stars = "★" * rating
     return stars or ""
 
 def parse_chat_id(raw_value) -> int | None:
@@ -487,7 +513,7 @@ async def reminder_checker_job(context: ContextTypes.DEFAULT_TYPE):
                 continue
             last_cursor = conn.cursor()
             last_cursor.execute(
-                "SELECT MAX(Date) FROM Appointments WHERE UserID = ? AND Status = 'Завершена'",
+                "SELECT MAX(Date) FROM Appointments WHERE UserID = ? AND Status = 'Выполнена'",
                 (str(telegram_id),),
             )
             last_row = last_cursor.fetchone()
@@ -556,7 +582,7 @@ async def reminder_checker_job(context: ContextTypes.DEFAULT_TYPE):
                     if user_id:
                         try:
                             msg = (
-                                f"⏰ Напоминание: у вас сегодня в {start_time_str} запись к барберу "
+                                f"⏰ Напоминание: \nУ вас сегодня в {start_time_str} запись к барберу "
                                 f"<b>{appt.get('Barber')}</b>."
                             )
                             await context.bot.send_message(
@@ -592,7 +618,7 @@ async def reminder_checker_job(context: ContextTypes.DEFAULT_TYPE):
                     if barber_chat_id:
                         try:
                             msg = (
-                                f"⏰ Напоминание: у вас сегодня в {start_time_str} запись.\n"
+                                f"⏰ Напоминание: \nУ вас сегодня в {start_time_str} запись.\n"
                                 f"Клиент: <b>{appt.get('CustomerName')}</b>\n"
                                 f"Телефон: {appt.get('Phone')}"
                             )
@@ -639,7 +665,7 @@ def get_last_haircut_date(user_id: str) -> str | None:
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT MAX(Date) FROM Appointments WHERE UserID = ? AND Status = 'Завершена'",
+            "SELECT MAX(Date) FROM Appointments WHERE UserID = ? AND Status = 'Выполнена'",
             (str(user_id),),
         )
         result = cursor.fetchone()
@@ -796,7 +822,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if cursor.fetchone():
             registered = True
     caption = (
-        description if registered else f"{description}\n\nСначала расскажите о себе."
+        description if registered else f"{description}\n\nСначала отправьте свои Фамилию и Имя."
     )
     msg = await update.message.reply_photo(
         IMAGE_BYTES,
@@ -1180,7 +1206,7 @@ async def cancel_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                     )
                     return MENU
                 cursor.execute(
-                    "UPDATE Appointments SET Status = 'Отменена' WHERE id = ?",
+                    "UPDATE Appointments SET Status = 'Отмена' WHERE id = ?",
                     (rec_id,),
                 )
                 if cursor.rowcount:

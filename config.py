@@ -1,4 +1,5 @@
-"""Configuration helper for values shared between the Telegram bot and Airtable sync."""
+TOKEN = "5523625358:AAGVplQ4Qp4i-BpjBM68eXVeRmHqoPrnkqw"
+"""Configuration helper for values shared between the Telegram bot and CRM."""
 
 from __future__ import annotations
 
@@ -37,8 +38,4 @@ def _split_admin_ids(raw_value: str | None) -> list[int]:
 
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TOKEN", "")
-API_KEY = os.getenv("AIRTABLE_API_KEY") or os.getenv("API_KEY", "")
-BASE_ID = os.getenv("AIRTABLE_BASE_ID") or os.getenv("BASE_ID", "")
-USERS_TABLE = os.getenv("AIRTABLE_USERS_TABLE", "Users")
-APPTS_TABLE = os.getenv("AIRTABLE_APPOINTMENTS_TABLE", "Appointments")
 ADMIN_IDS = _split_admin_ids(os.getenv("TELEGRAM_ADMIN_IDS"))

@@ -1,4 +1,4 @@
-require("dotenv").config();
+ï»¿require("dotenv").config();
 const express = require("express");
 const { PrismaClient } = require("@prisma/client");
 const cors = require("cors");
@@ -24,22 +24,22 @@ const BACKUP_DIR = path.join(__dirname, "backups");
 const DB_PATH = path.join(__dirname, "prisma", "dev.db");
 const BACKUP_RETENTION_DAYS = 30;
 const DEFAULT_BOT_DESCRIPTION =
-  "Telegram-áîò ïîìîãàåò ñèíõðîíèçèðîâàòü çàïèñè è íàïîìèíàíèÿ ñ CRM.";
+  "Ð¢ÐµÐºÑÑ‚ Ð² Ð“Ð»Ð°Ð²Ð½Ð¾Ð¼ Ð¼ÐµÐ½ÑŽ";
 const DEFAULT_ABOUT_TEXT =
-  "Ýòà CRM àâòîìàòèçèðóåò ðàáîòó áàðáåðøîïà: ðàñïèñàíèå, óâåäîìëåíèÿ è àíàëèòèêó.";
+  "Ð¢ÐµÐºÑÑ‚ Ð² Ð±Ð»Ð¾ÐºÐµ Â«Ðž Ð½Ð°ÑÂ»";
 const IMAGE_DIR = path.join(__dirname, "Image");
 const MAX_AVATAR_FILE_SIZE = Number(
   process.env.MAX_AVATAR_FILE_SIZE || 5 * 1024 * 1024,
 );
 const BARBER_ALIAS_FILE = path.join(__dirname, "data", "barber-aliases.json");
 const BOT_SUPPORTED_STATUS_OPTIONS = [
-  "Àêòèâíàÿ",
-  "Âûïîëíåíà",
-  "Îòìåíà",
-  "Íåÿâêà",
+  "ÐÐºÑ‚Ð¸Ð²Ð½Ð°Ñ",
+  "Ð’Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð°",
+  "ÐžÑ‚Ð¼ÐµÐ½Ð°",
+  "ÐÐµÑÐ²ÐºÐ°",
 ];
 const SUPPORTED_APPOINTMENT_STATUSES = [...BOT_SUPPORTED_STATUS_OPTIONS];
-const COMPLETED_STATUS_TOKENS = ["âûïîëí", "çàâåðø", "done", "completed", "èñïîëí", "ãîòîâ"];
+const COMPLETED_STATUS_TOKENS = ["Ð²Ñ‹Ð¿Ð¾Ð»Ð½", "Ð·Ð°Ð²ÐµÑ€Ñˆ", "done", "completed", "Ð¸ÑÐ¿Ð¾Ð»Ð½", "Ð³Ð¾Ñ‚Ð¾Ð²"];
 const RESERVED_COST_FIELDS = new Set([
   "id",
   "Id",
@@ -48,14 +48,14 @@ const RESERVED_COST_FIELDS = new Set([
   "Dlitelnost",
 ]);
 const CONFIRMED_STATUS_TOKENS = [
-  "ïîäòâåðæä",
-  "âûïîëí",
-  "çàâåðø",
+  "Ð¿Ð¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´",
+  "Ð²Ñ‹Ð¿Ð¾Ð»Ð½",
+  "Ð·Ð°Ð²ÐµÑ€Ñˆ",
   "done",
   "completed",
 ];
-const ACTIVE_STATUS_TOKENS = ["active", "àêòèâ", "â ðàáîòå"];
-const BLOCKED_STATUS_TOKENS = ["block", "çàáëîê", "îòìåí", "íåÿâ", "noshow"];
+const ACTIVE_STATUS_TOKENS = ["active", "Ð°ÐºÑ‚Ð¸Ð²", "Ð² Ñ€Ð°Ð±Ð¾Ñ‚Ðµ"];
+const BLOCKED_STATUS_TOKENS = ["block", "Ð·Ð°Ð±Ð»Ð¾Ðº", "Ð¾Ñ‚Ð¼ÐµÐ½", "Ð½ÐµÑÐ²", "noshow"];
 const tableToModelMap = {
   Appointments: "appointments",
   Schedules: "schedules",
@@ -175,41 +175,41 @@ const registerBarberAlias = async (barberId, alias) => {
 loadBarberAliasesFromDisk();
 const STATUS_CANONICAL_MAP = new Map(
   [
-    "àêòèâíàÿ",
-    "àêòèâ",
+    "Ð°ÐºÑ‚Ð¸Ð²Ð½Ð°Ñ",
+    "Ð°ÐºÑ‚Ð¸Ð²",
     "active",
-    "ïîäòâåðæäåíà",
-    "ïîäòâåðæäåíî",
-    "â ðàáîòå",
-    "â îáðàáîòêå",
-    "íîâàÿ çàïèñü",
+    "Ð¿Ð¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´ÐµÐ½Ð°",
+    "Ð¿Ð¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´ÐµÐ½Ð¾",
+    "Ð² Ñ€Ð°Ð±Ð¾Ñ‚Ðµ",
+    "Ð² Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐµ",
+    "Ð½Ð¾Ð²Ð°Ñ Ð·Ð°Ð¿Ð¸ÑÑŒ",
     "pending",
     "wait",
     "waiting",
     "processing",
-  ].map((key) => [key, "Àêòèâíàÿ"]),
+  ].map((key) => [key, "ÐÐºÑ‚Ð¸Ð²Ð½Ð°Ñ"]),
 );
 [
-  ["done", "Âûïîëíåíà"],
-  ["complete", "Âûïîëíåíà"],
-  ["completed", "Âûïîëíåíà"],
-  ["finished", "Âûïîëíåíà"],
-  ["âûïîëíåíà", "Âûïîëíåíà"],
-  ["çàâåðøåíà", "Âûïîëíåíà"],
-  ["ãîòîâî", "Âûïîëíåíà"],
-  ["cancel", "Îòìåíà"],
-  ["canceled", "Îòìåíà"],
-  ["cancelled", "Îòìåíà"],
-  ["îòìåíà", "Îòìåíà"],
-  ["îòìåíåíî", "Îòìåíà"],
-  ["îòìåíåíà", "Îòìåíà"],
-  ["no show", "Íåÿâêà"],
-  ["no-show", "Íåÿâêà"],
-  ["noshow", "Íåÿâêà"],
-  ["missed", "Íåÿâêà"],
-  ["íå ïðèø¸ë", "Íåÿâêà"],
-  ["íå ïðèøåë", "Íåÿâêà"],
-  ["íåÿâêà", "Íåÿâêà"],
+  ["done", "Ð’Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð°"],
+  ["complete", "Ð’Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð°"],
+  ["completed", "Ð’Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð°"],
+  ["finished", "Ð’Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð°"],
+  ["Ð²Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð°", "Ð’Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð°"],
+  ["Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð°", "Ð’Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð°"],
+  ["Ð³Ð¾Ñ‚Ð¾Ð²Ð¾", "Ð’Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð°"],
+  ["cancel", "ÐžÑ‚Ð¼ÐµÐ½Ð°"],
+  ["canceled", "ÐžÑ‚Ð¼ÐµÐ½Ð°"],
+  ["cancelled", "ÐžÑ‚Ð¼ÐµÐ½Ð°"],
+  ["Ð¾Ñ‚Ð¼ÐµÐ½Ð°", "ÐžÑ‚Ð¼ÐµÐ½Ð°"],
+  ["Ð¾Ñ‚Ð¼ÐµÐ½ÐµÐ½Ð¾", "ÐžÑ‚Ð¼ÐµÐ½Ð°"],
+  ["Ð¾Ñ‚Ð¼ÐµÐ½ÐµÐ½Ð°", "ÐžÑ‚Ð¼ÐµÐ½Ð°"],
+  ["no show", "ÐÐµÑÐ²ÐºÐ°"],
+  ["no-show", "ÐÐµÑÐ²ÐºÐ°"],
+  ["noshow", "ÐÐµÑÐ²ÐºÐ°"],
+  ["missed", "ÐÐµÑÐ²ÐºÐ°"],
+  ["Ð½Ðµ Ð¿Ñ€Ð¸ÑˆÑ‘Ð»", "ÐÐµÑÐ²ÐºÐ°"],
+  ["Ð½Ðµ Ð¿Ñ€Ð¸ÑˆÐµÐ»", "ÐÐµÑÐ²ÐºÐ°"],
+  ["Ð½ÐµÑÐ²ÐºÐ°", "ÐÐµÑÐ²ÐºÐ°"],
 ].forEach(([key, value]) => {
   STATUS_CANONICAL_MAP.set(key, value);
 });
@@ -247,7 +247,7 @@ const requireOwner = (req, res, next) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ âûïîëíåíèÿ äåéñòâèÿ." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ Ð²Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ Ð´ÐµÐ¹ÑÑ‚Ð²Ð¸Ñ." });
   }
   return next();
 };
@@ -366,7 +366,7 @@ const decodeBase64Image = (input = "") => {
   const normalized = normalizeText(input);
   const payload = normalized.includes("base64,") ? normalized.split("base64,").pop() : normalized;
   if (!payload) {
-    throw new Error("Ïóñòûå äàííûå èçîáðàæåíèÿ.");
+    throw new Error("ÐŸÑƒÑÑ‚Ñ‹Ðµ Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ñ.");
   }
   return Buffer.from(payload, "base64");
 };
@@ -608,7 +608,7 @@ const seedServicesFromCost = async () => {
       const service = await tx.services.create({
         data: {
           id: randomUUID(),
-          name: row.Uslugi || `Óñëóãà #${index + 1}`,
+          name: row.Uslugi || `Ð£ÑÐ»ÑƒÐ³Ð° #${index + 1}`,
           description: "",
           category: null,
           duration,
@@ -717,7 +717,7 @@ const getServiceCatalog = async (includeInactive = true, identity = null) => {
   if (!services.length) {
     services = (await prisma.cost.findMany()).map((row, index) => ({
       id: row.id,
-      name: row.Uslugi || `Óñëóãà #${index + 1}`,
+      name: row.Uslugi || `Ð£ÑÐ»ÑƒÐ³Ð° #${index + 1}`,
       description: "",
       category: null,
       duration: Number(normalizeText(row.Dlitelnost).match(/(\d+)/)?.[1] ?? 0),
@@ -781,7 +781,7 @@ const buildClientRows = (users, appointments) => {
     const lastConfirmed = confirmed.sort((a, b) => b.sortKey - a.sortKey)[0];
     clients.push({
       id: user.id,
-      name: user.Name || "Áåç èìåíè",
+      name: user.Name || "Ð‘ÐµÐ· Ð¸Ð¼ÐµÐ½Ð¸",
       phone: user.Phone || "",
       normalizedPhone,
       telegramId: user.TelegramID || null,
@@ -816,7 +816,7 @@ const buildClientRows = (users, appointments) => {
         : 0;
     clients.push({
       id: clientId,
-      name: appt.CustomerName || "Áåç èìåíè",
+      name: appt.CustomerName || "Ð‘ÐµÐ· Ð¸Ð¼ÐµÐ½Ð¸",
       phone: appt.Phone || "",
       normalizedPhone: appt.normalizedPhone,
       telegramId: null,
@@ -1205,7 +1205,7 @@ const handleLoginOptions = async (req, res) => {
     res.json(options);
   } catch (error) {
     console.error("Login options error:", error);
-    res.status(500).json({ error: "Íå óäàëîñü ïîëó÷èòü ñïèñîê áàðáåðîâ" });
+    res.status(500).json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ð¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ ÑÐ¿Ð¸ÑÐ¾Ðº Ð±Ð°Ñ€Ð±ÐµÑ€Ð¾Ð²" });
   }
 };
 const handleLogin = async (req, res) => {
@@ -1215,7 +1215,7 @@ const handleLogin = async (req, res) => {
     if (!username || !password) {
       return res
         .status(400)
-        .json({ success: false, message: "Óêàæèòå ëîãèí è ïàðîëü." });
+        .json({ success: false, message: "Ð£ÐºÐ°Ð¶Ð¸Ñ‚Ðµ Ð»Ð¾Ð³Ð¸Ð½ Ð¸ Ð¿Ð°Ñ€Ð¾Ð»ÑŒ." });
     }
     const barber = await prisma.barbers.findFirst({
       where: { login: username, isActive: true },
@@ -1230,7 +1230,7 @@ const handleLogin = async (req, res) => {
     if (!barber || !barber.password || barber.password !== password) {
       return res
         .status(401)
-        .json({ success: false, message: "Íåâåðíûé ëîãèí èëè ïàðîëü." });
+        .json({ success: false, message: "ÐÐµÐ²ÐµÑ€Ð½Ñ‹Ð¹ Ð»Ð¾Ð³Ð¸Ð½ Ð¸Ð»Ð¸ Ð¿Ð°Ñ€Ð¾Ð»ÑŒ." });
     }
     const identity = resolveUserIdentity({
       username: barber.login,
@@ -1254,7 +1254,7 @@ const handleLogin = async (req, res) => {
     console.error("Login error:", error);
     return res
       .status(500)
-      .json({ success: false, message: "Îøèáêà âõîäà. Ïîïðîáóéòå ïîçæå." });
+      .json({ success: false, message: "ÐžÑˆÐ¸Ð±ÐºÐ° Ð²Ñ…Ð¾Ð´Ð°. ÐŸÐ¾Ð¿Ñ€Ð¾Ð±ÑƒÐ¹Ñ‚Ðµ Ð¿Ð¾Ð·Ð¶Ðµ." });
   }
 };
 app.get("/api/login/options", handleLoginOptions);
@@ -1265,14 +1265,14 @@ app.get("/api/license/status", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ äîñòóïà ê ëèöåíçèè." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð° Ðº Ð»Ð¸Ñ†ÐµÐ½Ð·Ð¸Ð¸." });
   }
   try {
     const status = await ensureLicenseValid();
     res.json(status);
   } catch (error) {
     res.status(403).json({
-      error: "Ëèöåíçèÿ íåäåéñòâèòåëüíà. Ïðîâåðüòå êëþ÷ è ïîâòîðèòå ïîïûòêó.",
+      error: "Ð›Ð¸Ñ†ÐµÐ½Ð·Ð¸Ñ Ð½ÐµÐ´ÐµÐ¹ÑÑ‚Ð²Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð°. ÐŸÑ€Ð¾Ð²ÐµÑ€ÑŒÑ‚Ðµ ÐºÐ»ÑŽÑ‡ Ð¸ Ð¿Ð¾Ð²Ñ‚Ð¾Ñ€Ð¸Ñ‚Ðµ Ð¿Ð¾Ð¿Ñ‹Ñ‚ÐºÑƒ.",
       details: error.message,
       status: getLicenseStatus(),
     });
@@ -1282,7 +1282,7 @@ app.get("/api/bot/status", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ óïðàâëåíèÿ áîòîì." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ ÑƒÐ¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ñ Ð±Ð¾Ñ‚Ð¾Ð¼." });
   }
   const settings = await getBotSettings();
   const token = await readBotToken();
@@ -1292,7 +1292,7 @@ app.post("/api/bot/status", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ óïðàâëåíèÿ áîòîì." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ ÑƒÐ¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ñ Ð±Ð¾Ñ‚Ð¾Ð¼." });
   }
   const { action, isBotEnabled } = req.body || {};
   try {
@@ -1322,7 +1322,7 @@ app.post("/api/bot/status", authenticateToken, async (req, res) => {
     res.json({ status: serializeBotRuntime(), settings });
   } catch (error) {
     console.error("Bot status update failed:", error);
-    res.status(500).json({ error: "Íå óäàëîñü èçìåíèòü ñòàòóñ áîòà." });
+    res.status(500).json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¸Ð·Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ ÑÑ‚Ð°Ñ‚ÑƒÑ Ð±Ð¾Ñ‚Ð°." });
   }
 });
 
@@ -1330,11 +1330,11 @@ app.put("/api/bot/token", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ èçìåíåíèÿ òîêåíà." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ñ Ñ‚Ð¾ÐºÐµÐ½Ð°." });
   }
   const candidate = normalizeText(req.body?.token);
   if (!candidate) {
-    return res.status(400).json({ error: "Óêàæèòå òîêåí áîòà." });
+    return res.status(400).json({ error: "Ð£ÐºÐ°Ð¶Ð¸Ñ‚Ðµ Ñ‚Ð¾ÐºÐµÐ½ Ð±Ð¾Ñ‚Ð°." });
   }
   try {
     const token = await writeBotToken(candidate);
@@ -1347,7 +1347,7 @@ app.put("/api/bot/token", authenticateToken, async (req, res) => {
     console.error("Bot token update failed:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü îáíîâèòü òîêåí áîòà." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ð±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ Ñ‚Ð¾ÐºÐµÐ½ Ð±Ð¾Ñ‚Ð°." });
   }
 });
 
@@ -1355,7 +1355,7 @@ app.get("/api/system/update", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ ïðîâåðêè îáíîâëåíèé." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ¸ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹." });
   }
   try {
     const force = req.query.force === "1" || req.query.force === "true";
@@ -1364,7 +1364,7 @@ app.get("/api/system/update", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Update check error:", error);
     res.status(500).json({
-      error: "Íå óäàëîñü ïðîâåðèòü îáíîâëåíèÿ.",
+      error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ñ€Ð¾Ð²ÐµÑ€Ð¸Ñ‚ÑŒ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ.",
       details: error.message,
     });
   }
@@ -1373,7 +1373,7 @@ app.post("/api/system/update", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ óñòàíîâêè îáíîâëåíèé." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ ÑƒÑÑ‚Ð°Ð½Ð¾Ð²ÐºÐ¸ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹." });
   }
   try {
     const result = await applyUpdate();
@@ -1383,7 +1383,7 @@ app.post("/api/system/update", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Update apply error:", error);
     res.status(500).json({
-      error: "Íå óäàëîñü ïðèìåíèòü îáíîâëåíèå.",
+      error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ñ€Ð¸Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ.",
       details: error.message,
     });
   }
@@ -1396,7 +1396,7 @@ app.get("/api/dashboard/overview", authenticateToken, async (req, res) => {
     console.error("Dashboard snapshot error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü çàãðóçèòü îáçîð äàøáîðäà." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ð¾Ð±Ð·Ð¾Ñ€ Ð´Ð°ÑˆÐ±Ð¾Ñ€Ð´Ð°." });
   }
 });
 app.get("/api/services/full", authenticateToken, async (req, res) => {
@@ -1411,7 +1411,7 @@ app.get("/api/services/full", authenticateToken, async (req, res) => {
     console.error("Services fetch error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü ïîëó÷èòü ñïèñîê óñëóã." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ð¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ ÑÐ¿Ð¸ÑÐ¾Ðº ÑƒÑÐ»ÑƒÐ³." });
   }
 });
 app.get("/api/assets/avatars", authenticateToken, async (req, res) => {
@@ -1422,7 +1422,7 @@ app.get("/api/assets/avatars", authenticateToken, async (req, res) => {
     console.error("Avatar assets error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü ïîëó÷èòü ñïèñîê èçîáðàæåíèé." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ð¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ ÑÐ¿Ð¸ÑÐ¾Ðº Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ð¹." });
   }
 });
 
@@ -1432,22 +1432,22 @@ app.post("/api/assets/avatars/upload", authenticateToken, async (req, res) => {
     if (!data) {
       return res
         .status(400)
-        .json({ error: "Íå ïåðåäàíû äàííûå èçîáðàæåíèÿ." });
+        .json({ error: "ÐÐµ Ð¿ÐµÑ€ÐµÐ´Ð°Ð½Ñ‹ Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ñ." });
     }
     const sanitizedName = buildSafeImageFilename(name || `avatar-${Date.now()}.png`);
     if (!sanitizedName) {
-      return res.status(400).json({ error: "Íåêîððåêòíîå èìÿ ôàéëà." });
+      return res.status(400).json({ error: "ÐÐµÐºÐ¾Ñ€Ñ€ÐµÐºÑ‚Ð½Ð¾Ðµ Ð¸Ð¼Ñ Ñ„Ð°Ð¹Ð»Ð°." });
     }
     await fs.ensureDir(IMAGE_DIR);
     const buffer = decodeBase64Image(data);
     if (!buffer.length) {
-      return res.status(400).json({ error: "Ôàéë ïóñò." });
+      return res.status(400).json({ error: "Ð¤Ð°Ð¹Ð» Ð¿ÑƒÑÑ‚." });
     }
     if (buffer.length > MAX_AVATAR_FILE_SIZE) {
       return res
         .status(400)
         .json({
-          error: `Ôàéë ñëèøêîì áîëüøîé (äî ${Math.floor(MAX_AVATAR_FILE_SIZE / (1024 * 1024))} ÌÁ).`,
+          error: `Ð¤Ð°Ð¹Ð» ÑÐ»Ð¸ÑˆÐºÐ¾Ð¼ Ð±Ð¾Ð»ÑŒÑˆÐ¾Ð¹ (Ð´Ð¾ ${Math.floor(MAX_AVATAR_FILE_SIZE / (1024 * 1024))} ÐœÐ‘).`,
         });
     }
     const filename = await ensureUniqueImageName(sanitizedName);
@@ -1457,7 +1457,7 @@ app.post("/api/assets/avatars/upload", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Avatar upload error:", error);
     res.status(500).json({
-      error: "Íå óäàëîñü çàãðóçèòü èçîáðàæåíèå.",
+      error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ðµ.",
       details: error.message,
     });
   }
@@ -1467,15 +1467,15 @@ app.delete("/api/assets/avatars", authenticateToken, async (req, res) => {
   try {
     const { filename } = req.body || {};
     if (!filename) {
-      return res.status(400).json({ error: "Íå óêàçàíî èìÿ ôàéëà." });
+      return res.status(400).json({ error: "ÐÐµ ÑƒÐºÐ°Ð·Ð°Ð½Ð¾ Ð¸Ð¼Ñ Ñ„Ð°Ð¹Ð»Ð°." });
     }
     const sanitizedName = getExistingImageFilename(filename);
     if (!sanitizedName) {
-      return res.status(400).json({ error: "Ôàéë íå íàéäåí." });
+      return res.status(400).json({ error: "Ð¤Ð°Ð¹Ð» Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½." });
     }
     const targetPath = path.join(IMAGE_DIR, sanitizedName);
     if (!(await fs.pathExists(targetPath))) {
-      return res.status(404).json({ error: "Ôàéë îòñóòñòâóåò íà ñåðâåðå." });
+      return res.status(404).json({ error: "Ð¤Ð°Ð¹Ð» Ð¾Ñ‚ÑÑƒÑ‚ÑÑ‚Ð²ÑƒÐµÑ‚ Ð½Ð° ÑÐµÑ€Ð²ÐµÑ€Ðµ." });
     }
     await fs.remove(targetPath);
     const images = await listAvatarImages();
@@ -1483,7 +1483,7 @@ app.delete("/api/assets/avatars", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Avatar delete error:", error);
     res.status(500).json({
-      error: "Íå óäàëîñü óäàëèòü èçîáðàæåíèå.",
+      error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑƒÐ´Ð°Ð»Ð¸Ñ‚ÑŒ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ðµ.",
       details: error.message,
     });
   }
@@ -1493,7 +1493,7 @@ app.get("/api/bot/messages", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ èçìåíåíèÿ ñîîáùåíèé áîòà." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ñ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹ Ð±Ð¾Ñ‚Ð°." });
   }
   try {
     const messages = await prisma.botMessages.findMany({
@@ -1504,7 +1504,7 @@ app.get("/api/bot/messages", authenticateToken, async (req, res) => {
     console.error("Bot messages fetch error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü çàãðóçèòü ñîîáùåíèÿ áîòà." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ Ð±Ð¾Ñ‚Ð°." });
   }
 });
 
@@ -1512,7 +1512,7 @@ app.put("/api/bot/messages/:id", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ èçìåíåíèÿ ñîîáùåíèé áîòà." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ñ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹ Ð±Ð¾Ñ‚Ð°." });
   }
   const { id } = req.params;
   const payload = req.body || {};
@@ -1525,7 +1525,7 @@ app.put("/api/bot/messages/:id", authenticateToken, async (req, res) => {
     if (!data.text.trim()) {
       return res
         .status(400)
-        .json({ error: "Òåêñò ñîîáùåíèÿ íå ìîæåò áûòü ïóñòûì." });
+        .json({ error: "Ð¢ÐµÐºÑÑ‚ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ Ð½Ðµ Ð¼Ð¾Ð¶ÐµÑ‚ Ð±Ñ‹Ñ‚ÑŒ Ð¿ÑƒÑÑ‚Ñ‹Ð¼." });
     }
     const updated = await prisma.botMessages.update({
       where: { id },
@@ -1535,11 +1535,11 @@ app.put("/api/bot/messages/:id", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Bot message update error:", error);
     if (error.code === "P2025") {
-      return res.status(404).json({ error: "Ñîîáùåíèå íå íàéäåíî." });
+      return res.status(404).json({ error: "Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð¾." });
     }
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü îáíîâèòü ñîîáùåíèå." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ð±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ." });
   }
 });
 app.get("/api/events/stream", authenticateStream, (req, res) => {
@@ -1621,7 +1621,7 @@ app.post("/api/services/full", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ ñîçäàíèÿ óñëóã." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ñ ÑƒÑÐ»ÑƒÐ³." });
   }
   try {
     await upsertServiceWithPrices(null, req.body || {});
@@ -1631,7 +1631,7 @@ app.post("/api/services/full", authenticateToken, async (req, res) => {
     console.error("Create service error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü ñîçäàòü óñëóãó." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐ¾Ð·Ð´Ð°Ñ‚ÑŒ ÑƒÑÐ»ÑƒÐ³Ñƒ." });
   }
 });
 app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
@@ -1646,7 +1646,7 @@ app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
 
       .status(403)
 
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ èçìåíåíèÿ óñëóã." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ñ ÑƒÑÐ»ÑƒÐ³." });
 
   }
 
@@ -1668,7 +1668,7 @@ app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
 
         .status(500)
 
-        .json({ error: "Íå óäàëîñü îáíîâèòü óñëóãó." });
+        .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ð±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ ÑƒÑÐ»ÑƒÐ³Ñƒ." });
 
     }
 
@@ -1682,7 +1682,7 @@ app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
 
       .status(403)
 
-      .json({ error: "Ïðîôèëü ñîòðóäíèêà íå ïðèâÿçàí ê áàðáåðó." });
+      .json({ error: "ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ ÑÐ¾Ñ‚Ñ€ÑƒÐ´Ð½Ð¸ÐºÐ° Ð½Ðµ Ð¿Ñ€Ð¸Ð²ÑÐ·Ð°Ð½ Ðº Ð±Ð°Ñ€Ð±ÐµÑ€Ñƒ." });
 
   }
 
@@ -1698,7 +1698,7 @@ app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
 
   if (!hasOwnPrice) {
 
-    return res.status(400).json({ error: "Ïåðåäàéòå öåíó äëÿ ñâîåãî ïðîôèëÿ." });
+    return res.status(400).json({ error: "ÐŸÐµÑ€ÐµÐ´Ð°Ð¹Ñ‚Ðµ Ñ†ÐµÐ½Ñƒ Ð´Ð»Ñ ÑÐ²Ð¾ÐµÐ³Ð¾ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ." });
 
   }
 
@@ -1714,7 +1714,7 @@ app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
 
     if (!Number.isFinite(numeric) || numeric < 0) {
 
-      return res.status(400).json({ error: "Íåêîððåêòíîå çíà÷åíèå öåíû." });
+      return res.status(400).json({ error: "ÐÐµÐºÐ¾Ñ€Ñ€ÐµÐºÑ‚Ð½Ð¾Ðµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ Ñ†ÐµÐ½Ñ‹." });
 
     }
 
@@ -1798,7 +1798,7 @@ app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
 
     if (error.message === "SERVICE_NOT_FOUND") {
 
-      return res.status(404).json({ error: "Óñëóãà íå íàéäåíà." });
+      return res.status(404).json({ error: "Ð£ÑÐ»ÑƒÐ³Ð° Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°." });
 
     }
 
@@ -1808,7 +1808,7 @@ app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
 
       .status(500)
 
-      .json({ error: "Íå óäàëîñü îáíîâèòü óñëóãó." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ð±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ ÑƒÑÐ»ÑƒÐ³Ñƒ." });
 
   }
 
@@ -1818,7 +1818,7 @@ app.delete("/api/services/full/:id", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ óäàëåíèÿ óñëóã." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸Ñ ÑƒÑÐ»ÑƒÐ³." });
   }
   try {
     await prisma.$transaction([
@@ -1831,7 +1831,7 @@ app.delete("/api/services/full/:id", authenticateToken, async (req, res) => {
     console.error("Delete service error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü óäàëèòü óñëóãó." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑƒÐ´Ð°Ð»Ð¸Ñ‚ÑŒ ÑƒÑÐ»ÑƒÐ³Ñƒ." });
   }
 });
 app.get("/api/barbers/full", authenticateToken, async (req, res) => {
@@ -1867,31 +1867,31 @@ app.get("/api/barbers/full", authenticateToken, async (req, res) => {
     console.error("Barbers list error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü çàãðóçèòü ñïèñîê áàðáåðîâ." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ ÑÐ¿Ð¸ÑÐ¾Ðº Ð±Ð°Ñ€Ð±ÐµÑ€Ð¾Ð²." });
   }
 });
 app.get("/api/:tableName", authenticateToken, async (req, res) => {
   const { tableName } = req.params;
   const modelName = tableToModelMap[tableName];
   if (!modelName || !prisma[modelName])
-    return res.status(404).json({ error: "Çàïðîøåííàÿ òàáëèöà íå íàéäåíà." });
+    return res.status(404).json({ error: "Ð—Ð°Ð¿Ñ€Ð¾ÑˆÐµÐ½Ð½Ð°Ñ Ñ‚Ð°Ð±Ð»Ð¸Ñ†Ð° Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°." });
   if (isStaffIdentity(req.identity) && !STAFF_READ_TABLES.has(tableName)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ äîñòóïà ê ýòîìó ðàçäåëó." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð° Ðº ÑÑ‚Ð¾Ð¼Ñƒ Ñ€Ð°Ð·Ð´ÐµÐ»Ñƒ." });
   }
 
   if (tableName === "Schedules") {
     try {
       const barbersList = await getBarbers({ includeInactive: true });
       const daysOfWeek = [
-        "Ïîíåäåëüíèê",
-        "Âòîðíèê",
-        "Ñðåäà",
-        "×åòâåðã",
-        "Ïÿòíèöà",
-        "Ñóááîòà",
-        "Âîñêðåñåíüå",
+        "ÐŸÐ¾Ð½ÐµÐ´ÐµÐ»ÑŒÐ½Ð¸Ðº",
+        "Ð’Ñ‚Ð¾Ñ€Ð½Ð¸Ðº",
+        "Ð¡Ñ€ÐµÐ´Ð°",
+        "Ð§ÐµÑ‚Ð²ÐµÑ€Ð³",
+        "ÐŸÑÑ‚Ð½Ð¸Ñ†Ð°",
+        "Ð¡ÑƒÐ±Ð±Ð¾Ñ‚Ð°",
+        "Ð’Ð¾ÑÐºÑ€ÐµÑÐµÐ½ÑŒÐµ",
       ];
       const windowDays = 14;
       const today = new Date();
@@ -1968,7 +1968,7 @@ app.get("/api/:tableName", authenticateToken, async (req, res) => {
       console.error("Schedules fetch error:", error);
       return res
         .status(500)
-        .json({ error: "Íå óäàëîñü çàãðóçèòü ðàñïèñàíèå." });
+        .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ñ€Ð°ÑÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ." });
     }
   }
   try {
@@ -1986,21 +1986,21 @@ app.get("/api/:tableName", authenticateToken, async (req, res) => {
     console.error("Generic fetch error:", error);
     return res
       .status(500)
-      .json({ error: "Íå óäàëîñü çàãðóçèòü äàííûå." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ð´Ð°Ð½Ð½Ñ‹Ðµ." });
   }
 });
 app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
   const { tableName, id } = req.params;
   const modelName = tableToModelMap[tableName];
   if (!modelName || !prisma[modelName])
-    return res.status(404).json({ error: "Çàïðîøåííàÿ òàáëèöà íå íàéäåíà." });
+    return res.status(404).json({ error: "Ð—Ð°Ð¿Ñ€Ð¾ÑˆÐµÐ½Ð½Ð°Ñ Ñ‚Ð°Ð±Ð»Ð¸Ñ†Ð° Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°." });
   const isStaff = isStaffIdentity(req.identity);
   if (isStaff) {
     const allowedTables = new Set(["Appointments", "Barbers", "Schedules"]);
     if (!allowedTables.has(tableName)) {
       return res
         .status(403)
-        .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ äîñòóïà ê ýòîìó ðàçäåëó." });
+        .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð° Ðº ÑÑ‚Ð¾Ð¼Ñƒ Ñ€Ð°Ð·Ð´ÐµÐ»Ñƒ." });
     }
   }
   const data = coercePayload(tableName, { ...req.body });
@@ -2030,7 +2030,7 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
       if (!staffBarberName) {
         return res
           .status(400)
-          .json({ error: "Â ïðîôèëå ñîòðóäíèêà íå óêàçàíî èìÿ áàðáåðà." });
+          .json({ error: "Ð’ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ðµ ÑÐ¾Ñ‚Ñ€ÑƒÐ´Ð½Ð¸ÐºÐ° Ð½Ðµ ÑƒÐºÐ°Ð·Ð°Ð½Ð¾ Ð¸Ð¼Ñ Ð±Ð°Ñ€Ð±ÐµÑ€Ð°." });
       }
     }
     if (tableName === "Appointments") {
@@ -2038,20 +2038,20 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
       if (!existing || !matchesIdentityBarber(existing.Barber, req.identity)) {
         return res
           .status(403)
-          .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ èçìåíåíèÿ ýòîé çàïèñè." });
+          .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ñ ÑÑ‚Ð¾Ð¹ Ð·Ð°Ð¿Ð¸ÑÐ¸." });
       }
       data.Barber = staffBarberName;
     } else if (tableName === "Barbers") {
       if (id !== req.identity.barberId) {
         return res
           .status(403)
-          .json({ error: "Ìîæíî ðåäàêòèðîâàòü òîëüêî ñâîé ïðîôèëü." });
+          .json({ error: "ÐœÐ¾Ð¶Ð½Ð¾ Ñ€ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ ÑÐ²Ð¾Ð¹ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ." });
       }
     } else if (tableName === "Schedules") {
       if (data.Barber && !matchesIdentityBarber(data.Barber, req.identity)) {
         return res
           .status(403)
-          .json({ error: "Ìîæíî ðåäàêòèðîâàòü òîëüêî ñâî¸ ðàñïèñàíèå." });
+          .json({ error: "ÐœÐ¾Ð¶Ð½Ð¾ Ñ€ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ ÑÐ²Ð¾Ñ‘ Ñ€Ð°ÑÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ." });
       }
       data.Barber = staffBarberName;
     }
@@ -2100,7 +2100,7 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
       console.error("Schedule update error:", error);
       return res
         .status(500)
-        .json({ error: "Íå óäàëîñü îáíîâèòü ðàñïèñàíèå." });
+        .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ð±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ Ñ€Ð°ÑÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ." });
     }
   }
   if (tableName === "Cost") {
@@ -2125,18 +2125,18 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
     console.error("Record update error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü îáíîâèòü çàïèñü." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ð±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ Ð·Ð°Ð¿Ð¸ÑÑŒ." });
   }
 });
 app.post("/api/:tableName", authenticateToken, async (req, res) => {
   const { tableName } = req.params;
   const modelName = tableToModelMap[tableName];
   if (!modelName || !prisma[modelName])
-    return res.status(404).json({ error: "Çàïðîøåííàÿ òàáëèöà íå íàéäåíà." });
+    return res.status(404).json({ error: "Ð—Ð°Ð¿Ñ€Ð¾ÑˆÐµÐ½Ð½Ð°Ñ Ñ‚Ð°Ð±Ð»Ð¸Ñ†Ð° Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°." });
   if (isStaffIdentity(req.identity) && !STAFF_WRITE_TABLES.has(tableName)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ ñîçäàíèÿ çàïèñåé â ýòîì ðàçäåëå." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ñ Ð·Ð°Ð¿Ð¸ÑÐµÐ¹ Ð² ÑÑ‚Ð¾Ð¼ Ñ€Ð°Ð·Ð´ÐµÐ»Ðµ." });
   }
   const payload = coercePayload(tableName, { ...req.body });
   if (isStaffIdentity(req.identity) && tableName === "Appointments") {
@@ -2144,7 +2144,7 @@ app.post("/api/:tableName", authenticateToken, async (req, res) => {
     if (!staffBarber) {
       return res
         .status(400)
-        .json({ error: "Â ïðîôèëå ñîòðóäíèêà íå óêàçàíî èìÿ áàðáåðà." });
+        .json({ error: "Ð’ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ðµ ÑÐ¾Ñ‚Ñ€ÑƒÐ´Ð½Ð¸ÐºÐ° Ð½Ðµ ÑƒÐºÐ°Ð·Ð°Ð½Ð¾ Ð¸Ð¼Ñ Ð±Ð°Ñ€Ð±ÐµÑ€Ð°." });
     }
     payload.Barber = staffBarber;
   }
@@ -2154,7 +2154,7 @@ app.post("/api/:tableName", authenticateToken, async (req, res) => {
   if (tableName === "Appointments" && !normalizeText(payload.Barber)) {
     return res
       .status(400)
-      .json({ error: "Äëÿ çàïèñè íóæíî óêàçàòü áàðáåðà." });
+      .json({ error: "Ð”Ð»Ñ Ð·Ð°Ð¿Ð¸ÑÐ¸ Ð½ÑƒÐ¶Ð½Ð¾ ÑƒÐºÐ°Ð·Ð°Ñ‚ÑŒ Ð±Ð°Ñ€Ð±ÐµÑ€Ð°." });
   }
   if (tableName === "Appointments" && payload.UserID !== undefined) {
     if (payload.UserID === null || payload.UserID === "") {
@@ -2181,18 +2181,18 @@ app.post("/api/:tableName", authenticateToken, async (req, res) => {
     console.error("Record create error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü ñîçäàòü çàïèñü." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐ¾Ð·Ð´Ð°Ñ‚ÑŒ Ð·Ð°Ð¿Ð¸ÑÑŒ." });
   }
 });
 app.delete("/api/:tableName/:id", authenticateToken, async (req, res) => {
   const { tableName, id } = req.params;
   const modelName = tableToModelMap[tableName];
   if (!modelName || !prisma[modelName])
-    return res.status(404).json({ error: "Çàïðîøåííàÿ òàáëèöà íå íàéäåíà." });
+    return res.status(404).json({ error: "Ð—Ð°Ð¿Ñ€Ð¾ÑˆÐµÐ½Ð½Ð°Ñ Ñ‚Ð°Ð±Ð»Ð¸Ñ†Ð° Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°." });
   if (isStaffIdentity(req.identity) && !STAFF_DELETE_TABLES.has(tableName)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ óäàëåíèÿ ýòîãî ðàçäåëà." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸Ñ ÑÑ‚Ð¾Ð³Ð¾ Ñ€Ð°Ð·Ð´ÐµÐ»Ð°." });
   }
   try {
     if (isStaffIdentity(req.identity) && tableName === "Appointments") {
@@ -2200,7 +2200,7 @@ app.delete("/api/:tableName/:id", authenticateToken, async (req, res) => {
       if (!existing || !matchesIdentityBarber(existing.Barber, req.identity)) {
         return res
           .status(403)
-          .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ óäàëåíèÿ ýòîé çàïèñè." });
+          .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸Ñ ÑÑ‚Ð¾Ð¹ Ð·Ð°Ð¿Ð¸ÑÐ¸." });
       }
     }
 
@@ -2211,30 +2211,30 @@ app.delete("/api/:tableName/:id", authenticateToken, async (req, res) => {
     console.error("Record delete error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü óäàëèòü çàïèñü." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑƒÐ´Ð°Ð»Ð¸Ñ‚ÑŒ Ð·Ð°Ð¿Ð¸ÑÑŒ." });
   }
 });
 app.post("/api/backups/create", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ ñîçäàíèÿ áýêàïîâ." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ñ Ð±ÑÐºÐ°Ð¿Ð¾Ð²." });
   }
   try {
     await createBackup();
-    res.json({ success: true, message: "Ðåçåðâíàÿ êîïèÿ ñîçäàíà." });
+    res.json({ success: true, message: "Ð ÐµÐ·ÐµÑ€Ð²Ð½Ð°Ñ ÐºÐ¾Ð¿Ð¸Ñ ÑÐ¾Ð·Ð´Ð°Ð½Ð°." });
   } catch (error) {
     console.error("Backup create error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü ñîçäàòü áýêàï." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐ¾Ð·Ð´Ð°Ñ‚ÑŒ Ð±ÑÐºÐ°Ð¿." });
   }
 });
 app.get("/api/backups/list", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ ïðîñìîòðà áýêàïîâ." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ Ð¿Ñ€Ð¾ÑÐ¼Ð¾Ñ‚Ñ€Ð° Ð±ÑÐºÐ°Ð¿Ð¾Ð²." });
   }
   try {
     const files = await listBackups();
@@ -2242,64 +2242,64 @@ app.get("/api/backups/list", authenticateToken, async (req, res) => {
   } catch (error) {
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü ïîëó÷èòü ñïèñîê áýêàïîâ." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ð¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ ÑÐ¿Ð¸ÑÐ¾Ðº Ð±ÑÐºÐ°Ð¿Ð¾Ð²." });
   }
 });
 app.post("/api/backups/restore", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ âîññòàíîâëåíèÿ èç áýêàïà." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ Ð²Ð¾ÑÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð¸Ð· Ð±ÑÐºÐ°Ð¿Ð°." });
   }
   try {
     const { filename } = req.body || {};
     if (!filename)
-      return res.status(400).json({ error: "Íå óêàçàíî èìÿ ôàéëà áýêàïà." });
+      return res.status(400).json({ error: "ÐÐµ ÑƒÐºÐ°Ð·Ð°Ð½Ð¾ Ð¸Ð¼Ñ Ñ„Ð°Ð¹Ð»Ð° Ð±ÑÐºÐ°Ð¿Ð°." });
     const backupPath = path.join(BACKUP_DIR, filename);
     if (!(await fs.pathExists(backupPath))) {
-      return res.status(404).json({ error: "Áýêàï íå íàéäåí." });
+      return res.status(404).json({ error: "Ð‘ÑÐºÐ°Ð¿ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½." });
     }
     await prisma.$disconnect();
     await fs.copyFile(backupPath, DB_PATH);
     res.json({
       success: true,
-      message: `Áýêàï ${filename} âîññòàíîâëåí.`,
+      message: `Ð‘ÑÐºÐ°Ð¿ ${filename} Ð²Ð¾ÑÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½.`,
     });
   } catch (error) {
     console.error("Backup restore error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü âîññòàíîâèòü áýêàï." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð²Ð¾ÑÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ Ð±ÑÐºÐ°Ð¿." });
   }
 });
 app.post("/api/backups/delete", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ óäàëåíèÿ áýêàïîâ." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸Ñ Ð±ÑÐºÐ°Ð¿Ð¾Ð²." });
   }
   try {
     const { filename } = req.body || {};
     if (!filename) {
       return res
         .status(400)
-        .json({ error: "Íå óêàçàíî èìÿ ôàéëà áýêàïà." });
+        .json({ error: "ÐÐµ ÑƒÐºÐ°Ð·Ð°Ð½Ð¾ Ð¸Ð¼Ñ Ñ„Ð°Ð¹Ð»Ð° Ð±ÑÐºÐ°Ð¿Ð°." });
     }
     const safeName = path.basename(filename);
     const backupPath = path.join(BACKUP_DIR, safeName);
     if (!(await fs.pathExists(backupPath))) {
-      return res.status(404).json({ error: "Áýêàï íå íàéäåí." });
+      return res.status(404).json({ error: "Ð‘ÑÐºÐ°Ð¿ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½." });
     }
     await fs.remove(backupPath);
     res.json({
       success: true,
-      message: `Áýêàï ${safeName} óäàëåí.`,
+      message: `Ð‘ÑÐºÐ°Ð¿ ${safeName} ÑƒÐ´Ð°Ð»ÐµÐ½.`,
     });
   } catch (error) {
     console.error("Backup delete error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü óäàëèòü áýêàï." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑƒÐ´Ð°Ð»Ð¸Ñ‚ÑŒ Ð±ÑÐºÐ°Ð¿." });
   }
 });
 app.get("/api/options/appointments", authenticateToken, async (req, res) => {
@@ -2319,14 +2319,14 @@ app.get("/api/options/appointments", authenticateToken, async (req, res) => {
     console.error("Options fetch error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü ïîëó÷èòü ñïðàâî÷íûå äàííûå." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ð¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ ÑÐ¿Ñ€Ð°Ð²Ð¾Ñ‡Ð½Ñ‹Ðµ Ð´Ð°Ð½Ð½Ñ‹Ðµ." });
   }
 });
 app.get("/api/revenue/summary", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Íåäîñòàòî÷íî ïðàâ äëÿ ïðîñìîòðà äîõîäîâ." });
+      .json({ error: "ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ Ð¿Ñ€Ð°Ð² Ð´Ð»Ñ Ð¿Ñ€Ð¾ÑÐ¼Ð¾Ñ‚Ñ€Ð° Ð´Ð¾Ñ…Ð¾Ð´Ð¾Ð²." });
   }
   try {
     const defaultRange = getDefaultRevenueRange();
@@ -2428,7 +2428,7 @@ app.get("/api/revenue/summary", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Revenue summary error:", error);
     res.status(500).json({
-      error: "Íå óäàëîñü ðàññ÷èòàòü äîõîäû.",
+      error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ñ€Ð°ÑÑÑ‡Ð¸Ñ‚Ð°Ñ‚ÑŒ Ð´Ð¾Ñ…Ð¾Ð´Ñ‹.",
       details: error.message,
     });
   }
@@ -2438,7 +2438,7 @@ app.get("/api/user-profile/:name", authenticateToken, async (req, res) => {
     const { name } = req.params;
     const user = await prisma.users.findFirst({ where: { Name: name } });
     if (!user)
-      return res.status(404).json({ error: "Ïîëüçîâàòåëü íå íàéäåí." });
+      return res.status(404).json({ error: "ÐŸÐ¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½." });
     const appointmentsRaw = await prisma.appointments.findMany({
       where: { CustomerName: name },
     });
@@ -2450,7 +2450,7 @@ app.get("/api/user-profile/:name", authenticateToken, async (req, res) => {
     console.error("Profile fetch error:", error);
     res
       .status(500)
-      .json({ error: "Íå óäàëîñü çàãðóçèòü ïðîôèëü ïîëüçîâàòåëÿ." });
+      .json({ error: "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»Ñ." });
   }
 });
 cron.schedule("0 3 * * *", async () => {

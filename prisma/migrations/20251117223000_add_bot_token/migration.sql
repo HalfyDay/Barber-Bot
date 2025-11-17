@@ -1,0 +1,1 @@
+ALTER TABLE "BotSettings" ADD COLUMN "botToken" TEXT NOT NULL DEFAULT '';

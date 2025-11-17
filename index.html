@@ -4,13 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Barber Bot CRM</title>
-    <!-- Подключаем React, ReactDOM и Tailwind CSS -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Основной шрифт -->
+    <!-- React + ReactDOM (production builds) -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- ???????????????? ??????"?' -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Подключаем стили панели -->
+    <!-- ????????>???????? ???'??>?? ????????>?? -->
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="manifest.webmanifest">
     <meta name="theme-color" content="#0f172a">
@@ -19,13 +18,13 @@
     <link rel="apple-touch-icon" href="Image/Icon/icon-192.png">
 </head>
 <body class="bg-gray-900">
-    <!-- Контейнер, в который монтируется React-приложение -->
+    <!-- ???????'????????, ?? ????'?????<?? ???????'???????'???? React-??????>????????? -->
     <div id="root"></div>
 
     <script>
         window.__BARBER_API_BASE__ = window.location.origin + '/api';
     </script>
-    <!-- Собранный фронтенд-бандл -->
+    <!-- ?????+?????????<?? ?"???????'?????-?+???????> -->
     <script src="script.bundle.js" defer></script>
     <script>
         if ("serviceWorker" in navigator) {

@@ -5966,7 +5966,11 @@ const BotControlView = ({
               {savingToken ? 'Сохранение...' : 'Сохранить'}
             </button>
           </div>
-          {!token && <p className="mt-2 text-xs text-slate-400">Укажите токен и сохраните изменения — файл config.py обновится автоматически.</p>}
+          {!token && (
+            <p className="mt-2 text-xs text-slate-400">
+              Укажите токен и сохраните изменения — CRM сохранит этот ключ в базе и перезапустит/остановит бота автоматически.
+            </p>
+          )}
         </div>
       </SectionCard>
 

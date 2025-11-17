@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const CACHE_PREFIX = "barber-bot-cache";
 const CACHE_NAME = `${CACHE_PREFIX}-${CACHE_VERSION}`;
 const OFFLINE_URL = "/";
@@ -51,6 +51,11 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(networkFirst(request));
+    return;
+  }
+
+  if (url.pathname === "/styles.css") {
+    event.respondWith(staleWhileRevalidate(request));
     return;
   }
 

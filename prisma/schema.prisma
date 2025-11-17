@@ -129,6 +129,7 @@ model BotSettings {
   minLeadHours   Int      @default(2)
   maxDaysAhead   Int      @default(14)
   lastSyncSource String   @default("site")
+  botToken       String   @default("")
   updatedAt      DateTime @updatedAt
 }
 

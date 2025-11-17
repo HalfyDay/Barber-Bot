@@ -1,19 +1,51 @@
-/node_modules
-/old_code
-/backups
-/Image/generated
-/.env
-/.env.*
-/.DS_Store
-/cp.log
+/node_modules/
+/old_code/
+/backups/
+/Image/generated/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Python & virtual envs
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Local data & persistence
 /bot_persistence.pickle
-/bot_persistence
-/data/*.db
+/bot_persistence/
+/data/*
+!/data/.gitkeep
+!/data/README.md
+*.pickle
+
+# Databases
+/prisma/dev.db
+/prisma/dev.db-*
 /prisma/*.db
 /prisma/*.db-shm
 /prisma/*.db-wal
+*.db
+*.db-shm
+*.db-wal
 *.sqlite
-*.log
-__pycache__/
-*.pyc
+*.sqlite3
+
+# Build artifacts
+/script.bundle.js
+/script.bundle.js.map
+/dist/
+/build/
 /tmp
+
+# Logs
+*.log
+cp.log
+logs/
+
+# OS / misc
+.DS_Store
+Thumbs.db

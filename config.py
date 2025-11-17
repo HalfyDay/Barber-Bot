@@ -1,13 +1,44 @@
-# config.py
-TOKEN       = "5523625358:AAGVplQ4Qp4i-BpjBM68eXVeRmHqoPrnkqw"
-# TOKEN       = "7718371058:AAEMd1wncQiMjLxgCfHdJv3LhRJBKfT-BlE"
+"""Configuration helper for values shared between the Telegram bot and Airtable sync."""
 
-# API_KEY     = "pat1QzCHFsEiNnMpr.4bb9b97ba5442166710bb1f6b3e7054197b040d211a39e32409a920d46256621"
-# BASE_ID     = "appyFvXd9P0p2kiOE"
+from __future__ import annotations
 
-API_KEY     = "patDohuxagZMvybny.c05e7f2cb0849a42b3e62db5672ff9b67151257a0e7f7068991a1f903cfaecd9"
-BASE_ID     = "appb27TTiPsdlqKBF"
+import os
+from pathlib import Path
 
-USERS_TABLE = "Users"
-APPTS_TABLE = "Appointments"
-ADMIN_IDS = [453003638, 1605937973]
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - dependency is optional at import time
+    load_dotenv = None
+
+BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / ".env"
+
+if load_dotenv:
+    if ENV_PATH.exists():
+        load_dotenv(ENV_PATH)
+    else:
+        load_dotenv()
+
+
+def _split_admin_ids(raw_value: str | None) -> list[int]:
+    """Convert a comma separated list of ids into integers."""
+    if not raw_value:
+        return []
+    result: list[int] = []
+    for chunk in raw_value.split(","):
+        value = chunk.strip()
+        if not value:
+            continue
+        try:
+            result.append(int(value))
+        except ValueError:
+            continue
+    return result
+
+
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TOKEN", "")
+API_KEY = os.getenv("AIRTABLE_API_KEY") or os.getenv("API_KEY", "")
+BASE_ID = os.getenv("AIRTABLE_BASE_ID") or os.getenv("BASE_ID", "")
+USERS_TABLE = os.getenv("AIRTABLE_USERS_TABLE", "Users")
+APPTS_TABLE = os.getenv("AIRTABLE_APPOINTMENTS_TABLE", "Appointments")
+ADMIN_IDS = _split_admin_ids(os.getenv("TELEGRAM_ADMIN_IDS"))

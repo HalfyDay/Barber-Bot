@@ -1,0 +1,88 @@
+# Barber Bot CRM
+
+Полноценный набор для управления барбершопом: веб-CRM на Express/React, Telegram-бот на python-telegram-bot и вспомогательные сервисы резервного копирования, обновления и защиты лицензии.
+
+## Возможности
+- Единый веб-интерфейс для записей, расписаний, услуг и персонала (React + Tailwind).
+- REST/WS API на Express + Prisma поверх SQLite (файл `prisma/dev.db`).
+- Telegram-бот (`BotBarberShop.py`) для записи клиентов и синхронизации с CRM.
+- Планировщик резервных копий и менеджер обновлений, работающий через GitHub.
+- Система лицензирования с локальным кэшем (`data/licenses.json`).
+
+## Архитектура
+```text
++-- server.js          # Express API, статические файлы и интеграция с ботом
++-- BotBarberShop.py   # Telegram-бот (python-telegram-bot v20)
++-- script.js          # Исходники React-интерфейса (требует сборки Babel)
++-- services/          # licenseGuard и updateManager
++-- prisma/            # Prisma schema + migrations
++-- data/              # Локальные json/кэши (не коммитим)
+L-- Image/             # Медиа (фото мастеров, иконки)
+```
+
+## Требования
+- Node.js 20+
+- npm 10+
+- Python 3.11+ (совместим с 3.10)
+- SQLite (входит в поставку Node/Prisma)
+- Git (для автообновления)
+
+## Быстрый старт
+1. Склонируйте проект и перейдите в каталог.
+2. Скопируйте `.env.example` в `.env` и заполните ключи (см. раздел ниже).
+3. Установите зависимости Node.js: `npm install`.
+4. Установите Python-зависимости: `python -m pip install -r requirements.txt`.
+5. Примените миграции БД (создаёт свежий `prisma/dev.db`):
+   ```bash
+   npx prisma migrate deploy
+   ```
+6. Соберите фронтенд (создаёт `script.bundle.js` из `script.js`):
+   ```bash
+   npm run build:web
+   ```
+7. Запустите сервер: `npm start`. Express отдаёт статику и управляет ботом.
+
+> **Важно:** Бот запускается дочерним процессом из `server.js`. Убедитесь, что путь к Python и переменные бота заданы в `.env`.
+
+## Переменные окружения
+Файл `.env.example` содержит полный список. Основные ключи:
+
+| Ключ | Назначение |
+| --- | --- |
+| `PORT` | Порт Express-сервера (по умолчанию 3000) |
+| `JWT_SECRET` | Секрет для выдачи токенов CRM |
+| `DATABASE_URL` | Строка подключения Prisma (по умолчанию `file:./dev.db`) |
+| `TELEGRAM_BOT_TOKEN` | Токен Telegram-бота |
+| `TELEGRAM_ADMIN_IDS` | Список ID администраторов через запятую |
+| `AIRTABLE_API_KEY`, `AIRTABLE_BASE_ID` | Ключ и база для синхронизации |
+| `BARBER_LICENSE_KEY` | Ключ лицензии (совпадает с записью в `licenses.json`) |
+| `BOT_PYTHON_PATH` / `BOT_COMMAND` | Явный путь/команда запуска Python при необходимости |
+| `LICENSE_SOURCE`, `UPDATE_REPO` и др. | Настройки проверки лицензии и автообновления |
+
+`config.py` автоматически подхватывает эти значения (через `python-dotenv`), поэтому шаблон `.env.example` один для Node и Python.
+
+## Управление обновлениями
+Модуль `services/updateManager.js` подтягивает коммиты/релизы из GitHub:
+- `checkForUpdates` сравнивает текущую версию `package.json` и HEAD удалённого репо.
+- `applyUpdate` выполняет `git fetch/pull`, `npm install --omit=dev` и `pip install -r requirements.txt`.
+
+Чтобы избежать потери данных при обновлении, все важные файлы (`.env`, `data/*.json`, `prisma/dev.db`, `bot_persistence.pickle`, резервные копии) исключены из Git. Обновления не перезапишут ваши рабочие данные.
+
+## Работа с данными
+- **База**: рабочая SQLite лежит в `prisma/dev.db` (игнорируется в Git). Для чистого запуска создайте новую через `npx prisma migrate deploy`.
+- **Кэши/JSON**: папка `data/` используется для алиасов, локальных лицензий и временных экспортов. В репозитории присутствует только `.gitkeep` и README, всё остальное игнорируется.
+- **Резервные копии**: каталог `backups/` создаётся автоматически, файлы не коммитятся.
+- **Состояние бота**: `bot_persistence.pickle` хранит диалоги Telegram и не версионируется.
+
+## npm-скрипты
+| Команда | Описание |
+| --- | --- |
+| `npm start` | Запуск Express API и фонового бота |
+| `npm run build:web` | Транспиляция `script.js` > `script.bundle.js` (Babel presets React/Env) |
+| `npm test` | Заглушка (можно заменить на фактические тесты) |
+
+## Полезные советы
+- Перед публикацией релиза/обновления выполните `npm run build:web`, чтобы фронтенд всегда соответствовал исходникам.
+- Настройте расписание резервных копий через cron в `server.js` или запускайте ручные бэкапы через API `/api/backups`.
+- Для локальной разработки можно задать `BOT_COMMAND="python -m BotBarberShop"`, если требуется нестандартная команда запуска.
+- Все пользовательские медиа складывайте в `Image/`; подпапка `Image/generated/` игнорируется и подходит для временных файлов.

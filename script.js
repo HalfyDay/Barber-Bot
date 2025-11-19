@@ -93,7 +93,7 @@ const TABLE_COLUMNS = {
 };
 const BOT_SUPPORTED_STATUS_OPTIONS = ['Активная', 'Выполнена', 'Отмена', 'Неявка'];
 
-const RATING_MIN = 3;
+const RATING_MIN = 1;
 const RATING_MAX = 5;
 const RATING_STEP = 1;
 const clampRatingValue = (value) => {
@@ -106,6 +106,14 @@ const formatRatingValue = (value) => String(clampRatingValue(value));
 let avatarOptionsCache = null;
 const YEAR_IN_MS = 365 * 24 * 60 * 60 * 1000;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const getLocalISODateString = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!date || Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 const buildNewBarberState = () => ({
   name: '',
   password: '',
@@ -149,6 +157,34 @@ const buildVisitHistory = (appointments = []) => {
     orderNumber: completed.length - index,
     dateLabel: formatDateTime(appt.Date, appt.Time),
   }));
+};
+const FAVORITE_BARBER_RECENT_LIMIT = 3;
+const resolveFavoriteBarberFromAppointments = (appointments = [], limit = FAVORITE_BARBER_RECENT_LIMIT) => {
+  if (!Array.isArray(appointments) || !appointments.length || limit <= 0) return '';
+  const ranked = appointments
+    .map((appointment) => {
+      const startDate = getAppointmentStartDate(appointment.Date, appointment.Time, appointment.startDateTime);
+      const rawBarber = normalizeText(appointment.Barber).trim();
+      return {
+        startDate,
+        barberLabel: rawBarber ? appointment.Barber?.trim() || rawBarber : '',
+        normalizedBarber: rawBarber.toLowerCase(),
+      };
+    })
+    .filter((item) => item.startDate && item.barberLabel && item.normalizedBarber);
+  if (!ranked.length) return '';
+  ranked.sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+  const recent = ranked.slice(0, limit);
+  const counts = new Map();
+  let favorite = { label: '', count: 0, index: Number.POSITIVE_INFINITY };
+  recent.forEach((entry, index) => {
+    const nextCount = (counts.get(entry.normalizedBarber) || 0) + 1;
+    counts.set(entry.normalizedBarber, nextCount);
+    if (nextCount > favorite.count || (nextCount === favorite.count && index < favorite.index)) {
+      favorite = { label: entry.barberLabel, count: nextCount, index };
+    }
+  });
+  return favorite.label;
 };
 const defaultConfirmState = {
   open: false,
@@ -615,7 +651,7 @@ const getAppointmentEndDate = (dateValue, timeValue, fallbackIso) => {
   const { start, end } = parseTimeRangeParts(timeValue);
   const endToken = end || start;
   if (!endToken) return startDate;
-  const baseDatePart = normalizeText(dateValue).slice(0, 10) || startDate.toISOString().slice(0, 10);
+  const baseDatePart = normalizeText(dateValue).slice(0, 10) || getLocalISODateString(startDate);
   if (!baseDatePart) return startDate;
   const isoCandidate = `${baseDatePart}T${endToken}:00`;
   let parsed = new Date(isoCandidate);
@@ -1487,7 +1523,7 @@ const DashboardView = ({
     typeof onNavigateTable === 'function' ? () => handleStatNavigate(tableId) : undefined;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       <SectionCard title="Ключевые показатели">
         <div className="grid gap-4 stat-grid">
           <StatCard label="Всего клиентов" value={stats.totalUsers ?? 0} onClick={resolveStatHandler('Users')} />
@@ -1904,7 +1940,7 @@ const getScheduleSortValue = (slot) => {
   return base + dayIndex * 10000 + parseSlotTimeMinutes(parseTimeRangeParts(slot.Week).start || slot.Week) * 10;
 };
 
-const RatingSlider = ({ value, onChange, dense = false }) => {
+const RatingSlider = ({ value, onChange, dense = false, disabled = false }) => {
   const ratingValue = clampRatingValue(value ?? RATING_MAX);
   const wrapperClass = dense
     ? 'space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-1.5'
@@ -1913,7 +1949,7 @@ const RatingSlider = ({ value, onChange, dense = false }) => {
     ? 'flex items-center justify-between text-xs text-slate-300'
     : 'flex items-center justify-between text-sm text-slate-300';
   return (
-    <div className={wrapperClass}>
+    <div className={classNames(wrapperClass, disabled ? 'opacity-60' : '')}>
       <label className={labelClass}>
         <span>Рейтинг</span>
         <span className="font-semibold text-white">{ratingValue}</span>
@@ -1924,8 +1960,9 @@ const RatingSlider = ({ value, onChange, dense = false }) => {
         max={RATING_MAX}
         step={RATING_STEP}
         value={ratingValue}
-        onChange={onChange}
-        className="w-full accent-indigo-500"
+        onChange={disabled ? undefined : onChange}
+        disabled={disabled}
+        className={classNames('w-full accent-indigo-500', disabled ? 'cursor-not-allowed' : '')}
       />
     </div>
   );
@@ -2048,7 +2085,7 @@ const BarbersView = ({
   const canSubmit = isCreateMode ? Boolean(workingBarber?.name?.trim() && workingBarber?.password?.trim()) : Boolean(workingBarber);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       <SectionCard
         title="Барберы"
         actions={
@@ -2283,6 +2320,7 @@ const BarberProfileView = ({
   deleteAvatar,
   onFieldChange,
   onSave,
+  allowRatingEdit = false,
 }) => {
   const [pendingAvatar, setPendingAvatar] = useState(barber?.avatarUrl || '');
   const profileSnapshot = useMemo(
@@ -2353,6 +2391,9 @@ const BarberProfileView = ({
   }
 
   const handleFieldChange = (field, value) => {
+    if (field === 'rating' && !allowRatingEdit) {
+      return;
+    }
     const nextValue = field === 'rating' ? formatRatingValue(value) : value;
     onFieldChange?.(barber.id, field, nextValue);
   };
@@ -2377,7 +2418,12 @@ const BarberProfileView = ({
                 className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
               />
               <div className="w-full">
-                <RatingSlider dense value={barber.rating} onChange={(event) => handleFieldChange('rating', event.target.value)} />
+                <RatingSlider
+                  dense
+                  value={barber.rating}
+                  onChange={allowRatingEdit ? (event) => handleFieldChange('rating', event.target.value) : undefined}
+                  disabled={!allowRatingEdit}
+                />
               </div>
               <input
                 type="password"
@@ -2630,7 +2676,7 @@ const ServicesView = ({
         }
       >
         {workingService ? (
-          <div className="space-y-4">
+                  <div className="space-y-4 w-full">
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
                 <label className="block text-sm text-slate-300">Название</label>
@@ -2743,7 +2789,7 @@ const resolveWeekBucket = (dateValue) => {
   const start = new Date(parsed);
   const offset = (start.getDay() + 6) % 7;
   start.setDate(start.getDate() - offset);
-  return { key: start.toISOString().slice(0, 10), start };
+  return { key: getLocalISODateString(start), start };
 };
 
 const formatWeekRangeLabel = (startDate) => {
@@ -2950,7 +2996,7 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
   );
 };
 
-const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestConfirm }) => {
+const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh, requestConfirm }) => {
   const [newPosition, setNewPosition] = useState({ name: '', rate: '' });
   const [drafts, setDrafts] = useState({});
   const [error, setError] = useState('');
@@ -3016,6 +3062,26 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
       rate: resolvedRate === undefined || resolvedRate === null ? '' : String(resolvedRate),
     };
   };
+
+  const pendingChanges = useMemo(
+    () =>
+      sortedPositions
+        .map((position) => {
+          const draft = getDraft(position);
+          const nextName = draft.name.trim();
+          const nextRate = normalizeCommissionValue(draft.rate);
+          const currentName = (position.name || '').trim();
+          const currentRate = normalizeCommissionValue(position.commissionRate);
+          if (nextName === currentName && nextRate === currentRate) {
+            return null;
+          }
+          return { position, draft };
+        })
+        .filter(Boolean),
+    [sortedPositions, drafts]
+  );
+  const pendingCount = pendingChanges.length;
+  const bulkSaving = savingKey === 'bulk';
 
   const handleSave = async (position) => {
     if (!position?.id) return;
@@ -3176,12 +3242,38 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, requestCo
 
 const RevenueView = ({ apiRequest, barbers = [] }) => {
   const defaultRange = useMemo(() => getCurrentMonthRange(), []);
-  const [filters, setFilters] = useState(() => ({
-    start: toInputDate(defaultRange.start),
-    end: toInputDate(defaultRange.end),
-    barberId: 'all',
-  }));
+  const defaultFilters = useMemo(
+    () => ({
+      start: toInputDate(defaultRange.start),
+      end: toInputDate(defaultRange.end),
+      barberId: 'all',
+    }),
+    [defaultRange.start, defaultRange.end]
+  );
+  const [filters, setFilters] = useLocalStorage('revenue.filters', defaultFilters);
   const [state, setState] = useState({ loading: true, error: '', data: null });
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
+  useEffect(() => {
+    if (!filters) {
+      setFilters(defaultFilters);
+      return;
+    }
+    if (!filters.start || !filters.end) {
+      setFilters((prev) => ({
+        start: prev?.start || defaultFilters.start,
+        end: prev?.end || defaultFilters.end,
+        barberId: prev?.barberId || 'all',
+      }));
+    }
+  }, [filters, defaultFilters, setFilters]);
 
   const barberOptions = useMemo(
     () =>
@@ -3192,11 +3284,11 @@ const RevenueView = ({ apiRequest, barbers = [] }) => {
   );
 
   useEffect(() => {
-    if (filters.barberId === 'all') return;
+    if (!filters || filters.barberId === 'all') return;
     if (!barberOptions.some((option) => option.id === filters.barberId)) {
       setFilters((prev) => ({ ...prev, barberId: 'all' }));
     }
-  }, [filters.barberId, barberOptions]);
+  }, [filters, barberOptions, setFilters]);
 
   const fetchRevenue = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: '' }));
@@ -3227,25 +3319,56 @@ const RevenueView = ({ apiRequest, barbers = [] }) => {
 
   const summary = state.data;
   const items = summary?.items || [];
-  const timeline = summary?.timeline || [];
+  const rawTimeline = useMemo(() => {
+    if (Array.isArray(summary?.timeline)) return summary.timeline;
+    if (summary?.timeline && typeof summary.timeline === 'object') {
+      return Object.entries(summary.timeline).map(([key, value]) => {
+        if (value && typeof value === 'object') {
+          return { date: key, ...value };
+        }
+        return { date: key, gross: value };
+      });
+    }
+    return [];
+  }, [summary?.timeline]);
   const totalGross = summary?.totalGross ?? 0;
   const totalCommission = summary?.totalCommission ?? 0;
   const totalNet = summary?.totalNet ?? totalGross - totalCommission;
-  const chartMax = timeline.reduce((max, point) => Math.max(max, point.gross), 0);
-  const chartMinWidth = Math.max(timeline.length * 72, 320);
+  const parseGrossValue = useCallback((value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (value == null) return 0;
+    const normalized = String(value).replace(/[^0-9.,-]/g, '').replace(',', '.');
+    const numeric = Number(normalized);
+    return Number.isFinite(numeric) ? numeric : 0;
+  }, []);
+  const normalizedTimeline = useMemo(
+    () =>
+      rawTimeline.map((point) => ({
+        ...point,
+        grossValue:
+          parseGrossValue(point?.gross) ||
+          parseGrossValue(point?.Gross) ||
+          parseGrossValue(point?.total) ||
+          parseGrossValue(point?.totalGross) ||
+          parseGrossValue(point?.net),
+      })),
+    [rawTimeline, parseGrossValue]
+  );
+  const chartMax = normalizedTimeline.reduce((max, point) => Math.max(max, point.grossValue), 0);
+  const chartMinWidth = Math.max(normalizedTimeline.length * (isMobile ? 56 : 72), isMobile ? 240 : 320);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       <SectionCard title="Доходы барберов">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="grid grid-cols-2 gap-3 sm:col-span-2 lg:col-span-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:col-span-2 lg:col-span-2">
             <div className="space-y-1">
               <label className="text-xs uppercase tracking-wide text-slate-400">Дата с</label>
               <input
                 type="date"
                 value={filters.start}
                 onChange={(event) => handleFilterChange('start', event.target.value)}
-                className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
+                className="revenue-date-input w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
               />
             </div>
             <div className="space-y-1">
@@ -3254,7 +3377,7 @@ const RevenueView = ({ apiRequest, barbers = [] }) => {
                 type="date"
                 value={filters.end}
                 onChange={(event) => handleFilterChange('end', event.target.value)}
-                className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
+                className="revenue-date-input w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
               />
             </div>
           </div>
@@ -3298,60 +3421,65 @@ const RevenueView = ({ apiRequest, barbers = [] }) => {
                 <p className="rounded-2xl border border-slate-800 p-4 text-sm text-slate-400">Нет выполненных услуг за выбранный период.</p>
               ) : (
                 <>
-                  <div className="hidden overflow-x-auto rounded-2xl border border-slate-800 md:block">
-                    <table className="min-w-full divide-y divide-slate-800 text-sm">
-                      <thead className="bg-slate-900/40 text-slate-400">
-                        <tr>
-                          <th className="px-4 py-3 text-left font-semibold">Барбер</th>
-                          <th className="px-4 py-3 text-right font-semibold">Записей</th>
-                          <th className="px-4 py-3 text-right font-semibold">Выручка</th>
-                          <th className="px-4 py-3 text-right font-semibold">Процент</th>
-                          <th className="px-4 py-3 text-right font-semibold">Выплата</th>
-                          <th className="px-4 py-3 text-right font-semibold">В кассу</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                        {items.map((item) => (
-                          <tr key={item.id} className="hover:bg-slate-900/40">
-                            <td className="px-4 py-3 text-white">{item.name}</td>
-                            <td className="px-4 py-3 text-right text-slate-300">{item.appointments}</td>
-                            <td className="px-4 py-3 text-right text-slate-100">{formatCurrency(item.gross)}</td>
-                            <td className="px-4 py-3 text-right text-slate-300">{formatPercent(item.commissionRate)}</td>
-                            <td className="px-4 py-3 text-right text-emerald-300">{formatCurrency(item.commission)}</td>
-                            <td className="px-4 py-3 text-right text-indigo-300">{formatCurrency(item.net)}</td>
+                  {!isMobile && (
+                    <div className="overflow-x-auto rounded-2xl border border-slate-800">
+                      <table className="min-w-full divide-y divide-slate-800 text-sm">
+                        <thead className="bg-slate-900/40 text-slate-400">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-semibold">Барбер</th>
+                            <th className="px-4 py-3 text-right font-semibold">Записи</th>
+                            <th className="px-4 py-3 text-right font-semibold">Выручка</th>
+                            <th className="px-4 py-3 text-right font-semibold">Комиссия</th>
+                            <th className="px-4 py-3 text-right font-semibold">Выплаты</th>
+                            <th className="px-4 py-3 text-right font-semibold">В кассу</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="space-y-4 md:hidden">
-                    {items.map((item) => (
-                      <div key={item.id} className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-inner shadow-black/20">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-base font-semibold text-white">{item.name}</p>
-                          <span className="text-xs uppercase tracking-wide text-slate-400">{item.appointments} записей</span>
-                        </div>
-                        <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-300">
-                          <div className="rounded-xl border border-slate-800/70 bg-slate-950/40 px-3 py-2">
-                            <p className="text-xs uppercase tracking-wide text-slate-400">Выручка</p>
-                            <p className="text-lg font-semibold text-white">{formatCurrency(item.gross)}</p>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {items.map((item) => (
+                            <tr key={item.id} className="hover:bg-slate-900/40">
+                              <td className="px-4 py-3 text-white">{item.name}</td>
+                              <td className="px-4 py-3 text-right text-slate-300">{item.appointments}</td>
+                              <td className="px-4 py-3 text-right text-slate-100">{formatCurrency(item.gross)}</td>
+                              <td className="px-4 py-3 text-right text-slate-300">{formatPercent(item.commissionRate)}</td>
+                              <td className="px-4 py-3 text-right text-emerald-300">{formatCurrency(item.commission)}</td>
+                              <td className="px-4 py-3 text-right text-indigo-300">{formatCurrency(item.net)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {isMobile && (
+                    <div className="space-y-4 w-full">
+                      {items.map((item) => {
+                        const mobileStats = [
+                          { label: 'Выручка', value: formatCurrency(item.gross), accent: 'text-white', wrapper: 'border-slate-800/70 bg-slate-950/40' },
+                          { label: 'Комиссия', value: formatPercent(item.commissionRate), accent: 'text-slate-100', wrapper: 'border-slate-800/70 bg-slate-950/40' },
+                          { label: 'Выплаты', value: formatCurrency(item.commission), accent: 'text-emerald-300', wrapper: 'border-emerald-900/80 bg-emerald-500/5' },
+                          { label: 'В кассу', value: formatCurrency(item.net), accent: 'text-indigo-200', wrapper: 'border-indigo-900/80 bg-indigo-500/5' },
+                        ];
+                        return (
+                          <div key={item.id} className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-inner shadow-black/20">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-base font-semibold text-white">{item.name}</p>
+                              <span className="text-xs uppercase tracking-wide text-slate-400">{item.appointments} записей</span>
+                            </div>
+                            <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-300">
+                              {mobileStats.map((metric) => (
+                                <div
+                                  key={metric.label}
+                                  className={`rounded-xl border px-3 py-2 ${metric.wrapper}`}
+                                >
+                                  <p className="text-xs uppercase tracking-wide text-slate-400">{metric.label}</p>
+                                  <p className={`text-lg font-semibold ${metric.accent}`}>{metric.value}</p>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                          <div className="rounded-xl border border-slate-800/70 bg-slate-950/40 px-3 py-2">
-                            <p className="text-xs uppercase tracking-wide text-slate-400">Процент</p>
-                            <p className="text-lg font-semibold text-slate-100">{formatPercent(item.commissionRate)}</p>
-                          </div>
-                          <div className="rounded-xl border border-emerald-900/80 bg-emerald-500/5 px-3 py-2">
-                            <p className="text-xs uppercase tracking-wide text-slate-400">Выплата</p>
-                            <p className="text-lg font-semibold text-emerald-300">{formatCurrency(item.commission)}</p>
-                          </div>
-                          <div className="rounded-xl border border-indigo-900/80 bg-indigo-500/5 px-3 py-2">
-                            <p className="text-xs uppercase tracking-wide text-slate-400">В кассу</p>
-                            <p className="text-lg font-semibold text-indigo-200">{formatCurrency(item.net)}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -3360,27 +3488,33 @@ const RevenueView = ({ apiRequest, barbers = [] }) => {
       </SectionCard>
       <SectionCard title="Динамика выручки">
         {state.loading ? (
-          <LoadingState label="Строю график..." />
-        ) : timeline.length === 0 ? (
-          <p className="text-sm text-slate-400">Нет данных для отображения графика.</p>
+          <LoadingState label="Загрузка данных..." />
+        ) : normalizedTimeline.length === 0 ? (
+          <p className="text-sm text-slate-400">Нет данных для выбранного периода.</p>
         ) : (
           <div className="mt-2 overflow-x-auto pb-2">
-            <div className="flex h-56 items-end gap-3" style={{ minWidth: `${chartMinWidth}px` }}>
-              {timeline.map((point) => {
-                const height = chartMax ? Math.max((point.gross / chartMax) * 100, 5) : 0;
+            <div
+              className="flex h-56 items-end gap-3"
+              style={isMobile ? undefined : { minWidth: `${chartMinWidth}px` }}
+            >
+              {normalizedTimeline.map((point, index) => {
+                const safeGross = point.grossValue || 0;
+                const height = chartMax > 0 ? Math.max((safeGross / chartMax) * 100, 5) : safeGross > 0 ? 100 : 5;
                 return (
-                  <div key={point.date} className="flex-1">
+                  <div key={point.date || point.label || index} className="flex-1">
                     <div className="relative flex items-end justify-center">
                       <div
                         className="w-full rounded-t-xl bg-indigo-500/80 shadow-inner shadow-indigo-900/40"
                         style={{ height: `${height}%` }}
                       >
                         <span className="absolute -top-6 text-xs font-semibold text-indigo-100">
-                          {formatCurrency(point.gross)}
+                          {formatCurrency(safeGross)}
                         </span>
                       </div>
                     </div>
-                    <p className="mt-3 text-center text-xs text-slate-400">{formatShortDateLabel(point.date)}</p>
+                    <p className="mt-3 text-center text-xs text-slate-400">
+                      {formatShortDateLabel(point.date || point.label)}
+                    </p>
                   </div>
                 );
               })}
@@ -3525,7 +3659,8 @@ const TimeRangePicker = ({
   buttonClassName = 'w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-left text-sm text-white whitespace-nowrap',
 }) => {
   const [open, setOpen] = useState(false);
-  const [{ start, end }, setDraft] = useState(() => parseTimeRangeValue(value));
+  const [{ start, end }, setDraft] = useState(() => ({ start: '', end: '' }));
+  const [pristineState, setPristineState] = useState({ start: true, end: true });
   const buttonStyle = useMemo(() => {
     const label = value || placeholder || '';
     const length = label.length;
@@ -3542,15 +3677,22 @@ const TimeRangePicker = ({
     return Object.keys(style).length ? style : undefined;
   }, [value, placeholder, buttonClassName]);
 
-  const normalizeHourValue = (inputValue) => {
+  const normalizeTimeValue = (inputValue) => {
     if (!inputValue) return '';
-    const [hours] = inputValue.split(':');
+    const sanitized = sanitizeTimeToken(inputValue);
+    if (sanitized) return sanitized;
+    const [hours] = String(inputValue).split(':');
     if (!hours) return '';
     return `${hours.padStart(2, '0')}:00`;
   };
 
   const handleOpen = () => {
-    setDraft(parseTimeRangeValue(value));
+    const nextRange = parseTimeRangeValue(value);
+    setDraft(nextRange);
+    setPristineState({
+      start: !nextRange.start,
+      end: !nextRange.end,
+    });
     setOpen(true);
   };
 
@@ -3562,8 +3704,23 @@ const TimeRangePicker = ({
   const handleClear = () => {
     onChange?.('0');
     setDraft({ start: '', end: '' });
+    setPristineState({ start: true, end: true });
     setOpen(false);
   };
+
+  const handleTimeInputChange = (field) => (event) => {
+    const inputValue = event.target.value;
+    if (!inputValue) {
+      setDraft((prev) => ({ ...prev, [field]: '' }));
+      setPristineState((prev) => ({ ...prev, [field]: true }));
+      return;
+    }
+    setDraft((prev) => ({ ...prev, [field]: normalizeTimeValue(inputValue) }));
+    setPristineState((prev) => ({ ...prev, [field]: false }));
+  };
+
+  const startInputValue = pristineState.start ? '00:00' : start || '00:00';
+  const endInputValue = pristineState.end ? '00:00' : end || '00:00';
 
   return (
     <>
@@ -3598,9 +3755,9 @@ const TimeRangePicker = ({
               <label className="block text-sm font-medium text-slate-400">Начало</label>
               <input
                 type="time"
-                step="3600"
-                value={start}
-                onChange={(event) => setDraft((prev) => ({ ...prev, start: normalizeHourValue(event.target.value) }))}
+                step="60"
+                value={startInputValue}
+                onChange={handleTimeInputChange('start')}
                 className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-900 px-2 py-2 text-center text-lg text-white"
               />
             </div>
@@ -3609,9 +3766,9 @@ const TimeRangePicker = ({
               <label className="block text-sm font-medium text-slate-400">Окончание</label>
               <input
                 type="time"
-                step="3600"
-                value={end}
-                onChange={(event) => setDraft((prev) => ({ ...prev, end: normalizeHourValue(event.target.value) }))}
+                step="60"
+                value={endInputValue}
+                onChange={handleTimeInputChange('end')}
                 className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-900 px-2 py-2 text-center text-lg text-white"
               />
             </div>
@@ -5303,6 +5460,7 @@ const TablesWorkspace = ({
   dataTables = DEFAULT_DATA_TABLES,
   visibleTableOrder = DEFAULT_VISIBLE_TABLE_ORDER,
   role = ROLE_OWNER,
+  applyFavoriteBarberRule = null,
 }) => {
   const resolvedDataTables = useMemo(
     () => (Array.isArray(dataTables) && dataTables.length ? dataTables : DEFAULT_DATA_TABLES),
@@ -5344,7 +5502,7 @@ const TablesWorkspace = ({
       CustomerName: '',
       Phone: '',
       Barber: pickBarberForUser(currentUser, dropdownOptions.barbers || []),
-      Date: new Date().toISOString().slice(0, 10),
+      Date: getLocalISODateString(),
       Time: '',
       Status: normalizeStatusValue((dropdownOptions.statuses && dropdownOptions.statuses[0]) || 'Активная'),
       Services: '',
@@ -5442,6 +5600,16 @@ const TablesWorkspace = ({
   useEffect(() => {
     fetchTables();
   }, [fetchTables]);
+
+  const refreshPositions = useCallback(async () => {
+    try {
+      const records = await apiRequest('/Positions');
+      setTables((prev) => ({ ...prev, Positions: Array.isArray(records) ? records : [] }));
+    } catch (error) {
+      console.error('Positions refresh failed', error);
+      throw error;
+    }
+  }, [apiRequest]);
 
   useEffect(() => {
     if (!Array.isArray(liveAppointments)) return;
@@ -5605,11 +5773,15 @@ const TablesWorkspace = ({
   };
 
   const fetchClientProfile = useCallback(
-    (client) => {
+    async (client) => {
       if (!client?.Name) return null;
-      return apiRequest(`/user-profile/${encodeURIComponent(client.Name)}`);
+      const payload = await apiRequest(`/user-profile/${encodeURIComponent(client.Name)}`);
+      if (typeof applyFavoriteBarberRule === 'function') {
+        return applyFavoriteBarberRule(payload);
+      }
+      return payload;
     },
-    [apiRequest]
+    [apiRequest, applyFavoriteBarberRule]
   );
 
   const loadAvatarAssets = useCallback(
@@ -5681,6 +5853,7 @@ const TablesWorkspace = ({
               onCreate={onCreatePosition}
               onUpdate={onUpdatePosition}
               onDelete={onDeletePosition}
+              onRefresh={refreshPositions}
               requestConfirm={onRequestConfirm}
             />
           )}
@@ -6354,6 +6527,33 @@ const App = () => {
     [session?.token, handleLogout]
   );
 
+  const applyFavoriteBarberRule = useCallback(
+    async (profilePayload) => {
+      if (!profilePayload || !Array.isArray(profilePayload.appointments) || !profilePayload.user) {
+        return profilePayload;
+      }
+      const favoriteBarber = resolveFavoriteBarberFromAppointments(profilePayload.appointments);
+      const normalizedFavorite = normalizeText(favoriteBarber).toLowerCase();
+      if (!normalizedFavorite) return profilePayload;
+      const normalizedCurrent = normalizeText(profilePayload.user.Barber).toLowerCase();
+      if (normalizedFavorite === normalizedCurrent) return profilePayload;
+      const updatedPayload = { ...profilePayload, user: { ...profilePayload.user, Barber: favoriteBarber } };
+      const userId = getRecordId(profilePayload.user);
+      if (userId) {
+        try {
+          await apiRequest(`/Users/${encodeURIComponent(userId)}`, {
+            method: 'PUT',
+            body: JSON.stringify({ Barber: favoriteBarber }),
+          });
+        } catch (error) {
+          console.warn('Favorite barber auto-assign failed:', error);
+        }
+      }
+      return updatedPayload;
+    },
+    [apiRequest]
+  );
+
   const handleLoadAvatarOptions = useCallback(
     () => apiRequest('/assets/avatars'),
     [apiRequest]
@@ -6481,30 +6681,22 @@ const App = () => {
   }, [session?.token, canUseRealtime]);
 
   const handleCreatePosition = useCallback(
-    async (payload) => {
-      await apiRequest('/Positions', { method: 'POST', body: JSON.stringify(payload) });
-      await fetchAll();
-    },
-    [apiRequest, fetchAll]
+    (payload) => apiRequest('/Positions', { method: 'POST', body: JSON.stringify(payload) }),
+    [apiRequest]
   );
 
   const handleUpdatePosition = useCallback(
-    async (id, payload) => {
-      await apiRequest(`/Positions/${encodeURIComponent(id)}`, {
+    (id, payload) =>
+      apiRequest(`/Positions/${encodeURIComponent(id)}`, {
         method: 'PUT',
         body: JSON.stringify(payload),
-      });
-      await fetchAll();
-    },
-    [apiRequest, fetchAll]
+      }),
+    [apiRequest]
   );
 
   const handleDeletePosition = useCallback(
-    async (id) => {
-      await apiRequest(`/Positions/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      await fetchAll();
-    },
-    [apiRequest, fetchAll]
+    (id) => apiRequest(`/Positions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    [apiRequest]
   );
 
   useEffect(() => {
@@ -6922,12 +7114,13 @@ const App = () => {
       setProfileModal({ open: true, data: null, loading: true });
       try {
         const payload = await apiRequest(`/user-profile/${encodeURIComponent(name)}`);
-        setProfileModal({ open: true, data: payload, loading: false });
+        const processed = await applyFavoriteBarberRule(payload);
+        setProfileModal({ open: true, data: processed, loading: false });
       } catch (error) {
-        setProfileModal({ open: true, data: { error: error.message || 'Не удалось загрузить профиль' }, loading: false });
+        setProfileModal({ open: true, data: { error: error.message || '?? ??????? ????????? ???????' }, loading: false });
       }
     },
-    [apiRequest]
+    [apiRequest, applyFavoriteBarberRule]
   );
 
   const ensureOptions = useCallback(async () => {
@@ -6971,7 +7164,7 @@ const App = () => {
   const handleCreateAppointment = useCallback(async () => {
     try {
       const [options, context] = await Promise.all([ensureOptions(), fetchAppointmentContext()]);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getLocalISODateString();
       const defaultStatus = normalizeStatusValue(options.statuses?.[0] || BOT_SUPPORTED_STATUS_OPTIONS[0] || 'Активная');
       const defaultBarber = pickBarberForUser(session, options.barbers || []);
       setAppointmentModal({
@@ -7120,6 +7313,7 @@ const App = () => {
             dataTables={dataTables}
             visibleTableOrder={visibleTableOrder}
             role={role}
+            applyFavoriteBarberRule={applyFavoriteBarberRule}
           />
         );
       case 'profile':
@@ -7131,6 +7325,7 @@ const App = () => {
             deleteAvatar={handleDeleteAvatar}
             onFieldChange={handleBarberFieldChange}
             onSave={handleSaveBarber}
+            allowRatingEdit={role === ROLE_OWNER}
           />
         );
       case 'system':

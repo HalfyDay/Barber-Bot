@@ -6163,25 +6163,25 @@ const BotControlView = ({
                   )}
                 </p>
               )}
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-nowrap items-stretch gap-1.5 text-xs sm:flex-wrap sm:gap-2 sm:text-sm">
                 <button
                   onClick={onRefreshUpdate}
                   disabled={systemBusy}
-                  className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg border border-slate-600 px-2.5 py-2 text-[11px] text-white whitespace-nowrap hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
                 >
                   Проверить
                 </button>
                 <button
                   onClick={onApplyUpdate}
                   disabled={systemBusy || !updateAvailable}
-                  className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg bg-emerald-600 px-2.5 py-2 text-[11px] text-white whitespace-nowrap hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
                 >
                   {updateButtonLabel}
                 </button>
                 <button
                   onClick={onRestartSystem}
                   disabled={restartDisabled}
-                  className="rounded-lg bg-amber-600 px-3 py-2 text-sm text-white hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg bg-amber-600 px-2.5 py-2 text-[11px] text-white whitespace-nowrap hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
                 >
                   {restartButtonLabel}
                 </button>

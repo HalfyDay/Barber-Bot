@@ -2323,7 +2323,24 @@ app.get("/api/options/appointments", authenticateToken, async (req, res) => {
   }
 });
 app.get("/api/revenue/summary", authenticateToken, async (req, res) => {
-  if (!isOwnerRequest(req)) {
+  const identity = resolveRequestIdentity(req);
+  const isOwner = isOwnerIdentity(identity);
+  const isStaff = isStaffIdentity(identity);
+  const normalizedIdentityBarberId = identity?.barberId
+    ? normalizeText(identity.barberId)
+    : null;
+  let requestedBarberId = normalizeText(req.query.barberId);
+  if (isStaff) {
+    if (!normalizedIdentityBarberId) {
+      return res
+        .status(403)
+        .json({ error: "Профиль сотрудника не привязан к барберу." });
+    }
+    if (requestedBarberId && requestedBarberId !== normalizedIdentityBarberId) {
+      return res.status(403).json({ error: "Недостаточно прав для просмотра доходов." });
+    }
+    requestedBarberId = normalizedIdentityBarberId;
+  } else if (!isOwner) {
     return res
       .status(403)
       .json({ error: "Недостаточно прав для просмотра доходов." });
@@ -2337,7 +2354,6 @@ app.get("/api/revenue/summary", authenticateToken, async (req, res) => {
     }
     const startKey = formatDateOnly(startDate);
     const endKey = formatDateOnly(endDate);
-    const requestedBarberId = normalizeText(req.query.barberId);
     const [barbersList, servicesCatalog, appointments] = await Promise.all([
       getBarbers({ includeInactive: true }),
       getServiceCatalog(true),
@@ -2353,6 +2369,9 @@ app.get("/api/revenue/summary", authenticateToken, async (req, res) => {
     const targetBarber =
       requestedBarberId &&
       barbersList.find((barber) => normalizeText(barber.id) === requestedBarberId);
+    if (isStaff && !targetBarber) {
+      return res.status(404).json({ error: "Барбер не найден." });
+    }
     const barberFilterId = targetBarber ? targetBarber.id : null;
     const barberLookup = buildBarberNameLookup(barbersList);
     const serviceLookup = buildServiceLookup(servicesCatalog);

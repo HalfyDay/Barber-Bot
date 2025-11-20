@@ -104,9 +104,8 @@ const pythonExecutable =
 const botScriptPath = path.join(__dirname, "BotBarberShop.py");
 const restartCommand = () => {
   const nodePath = process.execPath;
-  const entry = process.argv[1] || path.join(__dirname, "server.js");
-  const extraArgs = process.argv.slice(2);
-  return { command: nodePath, args: [entry, ...extraArgs] };
+  const entry = path.join(__dirname, "server.js");
+  return { command: nodePath, args: [entry] };
 };
 app.use(cors());
 app.use(express.json({ limit: "12mb" }));
@@ -1263,14 +1262,13 @@ const scheduleSelfRestart = (delayMs = 500) => {
       const child = spawn(command, args, {
         cwd: __dirname,
         env: process.env,
-        detached: true,
+        detached: false,
         stdio: "inherit",
       });
       child.on("error", (spawnError) => {
         console.error("Failed to relaunch application:", spawnError);
       });
-      child.unref();
-      console.log("[update] Relaunch spawned");
+      console.log("[update] Relaunch spawned in current console");
     } catch (error) {
       console.error("Failed to relaunch application:", error);
     }

@@ -225,7 +225,6 @@ const applyUpdate = async () => {
   try {
     await runCommand(`git fetch ${UPDATE_REMOTE} --tags`);
     await runCommand(`git pull ${UPDATE_REMOTE} ${UPDATE_BRANCH}`);
-    // await runCommand('npm install');
     await runCommand('npm run build:web');
     const python = process.env.BOT_PYTHON_PATH || (os.platform() === 'win32' ? 'python' : 'python3');
     const requirementsPath = path.join(PROJECT_ROOT, 'requirements.txt');

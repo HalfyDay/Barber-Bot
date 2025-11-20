@@ -3001,6 +3001,14 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
   const [drafts, setDrafts] = useState({});
   const [error, setError] = useState('');
   const [savingKey, setSavingKey] = useState(null);
+  const refreshPositionsList = useCallback(async () => {
+    if (typeof onRefresh !== 'function') return;
+    try {
+      await onRefresh();
+    } catch (refreshError) {
+      console.error('Positions refresh failed', refreshError);
+    }
+  }, [onRefresh]);
 
   useEffect(() => {
     setDrafts({});
@@ -3039,6 +3047,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
         orderIndex: sortedPositions.length,
       });
       setNewPosition({ name: '', rate: '' });
+      await refreshPositionsList();
     } catch (createError) {
       setError(createError.message || 'Не удалось создать должность.');
     } finally {
@@ -3063,6 +3072,23 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
     };
   };
 
+  const commitPositionUpdate = async (position, draft) => {
+    if (!position?.id) return;
+    const nextName = (draft?.name || '').trim();
+    if (!nextName) {
+      throw new Error('Название должности не может быть пустым.');
+    }
+    await onUpdate?.(position.id, {
+      name: nextName,
+      commissionRate: normalizeCommissionValue(draft?.rate),
+    });
+    setDrafts((prev) => {
+      const next = { ...prev };
+      delete next[position.id];
+      return next;
+    });
+  };
+
   const pendingChanges = useMemo(
     () =>
       sortedPositions
@@ -3082,32 +3108,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
   );
   const pendingCount = pendingChanges.length;
   const bulkSaving = savingKey === 'bulk';
-
-  const handleSave = async (position) => {
-    if (!position?.id) return;
-    const draft = getDraft(position);
-    if (!draft.name.trim()) {
-      setError('Название должности не может быть пустым.');
-      return;
-    }
-    try {
-      setSavingKey(position.id);
-      setError('');
-      await onUpdate?.(position.id, {
-        name: draft.name.trim(),
-        commissionRate: normalizeCommissionValue(draft.rate),
-      });
-      setDrafts((prev) => {
-        const next = { ...prev };
-        delete next[position.id];
-        return next;
-      });
-    } catch (updateError) {
-      setError(updateError.message || 'Не удалось сохранить должность.');
-    } finally {
-      setSavingKey(null);
-    }
-  };
+  const hasPendingChanges = pendingCount > 0;
 
   const handleDelete = async (position) => {
     if (!position?.id) return;
@@ -3124,8 +3125,25 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
       setSavingKey(position.id);
       setError('');
       await onDelete?.(position.id);
+      await refreshPositionsList();
     } catch (deleteError) {
       setError(deleteError.message || 'Не удалось удалить должность.');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const handleBulkSave = async () => {
+    if (!hasPendingChanges) return;
+    try {
+      setSavingKey('bulk');
+      setError('');
+      for (const change of pendingChanges) {
+        await commitPositionUpdate(change.position, change.draft);
+      }
+      await refreshPositionsList();
+    } catch (bulkError) {
+      setError(bulkError.message || 'Не удалось сохранить изменения.');
     } finally {
       setSavingKey(null);
     }
@@ -3171,69 +3189,86 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
           {sortedPositions.length === 0 && <p className="text-sm text-slate-400">Должности еще не созданы.</p>}
           {sortedPositions.map((position) => {
             const draft = getDraft(position);
+            const isDirty = pendingChanges.some((change) => change.position.id === position.id);
             return (
               <div
                 key={position.id}
                 className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-inner shadow-black/5"
               >
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
-            <div className="flex w-full flex-wrap gap-3 md:flex-1">
-              <input
-                value={draft.name}
-                onChange={(event) => handleDraftChange(position.id, 'name', event.target.value)}
-                className="min-w-[160px] flex-1 rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
-              />
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                value={draft.rate}
-                onChange={(event) => handleDraftChange(position.id, 'rate', event.target.value)}
-                placeholder="Процент, %"
-                className="w-32 flex-none rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
-              />
-            </div>
-            <div className="hidden w-full flex-wrap justify-end gap-2 md:flex md:w-auto md:flex-nowrap">
-              <button
-                type="button"
-                onClick={() => handleSave(position)}
-                disabled={savingKey === position.id}
-                className="flex-1 rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 md:flex-none"
-              >
-                Сохранить
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDelete(position)}
-                disabled={savingKey === position.id}
-                className="flex-1 rounded-2xl border border-rose-600 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-600/10 disabled:cursor-not-allowed disabled:opacity-50 md:flex-none"
-              >
-                Удалить
-              </button>
-            </div>
-          </div>
-          <div className="flex w-full flex-nowrap gap-2 md:hidden">
-            <button
-              type="button"
-              onClick={() => handleSave(position)}
-              disabled={savingKey === position.id}
-              className="min-w-0 flex-1 rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Сохранить
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDelete(position)}
-              disabled={savingKey === position.id}
-              className="min-w-0 flex-1 rounded-2xl border border-rose-600 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-600/10 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Удалить
-            </button>
-          </div>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+                  <div className="flex w-full flex-wrap gap-3 md:flex-1">
+                    <input
+                      value={draft.name}
+                      onChange={(event) => handleDraftChange(position.id, 'name', event.target.value)}
+                      className="min-w-[160px] flex-1 rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={draft.rate}
+                      onChange={(event) => handleDraftChange(position.id, 'rate', event.target.value)}
+                      placeholder="Комиссия, %"
+                      className="w-32 flex-none rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
+                    />
+                  </div>
+                  <div className="hidden w-full flex-wrap items-center justify-end gap-3 md:flex md:w-auto md:flex-nowrap">
+                    {isDirty && (
+                      <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-200">
+                        Есть изменения
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(position)}
+                      disabled={savingKey === position.id || bulkSaving}
+                      className="flex-1 rounded-2xl border border-rose-600 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-600/10 disabled:cursor-not-allowed disabled:opacity-50 md:flex-none"
+                    >
+                      Удалить
+                    </button>
+                  </div>
+                </div>
+                <div className="flex w-full flex-wrap items-center gap-2 md:hidden">
+                  {isDirty && (
+                    <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-200">
+                      Есть изменения
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(position)}
+                    disabled={savingKey === position.id || bulkSaving}
+                    className="min-w-0 flex-1 rounded-2xl border border-rose-600 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-600/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Удалить
+                  </button>
+                </div>
               </div>
             );
           })}
+
+        </div>
+        <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-white">Несохраненные изменения</p>
+              <p className="text-xs text-slate-400">
+                {hasPendingChanges ? `Ожидает сохранения: ${pendingCount}` : 'Нет несохраненных изменений'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleBulkSave}
+              disabled={!hasPendingChanges || bulkSaving}
+              className="flex items-center justify-center rounded-2xl bg-indigo-600 px-6 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {bulkSaving ? 'Сохраняем...' : 'Сохранить изменения'}
+              {hasPendingChanges && !bulkSaving && (
+                <span className="ml-2 rounded-full bg-white/15 px-2 py-0.5 text-xs font-semibold">{pendingCount}</span>
+              )}
+            </button>
+          </div>
         </div>
       </SectionCard>
     </div>
@@ -7260,7 +7295,10 @@ const App = () => {
 
     const preferredTableTarget = pendingTableView;
   const liveUpdatedAt = realtimeSnapshot?.updatedAt || null;
-  const mainClassName = classNames('flex-1 space-y-4 p-4 md:p-8', isMobile ? 'pb-24' : '');
+  const mainClassName = classNames(
+    'flex-1 min-w-0 w-full space-y-4 overflow-x-hidden p-4 md:p-8',
+    isMobile ? 'pb-24' : ''
+  );
 
   const renderActive = () => {
     if (loading) return <LoadingState />;

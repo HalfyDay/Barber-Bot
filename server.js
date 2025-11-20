@@ -1249,6 +1249,7 @@ const scheduleSelfRestart = (delayMs = 500) => {
     )}`,
   );
   setTimeout(async () => {
+    let relaunched = false;
     try {
       stopRealtimeLoop();
       shutdownRealtimeClients();
@@ -1262,17 +1263,28 @@ const scheduleSelfRestart = (delayMs = 500) => {
       const child = spawn(command, args, {
         cwd: __dirname,
         env: process.env,
-        detached: false,
+        detached: true,
+        windowsHide: true,
         stdio: "inherit",
       });
       child.on("error", (spawnError) => {
         console.error("Failed to relaunch application:", spawnError);
       });
+      child.unref();
+      relaunched = true;
       console.log("[update] Relaunch spawned in current console");
     } catch (error) {
       console.error("Failed to relaunch application:", error);
     }
-    process.exit(0);
+    if (relaunched) {
+      process.exit(0);
+    } else {
+      console.error(
+        "[update] Relaunch did not start; keeping current process alive.",
+      );
+      ensureRealtimeLoop();
+      ensureBotProcessState();
+    }
   }, delayMs);
 };
 const ensureBotProcessState = async () => {

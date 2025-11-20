@@ -17,12 +17,12 @@ const ROLE_OPTIONS = [
 ];
 const VIEW_TABS_BY_ROLE = {
   [ROLE_OWNER]: [
-    { id: 'dashboard', label: 'Обзор' },
+    { id: 'dashboard', label: 'Главная' },
     { id: 'tables', label: 'Данные' },
     { id: 'system', label: 'Система' },
   ],
   [ROLE_STAFF]: [
-    { id: 'dashboard', label: 'Обзор' },
+    { id: 'dashboard', label: 'Главная' },
     { id: 'tables', label: 'Данные' },
     { id: 'profile', label: 'Профиль' },
   ],

@@ -95,6 +95,9 @@ const botRuntime = {
   lastExit: null,
   lastError: null,
 };
+let httpServer = null;
+let updateInProgress = false;
+let restartScheduled = false;
 const pythonExecutable =
   process.env.BOT_PYTHON_PATH ||
   (os.platform() === "win32" ? "python" : "python3");
@@ -1087,6 +1090,18 @@ const shutdownRealtimeClients = () => {
   });
   realtimeClients.clear();
 };
+const stopHttpServer = () =>
+  new Promise((resolve) => {
+    if (!httpServer) return resolve();
+    httpServer.close((error) => {
+      if (error) {
+        console.error("HTTP server close error:", error);
+      }
+      httpServer = null;
+      resolve();
+    });
+    setTimeout(() => resolve(), 4000);
+  });
 const requestRealtimePush = (force = false) =>
   runRealtimePush(force).catch((error) =>
     console.error("Realtime push failed:", error),
@@ -1144,6 +1159,58 @@ const stopBotProcess = async () => {
       }
     }, 3000);
   });
+};
+const performSystemUpdate = async () => {
+  if (updateInProgress) {
+    throw new Error("System update is already running");
+  }
+  updateInProgress = true;
+  const realtimeWasRunning = Boolean(realtimeInterval);
+  try {
+    stopRealtimeLoop();
+    shutdownRealtimeClients();
+    await stopBotProcess();
+    const result = await applyUpdate();
+    return result;
+  } catch (error) {
+    if (!restartScheduled) {
+      if (realtimeWasRunning) {
+        ensureRealtimeLoop();
+      }
+      await ensureBotProcessState();
+    }
+    throw error;
+  } finally {
+    updateInProgress = false;
+  }
+};
+const scheduleSelfRestart = (delayMs = 500) => {
+  if (restartScheduled) return;
+  restartScheduled = true;
+  updateInProgress = true;
+  setTimeout(async () => {
+    try {
+      stopRealtimeLoop();
+      shutdownRealtimeClients();
+      await stopBotProcess();
+      await stopHttpServer();
+      await prisma.$disconnect();
+    } catch (error) {
+      console.error("Shutdown for restart failed:", error);
+    }
+    try {
+      const child = spawn(process.execPath, process.argv.slice(1), {
+        cwd: __dirname,
+        env: process.env,
+        detached: true,
+        stdio: "inherit",
+      });
+      child.unref();
+    } catch (error) {
+      console.error("Failed to relaunch application:", error);
+    }
+    process.exit(0);
+  }, delayMs);
 };
 const ensureBotProcessState = async () => {
   const settings = await getBotSettings();
@@ -1375,11 +1442,16 @@ app.post("/api/system/update", authenticateToken, async (req, res) => {
       .status(403)
       .json({ error: "Недостаточно прав для установки обновлений." });
   }
+  if (updateInProgress) {
+    return res
+      .status(429)
+      .json({ error: "Обновление уже выполняется." });
+  }
   try {
-    const result = await applyUpdate();
-    await ensureBotProcessState();
+    const result = await performSystemUpdate();
     const info = await checkForUpdates(true);
-    res.json({ ...result, info });
+    res.json({ ...result, info, restarting: true });
+    scheduleSelfRestart();
   } catch (error) {
     console.error("Update apply error:", error);
     res.status(500).json({
@@ -2496,6 +2568,7 @@ const gracefulShutdown = async () => {
     stopRealtimeLoop();
     shutdownRealtimeClients();
     await stopBotProcess();
+    await stopHttpServer();
     await prisma.$disconnect();
     process.exit(0);
   } catch (error) {
@@ -2514,7 +2587,7 @@ const bootstrap = async () => {
     await ensureBotProcessState();
     await runRealtimePush(true);
     ensureRealtimeLoop();
-    app.listen(PORT, () => {
+    httpServer = app.listen(PORT, () => {
       console.log(`CRM server ready on http://localhost:${PORT}`);
     });
   } catch (error) {

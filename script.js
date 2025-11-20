@@ -4449,13 +4449,32 @@ const SchedulesBoard = ({ rows = [], columns = [], onUpdate, options }) => {
     </div>
   );
 };
-const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [] }) => {
+const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [], onOpenProfile }) => {
   if (!groups.length) {
     return <p className="text-slate-400">Записей пока нет.</p>;
   }
   const visibleColumns = useMemo(() => columns.filter((column) => !hiddenColumns.includes(column.key)), [columns, hiddenColumns]);
   const renderColumnValue = (record, column) => {
     const value = record[column.key];
+    if (column.key === 'CustomerName') {
+      if (!value) return '—';
+      if (typeof onOpenProfile === 'function') {
+        return (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onOpenProfile(value);
+            }}
+            className="text-indigo-300 hover:text-indigo-100"
+          >
+            {value}
+          </button>
+        );
+      }
+      return value;
+    }
     switch (column.key) {
       case 'Date':
         return formatDate(value) || '—';
@@ -4496,11 +4515,13 @@ const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [
               const { start, end } = parseTimeRangeParts(record.Time);
               const servicesList = parseMultiValue(record.Services);
               return (
-                <button
-                  type="button"
+                <div
+                  role="button"
+                  tabIndex={0}
                   key={key}
                   onClick={() => onOpen?.(record, { allowDelete: true })}
-                  className="flex h-full flex-col rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-left transition hover:border-indigo-500/70 hover:bg-slate-900/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 sm:p-4"
+                  onKeyDown={(event) => event.key === 'Enter' && onOpen?.(record, { allowDelete: true })}
+                  className="flex h-full cursor-pointer flex-col rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-left transition hover:border-indigo-500/70 hover:bg-slate-900/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 sm:p-4"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800/70 pb-3">
                     <div className="space-y-1">
@@ -4533,7 +4554,24 @@ const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [
                       </div>
                     ) : (
                       <>
-                        <p className="text-base font-semibold text-white sm:text-lg">{record.CustomerName || 'Без имени'}</p>
+                        {record.CustomerName ? (
+                          typeof onOpenProfile === 'function' ? (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onOpenProfile(record.CustomerName);
+                              }}
+                              className="text-left text-base font-semibold text-white hover:text-indigo-300 sm:text-lg"
+                            >
+                              {record.CustomerName}
+                            </button>
+                          ) : (
+                            <p className="text-base font-semibold text-white sm:text-lg">{record.CustomerName}</p>
+                          )
+                        ) : (
+                          <p className="text-base font-semibold text-white sm:text-lg">Без имени</p>
+                        )}
                         {servicesList.length ? (
                           <div className="flex flex-wrap gap-2">
                             {servicesList.slice(0, 3).map((service, index) => (
@@ -4549,7 +4587,7 @@ const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [
                       </>
                     )}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -4584,7 +4622,7 @@ const DataTable = ({
       : [{ key: 'default', label: null, rows }]
     : [{ key: 'default', label: null, rows }];
   if (isAppointmentsTable) {
-    return <AppointmentsList groups={groupedRows} onOpen={onOpenAppointment} />;
+    return <AppointmentsList groups={groupedRows} onOpen={onOpenAppointment} onOpenProfile={onOpenProfile} />;
   }
   if (tableId === 'Schedules') {
     return <SchedulesBoard rows={rows} columns={visibleColumns} onUpdate={onUpdate} options={options} />;
@@ -6502,7 +6540,7 @@ const App = () => {
     setActiveDataTable('Appointments');
     setConnectionStatus('unknown');
   }, []);
-  const apiRequest = useCallback(
+const apiRequest = useCallback(
     async (endpoint, options = {}) => {
       if (!session?.token) throw new Error('Нет активной сессии');
       const headers = {
@@ -6531,12 +6569,16 @@ const App = () => {
       if (!profilePayload || !Array.isArray(profilePayload.appointments) || !profilePayload.user) {
         return profilePayload;
       }
+      const canAutoAssignFavorite = session?.role === ROLE_OWNER;
       const favoriteBarber = resolveFavoriteBarberFromAppointments(profilePayload.appointments);
       const normalizedFavorite = normalizeText(favoriteBarber).toLowerCase();
       if (!normalizedFavorite) return profilePayload;
       const normalizedCurrent = normalizeText(profilePayload.user.Barber).toLowerCase();
       if (normalizedFavorite === normalizedCurrent) return profilePayload;
       const updatedPayload = { ...profilePayload, user: { ...profilePayload.user, Barber: favoriteBarber } };
+      if (!canAutoAssignFavorite) {
+        return updatedPayload;
+      }
       const userId = getRecordId(profilePayload.user);
       if (userId) {
         try {
@@ -6550,7 +6592,7 @@ const App = () => {
       }
       return updatedPayload;
     },
-    [apiRequest]
+    [apiRequest, session?.role]
   );
   const handleLoadAvatarOptions = useCallback(
     () => apiRequest('/assets/avatars'),

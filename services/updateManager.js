@@ -2,7 +2,7 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const packageJson = require('../package.json');
+const PACKAGE_PATH = path.join(__dirname, '..', 'package.json');
 
 const fetch =
   globalThis.fetch ||
@@ -83,6 +83,15 @@ const fetchBranchHead = async () => {
   };
 };
 
+const readLocalPackage = () => {
+  try {
+    const raw = fs.readFileSync(PACKAGE_PATH, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return { version: '0.0.0' };
+  }
+};
+
 const getLocalCommitHash = async () => {
   try {
     const { stdout } = await runCommand('git rev-parse HEAD');
@@ -126,6 +135,7 @@ const checkForUpdates = async (force = false) => {
   }
 
   const latestSnapshot = releaseInfo || branchInfo;
+  const packageJson = readLocalPackage();
   const currentVersion = packageJson.version || '0.0.0';
   const latestVersion = latestSnapshot?.version || currentVersion;
   const currentCommit = await getLocalCommitHash();
@@ -158,7 +168,8 @@ const checkForUpdates = async (force = false) => {
 const applyUpdate = async () => {
   await runCommand(`git fetch ${UPDATE_REMOTE} --tags`);
   await runCommand(`git pull ${UPDATE_REMOTE} ${UPDATE_BRANCH}`);
-  await runCommand('npm install --omit=dev');
+  await runCommand('npm install');
+  await runCommand('npm run build:web');
   const python = process.env.BOT_PYTHON_PATH || (os.platform() === 'win32' ? 'python' : 'python3');
   if (fs.existsSync(path.join(process.cwd(), 'requirements.txt'))) {
     await runCommand(`${python} -m pip install -r requirements.txt`);

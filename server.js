@@ -1533,6 +1533,32 @@ app.post("/api/system/update", authenticateToken, async (req, res) => {
     });
   }
 });
+app.post("/api/system/restart", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для перезапуска системы." });
+  }
+  if (updateInProgress || restartScheduled) {
+    return res
+      .status(429)
+      .json({ error: "Перезапуск или обновление уже выполняется." });
+  }
+  try {
+    console.log(
+      "[restart] /api/system/restart: user",
+      req.identity?.username || "unknown",
+    );
+    scheduleSelfRestart(400);
+    res.json({ restarting: true });
+  } catch (error) {
+    console.error("[restart] Failed to schedule restart:", error);
+    res.status(500).json({
+      error: "Не удалось запланировать перезапуск.",
+      details: error.message,
+    });
+  }
+});
 app.get("/api/dashboard/overview", authenticateToken, async (req, res) => {
   try {
     const snapshot = await buildDashboardSnapshot(req.identity);

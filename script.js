@@ -781,23 +781,26 @@ const LiveBadge = ({ timestamp, status = 'unknown' }) => {
   if (status === 'unknown' && !timestamp) return null;
   const isOffline = status === 'offline';
   const isOnline = status === 'online';
-  const label = isOffline ? 'OFFLINE' : 'LIVE';
+  const isUpdating = status === 'updating';
+  const label = isOffline ? 'OFFLINE' : isUpdating ? 'UPDATING' : 'LIVE';
   const timeLabel = isOnline && timestamp ? formatLiveTimestamp(timestamp, tickingNow) : null;
+  const badgeToneClass = (() => {
+    if (isOffline) return 'border-rose-500/50 bg-rose-500/10 text-rose-200';
+    if (isUpdating) return 'border-amber-400/60 bg-amber-500/10 text-amber-50';
+    return 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200';
+  })();
+  const dotToneClass = isOffline ? 'bg-rose-400' : isUpdating ? 'animate-pulse bg-amber-300' : 'animate-pulse bg-emerald-400';
+  const timeToneClass = isOffline ? 'text-rose-100/80' : isUpdating ? 'text-amber-100/80' : 'text-emerald-100/80';
   return (
     <span
       className={classNames(
         'flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em]',
-        isOffline ? 'border-rose-500/50 bg-rose-500/10 text-rose-200' : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+        badgeToneClass
       )}
     >
-      <span
-        className={classNames(
-          'h-2 w-2 rounded-full',
-          isOffline ? 'bg-rose-400' : 'animate-pulse bg-emerald-400'
-        )}
-      />
+      <span className={classNames('h-2 w-2 rounded-full', dotToneClass)} />
       {label}
-      {timeLabel && <span className={classNames(isOffline ? 'text-rose-100/80' : 'text-emerald-100/80', 'normal-case tracking-normal')}>{timeLabel}</span>}
+      {timeLabel && <span className={classNames(timeToneClass, 'normal-case tracking-normal')}>{timeLabel}</span>}
     </span>
   );
 };
@@ -6063,6 +6066,8 @@ const BotControlView = ({
   updateInfo,
   onRefreshUpdate,
   onApplyUpdate,
+  onRestartSystem,
+  pendingReloadReason = null,
   systemBusy,
   onUpdateToken = null,
   viewMode = 'bot',
@@ -6123,6 +6128,9 @@ const BotControlView = ({
   const normalizedTokenDraft = (tokenDraft || '').trim();
   const currentTokenValue = token || '';
   const canSaveToken = Boolean(onUpdateToken && normalizedTokenDraft && normalizedTokenDraft !== currentTokenValue);
+  const restartDisabled = systemBusy || typeof onRestartSystem !== 'function';
+  const updateButtonLabel = systemBusy && pendingReloadReason !== 'restart' ? 'Обновление…' : 'Обновить';
+  const restartButtonLabel = systemBusy && pendingReloadReason === 'restart' ? 'Перезапуск…' : 'Перезапуск';
   if (viewMode === 'system') {
     return (
       <div className="space-y-6">
@@ -6168,7 +6176,14 @@ const BotControlView = ({
                   disabled={systemBusy || !updateAvailable}
                   className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {systemBusy ? 'Обновление…' : 'Обновить'}
+                  {updateButtonLabel}
+                </button>
+                <button
+                  onClick={onRestartSystem}
+                  disabled={restartDisabled}
+                  className="rounded-lg bg-amber-600 px-3 py-2 text-sm text-white hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {restartButtonLabel}
                 </button>
               </div>
             </div>
@@ -6430,6 +6445,7 @@ const App = () => {
   const [globalError, setGlobalError] = useState('');
   const [authError, setAuthError] = useState('');
   const [systemBusy, setSystemBusy] = useState(false);
+  const [pendingReloadReason, setPendingReloadReason] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [realtimeSnapshot, setRealtimeSnapshot] = useState(null);
   const [fatalError, setFatalError] = useState(null);
@@ -6565,6 +6581,8 @@ const App = () => {
     setPendingTableView(null);
     setActiveDataTable('Appointments');
     setConnectionStatus('unknown');
+    setPendingReloadReason(null);
+    setSystemBusy(false);
   }, []);
 const apiRequest = useCallback(
     async (endpoint, options = {}) => {
@@ -7268,6 +7286,27 @@ const apiRequest = useCallback(
       setGlobalError(error.message || 'Не удалось удалить запись');
     }
   };
+  const triggerAppReload = useCallback(() => {
+    const reloadWithBypass = () => {
+      const url = new URL(window.location.href);
+      url.searchParams.set('_upd', Date.now().toString());
+      window.location.replace(url.toString());
+    };
+    setTimeout(() => {
+      try {
+        if (navigator?.serviceWorker?.getRegistrations) {
+          navigator.serviceWorker
+            .getRegistrations()
+            .then((registrations) => Promise.all(registrations.map((reg) => reg.update())))
+            .finally(reloadWithBypass);
+          return;
+        }
+      } catch (error) {
+        console.warn('[update] SW reload helper failed:', error);
+      }
+      reloadWithBypass();
+    }, 3500);
+  }, []);
   const handleRefreshUpdate = async () => {
     setSystemBusy(true);
     try {
@@ -7279,7 +7318,7 @@ const apiRequest = useCallback(
       setSystemBusy(false);
     }
   };
-const handleApplyUpdate = async () => {
+  const handleApplyUpdate = async () => {
     console.log('[update] User requested apply update');
     const confirmed = await requestConfirm({
       title: 'Обновить систему?',
@@ -7289,47 +7328,65 @@ const handleApplyUpdate = async () => {
     });
     if (!confirmed) return;
     setSystemBusy(true);
+    setPendingReloadReason('update');
     console.log('[update] Starting apply...');
+    let restartPlanned = false;
     try {
       const result = await apiRequest('/system/update', { method: 'POST' });
       console.log('[update] Apply result:', result);
       setUpdateInfo(normalizeUpdateInfo(result.info || result));
       fetchAll();
-      if (result?.restarting) {
+      restartPlanned = Boolean(result?.restarting);
+      if (restartPlanned) {
         console.log('[update] Restart flagged, reloading page soon...');
-        const reloadWithBypass = () => {
-          const url = new URL(window.location.href);
-          url.searchParams.set('_upd', Date.now().toString());
-          window.location.replace(url.toString());
-        };
-        setTimeout(() => {
-          try {
-            if (navigator?.serviceWorker?.getRegistrations) {
-              navigator.serviceWorker
-                .getRegistrations()
-                .then((regs) => Promise.all(regs.map((reg) => reg.update())))
-                .finally(reloadWithBypass);
-              return;
-            }
-          } catch (error) {
-            console.warn('[update] SW reload helper failed:', error);
-          }
-          reloadWithBypass();
-        }, 3500);
+        triggerAppReload();
+      } else {
+        setPendingReloadReason(null);
       }
     } catch (error) {
       console.error('[update] Apply failed:', error);
       setGlobalError(error.message || 'Не удалось применить обновление');
+      setPendingReloadReason(null);
     } finally {
-      setSystemBusy(false);
+      setSystemBusy(restartPlanned);
       console.log('[update] Apply finished');
+    }
+  };
+  const handleRestartSystem = async () => {
+    console.log('[restart] User requested restart');
+    const confirmed = await requestConfirm({
+      title: 'Перезапустить систему?',
+      message: 'Сайт и бот будут остановлены и запущены заново. Это может занять до нескольких минут.',
+      confirmLabel: 'Перезапуск',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    setSystemBusy(true);
+    setPendingReloadReason('restart');
+    let restartPlanned = false;
+    try {
+      const result = await apiRequest('/system/restart', { method: 'POST' });
+      restartPlanned = Boolean(result?.restarting);
+      if (restartPlanned) {
+        console.log('[restart] Restart scheduled, reloading page soon...');
+        triggerAppReload();
+      } else {
+        setPendingReloadReason(null);
+      }
+    } catch (error) {
+      console.error('[restart] Failed:', error);
+      setGlobalError(error.message || 'Не удалось выполнить перезапуск');
+      setPendingReloadReason(null);
+    } finally {
+      setSystemBusy(restartPlanned);
     }
   };
   if (!session?.token) {
     return <LoginScreen onLogin={handleLogin} error={authError} />;
   }
-    const preferredTableTarget = pendingTableView;
+  const preferredTableTarget = pendingTableView;
   const liveUpdatedAt = realtimeSnapshot?.updatedAt || null;
+  const effectiveLiveStatus = pendingReloadReason ? 'updating' : connectionStatus;
   const mainClassName = classNames(
     'flex-1 min-w-0 w-full space-y-4 overflow-x-hidden p-4 md:p-8',
     isMobile ? 'pb-24' : ''
@@ -7427,6 +7484,8 @@ const handleApplyUpdate = async () => {
             updateInfo={updateInfo}
             onRefreshUpdate={handleRefreshUpdate}
             onApplyUpdate={handleApplyUpdate}
+            onRestartSystem={handleRestartSystem}
+            pendingReloadReason={pendingReloadReason}
             systemBusy={systemBusy}
             token={botToken}
             onUpdateToken={handleUpdateBotToken}
@@ -7479,7 +7538,7 @@ const handleApplyUpdate = async () => {
           session={session}
           onLogout={handleLogout}
           liveUpdatedAt={liveUpdatedAt}
-          liveStatus={connectionStatus}
+          liveStatus={effectiveLiveStatus}
           tabs={viewTabs}
           activeDataTable={activeDataTable}
           onSelectTable={handleSidebarTableChange}
@@ -7495,7 +7554,7 @@ const handleApplyUpdate = async () => {
           onChange={setActiveTab}
           onLogout={handleLogout}
           liveUpdatedAt={liveUpdatedAt}
-          liveStatus={connectionStatus}
+          liveStatus={effectiveLiveStatus}
           activeDataTable={activeDataTable}
           onSelectTable={handleSidebarTableChange}
           tabs={viewTabs}

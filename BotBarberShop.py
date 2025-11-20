@@ -5,6 +5,7 @@ import re
 import sqlite3
 import uuid
 import time
+import sys
 from pathlib import Path
 from collections import defaultdict
 
@@ -105,6 +106,29 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+def _patch_telegram_updater_for_py313() -> None:
+    """Work around python-telegram-bot 20.x on Python 3.13 (missing cleanup slot)."""
+    if sys.version_info < (3, 13):
+        return
+    try:
+        from telegram.ext import _applicationbuilder, _updater
+
+        base_updater = _updater.Updater
+        base_slots = tuple(getattr(base_updater, "__slots__", ()))
+
+        class PatchedUpdater(base_updater):  # type: ignore[misc]
+            __slots__ = base_slots + ("__dict__", "_Updater__polling_cleanup_cb")
+
+        _updater.Updater = PatchedUpdater
+        _applicationbuilder.Updater = PatchedUpdater
+        logger.info("Patched python-telegram-bot Updater for Python 3.13 compatibility.")
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        logger.warning("Failed to patch python-telegram-bot Updater: %s", exc)
+
+
+_patch_telegram_updater_for_py313()
 
 _SCHEMA_INITIALIZED = False
 

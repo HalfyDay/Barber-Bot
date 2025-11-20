@@ -17,12 +17,12 @@ const ROLE_OPTIONS = [
 ];
 const VIEW_TABS_BY_ROLE = {
   [ROLE_OWNER]: [
-    { id: 'dashboard', label: 'Главная' },
+    { id: 'dashboard', label: 'Обзор' },
     { id: 'tables', label: 'Данные' },
     { id: 'system', label: 'Система' },
   ],
   [ROLE_STAFF]: [
-    { id: 'dashboard', label: 'Главная' },
+    { id: 'dashboard', label: 'Обзор' },
     { id: 'tables', label: 'Данные' },
     { id: 'profile', label: 'Профиль' },
   ],
@@ -7297,7 +7297,25 @@ const handleApplyUpdate = async () => {
       fetchAll();
       if (result?.restarting) {
         console.log('[update] Restart flagged, reloading page soon...');
-        setTimeout(() => window.location.reload(), 1500);
+        const reloadWithBypass = () => {
+          const url = new URL(window.location.href);
+          url.searchParams.set('_upd', Date.now().toString());
+          window.location.replace(url.toString());
+        };
+        setTimeout(() => {
+          try {
+            if (navigator?.serviceWorker?.getRegistrations) {
+              navigator.serviceWorker
+                .getRegistrations()
+                .then((regs) => Promise.all(regs.map((reg) => reg.update())))
+                .finally(reloadWithBypass);
+              return;
+            }
+          } catch (error) {
+            console.warn('[update] SW reload helper failed:', error);
+          }
+          reloadWithBypass();
+        }, 3500);
       }
     } catch (error) {
       console.error('[update] Apply failed:', error);

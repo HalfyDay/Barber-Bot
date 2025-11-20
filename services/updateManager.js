@@ -59,6 +59,7 @@ const versionToTuple = (value) =>
   normalizeVersion(value)
     .split(/\./)
     .map((part) => Number(part.replace(/[^0-9]/g, '')) || 0);
+const isSemverish = (value = '') => /^\d+(\.\d+){0,2}$/.test(normalizeVersion(value));
 const compareVersions = (current, latest) => {
   const currTuple = versionToTuple(current);
   const nextTuple = versionToTuple(latest);
@@ -187,9 +188,10 @@ const checkForUpdates = async (force = false) => {
   const latestCommitShort = latestCommit ? latestCommit.slice(0, 7) : null;
   const versionComparison = compareVersions(currentVersion, latestVersion);
   const commitDiff = Boolean(latestCommit && currentCommit && latestCommit !== currentCommit);
+  const semverComparable = isSemverish(currentVersion) && isSemverish(latestVersion);
   const currentVersionLabel = currentCommitShort ? `${currentVersion} (${currentCommitShort})` : currentVersion;
   const latestVersionLabel = latestCommitShort ? `${latestVersion} (${latestCommitShort})` : latestVersion;
-  const updateAvailable = versionComparison < 0 || commitDiff;
+  const updateAvailable = commitDiff || (semverComparable && versionComparison < 0);
   const info = {
     currentVersion,
     latestVersion,

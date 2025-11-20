@@ -183,12 +183,20 @@ const checkForUpdates = async (force = false) => {
   const latestVersion = latestSnapshot?.version || currentVersion;
   const currentCommit = await getLocalCommitHash();
   const latestCommit = branchInfo?.commit || releaseInfo?.commit || null;
+  const currentCommitShort = currentCommit ? currentCommit.slice(0, 7) : null;
+  const latestCommitShort = latestCommit ? latestCommit.slice(0, 7) : null;
   const versionComparison = compareVersions(currentVersion, latestVersion);
   const commitDiff = Boolean(latestCommit && currentCommit && latestCommit !== currentCommit);
+  const currentVersionLabel = currentCommitShort ? `${currentVersion} (${currentCommitShort})` : currentVersion;
+  const latestVersionLabel = latestCommitShort ? `${latestVersion} (${latestCommitShort})` : latestVersion;
   const updateAvailable = versionComparison < 0 || commitDiff;
   const info = {
     currentVersion,
     latestVersion,
+    currentVersionLabel,
+    latestVersionLabel,
+    currentCommitShort,
+    latestCommitShort,
     updateAvailable,
     commitChanged: commitDiff,
     currentCommit,

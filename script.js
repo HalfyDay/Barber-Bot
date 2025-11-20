@@ -17,12 +17,12 @@ const ROLE_OPTIONS = [
 ];
 const VIEW_TABS_BY_ROLE = {
   [ROLE_OWNER]: [
-    { id: 'dashboard', label: 'Обзор' },
+    { id: 'dashboard', label: 'Главная' },
     { id: 'tables', label: 'Данные' },
     { id: 'system', label: 'Система' },
   ],
   [ROLE_STAFF]: [
-    { id: 'dashboard', label: 'Обзор' },
+    { id: 'dashboard', label: 'Главная' },
     { id: 'tables', label: 'Данные' },
     { id: 'profile', label: 'Профиль' },
   ],
@@ -6108,8 +6108,10 @@ const BotControlView = ({
     }
   }, [onUpdateToken, tokenDraft]);
   const updateAvailable = Boolean(updateInfo?.available ?? updateInfo?.updateAvailable);
-  const currentVersionLabel = updateInfo?.currentVersion || updateInfo?.version || '—';
-  const latestVersionLabel = updateInfo?.latestVersion || updateInfo?.version || '—';
+  const currentVersionLabel =
+    updateInfo?.currentVersionLabel || updateInfo?.currentVersion || updateInfo?.version || '-';
+  const latestVersionLabel =
+    updateInfo?.latestVersionLabel || updateInfo?.latestVersion || updateInfo?.version || '-';
   const checkedAtLabel = updateInfo?.checkedAt ? formatDate(updateInfo.checkedAt) : '—';
   const publishedAtLabel = updateInfo?.publishedAt ? formatDate(updateInfo.publishedAt) : null;
   const updateStatusLabel =
@@ -7293,6 +7295,10 @@ const handleApplyUpdate = async () => {
       console.log('[update] Apply result:', result);
       setUpdateInfo(normalizeUpdateInfo(result.info || result));
       fetchAll();
+      if (result?.restarting) {
+        console.log('[update] Restart flagged, reloading page soon...');
+        setTimeout(() => window.location.reload(), 1500);
+      }
     } catch (error) {
       console.error('[update] Apply failed:', error);
       setGlobalError(error.message || 'Не удалось применить обновление');

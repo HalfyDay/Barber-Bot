@@ -1263,22 +1263,19 @@ const scheduleSelfRestart = (delayMs = 500) => {
       const child = spawn(command, args, {
         cwd: __dirname,
         env: process.env,
-        detached: true,
-        windowsHide: true,
+        detached: false,
+        windowsHide: false,
         stdio: "inherit",
       });
       child.on("error", (spawnError) => {
         console.error("Failed to relaunch application:", spawnError);
       });
-      child.unref();
       relaunched = true;
       console.log("[update] Relaunch spawned in current console");
     } catch (error) {
       console.error("Failed to relaunch application:", error);
     }
-    if (relaunched) {
-      process.exit(0);
-    } else {
+    if (!relaunched) {
       console.error(
         "[update] Relaunch did not start; keeping current process alive.",
       );

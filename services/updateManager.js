@@ -15,6 +15,45 @@ const UPDATE_CACHE_SECONDS = Number(process.env.UPDATE_CACHE_SECONDS || 600);
 
 let cachedUpdate = null;
 
+const getWorkingTreeStatus = async () => {
+  try {
+    const { stdout } = await runCommand('git status --porcelain');
+    return stdout.trim();
+  } catch (error) {
+    console.warn('[update] git status failed:', error.message);
+    return '';
+  }
+};
+
+const stashWorkingTree = async () => {
+  const status = await getWorkingTreeStatus();
+  if (!status) return null;
+  console.log('[update] Working tree is dirty, creating stash before pull...');
+  try {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const message = `auto-update-${stamp}`;
+    const { stdout } = await runCommand(`git stash push -u -m "${message}"`);
+    const match = stdout.match(/(stash@\{[^}]+\})/);
+    const ref = match ? match[1] : null;
+    console.log(`[update] Stashed changes${ref ? ` as ${ref}` : ''}`);
+    return ref;
+  } catch (error) {
+    console.error('[update] Failed to stash changes:', error.message);
+    throw new Error('Не удалось подготовить репозиторий к обновлению (stash).');
+  }
+};
+
+const popStash = async (stashRef) => {
+  if (!stashRef) return;
+  try {
+    console.log(`[update] Restoring stash ${stashRef}...`);
+    await runCommand(`git stash pop ${stashRef}`);
+    console.log('[update] Stash restored');
+  } catch (error) {
+    console.error('[update] Failed to restore stash:', error.message);
+  }
+};
+
 const normalizeVersion = (value = '') => value.toString().trim().replace(/^v/, '');
 const versionToTuple = (value) =>
   normalizeVersion(value)
@@ -171,20 +210,27 @@ const checkForUpdates = async (force = false) => {
 
 const applyUpdate = async () => {
   console.log("[update] applying update...");
-  await runCommand(`git fetch ${UPDATE_REMOTE} --tags`);
-  await runCommand(`git pull ${UPDATE_REMOTE} ${UPDATE_BRANCH}`);
-  await runCommand('npm install');
-  await runCommand('npm run build:web');
-  const python = process.env.BOT_PYTHON_PATH || (os.platform() === 'win32' ? 'python' : 'python3');
-  if (fs.existsSync(path.join(process.cwd(), 'requirements.txt'))) {
-    await runCommand(`${python} -m pip install -r requirements.txt`);
+  const stashRef = await stashWorkingTree();
+  try {
+    await runCommand(`git fetch ${UPDATE_REMOTE} --tags`);
+    await runCommand(`git pull ${UPDATE_REMOTE} ${UPDATE_BRANCH}`);
+    await runCommand('npm install');
+    await runCommand('npm run build:web');
+    const python = process.env.BOT_PYTHON_PATH || (os.platform() === 'win32' ? 'python' : 'python3');
+    if (fs.existsSync(path.join(process.cwd(), 'requirements.txt'))) {
+      await runCommand(`${python} -m pip install -r requirements.txt`);
+    }
+    console.log("[update] apply complete");
+    cachedUpdate = null;
+    return {
+      success: true,
+      completedAt: new Date().toISOString(),
+    };
+  } finally {
+    if (stashRef) {
+      await popStash(stashRef);
+    }
   }
-  console.log("[update] apply complete");
-  cachedUpdate = null;
-  return {
-    success: true,
-    completedAt: new Date().toISOString(),
-  };
 };
 
 module.exports = {

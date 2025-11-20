@@ -2,7 +2,8 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const PACKAGE_PATH = path.join(__dirname, '..', 'package.json');
+const PROJECT_ROOT = path.join(__dirname, '..');
+const PACKAGE_PATH = path.join(PROJECT_ROOT, 'package.json');
 
 const fetch =
   globalThis.fetch ||
@@ -73,7 +74,7 @@ const compareVersions = (current, latest) => {
   return 0;
 };
 
-const runCommand = (command, cwd = process.cwd()) =>
+const runCommand = (command, cwd = PROJECT_ROOT) =>
   new Promise((resolve, reject) => {
     console.log(`[update] run: ${command}`);
     exec(command, { cwd }, (error, stdout, stderr) => {
@@ -227,8 +228,9 @@ const applyUpdate = async () => {
     await runCommand('npm install');
     await runCommand('npm run build:web');
     const python = process.env.BOT_PYTHON_PATH || (os.platform() === 'win32' ? 'python' : 'python3');
-    if (fs.existsSync(path.join(process.cwd(), 'requirements.txt'))) {
-      await runCommand(`${python} -m pip install -r requirements.txt`);
+    const requirementsPath = path.join(PROJECT_ROOT, 'requirements.txt');
+    if (fs.existsSync(requirementsPath)) {
+      await runCommand(`${python} -m pip install -r "${requirementsPath}"`);
     }
     console.log("[update] apply complete");
     cachedUpdate = null;

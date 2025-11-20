@@ -102,6 +102,12 @@ const pythonExecutable =
   process.env.BOT_PYTHON_PATH ||
   (os.platform() === "win32" ? "python" : "python3");
 const botScriptPath = path.join(__dirname, "BotBarberShop.py");
+const restartCommand = () => {
+  const nodePath = process.execPath;
+  const entry = process.argv[1] || path.join(__dirname, "server.js");
+  const extraArgs = process.argv.slice(2);
+  return { command: nodePath, args: [entry, ...extraArgs] };
+};
 app.use(cors());
 app.use(express.json({ limit: "12mb" }));
 app.use(express.static(path.join(__dirname)));
@@ -894,6 +900,8 @@ const buildDashboardSnapshot = async (identity = null) => {
     todaysAppointments,
     confirmedYear,
     blockedClients,
+    earningsMonth: null,
+    positionName: null,
   };
   const snapshot = {
     stats,
@@ -933,6 +941,46 @@ const buildDashboardSnapshot = async (identity = null) => {
     const staffUsers = users.filter((user) =>
       matchesIdentityBarber(user.Barber, identity),
     );
+    const staffBarber =
+      barbers.find(
+        (barber) =>
+          barber.id &&
+          identity?.barberId &&
+          String(barber.id) === String(identity.barberId),
+      ) || null;
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStartKey = formatDateOnly(monthStart);
+    const serviceLookup = buildServiceLookup(services);
+    let staffMonthlyGross = 0;
+    let staffMonthlyCommission = 0;
+    staffAppointments.forEach((appt) => {
+      if (!isCompletedStatus(appt.Status)) return;
+      if (!appt.Date || appt.Date < monthStartKey) return;
+      const serviceNames = splitServiceList(appt.Services);
+      if (!serviceNames.length) return;
+      let appointmentGross = 0;
+      serviceNames.forEach((serviceName) => {
+        const service = serviceLookup.get(canonicalizeKey(serviceName));
+        if (!service) return;
+        const price = getServicePriceForBarber(
+          service,
+          staffBarber?.id || identity?.barberId,
+        );
+        const numericPrice = Number(price);
+        if (!Number.isFinite(numericPrice) || numericPrice <= 0) return;
+        appointmentGross += numericPrice;
+      });
+      if (!appointmentGross) return;
+      const commissionRate = Number(
+        staffBarber?.position?.commissionRate ?? 0,
+      );
+      const commissionValue = appointmentGross * (commissionRate / 100);
+      staffMonthlyGross += appointmentGross;
+      staffMonthlyCommission += commissionValue;
+    });
+    const staffPositionName = normalizeText(
+      staffBarber?.position?.name || staffBarber?.position?.title || "",
+    );
     return {
       stats: {
         totalUsers: staffUsers.length,
@@ -940,6 +988,10 @@ const buildDashboardSnapshot = async (identity = null) => {
         todaysAppointments: staffTodays,
         confirmedYear: staffConfirmedYear,
         blockedClients: staffBlocked,
+        earningsMonth: Math.round(
+          staffMonthlyGross - staffMonthlyCommission,
+        ),
+        positionName: staffPositionName || null,
       },
       appointments: { upcoming: staffUpcoming, history: staffHistory },
       clients,
@@ -1167,10 +1219,13 @@ const performSystemUpdate = async () => {
   updateInProgress = true;
   const realtimeWasRunning = Boolean(realtimeInterval);
   try {
+    console.log("[update] performSystemUpdate: stopping services...");
     stopRealtimeLoop();
     shutdownRealtimeClients();
     await stopBotProcess();
+    console.log("[update] performSystemUpdate: applying update...");
     const result = await applyUpdate();
+    console.log("[update] performSystemUpdate: update applied");
     return result;
   } catch (error) {
     if (!restartScheduled) {
@@ -1188,6 +1243,12 @@ const scheduleSelfRestart = (delayMs = 500) => {
   if (restartScheduled) return;
   restartScheduled = true;
   updateInProgress = true;
+  const { command, args } = restartCommand();
+  console.log(
+    `[update] Scheduling self-restart in ${delayMs}ms with: ${command} ${args.join(
+      " ",
+    )}`,
+  );
   setTimeout(async () => {
     try {
       stopRealtimeLoop();
@@ -1199,13 +1260,17 @@ const scheduleSelfRestart = (delayMs = 500) => {
       console.error("Shutdown for restart failed:", error);
     }
     try {
-      const child = spawn(process.execPath, process.argv.slice(1), {
+      const child = spawn(command, args, {
         cwd: __dirname,
         env: process.env,
         detached: true,
         stdio: "inherit",
       });
+      child.on("error", (spawnError) => {
+        console.error("Failed to relaunch application:", spawnError);
+      });
       child.unref();
+      console.log("[update] Relaunch spawned");
     } catch (error) {
       console.error("Failed to relaunch application:", error);
     }
@@ -1448,6 +1513,7 @@ app.post("/api/system/update", authenticateToken, async (req, res) => {
       .json({ error: "Обновление уже выполняется." });
   }
   try {
+    console.log("[update] /api/system/update: user", req.identity?.username || "unknown");
     const result = await performSystemUpdate();
     const info = await checkForUpdates(true);
     res.json({ ...result, info, restarting: true });

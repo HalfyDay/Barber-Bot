@@ -35,9 +35,13 @@ const compareVersions = (current, latest) => {
 
 const runCommand = (command, cwd = process.cwd()) =>
   new Promise((resolve, reject) => {
+    console.log(`[update] run: ${command}`);
     exec(command, { cwd }, (error, stdout, stderr) => {
       if (error) {
         return reject(new Error(`${command} >> ${stderr || error.message}`));
+      }
+      if (stdout?.trim()) {
+        console.log(`[update] ${command} >> ${stdout.trim()}`);
       }
       resolve({ stdout, stderr });
     });
@@ -166,6 +170,7 @@ const checkForUpdates = async (force = false) => {
 };
 
 const applyUpdate = async () => {
+  console.log("[update] applying update...");
   await runCommand(`git fetch ${UPDATE_REMOTE} --tags`);
   await runCommand(`git pull ${UPDATE_REMOTE} ${UPDATE_BRANCH}`);
   await runCommand('npm install');
@@ -174,6 +179,7 @@ const applyUpdate = async () => {
   if (fs.existsSync(path.join(process.cwd(), 'requirements.txt'))) {
     await runCommand(`${python} -m pip install -r requirements.txt`);
   }
+  console.log("[update] apply complete");
   cachedUpdate = null;
   return {
     success: true,

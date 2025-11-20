@@ -17,12 +17,12 @@ const ROLE_OPTIONS = [
 ];
 const VIEW_TABS_BY_ROLE = {
   [ROLE_OWNER]: [
-    { id: 'dashboard', label: 'Обзор' },
+    { id: 'dashboard', label: 'Главная' },
     { id: 'tables', label: 'Данные' },
     { id: 'system', label: 'Система' },
   ],
   [ROLE_STAFF]: [
-    { id: 'dashboard', label: 'Обзор' },
+    { id: 'dashboard', label: 'Главная' },
     { id: 'tables', label: 'Данные' },
     { id: 'profile', label: 'Профиль' },
   ],
@@ -98,6 +98,11 @@ const formatRatingValue = (value) => String(clampRatingValue(value));
 let avatarOptionsCache = null;
 const YEAR_IN_MS = 365 * 24 * 60 * 60 * 1000;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const formatCurrencyValue = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return value ?? '—';
+  return numeric.toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
+};
 const getLocalISODateString = (value = new Date()) => {
   const date = value instanceof Date ? value : new Date(value);
   if (!date || Number.isNaN(date.getTime())) return '';
@@ -1384,7 +1389,8 @@ const DashboardView = ({
   if (!data) return <LoadingState />;
   const stats = data.stats || {};
   const upcomingRaw = data.appointments?.upcoming || [];
-  const restrictUpcomingToStaff = currentUser?.role === ROLE_STAFF;
+  const isStaffView = currentUser?.role === ROLE_STAFF;
+  const restrictUpcomingToStaff = isStaffView;
   const staffNameSet = useMemo(() => {
     if (!restrictUpcomingToStaff) return null;
     const pool = [
@@ -1499,18 +1505,36 @@ const DashboardView = ({
             accent="text-emerald-300"
             onClick={resolveStatHandler('Appointments')}
           />
-          <StatCard
-            label="Подтверждено за год"
-            value={stats.confirmedYear ?? 0}
-            accent="text-fuchsia-300"
-            onClick={resolveStatHandler('Appointments')}
-          />
-          <StatCard
-            label="На сегодня"
-            value={stats.todaysAppointments ?? 0}
-            accent="text-cyan-300"
-            onClick={resolveStatHandler('Appointments')}
-          />
+          {isStaffView ? (
+            <>
+              <StatCard
+                label="Заработано за месяц"
+                value={stats.earningsMonth == null ? '—' : formatCurrencyValue(stats.earningsMonth)}
+                accent="text-amber-200"
+                onClick={resolveStatHandler('Revenue')}
+              />
+              <StatCard
+                label="Мой уровень"
+                value={stats.positionName || '—'}
+                accent="text-indigo-200"
+              />
+            </>
+          ) : (
+            <>
+              <StatCard
+                label="Подтверждено за год"
+                value={stats.confirmedYear ?? 0}
+                accent="text-fuchsia-300"
+                onClick={resolveStatHandler('Appointments')}
+              />
+              <StatCard
+                label="На сегодня"
+                value={stats.todaysAppointments ?? 0}
+                accent="text-cyan-300"
+                onClick={resolveStatHandler('Appointments')}
+              />
+            </>
+          )}
         </div>
       </SectionCard>
       <SectionCard title="Ближайшие записи" actions={upcomingActions}>
@@ -6734,18 +6758,42 @@ const apiRequest = useCallback(
   );
   useEffect(() => {
     if (!realtimeSnapshot) return;
+    const isStaffMode = role === ROLE_STAFF;
+    const staffNameSet = (() => {
+      if (!isStaffMode) return null;
+      const pool = [
+        session?.barberName,
+        session?.displayName,
+        session?.username,
+        currentBarber?.name,
+        currentBarber?.nickname,
+        currentBarber?.login,
+      ];
+      const normalized = pool
+        .map((value) => canonicalizeName(value).toLowerCase())
+        .filter(Boolean);
+      return normalized.length ? new Set(normalized) : null;
+    })();
     setDashboard((prev) => {
       const nextStats = { ...(prev?.stats || {}), ...(realtimeSnapshot.stats || {}) };
+      let nextUpcoming = realtimeSnapshot.upcoming || prev?.appointments?.upcoming || [];
+      if (isStaffMode && staffNameSet && nextUpcoming?.length) {
+        nextUpcoming = nextUpcoming.filter((appt) => {
+          const candidate = canonicalizeName(appt.Barber).toLowerCase();
+          return candidate && staffNameSet.has(candidate);
+        });
+        nextStats.activeAppointments = nextUpcoming.length;
+      }
       const nextAppointments = {
         ...(prev?.appointments || {}),
-        upcoming: realtimeSnapshot.upcoming || prev?.appointments?.upcoming || [],
+        upcoming: nextUpcoming,
       };
       if (!prev) {
         return { stats: nextStats, appointments: nextAppointments };
       }
       return { ...prev, stats: nextStats, appointments: nextAppointments };
     });
-  }, [realtimeSnapshot]);
+  }, [realtimeSnapshot, role, session?.barberName, session?.displayName, session?.username, currentBarber?.name, currentBarber?.nickname, currentBarber?.login]);
   useEffect(() => {
     const handleGlobalError = (event) => {
       const detail = event?.reason || event?.error;
@@ -7229,7 +7277,8 @@ const apiRequest = useCallback(
       setSystemBusy(false);
     }
   };
-  const handleApplyUpdate = async () => {
+const handleApplyUpdate = async () => {
+    console.log('[update] User requested apply update');
     const confirmed = await requestConfirm({
       title: 'Обновить систему?',
       message: 'CRM и бот будут обновлены до последней версии. Перезапуск может занять несколько минут.',
@@ -7238,14 +7287,18 @@ const apiRequest = useCallback(
     });
     if (!confirmed) return;
     setSystemBusy(true);
+    console.log('[update] Starting apply...');
     try {
       const result = await apiRequest('/system/update', { method: 'POST' });
+      console.log('[update] Apply result:', result);
       setUpdateInfo(normalizeUpdateInfo(result.info || result));
       fetchAll();
     } catch (error) {
+      console.error('[update] Apply failed:', error);
       setGlobalError(error.message || 'Не удалось применить обновление');
     } finally {
       setSystemBusy(false);
+      console.log('[update] Apply finished');
     }
   };
   if (!session?.token) {

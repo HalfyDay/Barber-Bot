@@ -3935,7 +3935,7 @@ const ColumnMenu = ({ columns, hiddenColumns = [], onToggle }) => {
   const ref = useRef(null);
   useOutsideClick(ref, open ? () => setOpen(false) : null);
   return (
-    <div className="relative w-full sm:w-auto">
+    <div className="relative z-40 w-full sm:w-auto">
       <button
         onClick={() => setOpen((prev) => !prev)}
         className="flex w-full items-center justify-center rounded-lg border border-slate-600 px-3 py-2 text-sm text-white sm:w-auto"
@@ -3945,7 +3945,7 @@ const ColumnMenu = ({ columns, hiddenColumns = [], onToggle }) => {
       {open && (
         <div
           ref={ref}
-          className="absolute left-0 z-30 mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 shadow-2xl sm:left-auto sm:right-0"
+          className="absolute left-0 z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 shadow-2xl sm:left-auto sm:right-0"
         >
           {columns.map((column) => (
             <label key={column.key} className="flex items-center gap-2 text-sm text-slate-200">
@@ -4123,7 +4123,7 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset }) =
   const ref = useRef(null);
   useOutsideClick(ref, open ? () => setOpen(false) : null);
   return (
-    <div className="relative w-full sm:w-auto">
+    <div className="relative z-40 w-full sm:w-auto">
       <button
         onClick={() => setOpen((prev) => !prev)}
         className="flex h-11 w-full items-center justify-center rounded-xl border border-slate-600 px-3 text-sm text-white sm:w-auto"
@@ -4133,7 +4133,7 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset }) =
       {open && (
         <div
           ref={ref}
-          className="absolute left-0 z-30 mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 shadow-2xl sm:left-auto sm:right-0"
+          className="absolute left-0 z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 shadow-2xl"
         >
           {statuses.length === 0 && <p className="text-sm text-slate-500">Нет статусов</p>}
           {statuses.map((status) => (

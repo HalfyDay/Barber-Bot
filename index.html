@@ -5,8 +5,76 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Barber Bot CRM</title>
     <!-- React + ReactDOM (local fallback for Telegram in-app browser stability) -->
+    <script>
+      (function () {
+        const sendLog = (data) => {
+          try {
+            const payload = {
+              ...data,
+              url: window.location ? window.location.href : '',
+              referrer: document.referrer || '',
+              ua: navigator.userAgent || '',
+              timestamp: new Date().toISOString(),
+            };
+            fetch('/api/log', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+              keepalive: true,
+            }).catch(() => {});
+          } catch (err) {
+            // ignore logging failures
+          }
+        };
+        window.__logClient = sendLog;
+        window.addEventListener(
+          'error',
+          (event) => {
+            const isResourceError = event.target && event.target !== window;
+            const isGenericScriptError = (event.message || '').trim() === 'Script error.' && !event.filename;
+            const scripts =
+              isGenericScriptError && document?.scripts
+                ? Array.from(document.scripts || [])
+                    .slice(0, 25)
+                    .map((el) => ({
+                      src: el.src || '(inline)',
+                      async: !!el.async,
+                      defer: !!el.defer,
+                      crossOrigin: el.crossOrigin || '',
+                      type: el.type || '',
+                    }))
+                : undefined;
+            sendLog({
+              level: 'error',
+              type: isResourceError ? 'resource-error' : 'error',
+              message: event.message || event.error?.message || '',
+              source: event.filename || event.target?.src || event.target?.href || '',
+              line: event.lineno || 0,
+              col: event.colno || 0,
+              stack: event.error?.stack ? event.error.stack.slice(0, 2000) : '',
+              tagName: isResourceError ? event.target?.tagName : '',
+              scripts,
+            });
+          },
+          true
+        );
+        window.addEventListener('unhandledrejection', (event) => {
+          const reason = event.reason || {};
+          sendLog({
+            level: 'error',
+            type: 'unhandledrejection',
+            message: reason?.message || String(reason || ''),
+            stack: reason?.stack ? reason.stack.slice(0, 2000) : '',
+          });
+        });
+      })();
+    </script>
     <script src="vendor/react.production.min.js"></script>
     <script src="vendor/react-dom.production.min.js"></script>
+    <script>
+      window.__logClient &&
+        window.__logClient({ level: 'info', type: 'bootstrap', stage: 'react-loaded' });
+    </script>
     <!-- ???????????????? ??????"?' -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- ????????>???????? ???'??>?? ????????>?? -->
@@ -25,7 +93,11 @@
         window.__BARBER_API_BASE__ = window.location.origin + '/api';
     </script>
     <!-- ?????+?????????<?? ?"???????'?????-?+???????> -->
-    <script src="script.bundle.js" defer></script>
+    <script
+      src="script.bundle.js"
+      defer
+      onerror="window.__logClient && window.__logClient({ level: 'error', type: 'resource-error', stage: 'bundle-load', message: 'Failed to load script.bundle.js' })"
+    ></script>
     <script>
         if ("serviceWorker" in navigator) {
             window.addEventListener("load", () => {

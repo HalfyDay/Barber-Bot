@@ -23,6 +23,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "change-me-secret";
 const BACKUP_DIR = path.join(__dirname, "backups");
 const DB_PATH = path.join(__dirname, "prisma", "dev.db");
 const BACKUP_RETENTION_DAYS = 30;
+const CLIENT_ERROR_LOG = path.join(__dirname, "data", "client-error.log");
 const DEFAULT_BOT_DESCRIPTION =
   "Текст в Главном меню";
 const DEFAULT_ABOUT_TEXT =
@@ -111,6 +112,35 @@ app.use(cors());
 app.use(express.json({ limit: "12mb" }));
 app.use(express.static(path.join(__dirname)));
 app.use("/Image", express.static(IMAGE_DIR));
+app.post("/api/log", async (req, res) => {
+  const payload = req.body || {};
+  const isNoisyScriptError =
+    payload?.message === "Script error." &&
+    payload?.isGenericScriptError === true &&
+    !payload?.source &&
+    !payload?.line &&
+    !payload?.stack;
+  if (isNoisyScriptError) {
+    return res.status(204).end();
+  }
+  const entry = {
+    ...payload,
+    ip: req.ip,
+    time: new Date().toISOString(),
+  };
+  try {
+    await fs.ensureDir(path.dirname(CLIENT_ERROR_LOG));
+    await fs.appendFile(
+      CLIENT_ERROR_LOG,
+      `${JSON.stringify(entry)}${os.EOL}`,
+      "utf8",
+    );
+  } catch (error) {
+    console.error("Failed to persist client log", error);
+  }
+  console.error("Client error log:", entry);
+  res.status(204).end();
+});
 const noCacheMiddleware = (req, res, next) => {
   res.setHeader(
     "Cache-Control",

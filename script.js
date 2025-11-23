@@ -1,5 +1,37 @@
 ﻿const { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, Fragment } = React;
 const { createPortal, createRoot } = ReactDOM;
+const sendClientLog = (data) => {
+  try {
+    const payload = {
+      ...data,
+      ua: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+      ts: new Date().toISOString(),
+    };
+    fetch('/api/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (error) {
+    // ignore logging failures
+  }
+};
+sendClientLog({ level: 'info', stage: 'bundle-start' });
+const originalConsoleError = console.error;
+console.error = (...args) => {
+  try {
+    const [first] = args;
+    const payload =
+      first instanceof Error
+        ? { message: first.message, stack: first.stack }
+        : { message: typeof first === 'string' ? first : JSON.stringify(first) };
+    sendClientLog({ level: 'error', stage: 'console-error', ...payload });
+  } catch {
+    // ignore logger failure
+  }
+  return originalConsoleError.apply(console, args);
+};
 const resolveDefaultApiBaseUrl = () => {
   if (typeof window !== 'undefined' && window.location && window.location.origin) {
     return `${window.location.origin}/api`;
@@ -6823,6 +6855,25 @@ const apiRequest = useCallback(
         detail?.message ||
         event?.message ||
         (typeof detail === 'string' ? detail : 'Неизвестная ошибка');
+      const isGenericScriptError =
+        (message || '').trim() === 'Script error.' &&
+        !event?.filename &&
+        !event?.lineno &&
+        !detail?.stack;
+      sendClientLog({
+        level: 'error',
+        stage: 'global-handler',
+        message,
+        stack: detail?.stack || '',
+        source: event?.filename || '',
+        line: event?.lineno || 0,
+        col: event?.colno || 0,
+        type: event?.type || '',
+        isGenericScriptError,
+      });
+      if (isGenericScriptError) {
+        return;
+      }
       console.error('Global UI error:', detail || event);
       setFatalError(message);
     };
@@ -6833,6 +6884,7 @@ const apiRequest = useCallback(
       window.removeEventListener('unhandledrejection', handleGlobalError);
     };
   }, []);
+
   useEffect(
     () => () => {
       serviceSaveTimers.current.forEach((timer) => clearTimeout(timer));
@@ -7603,8 +7655,15 @@ const renderApp = () => {
             };
     }
     reactAppRoot.render(<App />);
+    sendClientLog({ level: 'info', stage: 'render-success' });
   } catch (error) {
     console.error('Fatal render error:', error);
+    sendClientLog({
+      level: 'error',
+      stage: 'render-fatal',
+      message: error?.message || '',
+      stack: error?.stack || '',
+    });
     if (rootElement) {
       rootElement.innerHTML = `
         <div style="

@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
     "build:css": "tailwindcss -i styles.tailwind.css -o styles.css --minify",
-    "build:web": "npm run build:css && babel script.js --out-file script.bundle.js --presets @babel/preset-react,@babel/preset-env --source-maps inline"
+    "build:web": "npm run build:css && babel script.js --out-file script.bundle.js --source-maps inline"
   },
   "keywords": [],
   "author": "",

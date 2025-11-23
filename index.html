@@ -31,7 +31,14 @@
           'error',
           (event) => {
             const isResourceError = event.target && event.target !== window;
-            const isGenericScriptError = (event.message || '').trim() === 'Script error.' && !event.filename;
+            const isGenericScriptError =
+              (event.message || '').trim() === 'Script error.' &&
+              !event.filename &&
+              !event.lineno &&
+              !(event.error && event.error.stack);
+            if (isGenericScriptError) {
+              return;
+            }
             const scripts =
               isGenericScriptError && document?.scripts
                 ? Array.from(document.scripts || [])

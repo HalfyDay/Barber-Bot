@@ -2835,7 +2835,7 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           {isStaffUser ? (
             <div className="space-y-1">
-              <label className="text-sm text-slate-400">Ваш мастер</label>
+              <label className="text-sm text-slate-400">Мастер</label>
               <div className="w-64 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-white">
                 {staffDisplayName}
               </div>
@@ -3450,11 +3450,13 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
           <LoadingState label="Считаю доходы..." />
         ) : (
           <>
-            <div className="mt-6 grid gap-3 md:grid-cols-3">
-              <StatCard label="Общая выручка" value={formatCurrency(totalGross)} />
-              <StatCard label="Начислено сотрудникам" value={formatCurrency(totalCommission)} accent="text-rose-300" />
-              <StatCard label="В кассу" value={formatCurrency(totalNet)} accent="text-emerald-300" />
-            </div>
+            {!isStaffMode && (
+              <div className="mt-6 grid gap-3 md:grid-cols-3">
+                <StatCard label="Общая выручка" value={formatCurrency(totalGross)} />
+                <StatCard label="Начислено сотрудникам" value={formatCurrency(totalCommission)} accent="text-rose-300" />
+                <StatCard label="В кассу" value={formatCurrency(totalNet)} accent="text-emerald-300" />
+              </div>
+            )}
             <div className="mt-6">
               {items.length === 0 ? (
                 <p className="rounded-2xl border border-slate-800 p-4 text-sm text-slate-400">Нет выполненных услуг за выбранный период.</p>

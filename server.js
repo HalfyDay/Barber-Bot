@@ -932,7 +932,7 @@ const buildClientRows = (users, appointments, manualBlockedSet = new Set()) => {
     const isBlocked = manualBlocked || warningCount >= WARNING_BLOCK_THRESHOLD;
     clients.push({
       id: user.id,
-      name: user.Name || "??? ?????",
+      name: user.Name || "Без имени",
       phone: user.Phone || "",
       normalizedPhone,
       telegramId: user.TelegramID || null,
@@ -969,7 +969,7 @@ const buildClientRows = (users, appointments, manualBlockedSet = new Set()) => {
     const isBlocked = warningCount >= WARNING_BLOCK_THRESHOLD || appt.isBlocked;
     clients.push({
       id: clientId,
-      name: appt.CustomerName || "??? ?????",
+      name: appt.CustomerName || "Без имени",
       phone: appt.Phone || "",
       normalizedPhone: appt.normalizedPhone,
       telegramId: null,
@@ -2806,14 +2806,14 @@ app.post("/api/users/:id/block", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "�������筮 �ࠢ ��� ��������� �࠭�." });
+      .json({ error: "Доступ запрещен: требуется владелец." });
   }
   const { id } = req.params;
   const shouldBlock = req.body?.blocked !== false;
   try {
     const user = await prisma.users.findUnique({ where: { id } });
     if (!user) {
-      return res.status(404).json({ error: "������������ �� ������." });
+      return res.status(404).json({ error: "Пользователь не найден." });
     }
     const blockedUsers = await readBlockedUsers();
     if (shouldBlock) {
@@ -2847,7 +2847,7 @@ app.post("/api/users/:id/block", authenticateToken, async (req, res) => {
     console.error("Block toggle error:", error);
     return res
       .status(500)
-      .json({ error: "�� ������� ��������� ���������.", details: error.message });
+      .json({ error: "Не удалось обновить статус блокировки.", details: error.message });
   }
 });
 cron.schedule("0 3 * * *", async () => {

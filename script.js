@@ -117,6 +117,7 @@ const TABLE_COLUMNS = {
   ],
 };
 const BOT_SUPPORTED_STATUS_OPTIONS = ['Активная', 'Выполнена', 'Отмена', 'Неявка'];
+const [STATUS_ACTIVE, STATUS_DONE, STATUS_CANCELLED, STATUS_NO_SHOW] = BOT_SUPPORTED_STATUS_OPTIONS;
 const CLIENT_BLOCK_THRESHOLD = 3;
 const RATING_MIN = 1;
 const RATING_MAX = 5;
@@ -234,6 +235,38 @@ const buildAppointmentModalState = () => ({
 });
 const getRecordId = (record = {}) => record.id || record.Id || record.ID || record.recordId || record.ID_Record || null;
 const classNames = (...classes) => classes.filter(Boolean).join(' ');
+const EyeIcon = ({ open = false, className = "h-5 w-5" }) =>
+  open ? (
+    <svg
+      className={`${className} block`}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2.25 12c1.5-3.25 4.75-6 9.75-6s8.25 2.75 9.75 6c-1.5 3.25-4.75 6-9.75 6s-8.25-2.75-9.75-6Z" />
+      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+    </svg>
+  ) : (
+    <svg
+      className={`${className} block`}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3.98 8.22A11 11 0 0 0 1.86 12C3.73 16.06 7.52 19 12 19c.99 0 1.95-.15 2.86-.42" />
+      <path d="M6.23 6.23A11.1 11.1 0 0 1 12 5c4.48 0 8.27 2.94 10.14 7.0a11 11 0 0 1-4.44 5.18" />
+      <path d="M9.88 9.88a3 3 0 0 1 4.24 4.24" />
+      <path d="m3 3 18 18" />
+    </svg>
+  );
 const useLocalStorage = (key, initialValue) => {
   const [value, setValue] = useState(() => {
     try {
@@ -523,44 +556,11 @@ const normalizeUpdateInfo = (payload) => {
     note: payload.note || null,
   };
 };
-const STATUS_TRANSLATIONS = {
-  active: 'Активная',
-  'активная': 'Активная',
-  confirm: 'Активная',
-  confirmed: 'Активная',
-  'подтверждено': 'Активная',
-  'подтверждена': 'Активная',
-  'в работе': 'Активная',
-  pending: 'Активная',
-  wait: 'Активная',
-  waiting: 'Активная',
-  processing: 'Активная',
-  'новая запись': 'Активная',
-  done: 'Выполнена',
-  complete: 'Выполнена',
-  completed: 'Выполнена',
-  finished: 'Выполнена',
-  'выполнена': 'Выполнена',
-  'завершена': 'Выполнена',
-  cancel: 'Отмена',
-  canceled: 'Отмена',
-  cancelled: 'Отмена',
-  'отмена': 'Отмена',
-  'отменено': 'Отмена',
-  'отменена': 'Отмена',
-  'no show': 'Неявка',
-  'no-show': 'Неявка',
-  noshow: 'Неявка',
-  missed: 'Неявка',
-  'не пришёл': 'Неявка',
-  'не пришел': 'Неявка',
-  'неявка': 'Неявка',
-};
 const STATUS_BADGE_MAP = {
-  Активная: 'border border-sky-500/30 bg-sky-500/10 text-sky-100',
-  Выполнена: 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-100',
-  Отмена: 'border border-rose-500/30 bg-rose-500/10 text-rose-100',
-  Неявка: 'border border-amber-500/30 bg-amber-500/10 text-amber-100',
+  [STATUS_ACTIVE]: 'border border-sky-500/30 bg-sky-500/10 text-sky-100',
+  [STATUS_DONE]: 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-100',
+  [STATUS_CANCELLED]: 'border border-rose-500/30 bg-rose-500/10 text-rose-100',
+  [STATUS_NO_SHOW]: 'border border-amber-500/30 bg-amber-500/10 text-amber-100',
 };
 const getStatusBadgeClasses = (status) => {
   const normalized = normalizeStatusValue(status);
@@ -568,19 +568,19 @@ const getStatusBadgeClasses = (status) => {
     STATUS_BADGE_MAP[normalized] || 'border border-slate-600/60 bg-slate-800/70 text-slate-200'
   );
 };
-const INACTIVE_STATUS_TOKENS = ['выполн', 'заверш', 'done', 'cancel', 'отмен', 'не приш', 'noshow', 'no-show', 'missed', 'проср', 'expired'];
-const ACTIVE_STATUS_TOKENS = ['актив', 'active', 'подтверж', 'confirm', 'ожид', 'pending', 'wait', 'ждем', 'ждём', 'нов', 'new'];
-const COMPLETED_STATUS_TOKENS = ['выполн', 'заверш', 'done', 'complete', 'готов'];
+const INACTIVE_STATUS_TOKENS = ['выполн', 'заверш', 'отмен', 'не яв', 'неяв', 'проср'];
+const ACTIVE_STATUS_TOKENS = ['актив', 'подтверж', 'ожид', 'ждем', 'ждём', 'нов'];
+const COMPLETED_STATUS_TOKENS = ['выполн', 'заверш', 'готов'];
 const normalizeStatusValue = (status) => {
   const normalized = normalizeText(status).trim();
-  if (!normalized) return BOT_SUPPORTED_STATUS_OPTIONS[0];
-  const translated = STATUS_TRANSLATIONS[normalized.toLowerCase()];
-  if (translated) return translated;
+  if (!normalized) return STATUS_ACTIVE;
   const capitalized = normalized.charAt(0).toUpperCase() + normalized.slice(1);
-  if (BOT_SUPPORTED_STATUS_OPTIONS.includes(capitalized)) {
-    return capitalized;
-  }
-  return BOT_SUPPORTED_STATUS_OPTIONS[0];
+  if (BOT_SUPPORTED_STATUS_OPTIONS.includes(capitalized)) return capitalized;
+  const lowered = normalized.toLowerCase();
+  if (lowered.includes('выполн') || lowered.includes('заверш')) return STATUS_DONE;
+  if (lowered.includes('отмен')) return STATUS_CANCELLED;
+  if (lowered.includes('неяв') || lowered.includes('не яв') || lowered.includes('не приш')) return STATUS_NO_SHOW;
+  return STATUS_ACTIVE;
 };
 const normalizeStatusList = (statuses = []) => {
   const seen = new Set();
@@ -1994,7 +1994,7 @@ const RatingSlider = ({ value, onChange, dense = false, disabled = false }) => {
         value={ratingValue}
         onChange={disabled ? undefined : onChange}
         disabled={disabled}
-        aria-label="�������"
+        aria-label="Рейтинг"
         className={classNames('w-full accent-indigo-500', disabled ? 'cursor-not-allowed' : '')}
       />
     </div>
@@ -2024,6 +2024,7 @@ const BarbersView = ({
   const activeBarber = barbers.find((barber) => barber.id === editorState.targetId) || null;
   const workingBarber = isCreateMode ? draftBarber : activeBarber;
   const [pendingAvatar, setPendingAvatar] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const sortedPositions = useMemo(() => {
     if (!Array.isArray(positions) || !positions.length) return [];
     return [...positions].sort((a, b) => {
@@ -2050,6 +2051,9 @@ const BarbersView = ({
       setPendingAvatar('');
     }
   }, [editorState.open, isCreateMode, draftBarber.avatarUrl, activeBarber?.avatarUrl, activeBarber]);
+  useEffect(() => {
+    setShowPassword(false);
+  }, [editorState.open, editorState.mode, editorState.targetId]);
   const handleFieldChange = (field, value) => {
     const nextValue = field === 'rating' ? formatRatingValue(value) : value;
     if (field === 'avatarUrl') {
@@ -2224,16 +2228,26 @@ const BarbersView = ({
                 <div className="w-full">
                   <RatingSlider dense value={workingBarber.rating} onChange={(event) => handleFieldChange('rating', event.target.value)} />
                 </div>
-                <input
-                  name="barberPassword"
-                  aria-label="Пароль"
-                  type="password"
-                  value={workingBarber.password || ''}
-                  onChange={(event) => handleFieldChange('password', event.target.value)}
-                  placeholder="Пароль"
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
-                />
-                <label className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm text-white">
+                <div className="relative w-full">
+                  <input
+                    name="barberPassword"
+                    aria-label="Пароль"
+                    type={showPassword ? 'text' : 'password'}
+                    value={workingBarber.password || ""}
+                    onChange={(event) => handleFieldChange('password', event.target.value)}
+                    placeholder="Пароль"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 pr-12 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md p-0 text-slate-300 leading-none hover:text-white"
+                  >
+                    <EyeIcon open={showPassword} />
+                  </button>
+                </div>
+                <label className="flex h-[52px] items-center justify-between rounded-2xl border border-slate-700 bg-slate-900/70 px-4 text-sm text-white">
                   Цвет
                   <input
                     name="barberColor"
@@ -2241,7 +2255,7 @@ const BarbersView = ({
                     type="color"
                     value={/^#/.test(workingBarber.color || '') ? workingBarber.color : '#6d28d9'}
                     onChange={(event) => handleFieldChange('color', event.target.value)}
-                    className="h-10 w-16 cursor-pointer rounded-xl border border-slate-500 bg-transparent"
+                    className="h-9 w-16 cursor-pointer rounded-xl border border-slate-500 bg-transparent"
                   />
                 </label>
                 <div className="col-span-2 grid gap-3 md:grid-cols-2">
@@ -2321,15 +2335,15 @@ const BarbersView = ({
                   )}
                 >
                   <span>{workingBarber.isActive !== false ? ACTIVE_BARBER_LABEL : HIDDEN_BARBER_LABEL}</span>
-                <span
-                  className={classNames(
-                    'flex h-5 w-5 items-center justify-center rounded-full border',
-                    workingBarber.isActive !== false ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100' : 'border-slate-600 text-slate-500'
-                  )}
-                >
-                  {workingBarber.isActive !== false ? '\u2713' : '\u2715'}
-                </span>
-              </button>
+                  <span
+                    className={classNames(
+                      'flex h-5 w-5 items-center justify-center rounded-full border',
+                      workingBarber.isActive !== false ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100' : 'border-slate-600 text-slate-500'
+                    )}
+                  >
+                    {workingBarber.isActive !== false ? '\u2713' : '\u2715'}
+                  </span>
+                </button>
               </div>
             </div>
           </div>
@@ -2349,19 +2363,19 @@ const BarberProfileView = ({
   onSave,
   allowRatingEdit = false,
 }) => {
-  const [pendingAvatar, setPendingAvatar] = useState(barber?.avatarUrl || '');
+  const [pendingAvatar, setPendingAvatar] = useState(barber?.avatarUrl || "");
+  const [showPassword, setShowPassword] = useState(false);
   const profileSnapshot = useMemo(
     () => (barber ? JSON.stringify({ ...barber, avatarUrl: pendingAvatar || '' }) : null),
     [barber, pendingAvatar],
   );
-  const [autoSaveState, setAutoSaveState] = useState('idle');
-  const autoSaveTimerRef = useRef(null);
-  const autoSaveResetRef = useRef(null);
-  const initialSnapshotRef = useRef(true);
   const lastSnapshotRef = useRef(null);
   useEffect(() => {
     setPendingAvatar(barber?.avatarUrl || '');
   }, [barber?.avatarUrl]);
+  useEffect(() => {
+    setShowPassword(false);
+  }, [barber?.id]);
   useEffect(() => {
     initialSnapshotRef.current = true;
     lastSnapshotRef.current = null;
@@ -2450,16 +2464,26 @@ const BarberProfileView = ({
                   disabled={!allowRatingEdit}
                 />
               </div>
-              <input
-                name="barberPassword"
-                aria-label="Пароль"
-                type="password"
-                value={barber.password || ''}
-                onChange={(event) => handleFieldChange('password', event.target.value)}
-                placeholder="Пароль"
-                className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
-              />
-              <label className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm text-white">
+              <div className="relative w-full">
+                <input
+                  name="barberPassword"
+                  aria-label="Пароль"
+                  type={showPassword ? 'text' : 'password'}
+                  value={barber.password || ""}
+                  onChange={(event) => handleFieldChange('password', event.target.value)}
+                  placeholder="Пароль"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 pr-12 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md p-0 text-slate-300 leading-none hover:text-white"
+                >
+                  <EyeIcon open={showPassword} />
+                </button>
+              </div>
+              <label className="flex h-[52px] items-center justify-between rounded-2xl border border-slate-700 bg-slate-900/70 px-4 text-sm text-white">
                 Цвет
                 <input
                   name="barberColor"
@@ -2467,7 +2491,7 @@ const BarberProfileView = ({
                   type="color"
                   value={/^#/.test(barber.color || '') ? barber.color : '#6d28d9'}
                   onChange={(event) => handleFieldChange('color', event.target.value)}
-                  className="h-10 w-16 cursor-pointer rounded-xl border border-slate-500 bg-transparent"
+                  className="h-9 w-16 cursor-pointer rounded-xl border border-slate-500 bg-transparent"
                 />
               </label>
               <div className="col-span-2 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3">
@@ -6409,6 +6433,7 @@ const BotControlView = ({
   const [about, setAbout] = useState(settings?.aboutText || '');
   const [tokenDraft, setTokenDraft] = useState(token || '');
   const [savingToken, setSavingToken] = useState(false);
+  const [showToken, setShowToken] = useState(false);
   const descriptionRef = useRef(null);
   const aboutRef = useRef(null);
   const autosizeTextArea = useCallback((element) => {
@@ -6422,6 +6447,7 @@ const BotControlView = ({
   }, [settings]);
   useEffect(() => {
     setTokenDraft(token || '');
+    setShowToken(false);
   }, [token]);
   useLayoutEffect(() => {
     if (viewMode !== 'bot') return undefined;
@@ -6560,17 +6586,27 @@ const BotControlView = ({
         <div className="mt-4">
           <label className="text-sm text-slate-300">Telegram-токен</label>
           <div className="mt-1 flex items-center gap-2">
-            <input
-              name="botToken"
-              aria-label="Telegram-токен"
-              type="text"
-              value={tokenDraft}
-              onChange={(event) => setTokenDraft(event.target.value)}
-              className="min-w-0 flex-1 rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 font-mono text-sm text-white"
-              placeholder="1234567890:ABC-DEF"
-              spellCheck={false}
-              autoComplete="off"
-            />
+            <div className="relative min-w-0 flex-1">
+              <input
+                name="botToken"
+                aria-label="Telegram-токен"
+                type={showToken ? 'text' : 'password'}
+                value={tokenDraft}
+                onChange={(event) => setTokenDraft(event.target.value)}
+                className="w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 pr-16 font-mono text-sm text-white"
+                placeholder="1234567890:ABC-DEF"
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                aria-label={showToken ? 'Скрыть токен' : 'Показать токен'}
+                onClick={() => setShowToken((prev) => !prev)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:text-white"
+              >
+                <EyeIcon open={showToken} />
+              </button>
+            </div>
             <button
               onClick={handleTokenSave}
               disabled={!canSaveToken || savingToken}

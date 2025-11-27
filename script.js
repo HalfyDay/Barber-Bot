@@ -3942,7 +3942,7 @@ const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableI
       <TimeRangePicker
         value={value || ''}
         onChange={(nextValue) => commit(nextValue)}
-        placeholder={tableId === 'Schedules' ? '????????' : '?'}
+        placeholder={tableId === 'Schedules' ? 'Слоты не указаны' : 'Выберите время'}
         title={tableId === 'Schedules' ? 'Редактирование слотов' : 'Выбор времени'}
         buttonClassName="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-left text-sm text-white"
       />
@@ -4504,7 +4504,7 @@ const SchedulesBoard = ({ rows = [], columns = [], onUpdate, options }) => {
                     <p className="text-base font-semibold text-white">{slot.Barber || 'Не назначен'}</p>
                   </div>
                     <div className="text-right">
-                      <p className="text-lg font-semibold text-white">{slot.Week || '????????'}</p>
+                      <p className="text-lg font-semibold text-white">{slot.Week || 'Слоты не указаны'}</p>
                     <p className="text-[11px] uppercase tracking-wide text-slate-500">{slot.Date ? formatDate(slot.Date) : 'Без даты'}</p>
                   </div>
                 </div>
@@ -4890,7 +4890,7 @@ const ClientsList = ({
       setModalState((prev) => ({
         ...prev,
         blockBusy: false,
-        error: error.message || '?? ??????? ????????? ?????????',
+        error: error.message || 'Не удалось изменить блокировку клиента',
       }));
     }
   };
@@ -5293,30 +5293,32 @@ const ProfileModal = ({ state, onClose, onBlockClient }) => {
               <p className="font-semibold">Предупреждения: {warningCount}</p>
               {blockError && <p className="text-xs text-rose-300">{blockError}</p>}
             </div>
-            {isBlocked && <span className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-200">Заблокирован</span>}
+            {isBlocked && (
+              <span className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-200">Заблокирован</span>
+            )}
           </div>
           <div className="grid gap-2 text-sm text-slate-200">
             <div>
-              <span className="text-slate-400">Телефон:</span>{' '}
+              <span className="text-slate-400">Телефон:</span>{" "}
               {phoneLabel && phoneHref ? (
                 <a href={phoneHref} className="text-indigo-300 hover:text-indigo-100">
                   {phoneLabel}
                 </a>
               ) : (
-                '-'
+                "-"
               )}
             </div>
             <div>
-              <span className="text-slate-400">Телеграм:</span>{' '}
+              <span className="text-slate-400">Телеграм:</span>{" "}
               {telegramHandle && telegramHref ? (
                 <a href={telegramHref} target={telegramTarget} rel={telegramRel} className="text-indigo-300 hover:text-indigo-100">
                   {telegramHandle}
                 </a>
               ) : (
-                '-'
+                "-"
               )}
             </div>
-            <div><span className="text-slate-400">Любимый барбер:</span> {user.Barber || '-'}</div>
+            <div><span className="text-slate-400">Любимый барбер:</span> {user.Barber || "-"}</div>
           </div>
           <div>
             <p className="text-sm text-slate-400">История визитов</p>
@@ -7428,7 +7430,7 @@ const apiRequest = useCallback(
         const processed = await applyFavoriteBarberRule(payload);
         setProfileModal({ open: true, data: processed, loading: false });
       } catch (error) {
-        setProfileModal({ open: true, data: { error: error.message || '?? ??????? ????????? ???????' }, loading: false });
+        setProfileModal({ open: true, data: { error: error.message || 'Не удалось загрузить профиль клиента' }, loading: false });
       }
     },
     [apiRequest, applyFavoriteBarberRule]

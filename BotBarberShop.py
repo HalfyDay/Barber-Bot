@@ -1,4 +1,5 @@
 import logging
+import json
 import datetime
 import io
 import re
@@ -38,6 +39,7 @@ TOKEN = config.TOKEN
 
 BASE_DIR = Path(__file__).parent
 DB_PATH = BASE_DIR / "prisma" / "dev.db"  # Путь к базе данных SQLite
+BLOCKLIST_FILE = BASE_DIR / "data" / "blocked-users.json"
 
 # Медиа-ресурсы и кэш
 IMAGE_FILE = BASE_DIR / "Image" / "bot.jpg"
@@ -101,6 +103,35 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     if "LastHaircutReminderSent" not in columns:
         cursor.execute("ALTER TABLE Users ADD COLUMN LastHaircutReminderSent TEXT")
         conn.commit()
+
+def load_blocked_user_ids() -> set[str]:
+    """Читает список вручную заблокированных клиентов из веб-панели."""
+    try:
+        payload = json.loads(BLOCKLIST_FILE.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return set()
+    except Exception as exc:
+        logger.warning("Не удалось прочитать блоклист: %s", exc)
+        return set()
+    if isinstance(payload, dict):
+        payload = payload.get("blocked") or payload.get("ids") or []
+    if not isinstance(payload, list):
+        return set()
+    return {str(item) for item in payload if item is not None}
+
+def get_user_record_id_by_telegram(telegram_id: int | str) -> str | None:
+    """Возвращает id записи Users по TelegramID, если она есть."""
+    try:
+        with get_db_connection() as conn:
+            if not conn:
+                return None
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM Users WHERE TelegramID = ?", (telegram_id,))
+            row = cursor.fetchone()
+            return str(row["id"]) if row and row["id"] else None
+    except Exception as exc:
+        logger.warning("Не удалось получить id пользователя по TelegramID: %s", exc)
+        return None
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -978,6 +1009,13 @@ async def menu_book_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user_id_str = str(user_id)
     user_is_barber = is_barber(user_id)
     limit = get_booking_limit()
+    blocked_users = load_blocked_user_ids()
+    user_record_id = get_user_record_id_by_telegram(user_id)
+    if (user_record_id and user_record_id in blocked_users) or user_id_str in blocked_users:
+        await query.answer(
+            "❌ Запись заблокирована. Обратитесь в салон.", show_alert=True
+        )
+        return MENU
     if not user_is_barber:
         no_shows = count_no_shows(user_id_str)
         if no_shows >= 3:

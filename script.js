@@ -1821,7 +1821,15 @@ const BarberAvatarPicker = ({ value, onChange, loadOptions, onUpload, onDelete }
   const previewSrc = normalizedValue ? resolveAssetUrl(normalizedValue) : '';
   return (
     <div className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 shadow-2xl">
-      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInputChange} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        name="avatarFile"
+        aria-label="Выбрать файл"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
       <div className="relative h-52 w-full bg-slate-900">
         {previewSrc ? (
           <img src={previewSrc} alt="avatar preview" className="h-full w-full object-cover" />
@@ -1963,6 +1971,7 @@ const getScheduleSortValue = (slot) => {
 };
 const RatingSlider = ({ value, onChange, dense = false, disabled = false }) => {
   const ratingValue = clampRatingValue(value ?? RATING_MAX);
+  const sliderId = useMemo(() => `rating-slider-${Math.random().toString(36).slice(2, 8)}`, []);
   const wrapperClass = dense
     ? 'space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-1.5'
     : 'space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2';
@@ -1971,11 +1980,13 @@ const RatingSlider = ({ value, onChange, dense = false, disabled = false }) => {
     : 'flex items-center justify-between text-sm text-slate-300';
   return (
     <div className={classNames(wrapperClass, disabled ? 'opacity-60' : '')}>
-      <label className={labelClass}>
+      <label className={labelClass} htmlFor={sliderId}>
         <span>Рейтинг</span>
         <span className="font-semibold text-white">{ratingValue}</span>
       </label>
       <input
+        id={sliderId}
+        name="rating"
         type="range"
         min={RATING_MIN}
         max={RATING_MAX}
@@ -1983,6 +1994,7 @@ const RatingSlider = ({ value, onChange, dense = false, disabled = false }) => {
         value={ratingValue}
         onChange={disabled ? undefined : onChange}
         disabled={disabled}
+        aria-label="�������"
         className={classNames('w-full accent-indigo-500', disabled ? 'cursor-not-allowed' : '')}
       />
     </div>
@@ -2202,6 +2214,8 @@ const BarbersView = ({
             <div className="space-y-5 rounded-3xl border border-slate-800 bg-slate-950/80 p-6 shadow-inner shadow-black/10">
               <div className="grid grid-cols-2 gap-4">
                 <input
+                  name="barberName"
+                  aria-label="Имя"
                   value={workingBarber.name || ''}
                   onChange={(event) => handleFieldChange('name', event.target.value)}
                   placeholder="Имя"
@@ -2211,6 +2225,8 @@ const BarbersView = ({
                   <RatingSlider dense value={workingBarber.rating} onChange={(event) => handleFieldChange('rating', event.target.value)} />
                 </div>
                 <input
+                  name="barberPassword"
+                  aria-label="Пароль"
                   type="password"
                   value={workingBarber.password || ''}
                   onChange={(event) => handleFieldChange('password', event.target.value)}
@@ -2220,6 +2236,8 @@ const BarbersView = ({
                 <label className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm text-white">
                   Цвет
                   <input
+                    name="barberColor"
+                    aria-label="Цвет"
                     type="color"
                     value={/^#/.test(workingBarber.color || '') ? workingBarber.color : '#6d28d9'}
                     onChange={(event) => handleFieldChange('color', event.target.value)}
@@ -2276,6 +2294,8 @@ const BarbersView = ({
                   className="col-span-2 w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
                 />
                 <input
+                  name="barberPhone"
+                  aria-label="Телефон"
                   type="tel"
                   value={workingBarber.phone || ''}
                   onChange={(event) => handleFieldChange('phone', event.target.value)}
@@ -2283,6 +2303,8 @@ const BarbersView = ({
                   className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
                 />
                 <input
+                  name="barberTelegram"
+                  aria-label="Telegram ID"
                   value={workingBarber.telegramId || ''}
                   onChange={(event) => handleFieldChange('telegramId', event.target.value)}
                   placeholder="Telegram ID"
@@ -2413,6 +2435,8 @@ const BarberProfileView = ({
           <div className="space-y-5 rounded-3xl border border-slate-800 bg-slate-950/80 p-6 shadow-inner shadow-black/10">
             <div className="grid gap-4 md:grid-cols-2">
               <input
+                name="barberName"
+                aria-label="Имя"
                 value={barber.name || ''}
                 onChange={(event) => handleFieldChange('name', event.target.value)}
                 placeholder="Имя"
@@ -2427,6 +2451,8 @@ const BarberProfileView = ({
                 />
               </div>
               <input
+                name="barberPassword"
+                aria-label="Пароль"
                 type="password"
                 value={barber.password || ''}
                 onChange={(event) => handleFieldChange('password', event.target.value)}
@@ -2436,6 +2462,8 @@ const BarberProfileView = ({
               <label className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm text-white">
                 Цвет
                 <input
+                  name="barberColor"
+                  aria-label="Цвет"
                   type="color"
                   value={/^#/.test(barber.color || '') ? barber.color : '#6d28d9'}
                   onChange={(event) => handleFieldChange('color', event.target.value)}
@@ -2457,6 +2485,8 @@ const BarberProfileView = ({
                 className="col-span-2 w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
               />
               <input
+                name="barberPhone"
+                aria-label="Телефон"
                 type="tel"
                 value={barber.phone || ''}
                 onChange={(event) => handleFieldChange('phone', event.target.value)}
@@ -2464,6 +2494,8 @@ const BarberProfileView = ({
                 className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
               />
               <input
+                name="barberTelegram"
+                aria-label="Telegram"
                 value={barber.telegramId || ''}
                 onChange={(event) => handleFieldChange('telegramId', event.target.value)}
                 placeholder="Telegram"
@@ -2670,6 +2702,8 @@ const ServicesView = ({
               <div className="space-y-1">
                 <label className="block text-sm text-slate-300">Название</label>
                 <input
+                  name="serviceName"
+                  aria-label="Название услуги"
                   value={workingService.name || ''}
                   onChange={(event) => handleFieldChange('name', event.target.value)}
                   placeholder="Например, стрижка"
@@ -2683,6 +2717,8 @@ const ServicesView = ({
               <div className="space-y-1">
                 <label className="block text-sm text-slate-300">Длительность, мин</label>
                 <input
+                  name="serviceDuration"
+                  aria-label="Длительность услуги"
                   type="number"
                   min={5}
                   step={5}
@@ -2740,6 +2776,8 @@ const ServicesView = ({
                     <label key={barber.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-white">
                       <span className="truncate">{barber.name || 'Без имени'}</span>
                       <input
+                        name={`servicePrice-${barber.id}`}
+                        aria-label={`Цена для ${barber.name || 'барбера'}`}
                         type="number"
                         min={0}
                         value={workingService.prices?.[barber.id] ?? ''}
@@ -3125,12 +3163,16 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
       <SectionCard title="Должности">
         <form onSubmit={handleCreate} className="grid gap-3 md:grid-cols-3">
           <input
+            name="positionName"
+            aria-label="Название должности"
             value={newPosition.name}
             onChange={(event) => setNewPosition((prev) => ({ ...prev, name: event.target.value }))}
             placeholder="Название должности"
             className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
           />
           <input
+            name="positionRate"
+            aria-label="Процент"
             type="number"
             min="0"
             max="100"
@@ -3169,11 +3211,15 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
                   <div className="flex w-full flex-wrap gap-3 md:flex-1">
                     <input
+                      name={`positionName-${position.id}`}
+                      aria-label="Название должности"
                       value={draft.name}
                       onChange={(event) => handleDraftChange(position.id, 'name', event.target.value)}
                       className="min-w-[160px] flex-1 rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
                     />
                     <input
+                      name={`positionRate-${position.id}`}
+                      aria-label="Процент"
                       type="number"
                       min="0"
                       max="100"
@@ -3261,6 +3307,8 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
   const [state, setState] = useState({ loading: true, error: '', data: null });
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
   const [activePoint, setActivePoint] = useState(null);
+  const startDateId = useMemo(() => `revenue-start-${Math.random().toString(36).slice(2, 8)}`, []);
+  const endDateId = useMemo(() => `revenue-end-${Math.random().toString(36).slice(2, 8)}`, []);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const handler = () => setIsMobile(window.innerWidth < 768);
@@ -3441,8 +3489,13 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="grid grid-cols-2 gap-3 sm:col-span-2 lg:col-span-2">
             <div className="space-y-1">
-              <label className="text-xs uppercase tracking-wide text-slate-400">Дата с</label>
+              <label className="text-xs uppercase tracking-wide text-slate-400" htmlFor={startDateId}>
+                Дата с
+              </label>
               <input
+                id={startDateId}
+                name="revenueStartDate"
+                aria-label="Дата с"
                 type="date"
                 value={startDate}
                 onChange={(event) => handleFilterChange('start', event.target.value)}
@@ -3450,8 +3503,13 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs uppercase tracking-wide text-slate-400">Дата по</label>
+              <label className="text-xs uppercase tracking-wide text-slate-400" htmlFor={endDateId}>
+                Дата по
+              </label>
               <input
+                id={endDateId}
+                name="revenueEndDate"
+                aria-label="Дата по"
                 type="date"
                 value={endDate}
                 onChange={(event) => handleFilterChange('end', event.target.value)}
@@ -3772,7 +3830,14 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
                       )}
                     >
                       <span className="pr-2 text-left">{option}</span>
-                      <input type="checkbox" checked={isActive} onChange={() => toggleOption(option)} className="h-4 w-4 rounded border-slate-500 accent-indigo-500" />
+                      <input
+                        name={`option-${option}`}
+                        aria-label={option}
+                        type="checkbox"
+                        checked={isActive}
+                        onChange={() => toggleOption(option)}
+                        className="h-4 w-4 rounded border-slate-500 accent-indigo-500"
+                      />
                     </label>
                   );
                 })}
@@ -3802,6 +3867,8 @@ const TimeRangePicker = ({
   const [open, setOpen] = useState(false);
   const [{ start, end }, setDraft] = useState(() => ({ start: '', end: '' }));
   const [pristineState, setPristineState] = useState({ start: true, end: true });
+  const startInputId = useMemo(() => `start-time-${Math.random().toString(36).slice(2, 8)}`, []);
+  const endInputId = useMemo(() => `end-time-${Math.random().toString(36).slice(2, 8)}`, []);
   const buttonStyle = useMemo(() => {
     const label = value || placeholder || '';
     const length = label.length;
@@ -3886,8 +3953,11 @@ const TimeRangePicker = ({
           </div>
           <div className="flex flex-wrap items-center justify-around gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
             <div className="text-center">
-              <label className="block text-sm font-medium text-slate-400">Начало</label>
+              <label className="block text-sm font-medium text-slate-400" htmlFor={startInputId}>Начало</label>
               <input
+                id={startInputId}
+                name="startTime"
+                aria-label="Начало"
                 type="time"
                 step="60"
                 value={startInputValue}
@@ -3897,8 +3967,11 @@ const TimeRangePicker = ({
             </div>
             <span className="text-2xl font-light text-slate-500">-</span>
             <div className="text-center">
-              <label className="block text-sm font-medium text-slate-400">Окончание</label>
+              <label className="block text-sm font-medium text-slate-400" htmlFor={endInputId}>Окончание</label>
               <input
+                id={endInputId}
+                name="endTime"
+                aria-label="Окончание"
                 type="time"
                 step="60"
                 value={endInputValue}
@@ -3948,6 +4021,7 @@ const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableI
       />
     );
   }
+  const fieldLabel = column.label || column.key;
   switch (column.type) {
     case 'select': {
       const optionList = column.optionsKey ? options[column.optionsKey] || [] : [];
@@ -3965,18 +4039,40 @@ const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableI
     case 'boolean':
       return (
         <label className="flex items-center justify-center">
-          <input type="checkbox" checked={value === true || value === 'true' || value === 1 || value === '1'} onChange={(event) => commit(event.target.checked ? 'true' : '')} />
+          <input
+            name={column.key}
+            aria-label={fieldLabel}
+            type="checkbox"
+            checked={value === true || value === 'true' || value === 1 || value === '1'}
+            onChange={(event) => commit(event.target.checked ? 'true' : '')}
+          />
         </label>
       );
     case 'multi-select':
       return <MultiSelectCell value={value} options={options[column.optionsKey] || []} onCommit={commit} />;
     case 'date':
       return (
-        <input type="date" value={value ? String(value).slice(0, 10) : ''} onChange={(event) => commit(event.target.value)} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-white" />
+        <input
+          name={column.key}
+          aria-label={fieldLabel}
+          type="date"
+          value={value ? String(value).slice(0, 10) : ''}
+          onChange={(event) => commit(event.target.value)}
+          className="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-white"
+        />
       );
     default:
       return (
-        <input type="text" value={draft || ''} onChange={(event) => setDraft(event.target.value)} onBlur={() => commit()} onKeyDown={(event) => event.key === 'Enter' && commit()} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-white" />
+        <input
+          name={column.key}
+          aria-label={fieldLabel}
+          type="text"
+          value={draft || ''}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => commit()}
+          onKeyDown={(event) => event.key === 'Enter' && commit()}
+          className="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-white"
+        />
       );
   }
 };
@@ -3999,7 +4095,13 @@ const ColumnMenu = ({ columns, hiddenColumns = [], onToggle }) => {
         >
           {columns.map((column) => (
             <label key={column.key} className="flex items-center gap-2 text-sm text-slate-200">
-              <input type="checkbox" checked={!hiddenColumns.includes(column.key)} onChange={() => onToggle(column.key)} />
+            <input
+              type="checkbox"
+              name={`column-${column.key}`}
+              aria-label={column.label || column.key}
+              checked={!hiddenColumns.includes(column.key)}
+              onChange={() => onToggle(column.key)}
+            />
               {column.label}
             </label>
           ))}
@@ -4057,6 +4159,8 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
             />
           </svg>
           <input
+            name="serviceSearch"
+            aria-label="Поиск услуги"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Поиск услуги"
@@ -4112,6 +4216,7 @@ const ClientLookupInput = ({
   const [query, setQuery] = useState(value || '');
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
+  const inputId = useMemo(() => `client-search-${Math.random().toString(36).slice(2, 8)}`, []);
   useEffect(() => {
     setQuery(value || '');
   }, [value]);
@@ -4137,8 +4242,15 @@ const ClientLookupInput = ({
   };
   return (
     <div className="relative space-y-1" ref={containerRef}>
-      {label && <label className="text-sm text-slate-300">{label}</label>}
+      {label && (
+        <label className="text-sm text-slate-300" htmlFor={inputId}>
+          {label}
+        </label>
+      )}
       <input
+        id={inputId}
+        name="clientSearch"
+        aria-label={label || 'Поиск клиента'}
         value={query}
         onChange={(event) => {
           setQuery(event.target.value);
@@ -4188,7 +4300,13 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset }) =
           {statuses.length === 0 && <p className="text-sm text-slate-500">Нет статусов</p>}
           {statuses.map((status) => (
             <label key={status} className="flex items-center gap-2 text-sm text-slate-200">
-              <input type="checkbox" checked={!hiddenStatuses.includes(status)} onChange={() => onToggle(status)} />
+            <input
+              type="checkbox"
+              name={`status-${status}`}
+              aria-label={status}
+              checked={!hiddenStatuses.includes(status)}
+              onChange={() => onToggle(status)}
+            />
               {status}
             </label>
           ))}
@@ -4315,11 +4433,12 @@ const TableToolbar = ({
                     />
                   </svg>
                 </span>
-                <input
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Поиск..."
-                  aria-label="Поиск по таблице"
+              <input
+                name="optionsSearch"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Поиск..."
+                aria-label="Поиск по таблице"
                   className="h-11 w-full rounded-xl border border-slate-700 bg-slate-900 pl-9 pr-3 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                 />
               </label>
@@ -5028,6 +5147,8 @@ const ClientsList = ({
               <label className="space-y-1 text-sm text-slate-300">
                 Имя
                 <input
+                  name="clientName"
+                  aria-label="Имя клиента"
                   value={modalState.record.Name || ''}
                   onChange={(event) => handleFieldChange('Name', event.target.value)}
                   className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
@@ -5036,6 +5157,8 @@ const ClientsList = ({
               <label className="space-y-1 text-sm text-slate-300">
                 Телефон
                 <input
+                  name="clientPhone"
+                  aria-label="Телефон клиента"
                   value={modalState.record.Phone || ''}
                   onChange={(event) => handleFieldChange('Phone', event.target.value)}
                   className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
@@ -5044,6 +5167,8 @@ const ClientsList = ({
               <label className="space-y-1 text-sm text-slate-300">
                 Telegram ID
                 <input
+                  name="clientTelegram"
+                  aria-label="Telegram ID"
                   value={modalState.record.TelegramID || ''}
                   onChange={(event) => handleFieldChange('TelegramID', event.target.value)}
                   className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
@@ -5204,7 +5329,14 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
           return (
             <div key={column.key} className="space-y-1">
               <label className="text-sm text-slate-300">{column.label}</label>
-              <input type={column.type === 'date' ? 'date' : 'text'} value={value || ''} onChange={(event) => setDraft((prev) => ({ ...prev, [column.key]: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white" />
+              <input
+                name={column.key}
+                aria-label={column.label || column.key}
+                type={column.type === 'date' ? 'date' : 'text'}
+                value={value || ''}
+                onChange={(event) => setDraft((prev) => ({ ...prev, [column.key]: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+              />
             </div>
           );
         })}
@@ -5666,6 +5798,8 @@ const AppointmentModal = ({
         <div className="space-y-1">
           <label className="text-sm text-slate-300">Телефон</label>
           <input
+            name="appointmentPhone"
+            aria-label="Телефон клиента"
             type="tel"
             value={draft.Phone || ''}
             onChange={(event) => handleChange('Phone', event.target.value)}
@@ -5681,7 +5815,14 @@ const AppointmentModal = ({
             </option>
           ))}
         </select>
-        <input type="date" value={draft.Date ? String(draft.Date).slice(0, 10) : ''} onChange={(event) => handleChange('Date', event.target.value)} className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white" />
+        <input
+          name="appointmentDate"
+          aria-label="Дата"
+          type="date"
+          value={draft.Date ? String(draft.Date).slice(0, 10) : ''}
+          onChange={(event) => handleChange('Date', event.target.value)}
+          className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white"
+        />
         <TimeRangePicker value={draft.Time || ''} onChange={(nextValue) => handleChange('Time', nextValue)} placeholder="Выбрать время" />
         <select value={draft.Status || ''} onChange={(event) => handleChange('Status', event.target.value)} className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white">
           <option value="">Статус</option>
@@ -6407,13 +6548,21 @@ const BotControlView = ({
       >
         <p className="text-slate-300">Состояние: {status?.running ? 'работает' : 'остановлен'}</p>
         <label className="mt-3 inline-flex items-center gap-2 text-slate-300">
-          <input type="checkbox" checked={settings?.isBotEnabled !== false} onChange={(event) => onToggleEnabled(event.target.checked)} />
+          <input
+            type="checkbox"
+            name="botEnabled"
+            aria-label="Автостарт вместе с CRM"
+            checked={settings?.isBotEnabled !== false}
+            onChange={(event) => onToggleEnabled(event.target.checked)}
+          />
           Автостарт вместе с CRM
         </label>
         <div className="mt-4">
           <label className="text-sm text-slate-300">Telegram-токен</label>
           <div className="mt-1 flex items-center gap-2">
             <input
+              name="botToken"
+              aria-label="Telegram-токен"
               type="text"
               value={tokenDraft}
               onChange={(event) => setTokenDraft(event.target.value)}
@@ -6586,6 +6735,8 @@ const LoginScreen = ({ onLogin, error }) => {
         <div>
           <label className="text-sm text-slate-300">Пароль</label>
           <input
+            name="sessionPassword"
+            aria-label="Пароль"
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}

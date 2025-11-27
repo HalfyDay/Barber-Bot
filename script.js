@@ -2370,6 +2370,10 @@ const BarberProfileView = ({
     [barber, pendingAvatar],
   );
   const lastSnapshotRef = useRef(null);
+  const initialSnapshotRef = useRef(true);
+  const autoSaveTimerRef = useRef(null);
+  const autoSaveResetRef = useRef(null);
+  const [autoSaveState, setAutoSaveState] = useState('idle');
   useEffect(() => {
     setPendingAvatar(barber?.avatarUrl || '');
   }, [barber?.avatarUrl]);

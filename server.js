@@ -20,6 +20,13 @@ const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-secret";
+const TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "30d";
+const TOKEN_REFRESH_THRESHOLD_MS =
+  Number(process.env.JWT_REFRESH_THRESHOLD_MS) || 3 * 24 * 60 * 60 * 1000;
+const WARNING_LOOKBACK_DAYS =
+  Number(process.env.WARNING_LOOKBACK_DAYS || 90) || 90;
+const WARNING_BLOCK_THRESHOLD =
+  Number(process.env.WARNING_BLOCK_THRESHOLD || 3) || 3;
 const BACKUP_DIR = path.join(__dirname, "backups");
 const DB_PATH = path.join(__dirname, "prisma", "dev.db");
 const BACKUP_RETENTION_DAYS = 30;
@@ -549,6 +556,76 @@ const mapAppointment = (record) => {
     normalizedPhone: normalizePhone(record.Phone),
   };
 };
+const getWarningCutoffDate = () => {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - WARNING_LOOKBACK_DAYS);
+  return cutoff;
+};
+const getAppointmentDate = (appt) => {
+  if (appt?.startDateTime) {
+    const parsed = new Date(appt.startDateTime);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  if (appt?.Date) {
+    const parsed = new Date(`${appt.Date}T00:00:00`);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return null;
+};
+const countAppointmentWarnings = (appointments = [], cutoff = null) => {
+  const threshold = cutoff || getWarningCutoffDate();
+  return appointments.reduce((total, appt) => {
+    if (!appt?.isBlocked) return total;
+    const apptDate = getAppointmentDate(appt);
+    if (apptDate && apptDate < threshold) return total;
+    return total + 1;
+  }, 0);
+};
+const countBlockedClientsFromAppointments = (
+  appointments = [],
+  manualBlockedSet = new Set(),
+) => {
+  const cutoff = getWarningCutoffDate();
+  const warningTotals = new Map();
+  appointments.forEach((appt) => {
+    if (!appt) return;
+    const key =
+      appt.UserID ||
+      appt.normalizedPhone ||
+      normalizeText(appt.CustomerName || "") ||
+      appt.id;
+    if (!key) return;
+    if (!appt.isBlocked) return;
+    const apptDate = getAppointmentDate(appt);
+    if (apptDate && apptDate < cutoff) return;
+    const prev = warningTotals.get(key) || 0;
+    warningTotals.set(key, prev + 1);
+  });
+  manualBlockedSet.forEach((key) => {
+    if (!key) return;
+    warningTotals.set(String(key), WARNING_BLOCK_THRESHOLD);
+  });
+  let blocked = 0;
+  warningTotals.forEach((count) => {
+    if (count >= WARNING_BLOCK_THRESHOLD) blocked += 1;
+  });
+  return blocked;
+};
+const BLOCKLIST_FILE = path.join(__dirname, "data", "blocked-users.json");
+const readBlockedUsers = async () => {
+  try {
+    const payload = await fs.readJson(BLOCKLIST_FILE);
+    const list = Array.isArray(payload) ? payload : payload?.blocked || [];
+    return new Set(list.filter(Boolean).map(String));
+  } catch {
+    return new Set();
+  }
+};
+const writeBlockedUsers = async (blockedSet) => {
+  const list = Array.from(blockedSet);
+  await fs.ensureDir(path.dirname(BLOCKLIST_FILE));
+  await fs.writeJson(BLOCKLIST_FILE, list, { spaces: 2 });
+};
 const coercePayload = (tableName, payload) => {
   const numericList = numericFields[tableName] || [];
   const booleanList = booleanFields[tableName] || [];
@@ -569,17 +646,50 @@ const coercePayload = (tableName, payload) => {
   });
   return payload;
 };
+const signSessionToken = (identity) =>
+  jwt.sign(identity, JWT_SECRET, {
+    expiresIn: TOKEN_EXPIRES_IN,
+  });
+const verifyTokenGracefully = (token) => {
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    return { payload, expired: false };
+  } catch (error) {
+    if (error?.name !== "TokenExpiredError") throw error;
+    const payload = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
+    return { payload, expired: true };
+  }
+};
+const shouldRefreshToken = (payload, expired) => {
+  if (expired) return true;
+  if (!payload?.exp) return false;
+  const expiresAtMs = payload.exp * 1000;
+  return expiresAtMs - Date.now() <= TOKEN_REFRESH_THRESHOLD_MS;
+};
+const refreshSessionToken = (res, identity) => {
+  try {
+    const nextToken = signSessionToken(identity);
+    res.setHeader("x-session-token", nextToken);
+  } catch (error) {
+    console.warn("token refresh failed:", error?.message || error);
+  }
+};
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(" ")[1];
   if (!token) return res.sendStatus(401);
-  return jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.sendStatus(403);
-    const identity = resolveUserIdentity(user || {});
+  try {
+    const { payload, expired } = verifyTokenGracefully(token);
+    const identity = resolveUserIdentity(payload || {});
     req.user = identity;
     req.identity = identity;
+    if (shouldRefreshToken(payload, expired)) {
+      refreshSessionToken(res, identity);
+    }
     return next();
-  });
+  } catch (error) {
+    return res.sendStatus(403);
+  }
 };
 const authenticateStream = (req, res, next) => {
   const directToken = req.query.token;
@@ -587,13 +697,18 @@ const authenticateStream = (req, res, next) => {
   const headerToken = authHeader && authHeader.split(" ")[1];
   const token = directToken || headerToken;
   if (!token) return res.sendStatus(401);
-  return jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.sendStatus(403);
-    const identity = resolveUserIdentity(user || {});
+  try {
+    const { payload, expired } = verifyTokenGracefully(token);
+    const identity = resolveUserIdentity(payload || {});
     req.user = identity;
     req.identity = identity;
+    if (shouldRefreshToken(payload, expired)) {
+      refreshSessionToken(res, identity);
+    }
     return next();
-  });
+  } catch (error) {
+    return res.sendStatus(403);
+  }
 };
 const listBackups = async () => {
   await fs.ensureDir(BACKUP_DIR);
@@ -782,10 +897,11 @@ const getServiceCatalog = async (includeInactive = true, identity = null) => {
   }));
   return filterServicesForIdentity(mapped, identity);
 };
-const buildClientRows = (users, appointments) => {
+const buildClientRows = (users, appointments, manualBlockedSet = new Set()) => {
   const now = new Date();
   const yearAgo = new Date(now);
   yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+  const warningCutoff = getWarningCutoffDate();
   const clients = [];
   const appointmentsByUser = new Map();
   appointments.forEach((appt) => {
@@ -800,14 +916,8 @@ const buildClientRows = (users, appointments) => {
     const relatedAppointments = (appointmentsByUser.get(user.id) || []).concat(
       appointments.filter((appt) => {
         if (appt.UserID && appt.UserID === user.id) return false;
-        if (normalizedPhone && appt.normalizedPhone === normalizedPhone)
-          return true;
-        if (
-          user.Name &&
-          appt.CustomerName &&
-          normalizeText(user.Name) === normalizeText(appt.CustomerName)
-        )
-          return true;
+        if (normalizedPhone && appt.normalizedPhone === normalizedPhone) return true;
+        if (user.Name && appt.CustomerName && normalizeText(user.Name) === normalizeText(appt.CustomerName)) return true;
         return false;
       }),
     );
@@ -817,20 +927,25 @@ const buildClientRows = (users, appointments) => {
       (appt) => appt.startDateTime && new Date(appt.startDateTime) >= yearAgo,
     );
     const lastConfirmed = confirmed.sort((a, b) => b.sortKey - a.sortKey)[0];
+    const warningCount = countAppointmentWarnings(relatedAppointments, warningCutoff);
+    const manualBlocked = manualBlockedSet.has(user.id);
+    const isBlocked = manualBlocked || warningCount >= WARNING_BLOCK_THRESHOLD;
     clients.push({
       id: user.id,
-      name: user.Name || "Без имени",
+      name: user.Name || "??? ?????",
       phone: user.Phone || "",
       normalizedPhone,
       telegramId: user.TelegramID || null,
       preferredBarber: user.Barber || null,
+      warningCount,
+      manualBlocked,
+      isBlocked,
       activeAppointments: active.length,
       confirmedHaircutsYear: confirmedYear.length,
       totalConfirmed: confirmed.length,
       lastHaircutDate: lastConfirmed?.Date || null,
       lastHaircutTime: lastConfirmed?.Time || null,
       lastHaircutBarber: lastConfirmed?.Barber || null,
-      isBlocked: relatedAppointments.some((appt) => appt.isBlocked),
       activeRecords: active.slice(0, 5),
       historyRecords: confirmed.slice(0, 25),
     });
@@ -841,9 +956,7 @@ const buildClientRows = (users, appointments) => {
     const exists = clients.some(
       (client) =>
         client.id === clientId ||
-        (client.normalizedPhone &&
-          client.normalizedPhone === appt.normalizedPhone &&
-          client.name === (appt.CustomerName || client.name)),
+        (client.normalizedPhone && client.normalizedPhone === appt.normalizedPhone && client.name === (appt.CustomerName || client.name)),
     );
     if (exists) return;
     const confirmedYear =
@@ -852,34 +965,34 @@ const buildClientRows = (users, appointments) => {
       new Date(appt.startDateTime) >= yearAgo
         ? 1
         : 0;
+    const warningCount = countAppointmentWarnings([appt], warningCutoff);
+    const isBlocked = warningCount >= WARNING_BLOCK_THRESHOLD || appt.isBlocked;
     clients.push({
       id: clientId,
-      name: appt.CustomerName || "Без имени",
+      name: appt.CustomerName || "??? ?????",
       phone: appt.Phone || "",
       normalizedPhone: appt.normalizedPhone,
       telegramId: null,
       preferredBarber: appt.Barber || null,
+      warningCount,
+      manualBlocked: false,
+      isBlocked,
       activeAppointments: appt.isActive ? 1 : 0,
       confirmedHaircutsYear: confirmedYear,
       totalConfirmed: appt.isConfirmed ? 1 : 0,
       lastHaircutDate: appt.isConfirmed ? appt.Date : null,
       lastHaircutTime: appt.isConfirmed ? appt.Time : null,
       lastHaircutBarber: appt.isConfirmed ? appt.Barber : null,
-      isBlocked: appt.isBlocked,
       activeRecords: appt.isActive ? [appt] : [],
       historyRecords: appt.isConfirmed ? [appt] : [],
     });
   });
   return clients.sort((a, b) => {
     const aDate = a.lastHaircutDate
-      ? new Date(
-          `${a.lastHaircutDate}T${(a.lastHaircutTime || "00:00").slice(0, 5)}:00`,
-        ).getTime()
+      ? new Date(`${a.lastHaircutDate}T${(a.lastHaircutTime || "00:00").slice(0, 5)}:00`).getTime()
       : 0;
     const bDate = b.lastHaircutDate
-      ? new Date(
-          `${b.lastHaircutDate}T${(b.lastHaircutTime || "00:00").slice(0, 5)}:00`,
-        ).getTime()
+      ? new Date(`${b.lastHaircutDate}T${(b.lastHaircutTime || "00:00").slice(0, 5)}:00`).getTime()
       : 0;
     return bDate - aDate;
   });
@@ -892,6 +1005,7 @@ const buildDashboardSnapshot = async (identity = null) => {
     services,
     settings,
     backups,
+    blockedUsers,
   ] = await Promise.all([
     prisma.appointments.findMany(),
     prisma.users.findMany(),
@@ -899,6 +1013,7 @@ const buildDashboardSnapshot = async (identity = null) => {
     getServiceCatalog(true, identity),
     getBotSettings(),
     listBackups(),
+    readBlockedUsers(),
   ]);
   const appointments = appointmentsRaw.map(mapAppointment);
   const now = new Date();
@@ -921,8 +1036,8 @@ const buildDashboardSnapshot = async (identity = null) => {
   const todaysAppointments = upcoming.filter(
     (appt) => appt.Date === todayKey,
   ).length;
-  const blockedClients = appointments.filter((appt) => appt.isBlocked).length;
-  const clients = buildClientRows(users, appointments);
+  const clients = buildClientRows(users, appointments, blockedUsers);
+  const blockedClients = clients.filter((client) => client.isBlocked).length;
   const stats = {
     totalUsers: users.length,
     activeAppointments: upcoming.length,
@@ -965,8 +1080,10 @@ const buildDashboardSnapshot = async (identity = null) => {
     const staffTodays = staffUpcoming.filter(
       (appt) => appt.Date === todayKey,
     ).length;
-    const staffBlocked = staffAppointments.filter((appt) => appt.isBlocked)
-      .length;
+    const staffBlocked = countBlockedClientsFromAppointments(
+      staffAppointments,
+      blockedUsers,
+    );
     const staffUsers = users.filter((user) =>
       matchesIdentityBarber(user.Barber, identity),
     );
@@ -1062,9 +1179,10 @@ const hashAppointmentsSnapshot = (rows = []) => {
   return createHash("sha1").update(JSON.stringify(sorted)).digest("hex");
 };
 const buildRealtimeAppointmentsPayload = async () => {
-  const [appointmentsRaw, usersCount] = await Promise.all([
+  const [appointmentsRaw, usersCount, blockedUsers] = await Promise.all([
     prisma.appointments.findMany(),
     prisma.users.count(),
+    readBlockedUsers(),
   ]);
   const mapped = appointmentsRaw.map(mapAppointment);
   const now = new Date();
@@ -1084,7 +1202,10 @@ const buildRealtimeAppointmentsPayload = async () => {
   const todaysAppointments = upcoming.filter(
     (appt) => appt.Date === todayKey,
   ).length;
-  const blockedClients = mapped.filter((appt) => appt.isBlocked).length;
+  const blockedClients = countBlockedClientsFromAppointments(
+    mapped,
+    blockedUsers,
+  );
   return {
     appointmentsRaw,
     upcoming,
@@ -1407,9 +1528,7 @@ const handleLogin = async (req, res) => {
       barberName: barber.name || barber.login,
       role: barber.role,
     });
-    const token = jwt.sign(identity, JWT_SECRET, {
-      expiresIn: "7d",
-    });
+    const token = signSessionToken(identity);
     return res.json({
       success: true,
       token,
@@ -2659,18 +2778,76 @@ app.get("/api/user-profile/:name", authenticateToken, async (req, res) => {
     const user = await prisma.users.findFirst({ where: { Name: name } });
     if (!user)
       return res.status(404).json({ error: "Пользователь не найден." });
+    const blockedUsers = await readBlockedUsers();
     const appointmentsRaw = await prisma.appointments.findMany({
       where: { CustomerName: name },
     });
     const appointments = appointmentsRaw
       .map(mapAppointment)
       .sort((a, b) => b.sortKey - a.sortKey);
-    res.json({ user, appointments });
+    const warningCount = countAppointmentWarnings(appointments);
+    const manualBlocked = blockedUsers.has(user.id);
+    const isBlocked = manualBlocked || warningCount >= WARNING_BLOCK_THRESHOLD;
+    res.json({
+      user: { ...user, warningCount, manualBlocked, isBlocked },
+      appointments,
+      warningCount,
+      manualBlocked,
+      isBlocked,
+    });
   } catch (error) {
     console.error("Profile fetch error:", error);
     res
       .status(500)
       .json({ error: "Не удалось загрузить профиль пользователя." });
+  }
+});
+app.post("/api/users/:id/block", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "�������筮 �ࠢ ��� ��������� �࠭�." });
+  }
+  const { id } = req.params;
+  const shouldBlock = req.body?.blocked !== false;
+  try {
+    const user = await prisma.users.findUnique({ where: { id } });
+    if (!user) {
+      return res.status(404).json({ error: "������������ �� ������." });
+    }
+    const blockedUsers = await readBlockedUsers();
+    if (shouldBlock) {
+      blockedUsers.add(id);
+    } else {
+      blockedUsers.delete(id);
+    }
+    await writeBlockedUsers(blockedUsers);
+    const relatedAppointments = await prisma.appointments.findMany({
+      where: {
+        OR: [
+          { UserID: id },
+          { CustomerName: user.Name || undefined },
+          { Phone: user.Phone || undefined },
+        ],
+      },
+    });
+    const warnings = countAppointmentWarnings(
+      relatedAppointments.map(mapAppointment),
+    );
+    const manualBlocked = blockedUsers.has(id);
+    const blocked = manualBlocked || warnings >= WARNING_BLOCK_THRESHOLD;
+    requestRealtimePush(true);
+    return res.json({
+      success: true,
+      blocked,
+      manualBlocked,
+      warnings,
+    });
+  } catch (error) {
+    console.error("Block toggle error:", error);
+    return res
+      .status(500)
+      .json({ error: "�� ������� ��������� ���������.", details: error.message });
   }
 });
 cron.schedule("0 3 * * *", async () => {

@@ -117,6 +117,7 @@ const TABLE_COLUMNS = {
   ],
 };
 const BOT_SUPPORTED_STATUS_OPTIONS = ['Активная', 'Выполнена', 'Отмена', 'Неявка'];
+const CLIENT_BLOCK_THRESHOLD = 3;
 const RATING_MIN = 1;
 const RATING_MAX = 5;
 const RATING_STEP = 1;
@@ -897,6 +898,21 @@ const IconSave = ({ className = 'h-4 w-4' }) => (
     <path d="M14 3v5H6V3" />
     <path d="M6 17h12" />
     <path d="M12 11v6" />
+  </svg>
+);
+const IconBan = ({ className = 'h-4 w-4' }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <circle cx="12" cy="12" r="9" />
+    <line x1="7" y1="17" x2="17" y2="7" />
   </svg>
 );
 const RESPONSIVE_ACTION_BUTTON_CLASS =
@@ -4793,17 +4809,37 @@ const DataTable = ({
     </div>
   );
 };
-const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHistory, onRequestConfirm }) => {
-  const [modalState, setModalState] = useState({ open: false, record: null, history: [], loading: false, error: '' });
+const ClientsList = ({
+  clients = [],
+  barbers = [],
+  onUpdate,
+  onDelete,
+  fetchHistory,
+  onRequestConfirm,
+  onBlockClient,
+}) => {
+  const [modalState, setModalState] = useState({
+    open: false,
+    record: null,
+    history: [],
+    loading: false,
+    error: '',
+    blockBusy: false,
+  });
   const barberOptions = useMemo(() => (Array.isArray(barbers) ? barbers.filter(Boolean) : []), [barbers]);
   const openClientModal = async (client) => {
     if (!client) return;
-    setModalState({ open: true, record: { ...client }, history: [], loading: true, error: '' });
+    setModalState({ open: true, record: { ...client }, history: [], loading: true, error: '', blockBusy: false });
     try {
       if (fetchHistory && client.Name) {
         const profile = await fetchHistory(client);
         const history = buildVisitHistory(profile?.appointments || []);
-        setModalState((prev) => ({ ...prev, history, loading: false }));
+        setModalState((prev) => ({
+          ...prev,
+          history,
+          loading: false,
+          record: profile?.user ? { ...prev.record, ...profile.user } : prev.record,
+        }));
       } else {
         setModalState((prev) => ({ ...prev, loading: false, history: [] }));
       }
@@ -4811,7 +4847,13 @@ const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHist
       setModalState((prev) => ({ ...prev, loading: false, error: error.message || 'Не удалось загрузить историю' }));
     }
   };
-  const closeClientModal = () => setModalState({ open: false, record: null, history: [], loading: false, error: '' });
+  const closeClientModal = () =>
+    setModalState({ open: false, record: null, history: [], loading: false, error: '', blockBusy: false });
+  const warningCount = Number(modalState.record?.warningCount ?? 0);
+  const manualBlocked = Boolean(modalState.record?.manualBlocked);
+  const isBlocked =
+    (modalState.record?.isBlocked ?? manualBlocked) ||
+    warningCount >= CLIENT_BLOCK_THRESHOLD;
   const handleFieldChange = (field, value) => {
     setModalState((prev) => ({ ...prev, record: { ...prev.record, [field]: value } }));
   };
@@ -4827,6 +4869,30 @@ const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHist
     };
     onUpdate(recordId, payload);
     closeClientModal();
+  };
+  const handleBlockToggle = async () => {
+    if (!modalState.record?.id || typeof onBlockClient !== 'function') return;
+    setModalState((prev) => ({ ...prev, blockBusy: true, error: '' }));
+    const nextBlocked = !isBlocked;
+    try {
+      const result = await onBlockClient(modalState.record.id, nextBlocked);
+      setModalState((prev) => ({
+        ...prev,
+        blockBusy: false,
+        record: {
+          ...prev.record,
+          isBlocked: result?.blocked ?? nextBlocked,
+          manualBlocked: result?.manualBlocked ?? nextBlocked,
+          warningCount: result?.warnings ?? prev.record?.warningCount ?? warningCount,
+        },
+      }));
+    } catch (error) {
+      setModalState((prev) => ({
+        ...prev,
+        blockBusy: false,
+        error: error.message || '?? ??????? ????????? ?????????',
+      }));
+    }
   };
   const handleDelete = async () => {
     if (!modalState.record || typeof onDelete !== 'function') return;
@@ -4903,6 +4969,22 @@ const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHist
               </button>
             )}
             <button
+              onClick={handleBlockToggle}
+              disabled={modalState.blockBusy || !onBlockClient || !modalState.record?.id}
+              className={classNames(
+                RESPONSIVE_ACTION_BUTTON_CLASS,
+                isBlocked
+                  ? 'border border-amber-500 text-amber-200 hover:bg-amber-500/10'
+                  : 'border border-rose-500 text-rose-200 hover:bg-rose-500/10',
+                (modalState.blockBusy || !onBlockClient || !modalState.record?.id) && 'cursor-not-allowed opacity-60'
+              )}
+              aria-label={isBlocked ? 'Разблокировать клиента' : 'Заблокировать клиента'}
+              title={isBlocked ? 'Разблокировать клиента' : 'Заблокировать клиента'}
+            >
+              <IconBan className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">{isBlocked ? 'Разблокировать' : 'Заблокировать'}</span>
+            </button>
+            <button
               onClick={closeClientModal}
               className={classNames(
                 RESPONSIVE_ACTION_BUTTON_CLASS,
@@ -4933,6 +5015,15 @@ const ClientsList = ({ clients = [], barbers = [], onUpdate, onDelete, fetchHist
           <p className="text-slate-400">Выберите клиента.</p>
         ) : (
           <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  Предупреждения: {warningCount}{isBlocked ? ' (Заблокирован)' : ''}
+                </p>
+                {modalState.error && <p className="text-xs text-rose-300">{modalState.error}</p>}
+              </div>
+              {isBlocked && <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-200">Заблокирован</span>}
+            </div>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-1 text-sm text-slate-300">
                 Имя
@@ -5121,10 +5212,45 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
     </Modal>
   );
 };
-const ProfileModal = ({ state, onClose }) => {
+
+const ProfileModal = ({ state, onClose, onBlockClient }) => {
   const appointments = state.data?.appointments || [];
   const visitHistory = useMemo(() => buildVisitHistory(appointments), [appointments]);
   const user = state.data?.user || null;
+  const [blockState, setBlockState] = useState(null);
+  const [blockBusy, setBlockBusy] = useState(false);
+  const [blockError, setBlockError] = useState('');
+  useEffect(() => {
+    setBlockState(null);
+    setBlockError('');
+  }, [state?.open, user?.id]);
+  const warningCount = blockState?.warningCount ?? state.data?.warningCount ?? user?.warningCount ?? 0;
+  const manualBlocked = blockState?.manualBlocked ?? state.data?.manualBlocked ?? user?.manualBlocked ?? false;
+  const isBlocked =
+    (blockState?.isBlocked ??
+      blockState?.blocked ??
+      state.data?.isBlocked ??
+      user?.isBlocked ??
+      manualBlocked) ||
+    warningCount >= CLIENT_BLOCK_THRESHOLD;
+  const handleToggleBlock = async () => {
+    if (!onBlockClient || !user?.id) return;
+    setBlockBusy(true);
+    setBlockError('');
+    const nextBlocked = !isBlocked;
+    try {
+      const result = await onBlockClient(user.id, nextBlocked);
+      setBlockState({
+        warningCount: result?.warnings ?? warningCount,
+        manualBlocked: result?.manualBlocked ?? nextBlocked,
+        isBlocked: result?.blocked ?? nextBlocked,
+      });
+    } catch (error) {
+      setBlockError(error.message || 'Failed to update block status');
+    } finally {
+      setBlockBusy(false);
+    }
+  };
   const phoneLabel = user?.Phone ? formatPhoneInput(user.Phone) : '';
   const phoneHref = phoneLabel ? `tel:${phoneLabel.replace(/[^\d+]/g, '')}` : '';
   const telegramHandle = user?.TelegramID ? formatTelegramHandle(user.TelegramID) : '';
@@ -5133,15 +5259,42 @@ const ProfileModal = ({ state, onClose }) => {
   const telegramRel = telegramHref?.startsWith('tg://') ? undefined : 'noopener noreferrer';
   return (
     <Modal
-      title={state.data?.user?.Name || 'Профиль клиента'}
+      title={state.data?.user?.Name || 'Client profile'}
       isOpen={state.open}
       onClose={onClose}
-      footer={<button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">Закрыть</button>}
+      footer={
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {onBlockClient && user?.id && (
+            <button
+              onClick={handleToggleBlock}
+              disabled={blockBusy}
+              className={classNames(
+                RESPONSIVE_ACTION_BUTTON_CLASS,
+                isBlocked
+                  ? 'border border-amber-500 text-amber-200 hover:bg-amber-500/10'
+                  : 'border border-rose-500 text-rose-200 hover:bg-rose-500/10',
+                blockBusy && 'cursor-not-allowed opacity-60'
+              )}
+            >
+              <IconBan className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">{isBlocked ? 'Разблокировать' : 'Заблокировать'}</span>
+            </button>
+          )}
+          <button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">Закрыть</button>
+        </div>
+      }
     >
-      {state.loading && <LoadingState label="Загружаю профиль..." />}
+      {state.loading && <LoadingState label="Loading profile..." />}
       {!state.loading && state.data?.error && <ErrorBanner message={state.data.error} />}
       {!state.loading && user && (
         <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2">
+            <div className="text-sm text-white">
+              <p className="font-semibold">Предупреждения: {warningCount}</p>
+              {blockError && <p className="text-xs text-rose-300">{blockError}</p>}
+            </div>
+            {isBlocked && <span className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-200">Заблокирован</span>}
+          </div>
           <div className="grid gap-2 text-sm text-slate-200">
             <div>
               <span className="text-slate-400">Телефон:</span>{' '}
@@ -5150,25 +5303,25 @@ const ProfileModal = ({ state, onClose }) => {
                   {phoneLabel}
                 </a>
               ) : (
-                '—'
+                '-'
               )}
             </div>
             <div>
-              <span className="text-slate-400">Telegram:</span>{' '}
+              <span className="text-slate-400">Телеграм:</span>{' '}
               {telegramHandle && telegramHref ? (
                 <a href={telegramHref} target={telegramTarget} rel={telegramRel} className="text-indigo-300 hover:text-indigo-100">
                   {telegramHandle}
                 </a>
               ) : (
-                '—'
+                '-'
               )}
             </div>
-            <div><span className="text-slate-400">Любимый барбер:</span> {user.Barber || '—'}</div>
+            <div><span className="text-slate-400">Любимый барбер:</span> {user.Barber || '-'}</div>
           </div>
           <div>
             <p className="text-sm text-slate-400">История визитов</p>
             <div className="mt-2">
-              <VisitHistoryList visits={visitHistory} emptyMessage="Записей за последний год нет." />
+              <VisitHistoryList visits={visitHistory} emptyMessage="История пуста." />
             </div>
           </div>
         </div>
@@ -5608,6 +5761,7 @@ const TablesWorkspace = ({
   uploadAvatar,
   deleteAvatar,
   loadAvatarOptions,
+  onBlockClient,
   dataTables = DEFAULT_DATA_TABLES,
   visibleTableOrder = DEFAULT_VISIBLE_TABLE_ORDER,
   role = ROLE_OWNER,
@@ -6032,6 +6186,7 @@ const TablesWorkspace = ({
                   onDelete={handleDelete}
                   fetchHistory={fetchClientProfile}
                   onRequestConfirm={onRequestConfirm}
+                  onBlockClient={onBlockClient}
                 />
               ) : (
                 <DataTable
@@ -6618,6 +6773,22 @@ const App = () => {
     setPendingReloadReason(null);
     setSystemBusy(false);
   }, []);
+  const handleSessionTokenRefresh = useCallback(
+    (nextToken) => {
+      if (!nextToken) return;
+      setSession((prev) => {
+        if (!prev || prev.token === nextToken) return prev;
+        const updated = buildSessionPayload({ ...prev, token: nextToken });
+        try {
+          localStorage.setItem('barber-session', JSON.stringify(updated));
+        } catch (storageError) {
+          console.warn('session update error', storageError);
+        }
+        return updated;
+      });
+    },
+    [setSession]
+  );
 const apiRequest = useCallback(
     async (endpoint, options = {}) => {
       if (!session?.token) throw new Error('Нет активной сессии');
@@ -6628,6 +6799,7 @@ const apiRequest = useCallback(
         ...(options.headers || {}),
       };
       const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
+      handleSessionTokenRefresh(response.headers.get('x-session-token'));
       if (response.status === 401) {
         handleLogout();
         throw new Error('Сессия завершена, войдите снова');
@@ -6640,7 +6812,7 @@ const apiRequest = useCallback(
       if (response.status === 204) return null;
       return response.json();
     },
-    [session?.token, handleLogout]
+    [session?.token, handleLogout, handleSessionTokenRefresh]
   );
   const applyFavoriteBarberRule = useCallback(
     async (profilePayload) => {
@@ -6755,6 +6927,20 @@ const apiRequest = useCallback(
       setLoading(false);
     }
   }, [apiRequest, canAccessBot, canAccessSystem, session?.token]);
+  const handleBlockClient = useCallback(
+    async (clientId, blocked = true) => {
+      if (!clientId) throw new Error('No client id');
+      const result = await apiRequest(`/users/${encodeURIComponent(clientId)}/block`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blocked }),
+      });
+      fetchAll();
+      return result;
+    },
+    [apiRequest, fetchAll]
+  );
+
   useEffect(() => {
     if (session?.token) {
       fetchAll();
@@ -7490,6 +7676,7 @@ const apiRequest = useCallback(
             preferredTable={preferredTableTarget}
             onPreferredTableConsumed={handlePreferredTableConsumed}
             onRequestConfirm={requestConfirm}
+            onBlockClient={handleBlockClient}
             uploadAvatar={handleUploadAvatar}
             deleteAvatar={handleDeleteAvatar}
             loadAvatarOptions={handleLoadAvatarOptions}
@@ -7621,7 +7808,11 @@ const apiRequest = useCallback(
           {renderActive()}
         </main>
       </div>
-      <ProfileModal state={profileModal} onClose={() => setProfileModal({ open: false, data: null, loading: false })} />
+      <ProfileModal
+        state={profileModal}
+        onClose={() => setProfileModal({ open: false, data: null, loading: false })}
+        onBlockClient={handleBlockClient}
+      />
       <AppointmentModal
         open={appointmentModal.open}
         appointment={appointmentModal.data}

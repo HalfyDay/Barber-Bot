@@ -43,6 +43,7 @@ const API_BASE_URL = window.__BARBER_API_BASE__ || DEFAULT_API_BASE_URL;
 window.__BARBER_API_BASE__ = API_BASE_URL;
 const ROLE_OWNER = 'owner';
 const ROLE_STAFF = 'staff';
+const ROLE_CREATOR = 'creator';
 const ROLE_OPTIONS = [
   { value: ROLE_OWNER, label: 'Владелец' },
   { value: ROLE_STAFF, label: 'Сотрудник' },
@@ -58,11 +59,17 @@ const VIEW_TABS_BY_ROLE = {
     { id: 'tables', label: 'Данные' },
     { id: 'profile', label: 'Профиль' },
   ],
+  [ROLE_CREATOR]: [
+    { id: 'dashboard', label: 'Главная' },
+    { id: 'tables', label: 'Данные' },
+    { id: 'system', label: 'Система' },
+  ],
 };
 const TABLE_ORDER = ['Appointments', 'Schedules', 'Users', 'Barbers', 'Services', 'Positions', 'Revenue'];
 const DATA_TABLES_BY_ROLE = {
   [ROLE_OWNER]: ['Appointments', 'Schedules', 'Users', 'Positions'],
   [ROLE_STAFF]: ['Appointments', 'Schedules', 'Services'],
+  [ROLE_CREATOR]: ['Appointments', 'Schedules', 'Users', 'Positions'],
 };
 const VISIBLE_TABLE_ORDER_BY_ROLE = {
   [ROLE_OWNER]: ['Appointments', 'Users', 'Barbers', 'Schedules', 'Services', 'Positions', 'Revenue'],
@@ -387,7 +394,11 @@ const pluralize = (count, [one, few, many]) => {
 };
 const canonicalizeName = (value) => normalizeText(value).replace(/[^a-z0-9а-яё\s]/gi, '').trim();
 const resolveLogin = (value) => normalizeText(value);
-const normalizeRoleValue = (value) => (value === ROLE_STAFF ? ROLE_STAFF : ROLE_OWNER);
+const normalizeRoleValue = (value) => {
+  if (value === ROLE_CREATOR) return ROLE_CREATOR;
+  if (value === ROLE_STAFF) return ROLE_STAFF;
+  return ROLE_OWNER;
+};
 const buildSessionPayload = (payload = {}) => {
   const normalizedLogin = resolveLogin(payload.username || payload.login);
   return {
@@ -398,6 +409,82 @@ const buildSessionPayload = (payload = {}) => {
     role: normalizeRoleValue(payload.role),
     barberName: payload.barberName || payload.displayName || payload.name || normalizedLogin,
   };
+};
+const SESSION_STORAGE_KEY = 'barber-session';
+const REMEMBER_STORAGE_KEY = 'barber-session-remember';
+const getStorageArea = (type) => {
+  if (typeof window === 'undefined') return null;
+  try {
+    return type === 'session' ? window.sessionStorage : window.localStorage;
+  } catch (error) {
+    return null;
+  }
+};
+const safeStorageGet = (storage, key) => {
+  try {
+    return storage?.getItem ? storage.getItem(key) : null;
+  } catch (error) {
+    return null;
+  }
+};
+const safeStorageSet = (storage, key, value) => {
+  try {
+    if (storage?.setItem) {
+      storage.setItem(key, value);
+    }
+  } catch (error) {
+    console.warn('storage set error', error);
+  }
+};
+const safeStorageRemove = (storage, key) => {
+  try {
+    if (storage?.removeItem) {
+      storage.removeItem(key);
+    }
+  } catch (error) {
+    // ignore
+  }
+};
+const loadPersistedSession = () => {
+  const localValue = safeStorageGet(getStorageArea('local'), SESSION_STORAGE_KEY);
+  if (localValue) {
+    try {
+      return { session: buildSessionPayload(JSON.parse(localValue)), remember: true };
+    } catch (error) {
+      console.warn('session restore error', error);
+    }
+  }
+  const sessionValue = safeStorageGet(getStorageArea('session'), SESSION_STORAGE_KEY);
+  if (sessionValue) {
+    try {
+      return { session: buildSessionPayload(JSON.parse(sessionValue)), remember: false };
+    } catch (error) {
+      console.warn('session restore error', error);
+    }
+  }
+  const remember = safeStorageGet(getStorageArea('local'), REMEMBER_STORAGE_KEY) === '1';
+  return { session: null, remember };
+};
+const persistRememberChoice = (remember) => {
+  safeStorageSet(getStorageArea('local'), REMEMBER_STORAGE_KEY, remember ? '1' : '0');
+};
+const persistSessionPayload = (payload, remember) => {
+  const serialized = JSON.stringify(payload);
+  const localStore = getStorageArea('local');
+  const sessionStore = getStorageArea('session');
+  if (remember) {
+    safeStorageSet(localStore, SESSION_STORAGE_KEY, serialized);
+    safeStorageRemove(sessionStore, SESSION_STORAGE_KEY);
+    persistRememberChoice(true);
+  } else {
+    safeStorageSet(sessionStore, SESSION_STORAGE_KEY, serialized);
+    safeStorageRemove(localStore, SESSION_STORAGE_KEY);
+    persistRememberChoice(false);
+  }
+};
+const clearStoredSession = () => {
+  safeStorageRemove(getStorageArea('local'), SESSION_STORAGE_KEY);
+  safeStorageRemove(getStorageArea('session'), SESSION_STORAGE_KEY);
 };
 const pickBarberForUser = (userSession, availableBarbers = []) => {
   const fallback = availableBarbers?.[0] || '';
@@ -453,6 +540,37 @@ const formatPhoneInput = (value) => {
     return value.toString();
   }
   return `+${normalized}`;
+};
+const formatPhoneDisplay = (value) => {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return '';
+  let normalized = digits;
+  if (normalized.startsWith('8')) {
+    normalized = `7${normalized.slice(1)}`;
+  } else if (!normalized.startsWith('7')) {
+    normalized = `7${normalized}`;
+  }
+  normalized = normalized.slice(0, 11);
+  if (normalized === '7') return digits === '7' ? '' : '+7';
+  const core = normalized.slice(1);
+  const parts = [core.slice(0, 3), core.slice(3, 6), core.slice(6, 8), core.slice(8, 10)];
+  const [p1 = '', p2 = '', p3 = '', p4 = ''] = parts;
+  let result = '+7';
+  if (p1) result += ` ${p1}`;
+  if (p2) result += ` ${p2}`;
+  if (p3) result += `-${p3}`;
+  if (p4) result += `-${p4}`;
+  return result.trim();
+};
+const normalizePhoneValue = (value) => {
+  const digits = String(value || '')
+    .replace(/[^\d+]/g, '')
+    .trim();
+  if (!digits) return '';
+  if (digits.startsWith('+')) return digits;
+  if (digits.startsWith('8')) return `+7${digits.slice(1)}`;
+  if (digits.startsWith('7')) return `+7${digits.slice(1)}`;
+  return `+${digits}`;
 };
 const formatTelegramHandle = (value) => {
   const handle = normalizeText(value).replace(/^@+/, '').trim();
@@ -2070,6 +2188,11 @@ const BarbersView = ({
       onFieldChange?.(activeBarber.id, field, nextValue);
     }
   };
+  const handlePhoneChange = (rawValue) => {
+    const digits = (rawValue || '').replace(/\D/g, '');
+    const formatted = digits ? formatPhoneDisplay(rawValue) : '';
+    handleFieldChange('phone', formatted);
+  };
   const handleAvatarChange = useCallback(
     (value) => {
       handleFieldChange('avatarUrl', value);
@@ -2311,8 +2434,8 @@ const BarbersView = ({
                   name="barberPhone"
                   aria-label="Телефон"
                   type="tel"
-                  value={workingBarber.phone || ''}
-                  onChange={(event) => handleFieldChange('phone', event.target.value)}
+                  value={formatPhoneDisplay(workingBarber.phone || '')}
+                  onChange={(event) => handlePhoneChange(event.target.value)}
                   placeholder="Телефон"
                   className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
                 />
@@ -2439,6 +2562,11 @@ const BarberProfileView = ({
     const nextValue = field === 'rating' ? formatRatingValue(value) : value;
     onFieldChange?.(barber.id, field, nextValue);
   };
+  const handlePhoneChange = (rawValue) => {
+    const digits = (rawValue || '').replace(/\D/g, '');
+    const formatted = digits ? formatPhoneDisplay(rawValue) : '';
+    handleFieldChange('phone', formatted);
+  };
   return (
     <div className="space-y-6">
       <SectionCard title="Мой профиль">
@@ -2516,8 +2644,8 @@ const BarberProfileView = ({
                 name="barberPhone"
                 aria-label="Телефон"
                 type="tel"
-                value={barber.phone || ''}
-                onChange={(event) => handleFieldChange('phone', event.target.value)}
+                value={formatPhoneDisplay(barber.phone || '')}
+                onChange={(event) => handlePhoneChange(event.target.value)}
                 placeholder="Телефон"
                 className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
               />
@@ -6283,7 +6411,7 @@ const TablesWorkspace = ({
               barbers={barbers}
               currentUser={currentUser}
               onScheduleUpdate={
-                role === ROLE_OWNER || role === ROLE_STAFF
+                role === ROLE_OWNER || role === ROLE_STAFF || role === ROLE_CREATOR
                   ? (recordId, payload) => handleUpdate(recordId, payload, { tableId: 'Schedules' })
                   : null
               }
@@ -6432,6 +6560,7 @@ const BotControlView = ({
   onUpdateToken = null,
   viewMode = 'bot',
   token = null,
+  role = ROLE_OWNER,
 }) => {
   const [description, setDescription] = useState(settings?.botDescription || '');
   const [about, setAbout] = useState(settings?.aboutText || '');
@@ -6493,6 +6622,9 @@ const BotControlView = ({
   const restartDisabled = systemBusy || typeof onRestartSystem !== 'function';
   const updateButtonLabel = systemBusy && pendingReloadReason !== 'restart' ? 'Обновление…' : 'Обновить';
   const restartButtonLabel = systemBusy && pendingReloadReason === 'restart' ? 'Перезапуск…' : 'Перезапуск';
+  const isCreator = role === ROLE_CREATOR;
+  const licenseList = Array.isArray(licenseStatus?.licenses) ? licenseStatus.licenses : [];
+  const hasLicenseList = isCreator && licenseList.length > 0;
   if (viewMode === 'system') {
     return (
       <div className="space-y-6">
@@ -6551,6 +6683,23 @@ const BotControlView = ({
             </div>
           </div>
         </SectionCard>
+        {hasLicenseList && (
+          <SectionCard title="Авторизованные организации">
+            <div className="grid gap-3 md:grid-cols-2">
+              {licenseList.map((item, index) => {
+                const name = item.name || item.owner || 'Организация';
+                const key = item.key || item.number || '';
+                return (
+                  <div key={item.key || item.owner || index} className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
+                    <p className="font-semibold text-white">{name}</p>
+                    {key && <p className="text-xs text-slate-400">Ключ: {key}</p>}
+                    {item.expiresAt && <p className="text-xs text-slate-400">Действует до {formatDate(item.expiresAt)}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          </SectionCard>
+        )}
       </div>
     );
   }
@@ -6687,54 +6836,28 @@ const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
     </div>
   );
 };
-const LoginScreen = ({ onLogin, error }) => {
-  const [username, setUsername] = useState('');
+const LoginScreen = ({ onLogin, error, defaultRemember = false, onRememberChange = null }) => {
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(defaultRemember);
   const [validationError, setValidationError] = useState('');
-  const [loginOptions, setLoginOptions] = useState([]);
-  const [optionsError, setOptionsError] = useState('');
-  const [loadingOptions, setLoadingOptions] = useState(true);
+
   useEffect(() => {
-    let isMounted = true;
-    const fetchOptions = async () => {
-      setLoadingOptions(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/login/options`);
-        if (!response.ok) throw new Error('failed');
-        const data = await response.json();
-        if (!isMounted) return;
-        const normalized = Array.isArray(data) ? data : [];
-        setLoginOptions(normalized);
-        if (normalized.length === 1) {
-          setUsername(normalized[0].login);
-        } else if (!normalized.some((option) => option.login === username)) {
-          setUsername('');
-        }
-        setOptionsError('');
-      } catch (fetchError) {
-        if (!isMounted) return;
-        setLoginOptions([]);
-        setOptionsError('Не удалось загрузить список сотрудников.');
-      } finally {
-        if (isMounted) {
-          setLoadingOptions(false);
-        }
-      }
-    };
-    fetchOptions();
-    return () => {
-      isMounted = false;
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    setRememberMe(defaultRemember);
+  }, [defaultRemember]);
+
   useEffect(() => {
     if (error) {
       setValidationError('');
     }
   }, [error]);
+
   const handleSubmit = (event) => {
     event.preventDefault();
-    if (!username) {
-      setValidationError('Выберите сотрудника');
+    const normalizedPhone = normalizePhoneValue(phone);
+    const normalizedLogin = resolveLogin(phone);
+    if (!normalizedPhone && !normalizedLogin) {
+      setValidationError('Укажите номер телефона или логин');
       return;
     }
     if (!password) {
@@ -6742,34 +6865,71 @@ const LoginScreen = ({ onLogin, error }) => {
       return;
     }
     setValidationError('');
-    onLogin(username, password);
+    onLogin({
+      phone: normalizedPhone,
+      login: normalizedLogin,
+      password,
+      remember: rememberMe,
+    });
   };
-  const selectDisabled = loadingOptions || loginOptions.length === 0;
+
+  const handleRememberToggle = (value) => {
+    setRememberMe(value);
+    onRememberChange?.(value);
+  };
+
+  const formatPhoneDisplay = (value) => {
+    const digits = (value || '').replace(/\D/g, '');
+    if (!digits) return '';
+    let normalized = digits;
+    if (normalized.startsWith('8')) {
+      normalized = `7${normalized.slice(1)}`;
+    } else if (!normalized.startsWith('7')) {
+      normalized = `7${normalized}`;
+    }
+    normalized = normalized.slice(0, 11);
+    if (normalized === '7') return digits === '7' ? '' : '+7';
+    const core = normalized.slice(1);
+    const parts = [core.slice(0, 3), core.slice(3, 6), core.slice(6, 8), core.slice(8, 10)];
+    const [p1 = '', p2 = '', p3 = '', p4 = ''] = parts;
+    let result = '+7';
+    if (p1) result += ` ${p1}`;
+    if (p2) result += ` ${p2}`;
+    if (p3) result += `-${p3}`;
+    if (p4) result += `-${p4}`;
+    return result.trim();
+  };
+
+  const handlePhoneInput = (raw) => {
+    const digits = (raw || '').replace(/\D/g, '');
+    if (!digits) {
+      setPhone('');
+      return;
+    }
+    setValidationError('');
+    setPhone(formatPhoneDisplay(raw));
+  };
+
+
+  const suggestionPlaceholder = 'Например: +7 999 123-45-67';
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-md space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">
-        <h1 className="text-center text-2xl font-semibold text-white">Barber Bot CRM</h1>
+      <form onSubmit={handleSubmit} className="w-full max-w-md space-y-5 rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">
+        <div className="space-y-1 text-center">
+          <h1 className="text-2xl font-semibold text-white">HalfTime</h1>
+        </div>
         <div>
-          <label className="text-sm text-slate-300">Логин барбера (выбор)</label>
-          <select
-            value={username}
-            disabled={selectDisabled}
-            onChange={(event) => {
-              setValidationError('');
-              setUsername(event.target.value);
-            }}
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
-          >
-            <option value="">{loadingOptions ? 'Загрузка...' : 'Выберите сотрудника'}</option>
-            {loginOptions.map((option) => (
-              <option key={option.id || option.login} value={option.login}>
-                {option.label || option.login}
-              </option>
-            ))}
-          </select>
+          <label className="text-sm text-slate-300">Номер телефона</label>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(event) => handlePhoneInput(event.target.value)}
+            placeholder={suggestionPlaceholder}
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
+          />
           <div className="mt-1 space-y-1">
-            <p className="text-xs text-slate-500">Логин барбера нужен для входа.</p>
-            {optionsError && <p className="text-xs text-rose-400">{optionsError}</p>}
+            <p className="text-xs text-slate-500">Номер телефона подтверждает, что вы из нашей команды.</p>
           </div>
         </div>
         <div>
@@ -6783,8 +6943,19 @@ const LoginScreen = ({ onLogin, error }) => {
             className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
           />
         </div>
+        <div className="flex items-center justify-between text-sm text-slate-300">
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(event) => handleRememberToggle(event.target.checked)}
+              className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500"
+            />
+            <span>Запомнить меня</span>
+          </label>
+        </div>
         {(validationError || error) && <ErrorBanner message={validationError || error} />}
-        <button type="submit" className="w-full rounded-lg bg-indigo-600 py-2 font-semibold text-white hover:bg-indigo-500" disabled={selectDisabled}>
+        <button type="submit" className="w-full rounded-lg bg-indigo-600 py-2 font-semibold text-white hover:bg-indigo-500">
           Войти
         </button>
       </form>
@@ -6792,14 +6963,9 @@ const LoginScreen = ({ onLogin, error }) => {
   );
 };
 const App = () => {
-  const [session, setSession] = useState(() => {
-    try {
-      const saved = localStorage.getItem('barber-session');
-      return saved ? buildSessionPayload(JSON.parse(saved)) : null;
-    } catch (error) {
-      return null;
-    }
-  });
+  const persistedAuth = useMemo(() => loadPersistedSession(), []);
+  const [session, setSession] = useState(persistedAuth.session);
+  const [rememberSession, setRememberSession] = useState(persistedAuth.remember);
   const [activeTab, setActiveTab] = useLocalStorage('barber.activeTab', 'dashboard');
   const [systemSection, setSystemSection] = useLocalStorage('system.section', 'bot');
   const [pendingTableView, setPendingTableView] = useState(null);
@@ -6835,14 +7001,17 @@ const App = () => {
   const [connectionStatus, setConnectionStatus] = useState('unknown');
   const confirmResolverRef = useRef(null);
   const role = normalizeRoleValue(session?.role);
+  const isCreator = role === ROLE_CREATOR;
+  const isOwner = role === ROLE_OWNER;
+  const hasOwnerAccess = isOwner || isCreator;
   const staffBarberId = session?.barberId || null;
   const viewTabs = VIEW_TABS_BY_ROLE[role] || VIEW_TABS_BY_ROLE[ROLE_OWNER];
   const dataTables = DATA_TABLES_BY_ROLE[role] || DEFAULT_DATA_TABLES;
   const visibleTableOrder = VISIBLE_TABLE_ORDER_BY_ROLE[role] || DEFAULT_VISIBLE_TABLE_ORDER;
   const sidebarShortcuts = DATA_SHORTCUTS_BY_ROLE[role] || DEFAULT_TABLE_SHORTCUTS;
-  const canUseRealtime = role === ROLE_OWNER || role === ROLE_STAFF;
-  const canAccessBot = role === ROLE_OWNER;
-  const canAccessSystem = role === ROLE_OWNER;
+  const canUseRealtime = hasOwnerAccess || role === ROLE_STAFF;
+  const canAccessBot = hasOwnerAccess;
+  const canAccessSystem = hasOwnerAccess;
   const resolvedSystemSection = SYSTEM_SUB_SECTIONS.some((tab) => tab.id === systemSection) ? systemSection : 'bot';
   const requestConfirm = useCallback(
     (options = {}) =>
@@ -6888,14 +7057,10 @@ const App = () => {
         barberName: nextName,
         displayName: nextName,
       });
-      try {
-        localStorage.setItem('barber-session', JSON.stringify(updated));
-      } catch (storageError) {
-        console.warn('session update error', storageError);
-      }
+      persistSessionPayload(updated, rememberSession);
       return updated;
     });
-  }, [barbers, session?.barberId, session?.barberName, setSession]);
+  }, [barbers, session?.barberId, session?.barberName, setSession, rememberSession]);
   const handleSidebarTableChange = useCallback(
     (tableId) => {
       if (!tableId) return;
@@ -6946,7 +7111,7 @@ const App = () => {
     };
   }, [session?.token, canUseRealtime]);
   const handleLogout = useCallback(() => {
-    localStorage.removeItem('barber-session');
+    clearStoredSession();
     setSession(null);
     setDashboard(null);
     setGlobalError('');
@@ -6966,21 +7131,22 @@ const App = () => {
     setPendingReloadReason(null);
     setSystemBusy(false);
   }, []);
+  const handleRememberChange = useCallback((value) => {
+    const nextValue = Boolean(value);
+    setRememberSession(nextValue);
+    persistRememberChoice(nextValue);
+  }, []);
   const handleSessionTokenRefresh = useCallback(
     (nextToken) => {
       if (!nextToken) return;
       setSession((prev) => {
         if (!prev || prev.token === nextToken) return prev;
         const updated = buildSessionPayload({ ...prev, token: nextToken });
-        try {
-          localStorage.setItem('barber-session', JSON.stringify(updated));
-        } catch (storageError) {
-          console.warn('session update error', storageError);
-        }
+        persistSessionPayload(updated, rememberSession);
         return updated;
       });
     },
-    [setSession]
+    [setSession, rememberSession]
   );
 const apiRequest = useCallback(
     async (endpoint, options = {}) => {
@@ -7012,7 +7178,7 @@ const apiRequest = useCallback(
       if (!profilePayload || !Array.isArray(profilePayload.appointments) || !profilePayload.user) {
         return profilePayload;
       }
-      const canAutoAssignFavorite = session?.role === ROLE_OWNER;
+      const canAutoAssignFavorite = session?.role === ROLE_OWNER || session?.role === ROLE_CREATOR;
       const favoriteBarber = resolveFavoriteBarberFromAppointments(profilePayload.appointments);
       const normalizedFavorite = normalizeText(favoriteBarber).toLowerCase();
       if (!normalizedFavorite) return profilePayload;
@@ -7271,32 +7437,40 @@ const apiRequest = useCallback(
     },
     []
   );
-  const handleLogin = async (username, password) => {
+  const handleLogin = async ({ phone, login, password, remember } = {}) => {
     setAuthError('');
-    const normalizedUsername = resolveLogin(username);
-    if (!normalizedUsername) {
-      setAuthError('Выберите барбера из списка');
+    const normalizedPhone = normalizePhoneValue(phone || login);
+    const normalizedLogin = resolveLogin(login || phone);
+    const rememberChoice = remember ?? rememberSession;
+    if (!normalizedPhone && !normalizedLogin) {
+      setAuthError('Укажите номер телефона или логин');
       return;
     }
+    if (!password) {
+      setAuthError('Введите пароль');
+      return;
+    }
+    persistRememberChoice(rememberChoice);
+    setRememberSession(rememberChoice);
     try {
       const response = await fetch(`${API_BASE_URL}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: normalizedUsername, password }),
+        body: JSON.stringify({ phone: normalizedPhone, username: normalizedLogin, password }),
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
-        setAuthError(data.message || 'Неверный логин или пароль');
+        setAuthError(data.message || 'Неизвестная ошибка при входе');
         return;
       }
-      const sessionPayload = buildSessionPayload({ ...data, username: normalizedUsername });
-      localStorage.setItem('barber-session', JSON.stringify(sessionPayload));
+      const sessionPayload = buildSessionPayload({ ...data, username: normalizedPhone || normalizedLogin });
+      persistSessionPayload(sessionPayload, rememberChoice);
       setSession(sessionPayload);
     } catch (error) {
-      setAuthError('Сервер недоступен');
+      setAuthError('Не удалось подключиться к серверу');
     }
   };
-  const handleBarberFieldChange = (id, field, value) => {
+const handleBarberFieldChange = (id, field, value) => {
     setBarbers((prev) =>
       prev.map((barber) => {
         if (barber.id !== id) return barber;
@@ -7815,7 +7989,7 @@ const apiRequest = useCallback(
     }
   };
   if (!session?.token) {
-    return <LoginScreen onLogin={handleLogin} error={authError} />;
+    return <LoginScreen onLogin={handleLogin} error={authError} defaultRemember={rememberSession} onRememberChange={handleRememberChange} />;
   }
   const preferredTableTarget = pendingTableView;
   const liveUpdatedAt = realtimeSnapshot?.updatedAt || null;
@@ -7888,7 +8062,7 @@ const apiRequest = useCallback(
             deleteAvatar={handleDeleteAvatar}
             onFieldChange={handleBarberFieldChange}
             onSave={handleSaveBarber}
-            allowRatingEdit={role === ROLE_OWNER}
+            allowRatingEdit={role === ROLE_OWNER || role === ROLE_CREATOR}
           />
         );
       case 'system':
@@ -7918,15 +8092,16 @@ const apiRequest = useCallback(
             updateInfo={updateInfo}
             onRefreshUpdate={handleRefreshUpdate}
             onApplyUpdate={handleApplyUpdate}
-            onRestartSystem={handleRestartSystem}
-            pendingReloadReason={pendingReloadReason}
-            systemBusy={systemBusy}
-            token={botToken}
-            onUpdateToken={handleUpdateBotToken}
-            section={resolvedSystemSection}
-            onSectionChange={setSystemSection}
-          />
-        );
+          onRestartSystem={handleRestartSystem}
+          pendingReloadReason={pendingReloadReason}
+          systemBusy={systemBusy}
+          token={botToken}
+          onUpdateToken={handleUpdateBotToken}
+          section={resolvedSystemSection}
+          onSectionChange={setSystemSection}
+          role={role}
+        />
+      );
       default:
         return (
           <DashboardView

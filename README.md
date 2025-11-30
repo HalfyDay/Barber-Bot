@@ -1,67 +1,67 @@
-﻿# Barber Bot CRM
+# HalfTime
 
-Полноценное облако для управления барбершопом: веб‑CRM на Express/React, Telegram‑бот на python-telegram-bot и сервисы бэкапов/обновлений/лицензий. Репозиторий содержит backend, фронтенд и рабочие скрипты.
+РџРѕР»РЅРѕС†РµРЅРЅРѕРµ РѕР±Р»Р°РєРѕ РґР»СЏ СѓРїСЂР°РІР»РµРЅРёСЏ Р±Р°СЂР±РµСЂС€РѕРїРѕРј: РІРµР±вЂ‘CRM РЅР° Express/React, TelegramвЂ‘Р±РѕС‚ РЅР° python-telegram-bot Рё СЃРµСЂРІРёСЃС‹ Р±СЌРєР°РїРѕРІ/РѕР±РЅРѕРІР»РµРЅРёР№/Р»РёС†РµРЅР·РёР№. Р РµРїРѕР·РёС‚РѕСЂРёР№ СЃРѕРґРµСЂР¶РёС‚ backend, С„СЂРѕРЅС‚РµРЅРґ Рё СЂР°Р±РѕС‡РёРµ СЃРєСЂРёРїС‚С‹.
 
-## Возможности
-- Современный SPA на React + Tailwind для расписаний, услуг и персонала.
-- REST/WS API на Express + Prisma поверх SQLite (файл `prisma/dev.db`).
-- Telegram-бот (`BotBarberShop.py`) для записи клиентов и синхронизации с CRM.
-- Планировщик резервных копий и автообновлений, работающий через GitHub.
-- Лицензионная защита с поддержкой удалённого и локального списка ключей.
+## Р’РѕР·РјРѕР¶РЅРѕСЃС‚Рё
+- РЎРѕРІСЂРµРјРµРЅРЅС‹Р№ SPA РЅР° React + Tailwind РґР»СЏ СЂР°СЃРїРёСЃР°РЅРёР№, СѓСЃР»СѓРі Рё РїРµСЂСЃРѕРЅР°Р»Р°.
+- REST/WS API РЅР° Express + Prisma РїРѕРІРµСЂС… SQLite (С„Р°Р№Р» `prisma/dev.db`).
+- Telegram-Р±РѕС‚ (`BotBarberShop.py`) РґР»СЏ Р·Р°РїРёСЃРё РєР»РёРµРЅС‚РѕРІ Рё СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёРё СЃ CRM.
+- РџР»Р°РЅРёСЂРѕРІС‰РёРє СЂРµР·РµСЂРІРЅС‹С… РєРѕРїРёР№ Рё Р°РІС‚РѕРѕР±РЅРѕРІР»РµРЅРёР№, СЂР°Р±РѕС‚Р°СЋС‰РёР№ С‡РµСЂРµР· GitHub.
+- Р›РёС†РµРЅР·РёРѕРЅРЅР°СЏ Р·Р°С‰РёС‚Р° СЃ РїРѕРґРґРµСЂР¶РєРѕР№ СѓРґР°Р»С‘РЅРЅРѕРіРѕ Рё Р»РѕРєР°Р»СЊРЅРѕРіРѕ СЃРїРёСЃРєР° РєР»СЋС‡РµР№.
 
-## Структура проекта
+## РЎС‚СЂСѓРєС‚СѓСЂР° РїСЂРѕРµРєС‚Р°
 ```
-├── server.js          # Express API + интеграция с ботом
-├── BotBarberShop.py   # telegram-бот
-├── script.js          # SPA (React) + Tailwind
-├── prisma/            # Prisma schema + migrations
-├── services/          # licenseGuard, updateManager и др.
-├── data/              # runtime JSON (игнорируется в Git)
-└── Image/             # статические изображения
+в”њв”Ђв”Ђ server.js          # Express API + РёРЅС‚РµРіСЂР°С†РёСЏ СЃ Р±РѕС‚РѕРј
+в”њв”Ђв”Ђ BotBarberShop.py   # telegram-Р±РѕС‚
+в”њв”Ђв”Ђ script.js          # SPA (React) + Tailwind
+в”њв”Ђв”Ђ prisma/            # Prisma schema + migrations
+в”њв”Ђв”Ђ services/          # licenseGuard, updateManager Рё РґСЂ.
+в”њв”Ђв”Ђ data/              # runtime JSON (РёРіРЅРѕСЂРёСЂСѓРµС‚СЃСЏ РІ Git)
+в””в”Ђв”Ђ Image/             # СЃС‚Р°С‚РёС‡РµСЃРєРёРµ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ
 ```
 
-## Требования
+## РўСЂРµР±РѕРІР°РЅРёСЏ
 - Node.js 20+ / npm 10+
-- Python 3.11+ (совместимо с 3.10) + pip
-- SQLite (для Prisma)
-- Git + доступ к GitHub (для лицензии и обновлений)
+- Python 3.11+ (СЃРѕРІРјРµСЃС‚РёРјРѕ СЃ 3.10) + pip
+- SQLite (РґР»СЏ Prisma)
+- Git + РґРѕСЃС‚СѓРї Рє GitHub (РґР»СЏ Р»РёС†РµРЅР·РёРё Рё РѕР±РЅРѕРІР»РµРЅРёР№)
 
-## Быстрый старт
-1. `git clone https://github.com/HalfyDay/Barber-Bot.git` и `cd Barber-Bot`.
-2. Скопируйте `.env.example` → `.env` и заполните ключи (см. ниже).
-3. Node-зависимости: `npm install`.
-4. Python-зависимости: `python -m pip install -r requirements.txt`.
-5. Подготовьте базу и Prisma Client:
+## Р‘С‹СЃС‚СЂС‹Р№ СЃС‚Р°СЂС‚
+1. `git clone https://github.com/HalfyDay/Barber-Bot.git` Рё `cd Barber-Bot`.
+2. РЎРєРѕРїРёСЂСѓР№С‚Рµ `.env.example` в†’ `.env` Рё Р·Р°РїРѕР»РЅРёС‚Рµ РєР»СЋС‡Рё (СЃРј. РЅРёР¶Рµ).
+3. Node-Р·Р°РІРёСЃРёРјРѕСЃС‚Рё: `npm install`.
+4. Python-Р·Р°РІРёСЃРёРјРѕСЃС‚Рё: `python -m pip install -r requirements.txt`.
+5. РџРѕРґРіРѕС‚РѕРІСЊС‚Рµ Р±Р°Р·Сѓ Рё Prisma Client:
    ```bash
    npx prisma migrate deploy
    npx prisma generate
    ```
-6. Соберите фронтенд (Tailwind + Babel):
+6. РЎРѕР±РµСЂРёС‚Рµ С„СЂРѕРЅС‚РµРЅРґ (Tailwind + Babel):
    ```bash
    npm run build:web
    ```
-7. Запустите сервис: `npm start`.
+7. Р—Р°РїСѓСЃС‚РёС‚Рµ СЃРµСЂРІРёСЃ: `npm start`.
 
-> Telegram-токен сохраняйте через интерфейс (“Система → Telegram-бот”). CRM пишет токен в таблицу `BotSettings` и перезапускает бота. Переменная `TELEGRAM_BOT_TOKEN` в `.env` служит только для первого запуска.
+> Telegram-С‚РѕРєРµРЅ СЃРѕС…СЂР°РЅСЏР№С‚Рµ С‡РµСЂРµР· РёРЅС‚РµСЂС„РµР№СЃ (вЂњРЎРёСЃС‚РµРјР° в†’ Telegram-Р±РѕС‚вЂќ). CRM РїРёС€РµС‚ С‚РѕРєРµРЅ РІ С‚Р°Р±Р»РёС†Сѓ `BotSettings` Рё РїРµСЂРµР·Р°РїСѓСЃРєР°РµС‚ Р±РѕС‚Р°. РџРµСЂРµРјРµРЅРЅР°СЏ `TELEGRAM_BOT_TOKEN` РІ `.env` СЃР»СѓР¶РёС‚ С‚РѕР»СЊРєРѕ РґР»СЏ РїРµСЂРІРѕРіРѕ Р·Р°РїСѓСЃРєР°.
 
-## Переменные окружения
-| Ключ | Назначение |
+## РџРµСЂРµРјРµРЅРЅС‹Рµ РѕРєСЂСѓР¶РµРЅРёСЏ
+| РљР»СЋС‡ | РќР°Р·РЅР°С‡РµРЅРёРµ |
 | --- | --- |
-| `PORT` | Порт Express (по умолчанию 3000) |
-| `JWT_SECRET` | Секрет для JWT |
-| `DATABASE_URL` | Путь к SQLite (`file:./dev.db`) |
-| `TELEGRAM_BOT_TOKEN` (опц.) | Временный токен до сохранения через CRM |
-| `TELEGRAM_ADMIN_IDS` | ID администраторов через запятую |
-| `BARBER_LICENSE_KEY` | Ваш лицензионный ключ |
-| `LICENSE_SOURCE` | URL до JSON со списком лицензий (raw GitHub) |
-| `BOT_PYTHON_PATH` / `BOT_COMMAND` | Путь или команда для запуска бота |
-| `UPDATE_REPO` / `UPDATE_BRANCH` | Настройки автообновления |
+| `PORT` | РџРѕСЂС‚ Express (РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ 3000) |
+| `JWT_SECRET` | РЎРµРєСЂРµС‚ РґР»СЏ JWT |
+| `DATABASE_URL` | РџСѓС‚СЊ Рє SQLite (`file:./dev.db`) |
+| `TELEGRAM_BOT_TOKEN` (РѕРїС†.) | Р’СЂРµРјРµРЅРЅС‹Р№ С‚РѕРєРµРЅ РґРѕ СЃРѕС…СЂР°РЅРµРЅРёСЏ С‡РµСЂРµР· CRM |
+| `TELEGRAM_ADMIN_IDS` | ID Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂРѕРІ С‡РµСЂРµР· Р·Р°РїСЏС‚СѓСЋ |
+| `BARBER_LICENSE_KEY` | Р’Р°С€ Р»РёС†РµРЅР·РёРѕРЅРЅС‹Р№ РєР»СЋС‡ |
+| `LICENSE_SOURCE` | URL РґРѕ JSON СЃРѕ СЃРїРёСЃРєРѕРј Р»РёС†РµРЅР·РёР№ (raw GitHub) |
+| `BOT_PYTHON_PATH` / `BOT_COMMAND` | РџСѓС‚СЊ РёР»Рё РєРѕРјР°РЅРґР° РґР»СЏ Р·Р°РїСѓСЃРєР° Р±РѕС‚Р° |
+| `UPDATE_REPO` / `UPDATE_BRANCH` | РќР°СЃС‚СЂРѕР№РєРё Р°РІС‚РѕРѕР±РЅРѕРІР»РµРЅРёСЏ |
 
-`config.py` использует `python-dotenv`, поэтому `.env` един для Node и Python.
+`config.py` РёСЃРїРѕР»СЊР·СѓРµС‚ `python-dotenv`, РїРѕСЌС‚РѕРјСѓ `.env` РµРґРёРЅ РґР»СЏ Node Рё Python.
 
-## Лицензирование
-- В `LICENSE_SOURCE` укажите `https://raw.githubusercontent.com/HalfyDay/Barber-Bot/main/licenses.json` или свой URL.
-- JSON должен выглядеть так:
+## Р›РёС†РµРЅР·РёСЂРѕРІР°РЅРёРµ
+- Р’ `LICENSE_SOURCE` СѓРєР°Р¶РёС‚Рµ `https://raw.githubusercontent.com/HalfyDay/Barber-Bot/main/licenses.json` РёР»Рё СЃРІРѕР№ URL.
+- JSON РґРѕР»Р¶РµРЅ РІС‹РіР»СЏРґРµС‚СЊ С‚Р°Рє:
   ```json
   {
     "licenses": [
@@ -69,23 +69,23 @@
     ]
   }
   ```
-- Файл `data/licenses.json` (локальный fallback) хранится на сервере и игнорируется Git. При недоступном GitHub используется именно он.
+- Р¤Р°Р№Р» `data/licenses.json` (Р»РѕРєР°Р»СЊРЅС‹Р№ fallback) С…СЂР°РЅРёС‚СЃСЏ РЅР° СЃРµСЂРІРµСЂРµ Рё РёРіРЅРѕСЂРёСЂСѓРµС‚СЃСЏ Git. РџСЂРё РЅРµРґРѕСЃС‚СѓРїРЅРѕРј GitHub РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РёРјРµРЅРЅРѕ РѕРЅ.
 
-## Фронтенд и сборка
-- Tailwind исходники лежат в `styles.tailwind.css`, конфиг — в `tailwind.config.js`.
-- `npm run build:web` = `tailwindcss -i styles.tailwind.css -o styles.css --minify` + Babel (`script.js` → `script.bundle.js`).
-- Service Worker кеширует `styles.css` и `script.bundle.js`. После деплоя делайте “жёсткое обновление” или меняйте `CACHE_VERSION` в `service-worker.js`, чтобы клиенты получили новую версию.
+## Р¤СЂРѕРЅС‚РµРЅРґ Рё СЃР±РѕСЂРєР°
+- Tailwind РёСЃС…РѕРґРЅРёРєРё Р»РµР¶Р°С‚ РІ `styles.tailwind.css`, РєРѕРЅС„РёРі вЂ” РІ `tailwind.config.js`.
+- `npm run build:web` = `tailwindcss -i styles.tailwind.css -o styles.css --minify` + Babel (`script.js` в†’ `script.bundle.js`).
+- Service Worker РєРµС€РёСЂСѓРµС‚ `styles.css` Рё `script.bundle.js`. РџРѕСЃР»Рµ РґРµРїР»РѕСЏ РґРµР»Р°Р№С‚Рµ вЂњР¶С‘СЃС‚РєРѕРµ РѕР±РЅРѕРІР»РµРЅРёРµвЂќ РёР»Рё РјРµРЅСЏР№С‚Рµ `CACHE_VERSION` РІ `service-worker.js`, С‡С‚РѕР±С‹ РєР»РёРµРЅС‚С‹ РїРѕР»СѓС‡РёР»Рё РЅРѕРІСѓСЋ РІРµСЂСЃРёСЋ.
 
-## npm-скрипты
-| Скрипт | Описание |
+## npm-СЃРєСЂРёРїС‚С‹
+| РЎРєСЂРёРїС‚ | РћРїРёСЃР°РЅРёРµ |
 | --- | --- |
-| `npm start` | Express API + запуск Telegram-бота |
-| `npm run build:css` | Только Tailwind → `styles.css` |
-| `npm run build:web` | Полный билд фронтенда (CSS + Babel) |
-| `npm test` | Заглушка для собственных тестов |
+| `npm start` | Express API + Р·Р°РїСѓСЃРє Telegram-Р±РѕС‚Р° |
+| `npm run build:css` | РўРѕР»СЊРєРѕ Tailwind в†’ `styles.css` |
+| `npm run build:web` | РџРѕР»РЅС‹Р№ Р±РёР»Рґ С„СЂРѕРЅС‚РµРЅРґР° (CSS + Babel) |
+| `npm test` | Р—Р°РіР»СѓС€РєР° РґР»СЏ СЃРѕР±СЃС‚РІРµРЅРЅС‹С… С‚РµСЃС‚РѕРІ |
 
-## Обслуживание
-- Перед релизом запускайте `npm run build:web`, чтобы `script.bundle.js` и `styles.css` были актуальными.
-- Резервные копии (`backups/`) можно создавать через cron (см. `server.js`) или API `/api/backups`.
-- Для нестандартного запуска Python-бота задайте `BOT_COMMAND="python -m BotBarberShop"` или `BOT_PYTHON_PATH`.
-- Директория `data/` используется только для runtime-файлов и не попадает в Git. Секреты (.env, dev.db, licenses.json) храните локально и на GitHub не публикуйте.
+## РћР±СЃР»СѓР¶РёРІР°РЅРёРµ
+- РџРµСЂРµРґ СЂРµР»РёР·РѕРј Р·Р°РїСѓСЃРєР°Р№С‚Рµ `npm run build:web`, С‡С‚РѕР±С‹ `script.bundle.js` Рё `styles.css` Р±С‹Р»Рё Р°РєС‚СѓР°Р»СЊРЅС‹РјРё.
+- Р РµР·РµСЂРІРЅС‹Рµ РєРѕРїРёРё (`backups/`) РјРѕР¶РЅРѕ СЃРѕР·РґР°РІР°С‚СЊ С‡РµСЂРµР· cron (СЃРј. `server.js`) РёР»Рё API `/api/backups`.
+- Р”Р»СЏ РЅРµСЃС‚Р°РЅРґР°СЂС‚РЅРѕРіРѕ Р·Р°РїСѓСЃРєР° Python-Р±РѕС‚Р° Р·Р°РґР°Р№С‚Рµ `BOT_COMMAND="python -m BotBarberShop"` РёР»Рё `BOT_PYTHON_PATH`.
+- Р”РёСЂРµРєС‚РѕСЂРёСЏ `data/` РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ С‚РѕР»СЊРєРѕ РґР»СЏ runtime-С„Р°Р№Р»РѕРІ Рё РЅРµ РїРѕРїР°РґР°РµС‚ РІ Git. РЎРµРєСЂРµС‚С‹ (.env, dev.db, licenses.json) С…СЂР°РЅРёС‚Рµ Р»РѕРєР°Р»СЊРЅРѕ Рё РЅР° GitHub РЅРµ РїСѓР±Р»РёРєСѓР№С‚Рµ.

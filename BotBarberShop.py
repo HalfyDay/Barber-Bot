@@ -870,7 +870,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     registered = False
     settings = load_bot_settings()
-    description = settings.get("botDescription") or "Добро пожаловать в Barber Bot!"
+    description = settings.get("botDescription") or "Добро пожаловать в HalfTime!"
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT 1 FROM Users WHERE TelegramID = ?", (user_id,))

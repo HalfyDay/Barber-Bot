@@ -1,9 +1,9 @@
 {
-  "name": "Barber Bot CRM",
-  "short_name": "BarberBot",
+  "name": "HalfTime",
+  "short_name": "HalfTime",
   "description": "Барбер CRM с управлением записью клиентов и барбершопом.",
   "lang": "ru-RU",
-  "id": "barber-bot-crm",
+  "id": "halftime-crm",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",

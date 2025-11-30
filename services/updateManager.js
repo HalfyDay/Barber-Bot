@@ -90,7 +90,7 @@ const runCommand = (command, cwd = PROJECT_ROOT) =>
 
 const fetchLatestRelease = async () => {
   const response = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
-    headers: { 'User-Agent': 'BarberBot-Updater' },
+    headers: { 'User-Agent': 'HalfTime-Updater' },
   });
   if (response.status === 404) {
     return null;
@@ -113,7 +113,7 @@ const fetchLatestRelease = async () => {
 
 const fetchBranchHead = async () => {
   const response = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/commits/${UPDATE_BRANCH}`, {
-    headers: { 'User-Agent': 'BarberBot-Updater' },
+    headers: { 'User-Agent': 'HalfTime-Updater' },
   });
   if (!response.ok) {
     throw new Error(`GitHub API error: ${response.status}`);

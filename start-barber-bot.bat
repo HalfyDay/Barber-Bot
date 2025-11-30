@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title BarberShop npm start
+title HalfTime npm start
 
 set "DESKTOP=%USERPROFILE%\Desktop"
 set "TARGET="
@@ -12,8 +12,8 @@ for %%D in ("Barber Bot" "Barber-Bot") do (
   )
 )
 
-echo Barber Bot project folder not found on Desktop.
-echo Expected "%DESKTOP%\Barber Bot" or "%DESKTOP%\Barber-Bot".
+echo HalfTime project folder not found on Desktop.
+echo Expected "%DESKTOP%\\Barber Bot" or "%DESKTOP%\\Barber-Bot".
 pause
 exit /b 1
 

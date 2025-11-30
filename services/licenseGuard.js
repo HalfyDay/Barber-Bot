@@ -6,9 +6,10 @@ const LICENSE_REFRESH_SECONDS = Number(process.env.LICENSE_REFRESH_SECONDS || 36
 const LOCAL_LICENSE_FILE = path.join(__dirname, '..', 'data', 'licenses.json');
 let cachedStatus = {
   valid: false,
-  message: 'Лицензия не проверена',
+  message: 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ',
   license: null,
   lastChecked: null,
+  licenses: [],
 };
 let inflightCheck = null;
 const readLocalLicenses = () => {
@@ -17,33 +18,33 @@ const readLocalLicenses = () => {
     const payload = JSON.parse(fs.readFileSync(LOCAL_LICENSE_FILE, 'utf-8'));
     return payload.licenses || payload;
   } catch (error) {
-    console.warn('Не удалось прочитать локальный список лицензий:', error.message);
+    console.warn('пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ:', error.message);
     return null;
   }
 };
 const fetchRemoteLicenses = async () => {
   try {
     const response = await fetch(`${LICENSE_SOURCE}?${Date.now()}`, {
-      headers: { 'User-Agent': 'BarberBot-License-Checker' },
+      headers: { 'User-Agent': 'HalfTime-License-Checker' },
     });
-    if (!response.ok) throw new Error(`Код ответа ${response.status}`);
+    if (!response.ok) throw new Error(`пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ ${response.status}`);
     const payload = await response.json();
     return payload.licenses || payload;
   } catch (error) {
-    console.warn('Не удалось получить список лицензий с GitHub:', error.message);
+    console.warn('пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ GitHub:', error.message);
     return readLocalLicenses();
   }
 };
 const normalizeKey = (value = '') => value.toString().trim();
 const validateLicenseRecord = (record, key) => {
   if (!record) {
-    throw new Error('Лицензия не найдена');
+    throw new Error('пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ');
   }
   if (record.key && normalizeKey(record.key) !== key) {
-    throw new Error('Ключ лицензии не совпадает');
+    throw new Error('пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ');
   }
   if (record.expiresAt && new Date(record.expiresAt).getTime() < Date.now()) {
-    throw new Error('Срок действия лицензии истёк');
+    throw new Error('пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ');
   }
   return record;
 };
@@ -52,9 +53,10 @@ const ensureLicenseValid = async (force = false) => {
   if (!licenseKey) {
     cachedStatus = {
       valid: false,
-      message: 'Переменная BARBER_LICENSE_KEY не задана',
+      message: 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ BARBER_LICENSE_KEY пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ',
       license: null,
       lastChecked: new Date().toISOString(),
+      licenses: cachedStatus.licenses || [],
     };
     throw new Error(cachedStatus.message);
   }
@@ -66,14 +68,15 @@ const ensureLicenseValid = async (force = false) => {
   inflightCheck = (async () => {
     const licenses = await fetchRemoteLicenses();
     if (!licenses || !licenses.length) {
-      throw new Error('Не удалось получить список лицензий');
+      throw new Error('пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ');
     }
     const record = licenses.find((entry) => normalizeKey(entry.key) === licenseKey);
     validateLicenseRecord(record, licenseKey);
     cachedStatus = {
       valid: true,
-      message: 'Лицензия подтверждена',
+      message: 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ',
       license: record,
+      licenses,
       lastChecked: new Date().toISOString(),
     };
     return cachedStatus;
@@ -86,6 +89,7 @@ const ensureLicenseValid = async (force = false) => {
       message: error.message,
       license: null,
       lastChecked: new Date().toISOString(),
+      licenses: cachedStatus.licenses || [],
     };
     throw error;
   } finally {
@@ -107,12 +111,12 @@ const licenseMiddleware = async (req, res, next) => {
     await ensureLicenseValid();
     next();
   } catch (error) {
-    res.status(403).json({ error: 'Лицензия недействительна', details: error.message, status: getLicenseStatus() });
+    res.status(403).json({ error: 'пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ', details: error.message, status: getLicenseStatus() });
   }
 };
 const startLicenseWatcher = () => {
   setInterval(() => {
-    ensureLicenseValid().catch((error) => console.warn('Проверка лицензии не удалась:', error.message));
+    ensureLicenseValid().catch((error) => console.warn('пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ:', error.message));
   }, Math.max(60, LICENSE_REFRESH_SECONDS) * 1000);
 };
 module.exports = {

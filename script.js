@@ -1999,7 +1999,10 @@ const BarberAvatarPicker = ({
   const [cardPhoto, setCardPhoto] = useState('');
   const [cardPreview, setCardPreview] = useState('');
   const cardPreviewRef = useRef('');
+  const customCardInputRef = useRef(null);
+  const [customCardImage, setCustomCardImage] = useState('');
   const [photoGrayscale, setPhotoGrayscale] = useState(true);
+  const [photoOutlineEnabled, setPhotoOutlineEnabled] = useState(true);
   const [rendering, setRendering] = useState(false);
   const [renderError, setRenderError] = useState('');
   const fileInputRef = useRef(null);
@@ -2183,6 +2186,11 @@ const BarberAvatarPicker = ({
     let cancelled = false;
     const renderCard = async () => {
       if (!canvasRef.current) return;
+      if (customCardImage) {
+        cardPreviewRef.current = customCardImage;
+        setCardPreview(customCardImage);
+        return;
+      }
       setRendering(true);
       setRenderError('');
       try {
@@ -2295,11 +2303,13 @@ const BarberAvatarPicker = ({
         }
         if (profilePhoto) {
           const photoFilter = photoGrayscale ? 'grayscale(100%)' : 'saturate(1.05) contrast(1.05)';
-          drawRoundedImage(ctx, profilePhoto, photoX, photoY, photoWidth, photoHeight, 38, photoFilter, {
-            outlineColor: 'rgba(148, 163, 184, 0.95)',
-            outlineSize: 10,
-            outlineRoughness: 1.2,
-          });
+          drawRoundedImage(ctx, profilePhoto, photoX, photoY, photoWidth, photoHeight, 38, photoFilter, photoOutlineEnabled
+            ? {
+                outlineColor: 'rgba(148, 163, 184, 0.95)',
+                outlineSize: 10,
+                outlineRoughness: 1.2,
+              }
+            : {});
         } else {
           ctx.save();
           ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
@@ -2325,7 +2335,7 @@ const BarberAvatarPicker = ({
     return () => {
       cancelled = true;
     };
-  }, [cardFields.name, cardFields.description, cardFields.phrase, cardPhoto, photoGrayscale]);
+  }, [cardFields.name, cardFields.description, cardFields.phrase, cardPhoto, photoGrayscale, customCardImage, photoOutlineEnabled]);
   useEffect(() => {
     cardPreviewRef.current = cardPreview;
   }, [cardPreview]);
@@ -2356,6 +2366,25 @@ const BarberAvatarPicker = ({
     link.download = buildCardFileName(cardFields.name || 'barber-card').replace(/\.jpg$/, '.png');
     link.click();
   }, [cardPreview, cardFields.name]);
+  const handleCustomCardFile = useCallback(
+    async (event) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        setRenderError('Нужен файл изображения.');
+        return;
+      }
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        setCustomCardImage(dataUrl);
+        setRenderError('');
+      } catch (error) {
+        setRenderError(error.message || 'Не удалось прочитать файл карточки.');
+      }
+    },
+    [],
+  );
   const [cardDetailsOpen, setCardDetailsOpen] = useState(false);
   return (
     <div className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 shadow-2xl">
@@ -2377,6 +2406,15 @@ const BarberAvatarPicker = ({
         className="hidden"
         onChange={handleFileInputChange}
       />
+      <input
+        ref={customCardInputRef}
+        type="file"
+        name="customCard"
+        aria-label="Готовая карточка"
+        accept="image/*"
+        className="hidden"
+        onChange={handleCustomCardFile}
+      />
       <div className="space-y-4 p-5">
         <div className="space-y-3">
           <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-900">
@@ -2394,23 +2432,40 @@ const BarberAvatarPicker = ({
             )}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={handleDownloadCard}
-              disabled={!cardPreview}
-              className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-indigo-200 transition hover:border-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
-            >
-              Download PNG
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadCard}
+                disabled={!cardPreview}
+                className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-indigo-200 transition hover:border-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+              >
+                Download PNG
+              </button>
+              <button
+                type="button"
+                onClick={() => customCardInputRef.current?.click()}
+                className="rounded-2xl border border-emerald-500/70 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-400 hover:text-white"
+              >
+                Upload custom card
+              </button>
+              {customCardImage && (
+                <button
+                  type="button"
+                  onClick={() => setCustomCardImage("")}
+                  className="rounded-2xl border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-400"
+                >
+                  Reset to auto design
+                </button>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setCardDetailsOpen((prev) => !prev)}
               className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 transition hover:border-indigo-400 hover:text-white"
             >
-              {cardDetailsOpen ? 'Скрыть ввод' : 'Редактировать данные'}
+              {cardDetailsOpen ? "Hide fields" : "Edit fields"}
             </button>
           </div>
-          {(renderError || actionError) && <p className="text-sm text-rose-400">{renderError || actionError}</p>}
         </div>
         <div
           className={classNames(
@@ -2482,6 +2537,18 @@ const BarberAvatarPicker = ({
                         )}
                       >
                         {photoGrayscale ? 'B/W effect' : 'Color photo'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPhotoOutlineEnabled((prev) => !prev)}
+                        className={classNames(
+                          'rounded-xl px-3 py-1.5 text-xs font-semibold transition',
+                          photoOutlineEnabled
+                            ? 'border border-slate-500 bg-slate-800/70 text-slate-100 hover:border-slate-300'
+                            : 'border border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
+                        )}
+                      >
+                        {photoOutlineEnabled ? 'Обводка вкл' : 'Обводка выкл'}
                       </button>
                       <button
                         type="button"

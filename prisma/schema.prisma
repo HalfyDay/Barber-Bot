@@ -71,6 +71,11 @@ model Barbers {
   telegramId  String?
   login       String?
   password    String?
+  cardTitle       String   @default("")
+  cardDescription String   @default("")
+  cardPhrase      String   @default("")
+  cardMode        String   @default("generated")
+  cardImageUrl    String   @default("")
   isActive    Boolean    @default(true)
   orderIndex  Int        @default(0)
   role        BarberRole @default(owner)

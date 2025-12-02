@@ -158,6 +158,11 @@ const buildNewBarberState = () => ({
   rating: '5',
   color: '#6d28d9',
   avatarUrl: '',
+  cardTitle: '',
+  cardDescription: '',
+  cardPhrase: '',
+  cardMode: CARD_MODE_GENERATED,
+  cardImageUrl: '',
   description: '',
   phone: '',
   telegramId: '',
@@ -1829,29 +1834,11 @@ const TITLE_BASE_Y = 194; // tweak to move the big name vertically
 const TITLE_CENTER_OFFSET = 40; // tweak to shift the center horizontally
 const CARD_PHRASE_BG = resolveAssetUrl('card/Favorite_phrase.png');
 const CARD_PHOTO_BG = resolveAssetUrl('card/Barber_photo.png');
-const CARD_FIELDS_STORAGE_KEY = 'barber-card-fields';
+const CARD_MODE_GENERATED = 'generated';
+const CARD_MODE_CUSTOM_IMAGE = 'custom-image';
 const stripEmoji = (value) => normalizeText(value).replace(/[\p{Extended_Pictographic}\p{Emoji_Presentation}\u200d\ufe0f]/gu, '');
 const sanitizeCardText = (value) => stripEmoji(value).trim();
-const loadSavedCardFields = (key) => {
-  try {
-    const raw = safeStorageGet(getStorageArea('local'), CARD_FIELDS_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed?.[key] || null;
-  } catch {
-    return null;
-  }
-};
-const saveCardFields = (key, fields) => {
-  try {
-    const raw = safeStorageGet(getStorageArea('local'), CARD_FIELDS_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    parsed[key] = fields;
-    safeStorageSet(getStorageArea('local'), CARD_FIELDS_STORAGE_KEY, JSON.stringify(parsed));
-  } catch {
-    /* ignore storage errors */
-  }
-};
+const normalizeCardMode = (value) => (value === CARD_MODE_CUSTOM_IMAGE ? CARD_MODE_CUSTOM_IMAGE : CARD_MODE_GENERATED);
 const loadImageElement = (src) =>
   new Promise((resolve, reject) => {
     if (!src) {
@@ -1984,6 +1971,14 @@ const BarberAvatarPicker = ({
   onRegisterCardSaver,
   initialName = '',
   initialDescription = '',
+  initialCardTitle = '',
+  initialCardDescription = '',
+  initialCardPhrase = '',
+  cardMode = CARD_MODE_GENERATED,
+  cardImageUrl = '',
+  onCardFieldsChange,
+  onCardModeChange,
+  onCardImageChange,
 }) => {
   const [avatarOptions, setAvatarOptions] = useState(() => avatarOptionsCache || []);
   const [loading, setLoading] = useState(false);
@@ -1991,16 +1986,17 @@ const BarberAvatarPicker = ({
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState('');
   const lastSavedPreviewRef = useRef(null);
-  const [cardFields, setCardFields] = useState({
-    name: sanitizeCardText(initialName),
-    description: sanitizeCardText(initialDescription),
-    phrase: 'Комфорт клиента прежде всего',
-  });
+  const [cardFields, setCardFields] = useState(() => ({
+    name: sanitizeCardText(initialCardTitle || initialName),
+    description: sanitizeCardText(initialCardDescription || initialDescription),
+    phrase: sanitizeCardText(initialCardPhrase || ''),
+  }));
+  const [selectedCardMode, setSelectedCardMode] = useState(() => normalizeCardMode(cardMode));
   const [cardPhoto, setCardPhoto] = useState('');
   const [cardPreview, setCardPreview] = useState('');
   const cardPreviewRef = useRef('');
   const customCardInputRef = useRef(null);
-  const [customCardImage, setCustomCardImage] = useState('');
+  const [customCardImage, setCustomCardImage] = useState(() => normalizeImagePath(cardImageUrl || ''));
   const [photoGrayscale, setPhotoGrayscale] = useState(true);
   const [photoOutlineEnabled, setPhotoOutlineEnabled] = useState(true);
   const [rendering, setRendering] = useState(false);
@@ -2009,10 +2005,6 @@ const BarberAvatarPicker = ({
   const photoInputRef = useRef(null);
   const canvasRef = useRef(null);
   const normalizedValue = useMemo(() => normalizeImagePath(value), [value]);
-  const cardFieldsKey = useMemo(
-    () => sanitizeCardText(initialName || normalizedValue || 'card-default') || 'card-default',
-    [initialName, normalizedValue],
-  );
   useEffect(() => {
     if (!value || typeof onChange !== 'function') return;
     const normalized = normalizeImagePath(value);
@@ -2021,27 +2013,31 @@ const BarberAvatarPicker = ({
     }
   }, [value, onChange]);
   useEffect(() => {
-    const saved = loadSavedCardFields(cardFieldsKey);
-    if (saved) {
-      setCardFields((prev) => ({
-        ...prev,
-        ...['name', 'description', 'phrase'].reduce((acc, key) => {
-          if (typeof saved[key] === 'string') acc[key] = sanitizeCardText(saved[key]);
-          return acc;
-        }, {}),
-      }));
+    setCardFields({
+      name: sanitizeCardText(initialCardTitle || initialName),
+      description: sanitizeCardText(initialCardDescription || initialDescription),
+      phrase: sanitizeCardText(initialCardPhrase || ''),
+    });
+  }, [initialName, initialDescription, initialCardTitle, initialCardDescription, initialCardPhrase]);
+  useEffect(() => {
+    onCardFieldsChange?.({
+      cardTitle: cardFields.name,
+      cardDescription: cardFields.description,
+      cardPhrase: cardFields.phrase,
+    });
+  }, [cardFields, onCardFieldsChange]);
+  useEffect(() => {
+    setSelectedCardMode(normalizeCardMode(cardMode));
+  }, [cardMode]);
+  useEffect(() => {
+    const normalized = normalizeImagePath(cardImageUrl || '');
+    setCustomCardImage(normalized);
+    if (normalized && selectedCardMode === CARD_MODE_CUSTOM_IMAGE) {
+      cardPreviewRef.current = normalized;
+      setCardPreview(normalized);
+      lastSavedPreviewRef.current = normalized;
     }
-  }, [cardFieldsKey]);
-  useEffect(() => {
-    saveCardFields(cardFieldsKey, cardFields);
-  }, [cardFieldsKey, cardFields]);
-  useEffect(() => {
-    setCardFields((prev) => ({
-      ...prev,
-      name: prev.name || normalizeText(initialName),
-      description: prev.description || normalizeText(initialDescription),
-    }));
-  }, [initialName, initialDescription]);
+  }, [cardImageUrl, selectedCardMode]);
   useEffect(() => {
     if (!cardPhoto && normalizedValue && !normalizedValue.endsWith('background.jpg')) {
       setCardPhoto(normalizedValue);
@@ -2096,7 +2092,7 @@ const BarberAvatarPicker = ({
     async (file) => {
       if (!file || typeof onUpload !== 'function') return;
       if (!file.type.startsWith('image/')) {
-        setRenderError('???? ?????? ???? ????????????.');
+        setRenderError('Файл должен быть изображением.');
         return;
       }
       if (file.size > MAX_AVATAR_UPLOAD_BYTES) {
@@ -2139,11 +2135,11 @@ const BarberAvatarPicker = ({
       event.target.value = '';
       if (!file) return;
       if (!file.type.startsWith('image/')) {
-        setRenderError('???? ?????? ???? ????????????.');
+        setRenderError('Файл должен быть изображением.');
         return;
       }
       if (file.size > MAX_AVATAR_UPLOAD_BYTES) {
-        setRenderError('??????? ?????:? 5 ?? ? ???????? ???? ????????.');
+        setRenderError('Максимальный размер: 5 МБ, выберите файл поменьше.');
         return;
       }
       setRenderError('');
@@ -2182,13 +2178,16 @@ const BarberAvatarPicker = ({
   );
   const previewSrc = normalizedValue ? resolveAssetUrl(normalizedValue) : '';
   const photoPreview = cardPhoto ? resolveAssetUrl(cardPhoto) : '';
+  const isGeneratedMode = selectedCardMode === CARD_MODE_GENERATED;
+  const isCustomMode = selectedCardMode === CARD_MODE_CUSTOM_IMAGE;
   useEffect(() => {
     let cancelled = false;
     const renderCard = async () => {
       if (!canvasRef.current) return;
-      if (customCardImage) {
-        cardPreviewRef.current = customCardImage;
-        setCardPreview(customCardImage);
+      if (selectedCardMode === CARD_MODE_CUSTOM_IMAGE) {
+        const resolved = normalizeImagePath(customCardImage || cardImageUrl || '');
+        cardPreviewRef.current = resolved;
+        setCardPreview(resolved);
         return;
       }
       setRendering(true);
@@ -2244,7 +2243,7 @@ const BarberAvatarPicker = ({
           .split(/\n+/)
           .map((line) => line.trim())
           .filter(Boolean);
-        const payload = chunks.length ? chunks : ['Careful with details and loves to polish haircuts to perfect.'];
+        const payload = chunks.length ? chunks : ['Аккуратен в деталях и доводит стрижку до идеала.'];
         ctx.textBaseline = 'top';
         payload.forEach((chunk) => {
           const wrapped = wrapTextLines(ctx, chunk, descWidth).slice(0, 6);
@@ -2263,7 +2262,7 @@ const BarberAvatarPicker = ({
           });
         });
         const phraseLabel = 'Любимая фраза:';
-        const phraseText = sanitizeCardText(cardFields.phrase || 'Комфорт клиента прежде всего');
+        const phraseText = sanitizeCardText(cardFields.phrase || 'Комфорт клиента превыше всего');
         const phraseY = CARD_CANVAS_HEIGHT - 190; // adjust this to move the quote block
         const phraseBlockHeight = 180;
         if (phraseBg) {
@@ -2335,24 +2334,65 @@ const BarberAvatarPicker = ({
     return () => {
       cancelled = true;
     };
-  }, [cardFields.name, cardFields.description, cardFields.phrase, cardPhoto, photoGrayscale, customCardImage, photoOutlineEnabled]);
+  }, [
+    cardFields.name,
+    cardFields.description,
+    cardFields.phrase,
+    cardPhoto,
+    photoGrayscale,
+    customCardImage,
+    photoOutlineEnabled,
+    selectedCardMode,
+    cardImageUrl,
+  ]);
   useEffect(() => {
     cardPreviewRef.current = cardPreview;
   }, [cardPreview]);
   const cardSaveHandler = useCallback(
     async (barberId) => {
       if (!barberId || !cardPreviewRef.current || typeof onCardUpload !== 'function') return null;
-      if (lastSavedPreviewRef.current === cardPreviewRef.current) return null;
+      const previewData = cardPreviewRef.current;
+      if (lastSavedPreviewRef.current === previewData) return null;
+      if (!previewData.startsWith('data:image')) {
+        lastSavedPreviewRef.current = previewData;
+        if (previewData) {
+          onCardImageChange?.(previewData);
+        }
+        return { path: previewData };
+      }
       const result = await onCardUpload({
         barberId,
         name: buildCardFileName(cardFields.name || 'barber-card'),
-        data: cardPreviewRef.current,
+        data: previewData,
       });
-      lastSavedPreviewRef.current = cardPreviewRef.current;
+      lastSavedPreviewRef.current = previewData;
+      const uploadedPath = normalizeImagePath(result?.path || result?.image || '');
+      if (uploadedPath) {
+        onCardImageChange?.(uploadedPath);
+      }
       return result;
     },
-    [onCardUpload, cardFields.name],
+    [onCardUpload, cardFields.name, onCardImageChange],
   );
+  const handleCardModeSelect = useCallback(
+    (mode) => {
+      const normalized = normalizeCardMode(mode);
+      setSelectedCardMode(normalized);
+      onCardModeChange?.(normalized);
+      if (normalized === CARD_MODE_GENERATED) {
+        lastSavedPreviewRef.current = null;
+      }
+    },
+    [onCardModeChange],
+  );
+  const handleResetDesign = useCallback(() => {
+    setCustomCardImage('');
+    onCardImageChange?.('');
+    handleCardModeSelect(CARD_MODE_GENERATED);
+    setCardPreview('');
+    cardPreviewRef.current = '';
+    lastSavedPreviewRef.current = null;
+  }, [handleCardModeSelect, onCardImageChange]);
   useEffect(() => {
     if (typeof onRegisterCardSaver === 'function') {
       lastSavedPreviewRef.current = null;
@@ -2372,18 +2412,22 @@ const BarberAvatarPicker = ({
       event.target.value = '';
       if (!file) return;
       if (!file.type.startsWith('image/')) {
-        setRenderError('Нужен файл изображения.');
+        setRenderError('Можно загружать только изображения.');
         return;
       }
       try {
         const dataUrl = await readFileAsDataUrl(file);
         setCustomCardImage(dataUrl);
+        setSelectedCardMode(CARD_MODE_CUSTOM_IMAGE);
+        onCardModeChange?.(CARD_MODE_CUSTOM_IMAGE);
+        onCardImageChange?.('');
+        lastSavedPreviewRef.current = null;
         setRenderError('');
       } catch (error) {
-        setRenderError(error.message || 'Не удалось прочитать файл карточки.');
+        setRenderError(error.message || 'Не получилось прочитать файл карточки.');
       }
     },
-    [],
+    [onCardModeChange, onCardImageChange],
   );
   const [cardDetailsOpen, setCardDetailsOpen] = useState(false);
   return (
@@ -2417,6 +2461,39 @@ const BarberAvatarPicker = ({
       />
       <div className="space-y-4 p-5">
         <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Источник карточки</span>
+              <button
+                type="button"
+                onClick={() => handleCardModeSelect(CARD_MODE_GENERATED)}
+                className={classNames(
+                  'rounded-xl border px-3 py-1.5 text-xs font-semibold transition',
+                  isGeneratedMode
+                    ? 'border-emerald-400 bg-emerald-500/10 text-emerald-100'
+                    : 'border-slate-700 text-slate-300 hover:border-slate-500',
+                )}
+              >
+                Редактор
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleCardModeSelect(CARD_MODE_CUSTOM_IMAGE);
+                  customCardInputRef.current?.click();
+                }}
+                className={classNames(
+                  'rounded-xl border px-3 py-1.5 text-xs font-semibold transition',
+                  isCustomMode
+                    ? 'border-amber-400 bg-amber-500/10 text-amber-100'
+                    : 'border-slate-700 text-slate-300 hover:border-slate-500',
+                )}
+              >
+                Свое изображение
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">Предпросмотр обновляется для выбранного варианта.</p>
+          </div>
           <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-900">
             <canvas
               ref={canvasRef}
@@ -2425,9 +2502,7 @@ const BarberAvatarPicker = ({
             />
             {!cardPreview && (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-900/70 p-6 text-center text-sm text-slate-300">
-                <p>
-                  Upload a barber photo, enter name/description/favorite phrase ? the card will be auto-built on background.jpg.
-                </p>
+                <p>Загрузите фото барбера и заполните поля — карточка соберется автоматически.</p>
               </div>
             )}
           </div>
@@ -2439,22 +2514,25 @@ const BarberAvatarPicker = ({
                 disabled={!cardPreview}
                 className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-indigo-200 transition hover:border-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
               >
-                Download PNG
+                Скачать
               </button>
               <button
                 type="button"
-                onClick={() => customCardInputRef.current?.click()}
+                onClick={() => {
+                  handleCardModeSelect(CARD_MODE_CUSTOM_IMAGE);
+                  customCardInputRef.current?.click();
+                }}
                 className="rounded-2xl border border-emerald-500/70 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-400 hover:text-white"
               >
-                Upload custom card
+                Загрузить карточку
               </button>
-              {customCardImage && (
+              {isCustomMode && (customCardImage || cardImageUrl) && (
                 <button
                   type="button"
-                  onClick={() => setCustomCardImage("")}
+                  onClick={handleResetDesign}
                   className="rounded-2xl border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-400"
                 >
-                  Reset to auto design
+                  Вернуться к редактору
                 </button>
               )}
             </div>
@@ -2463,7 +2541,7 @@ const BarberAvatarPicker = ({
               onClick={() => setCardDetailsOpen((prev) => !prev)}
               className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 transition hover:border-indigo-400 hover:text-white"
             >
-              {cardDetailsOpen ? "Hide fields" : "Edit fields"}
+              {cardDetailsOpen ? 'Скрыть' : 'Раскрыть'}
             </button>
           </div>
         </div>
@@ -2476,7 +2554,7 @@ const BarberAvatarPicker = ({
           {cardDetailsOpen && (
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-white">Card name</label>
+                <label className="text-sm font-semibold text-white">Название карточки</label>
                 <input
                   value={cardFields.name}
                   onChange={(event) => setCardFields((prev) => ({ ...prev, name: event.target.value }))}
@@ -2485,38 +2563,38 @@ const BarberAvatarPicker = ({
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-white">Description (by lines)</label>
+                <label className="text-sm font-semibold text-white">Описание (построчно)</label>
                 <textarea
                   rows={4}
                   value={cardFields.description}
                   onChange={(event) => setCardFields((prev) => ({ ...prev, description: event.target.value }))}
-                  placeholder="Careful with details and brings haircuts to ideal"
+                  placeholder="Аккуратен в деталях и доводит стрижку до идеала"
                   className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
                 />
-                <p className="text-xs text-slate-500">Each line becomes a bullet with the reference font.</p>
+                <p className="text-xs text-slate-500">Каждая строка станет пунктом списка.</p>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-white">Favorite phrase</label>
+                <label className="text-sm font-semibold text-white">Любимая фраза</label>
                 <input
                   value={cardFields.phrase}
                   onChange={(event) => setCardFields((prev) => ({ ...prev, phrase: event.target.value }))}
-                  placeholder="Client comfort first"
+                  placeholder="Комфорт клиента превыше всего"
                   className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
                 />
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-semibold text-white">Barber photo</p>
+                <p className="text-sm font-semibold text-white">Фото барбера</p>
                 <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/70 p-3">
                   <div className="h-16 w-16 overflow-hidden rounded-xl border border-slate-800 bg-slate-800">
                     {photoPreview ? (
-                      <img src={photoPreview} alt="Barber photo" className="h-full w-full object-cover" />
+                      <img src={photoPreview} alt="Фото барбера" className="h-full w-full object-cover" />
                     ) : (
                       <DefaultProfileIcon className="h-full w-full bg-slate-900/60 text-slate-500" iconClassName="h-10 w-10" />
                     )}
                   </div>
                   <div className="flex-1 space-y-1">
                     <p className="text-xs text-slate-400">
-                      Photo sits on the left like the reference; portrait shots work best.
+                      Фото размещается слева, лучше портретное.
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -2524,7 +2602,7 @@ const BarberAvatarPicker = ({
                         onClick={() => photoInputRef.current?.click()}
                         className="rounded-xl border border-emerald-500/70 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:border-emerald-400 hover:text-white"
                       >
-                        Upload photo
+                        Загрузить фото
                       </button>
                       <button
                         type="button"
@@ -2536,7 +2614,7 @@ const BarberAvatarPicker = ({
                             : 'border border-emerald-500/70 bg-emerald-500/10 text-emerald-200 hover:border-emerald-400 hover:text-white',
                         )}
                       >
-                        {photoGrayscale ? 'B/W effect' : 'Color photo'}
+                        {photoGrayscale ? 'Ч/Б эффект' : 'Цветное фото'}
                       </button>
                       <button
                         type="button"
@@ -2548,7 +2626,7 @@ const BarberAvatarPicker = ({
                             : 'border border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
                         )}
                       >
-                        {photoOutlineEnabled ? 'Обводка вкл' : 'Обводка выкл'}
+                        {photoOutlineEnabled ? 'С рамкой' : 'Без рамки'}
                       </button>
                       <button
                         type="button"
@@ -2556,7 +2634,7 @@ const BarberAvatarPicker = ({
                         className="rounded-xl border border-slate-700 px-3 py-1.5 text-xs font-semibold text-indigo-200 transition hover:border-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
                         disabled={loading || (!avatarOptions.length && !normalizedValue)}
                       >
-                        {loading ? 'Loading...' : showGallery ? 'Hide gallery' : 'Show gallery'}
+                        {loading ? 'Загрузка...' : showGallery ? 'Скрыть галерею' : 'Показать галерею'}
                       </button>
                     </div>
                   </div>
@@ -2595,7 +2673,7 @@ const BarberAvatarPicker = ({
                   </div>
                 )}
                 {!avatarOptions.length && !loading && (
-                  <p className="text-sm text-slate-500">No cards yet. Save one to see it here.</p>
+                  <p className="text-sm text-slate-500">Карточек пока нет. Сохраните одну, чтобы увидеть здесь.</p>
                 )}
               </div>
             </div>
@@ -2795,6 +2873,44 @@ const BarbersView = ({
     },
     [handleFieldChange]
   );
+  const handleCardFieldsChange = useCallback(
+    (fields) => {
+      if (!fields) return;
+      const nextFields = {
+        cardTitle: fields.cardTitle ?? fields.name ?? '',
+        cardDescription: fields.cardDescription ?? fields.description ?? '',
+        cardPhrase: fields.cardPhrase ?? fields.phrase ?? '',
+      };
+      if (isCreateMode) {
+        setDraftBarber((prev) => ({ ...prev, ...nextFields }));
+      } else if (activeBarber) {
+        Object.entries(nextFields).forEach(([key, value]) => onFieldChange?.(activeBarber.id, key, value));
+      }
+    },
+    [isCreateMode, activeBarber, onFieldChange],
+  );
+  const handleCardModeChange = useCallback(
+    (mode) => {
+      const normalized = normalizeCardMode(mode);
+      if (isCreateMode) {
+        setDraftBarber((prev) => ({ ...prev, cardMode: normalized }));
+      } else if (activeBarber) {
+        onFieldChange?.(activeBarber.id, 'cardMode', normalized);
+      }
+    },
+    [isCreateMode, activeBarber, onFieldChange],
+  );
+  const handleCardImageChange = useCallback(
+    (path) => {
+      const normalized = normalizeImagePath(path || '');
+      if (isCreateMode) {
+        setDraftBarber((prev) => ({ ...prev, cardImageUrl: normalized }));
+      } else if (activeBarber) {
+        onFieldChange?.(activeBarber.id, 'cardImageUrl', normalized);
+      }
+    },
+    [isCreateMode, activeBarber, onFieldChange],
+  );
   const handleSave = async () => {
     if (!workingBarber) return;
     setSavingBarber(true);
@@ -2954,6 +3070,14 @@ const BarbersView = ({
               onRegisterCardSaver={registerCardSaver}
               initialName={workingBarber?.name || ''}
               initialDescription={workingBarber?.description || ''}
+              initialCardTitle={workingBarber?.cardTitle || workingBarber?.name || ''}
+              initialCardDescription={workingBarber?.cardDescription || workingBarber?.description || ''}
+              initialCardPhrase={workingBarber?.cardPhrase || ''}
+              cardMode={workingBarber?.cardMode || CARD_MODE_GENERATED}
+              cardImageUrl={workingBarber?.cardImageUrl || ''}
+              onCardFieldsChange={handleCardFieldsChange}
+              onCardModeChange={handleCardModeChange}
+              onCardImageChange={handleCardImageChange}
             />
             <div className="space-y-5 rounded-3xl border border-slate-800 bg-slate-950/80 p-6 shadow-inner shadow-black/10">
               <div className="grid grid-cols-2 gap-4">
@@ -3196,6 +3320,19 @@ const BarberProfileView = ({
             onDelete={deleteAvatar}
             initialName={barber?.name || ''}
             initialDescription={barber?.description || ''}
+            initialCardTitle={barber?.cardTitle || barber?.name || ''}
+            initialCardDescription={barber?.cardDescription || barber?.description || ''}
+            initialCardPhrase={barber?.cardPhrase || ''}
+            cardMode={barber?.cardMode || CARD_MODE_GENERATED}
+            cardImageUrl={barber?.cardImageUrl || ''}
+            onCardFieldsChange={(fields) => {
+              if (!fields || !barber?.id) return;
+              onFieldChange?.(barber.id, 'cardTitle', fields.cardTitle ?? fields.name ?? '');
+              onFieldChange?.(barber.id, 'cardDescription', fields.cardDescription ?? fields.description ?? '');
+              onFieldChange?.(barber.id, 'cardPhrase', fields.cardPhrase ?? fields.phrase ?? '');
+            }}
+            onCardModeChange={(mode) => handleFieldChange('cardMode', normalizeCardMode(mode))}
+            onCardImageChange={(path) => handleFieldChange('cardImageUrl', normalizeImagePath(path || ''))}
           />
           <div className="space-y-5 rounded-3xl border border-slate-800 bg-slate-950/80 p-6 shadow-inner shadow-black/10">
             <div className="grid gap-4 md:grid-cols-2">
@@ -8096,17 +8233,22 @@ const handleBarberFieldChange = (id, field, value) => {
   });
   const deriveBarberLogin = (barberData = {}) => resolveLogin(barberData.login || barberData.name || '');
   const buildBarberPayload = (barberData = {}, fallbackOrder = 0) => {
-    const payload = {
-      name: barberData.name || '',
-      nickname: null,
-      description: barberData.description || '',
-      rating: formatRatingValue(barberData.rating),
-      avatarUrl: barberData.avatarUrl || '',
-      color: barberData.color || '',
-      login: deriveBarberLogin(barberData),
-      password: barberData.password || '',
-      phone: barberData.phone || '',
-      telegramId: barberData.telegramId || '',
+  const payload = {
+    name: barberData.name || '',
+    nickname: null,
+    description: barberData.description || '',
+    rating: formatRatingValue(barberData.rating),
+    avatarUrl: barberData.avatarUrl || '',
+    cardTitle: sanitizeCardText(barberData.cardTitle || barberData.name || ''),
+    cardDescription: sanitizeCardText(barberData.cardDescription || ''),
+    cardPhrase: sanitizeCardText(barberData.cardPhrase || ''),
+    cardMode: normalizeCardMode(barberData.cardMode),
+    cardImageUrl: normalizeImagePath(barberData.cardImageUrl || ''),
+    color: barberData.color || '',
+    login: deriveBarberLogin(barberData),
+    password: barberData.password || '',
+    phone: barberData.phone || '',
+    telegramId: barberData.telegramId || '',
       isActive: barberData.isActive !== false,
       orderIndex: Number(barberData.orderIndex ?? fallbackOrder) || 0,
       role: normalizeRoleValue(barberData.role),

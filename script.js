@@ -1837,7 +1837,7 @@ const CARD_PHOTO_BG = resolveAssetUrl('card/Barber_photo.png');
 const CARD_MODE_GENERATED = 'generated';
 const CARD_MODE_CUSTOM_IMAGE = 'custom-image';
 const stripEmoji = (value) => normalizeText(value).replace(/[\p{Extended_Pictographic}\p{Emoji_Presentation}\u200d\ufe0f]/gu, '');
-const sanitizeCardText = (value) => stripEmoji(value).trim();
+const sanitizeCardText = (value) => stripEmoji(value).replace(/\r\n/g, '\n');
 const normalizeCardMode = (value) => (value === CARD_MODE_CUSTOM_IMAGE ? CARD_MODE_CUSTOM_IMAGE : CARD_MODE_GENERATED);
 const loadImageElement = (src) =>
   new Promise((resolve, reject) => {
@@ -1917,24 +1917,41 @@ const drawRoundedImage = (
   ctx.restore();
 };
 const wrapTextLines = (ctx, text, maxWidth) => {
-  const words = normalizeText(text)
-    .replace(/\s+/g, ' ')
-    .trim()
-    .split(' ')
-    .filter(Boolean);
-  if (!words.length) return [];
+  const source = normalizeText(text).replace(/\r\n/g, '\n').replace(/\t/g, '    ');
+  if (!source) return [];
   const lines = [];
-  let current = '';
-  words.forEach((word) => {
-    const testLine = current ? `${current} ${word}` : word;
-    if (ctx.measureText(testLine).width <= maxWidth) {
-      current = testLine;
-    } else {
+  const paragraphs = source.split('\n');
+  paragraphs.forEach((paragraph, index) => {
+    const tokens = paragraph.match(/\s+|\S+/g) || [''];
+    let current = '';
+    tokens.forEach((token) => {
+      const next = current + token;
+      if (ctx.measureText(next).width <= maxWidth || !current.trim()) {
+        current = next;
+        return;
+      }
+      if (ctx.measureText(token).width > maxWidth && !current.trim()) {
+        let chunk = '';
+        for (const char of token) {
+          const candidate = chunk + char;
+          if (ctx.measureText(candidate).width <= maxWidth || !chunk) {
+            chunk = candidate;
+          } else {
+            lines.push(chunk);
+            chunk = char;
+          }
+        }
+        current = chunk;
+        return;
+      }
       if (current) lines.push(current);
-      current = word;
+      current = token.trimStart();
+    });
+    lines.push(current);
+    if (index < paragraphs.length - 1) {
+      lines.push('');
     }
   });
-  if (current) lines.push(current);
   return lines;
 };
 const ensureDisplayFonts = async () => {
@@ -2239,14 +2256,18 @@ const BarberAvatarPicker = ({
         let lineIndex = 0;
         ctx.font = '600 30px "Manrope", "Inter", sans-serif';
         ctx.fillStyle = CARD_TEXT_COLOR;
-        const chunks = sanitizeCardText(cardFields.description || '')
-          .split(/\n+/)
-          .map((line) => line.trim())
-          .filter(Boolean);
-        const payload = chunks.length ? chunks : ['Аккуратен в деталях и доводит стрижку до идеала.'];
+        const rawDescription = sanitizeCardText(cardFields.description || '');
+        const descriptionLines = rawDescription.split('\n');
+        const payload = descriptionLines.some((line) => line.trim())
+          ? descriptionLines
+          : ['Аккуратен в деталях и доводит стрижку до идеала.'];
         ctx.textBaseline = 'top';
         payload.forEach((chunk) => {
           const wrapped = wrapTextLines(ctx, chunk, descWidth).slice(0, 6);
+          if (!wrapped.length) {
+            lineIndex += 1;
+            return;
+          }
           wrapped.forEach((line, localIndex) => {
             const y = descStartY + lineIndex * 38;
             const isFirstLine = localIndex === 0;
@@ -2463,7 +2484,7 @@ const BarberAvatarPicker = ({
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Источник карточки</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Источник:</span>
               <button
                 type="button"
                 onClick={() => handleCardModeSelect(CARD_MODE_GENERATED)}
@@ -2489,10 +2510,10 @@ const BarberAvatarPicker = ({
                     : 'border-slate-700 text-slate-300 hover:border-slate-500',
                 )}
               >
-                Свое изображение
+                Свое изобр.
               </button>
             </div>
-            <p className="text-xs text-slate-500">Предпросмотр обновляется для выбранного варианта.</p>
+            <p className="text-xs text-slate-500">Предпросмотр для выбранного варианта.</p>
           </div>
           <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-900">
             <canvas
@@ -2516,16 +2537,18 @@ const BarberAvatarPicker = ({
               >
                 Скачать
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  handleCardModeSelect(CARD_MODE_CUSTOM_IMAGE);
-                  customCardInputRef.current?.click();
-                }}
-                className="rounded-2xl border border-emerald-500/70 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-400 hover:text-white"
-              >
-                Загрузить карточку
-              </button>
+              {isCustomMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleCardModeSelect(CARD_MODE_CUSTOM_IMAGE);
+                    customCardInputRef.current?.click();
+                  }}
+                  className="rounded-2xl border border-emerald-500/70 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-400 hover:text-white"
+                >
+                  +
+                </button>
+              )}
               {isCustomMode && (customCardImage || cardImageUrl) && (
                 <button
                   type="button"
@@ -2554,7 +2577,7 @@ const BarberAvatarPicker = ({
           {cardDetailsOpen && (
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-white">Название карточки</label>
+                <label className="text-sm font-semibold text-white">Имя сотрудника</label>
                 <input
                   value={cardFields.name}
                   onChange={(event) => setCardFields((prev) => ({ ...prev, name: event.target.value }))}
@@ -2563,7 +2586,7 @@ const BarberAvatarPicker = ({
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-white">Описание (построчно)</label>
+                <label className="text-sm font-semibold text-white">Описание</label>
                 <textarea
                   rows={4}
                   value={cardFields.description}
@@ -2594,7 +2617,7 @@ const BarberAvatarPicker = ({
                   </div>
                   <div className="flex-1 space-y-1">
                     <p className="text-xs text-slate-400">
-                      Фото размещается слева, лучше портретное.
+                      Портретное фото.
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -3111,17 +3134,28 @@ const BarbersView = ({
                     <EyeIcon open={showPassword} />
                   </button>
                 </div>
-                <label className="flex h-[52px] items-center justify-between rounded-2xl border border-slate-700 bg-slate-900/70 px-4 text-sm text-white">
-                  Цвет
-                  <input
-                    name="barberColor"
-                    aria-label="Цвет"
-                    type="color"
-                    value={/^#/.test(workingBarber.color || '') ? workingBarber.color : '#6d28d9'}
-                    onChange={(event) => handleFieldChange('color', event.target.value)}
-                    className="h-9 w-16 cursor-pointer rounded-xl border border-slate-500 bg-transparent"
-                  />
-                </label>
+                <button
+                  type="button"
+                  onClick={() => handleFieldChange('isActive', !(workingBarber.isActive !== false))}
+                  className={classNames(
+                    'flex h-[52px] items-center justify-between rounded-2xl border px-4 text-sm font-semibold transition',
+                    workingBarber.isActive !== false
+                      ? 'border-emerald-400 bg-emerald-500/10 text-emerald-200'
+                      : 'border-slate-700 bg-slate-900/60 text-slate-400'
+                  )}
+                >
+                  <span>{workingBarber.isActive !== false ? ACTIVE_BARBER_LABEL : HIDDEN_BARBER_LABEL}</span>
+                  <span
+                    className={classNames(
+                      'flex h-5 w-5 items-center justify-center rounded-full border',
+                      workingBarber.isActive !== false
+                        ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100'
+                        : 'border-slate-600 text-slate-500'
+                    )}
+                  >
+                    {workingBarber.isActive !== false ? '\u2713' : '\u2715'}
+                  </span>
+                </button>
                 <div className="col-span-2 grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
                     <label className="text-sm text-slate-300">Права доступа</label>
@@ -3136,7 +3170,6 @@ const BarbersView = ({
                         </option>
                       ))}
                     </select>
-                    <p className="text-xs text-slate-500">Владелец видит все разделы, сотрудник — только свои записи и услуги.</p>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm text-slate-300">Должность</label>
@@ -3153,24 +3186,15 @@ const BarbersView = ({
                         </option>
                       ))}
                     </select>
-                    <p className="text-xs text-slate-500">
-                      {activePosition
-                        ? `Процент: ${
-                            typeof activePosition.commissionRate === 'number'
-                              ? formatPercent(activePosition.commissionRate)
-                              : 'не указан'
-                          }.`
-                        : 'Не влияет на доступы, используется для аналитики.'}
-                    </p>
                   </div>
                 </div>
-                <textarea
+                {/* <textarea
                   value={workingBarber.description || ''}
                   onChange={(event) => handleFieldChange('description', event.target.value)}
                   placeholder="Описание"
                   rows={4}
                   className="col-span-2 w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
-                />
+                /> */}
                 <input
                   name="barberPhone"
                   aria-label="Телефон"
@@ -3189,30 +3213,10 @@ const BarbersView = ({
                   className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
                 />
               </div>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleFieldChange('isActive', !(workingBarber.isActive !== false))}
-                  className={classNames(
-                    'inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition',
-                    workingBarber.isActive !== false ? 'border-emerald-400 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 bg-slate-900/60 text-slate-400'
-                  )}
-                >
-                  <span>{workingBarber.isActive !== false ? ACTIVE_BARBER_LABEL : HIDDEN_BARBER_LABEL}</span>
-                  <span
-                    className={classNames(
-                      'flex h-5 w-5 items-center justify-center rounded-full border',
-                      workingBarber.isActive !== false ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100' : 'border-slate-600 text-slate-500'
-                    )}
-                  >
-                    {workingBarber.isActive !== false ? '\u2713' : '\u2715'}
-                  </span>
-                </button>
-              </div>
             </div>
           </div>
         ) : (
-          <p className="text-slate-300">Выберите барбера, чтобы изменить данные.</p>
+          <p className="text-slate-300">Выберите барбера, чтобы отредактировать данные.</p>
         )}
       </Modal>
     </div>
@@ -3371,23 +3375,32 @@ const BarberProfileView = ({
                   <EyeIcon open={showPassword} />
                 </button>
               </div>
-              <label className="flex h-[52px] items-center justify-between rounded-2xl border border-slate-700 bg-slate-900/70 px-4 text-sm text-white">
-                Цвет
-                <input
-                  name="barberColor"
-                  aria-label="Цвет"
-                  type="color"
-                  value={/^#/.test(barber.color || '') ? barber.color : '#6d28d9'}
-                  onChange={(event) => handleFieldChange('color', event.target.value)}
-                  className="h-9 w-16 cursor-pointer rounded-xl border border-slate-500 bg-transparent"
-                />
-              </label>
+              <button
+                type="button"
+                onClick={() => handleFieldChange('isActive', !(barber.isActive !== false))}
+                className={classNames(
+                  'flex h-[52px] items-center justify-between rounded-2xl border px-4 text-sm font-semibold transition',
+                  barber.isActive !== false
+                    ? 'border-emerald-400 bg-emerald-500/10 text-emerald-200'
+                    : 'border-slate-700 bg-slate-900/60 text-slate-400'
+                )}
+              >
+                <span>{barber.isActive !== false ? ACTIVE_BARBER_LABEL : HIDDEN_BARBER_LABEL}</span>
+                <span
+                  className={classNames(
+                    'flex h-5 w-5 items-center justify-center rounded-full border',
+                    barber.isActive !== false
+                      ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100'
+                      : 'border-slate-600 text-slate-500'
+                  )}
+                >
+                  {barber.isActive !== false ? '\u2713' : '\u2715'}
+                </span>
+              </button>
               <div className="col-span-2 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3">
                 <p className="text-sm text-slate-300">Должность</p>
                 <p className="text-base font-semibold text-white">{normalizeText(barber.position?.name) || 'Не назначена'}</p>
-                {typeof barber.position?.commissionRate === 'number' && (
-                  <p className="text-xs text-slate-500">Процент: {formatPercent(barber.position.commissionRate)}</p>
-                )}
+                {typeof barber.position?.commissionRate === 'number'}
               </div>
               <textarea
                 value={barber.description || ''}

@@ -172,18 +172,20 @@ const checkForUpdates = async (force = false) => {
   try {
     branchInfo = await fetchBranchHead();
   } catch (branchError) {
-    console.error('[updates] \u041e\u0448\u0438\u0431\u043a\u0430 \u043f\u0440\u0438 \u0437\u0430\u043f\u0440\u043e\u0441\u0435 \u0432\u0435\u0442\u043a\u0438:', branchError);
-    throw new Error(
-      branchError.message ||
-        '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f GitHub.',
-    );
+    console.warn('[updates] \u041e\u0448\u0438\u0431\u043a\u0430 \u043f\u0440\u0438 \u0437\u0430\u043f\u0440\u043e\u0441\u0435 \u0432\u0435\u0442\u043a\u0438:', branchError);
+    note =
+      note ||
+      '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u0432\u0435\u0442\u043a\u0443: ' +
+        (branchError?.message || 'GitHub API error');
+    branchInfo = null;
   }
 
-  const latestSnapshot = releaseInfo || branchInfo;
   const packageJson = readLocalPackage();
   const currentVersion = packageJson.version || '0.0.0';
-  const latestVersion = latestSnapshot?.version || currentVersion;
   const currentCommit = await getLocalCommitHash();
+  const fallbackSnapshot = releaseInfo || branchInfo || { version: currentVersion, publishedAt: null, url: null, source: 'local', commit: currentCommit };
+  const latestSnapshot = releaseInfo || branchInfo || fallbackSnapshot;
+  const latestVersion = latestSnapshot?.version || currentVersion;
   const latestCommit = branchInfo?.commit || releaseInfo?.commit || null;
   const currentCommitShort = currentCommit ? currentCommit.slice(0, 7) : null;
   const latestCommitShort = latestCommit ? latestCommit.slice(0, 7) : null;

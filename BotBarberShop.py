@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 import json
 import datetime
 import io
@@ -7,8 +7,11 @@ import sqlite3
 import uuid
 import time
 import sys
+import base64
 from pathlib import Path
 from collections import defaultdict
+from urllib.parse import urlparse
+from urllib.request import urlopen
 
 from telegram import (
     Update,
@@ -38,8 +41,8 @@ from zoneinfo import ZoneInfo
 TOKEN = config.TOKEN
 
 BASE_DIR = Path(__file__).parent
-DB_PATH = BASE_DIR / "prisma" / "dev.db"  # Путь к базе данных SQLite
-BLOCKLIST_FILE = BASE_DIR / "data" / "blocked-users.json"
+DB_PATH = BASE_DIR / "prisma" / "dev.db"  # CRM SQLite database
+TGBOT_IMAGE_DIR = BASE_DIR / "Image" / "tgbot"
 
 # Медиа-ресурсы и кэш
 IMAGE_FILE = BASE_DIR / "Image" / "bot.jpg"
@@ -382,19 +385,53 @@ def get_menu_photo_bytes() -> bytes:
     except Exception:
         return IMAGE_BYTES
 
+def _load_image_bytes(source: str | Path | None) -> bytes | None:
+    if not source:
+        return None
+    text = str(source).strip()
+    if not text:
+        return None
+    if text.startswith("data:image"):
+        try:
+            _, encoded = text.split(",", 1)
+            return base64.b64decode(encoded)
+        except Exception as exc:
+            logger.warning("Failed to decode inline image: %s", exc)
+            return None
+    parsed = urlparse(text)
+    if parsed.scheme in ("http", "https"):
+        try:
+            with urlopen(text, timeout=5) as resp:
+                return resp.read()
+        except Exception as exc:
+            logger.warning("Failed to fetch remote image %s: %s", text, exc)
+            return None
+    candidate = Path(text)
+    if not candidate.is_absolute():
+        candidate = BASE_DIR / text.lstrip("/\\")
+    if candidate.exists():
+        try:
+            return candidate.read_bytes()
+        except Exception as exc:
+            logger.warning("Failed to read image file %s: %s", candidate, exc)
+            return None
+    return None
+
 def get_barber_photo_bytes(barber_info: dict | None) -> bytes:
-    avatar_path = None
-    avatar_url = (barber_info or {}).get("avatarUrl")
-    if avatar_url:
-        candidate = Path(avatar_url)
-        if not candidate.is_absolute():
-            candidate = BASE_DIR / avatar_url.lstrip("/\\")
-        avatar_path = candidate if candidate.exists() else None
-    if not avatar_path and MENU_IMAGE_PATH.exists():
-        avatar_path = MENU_IMAGE_PATH
-    if avatar_path and avatar_path.exists():
-        return avatar_path.read_bytes()
-    return IMAGE_BYTES
+    avatar_url = (barber_info or {}).get("avatarUrl") or ""
+    barber_id = (barber_info or {}).get("id") or ""
+    if barber_id:
+        for ext in (".png", ".jpg", ".jpeg"):
+            card_path = TGBOT_IMAGE_DIR / f"card-{barber_id}{ext}"
+            if card_path.exists():
+                try:
+                    return card_path.read_bytes()
+                except Exception as exc:
+                    logger.warning("Failed to read card image %s: %s", card_path, exc)
+    image_bytes = _load_image_bytes(avatar_url)
+    if not image_bytes and MENU_IMAGE_PATH.exists():
+        image_bytes = _load_image_bytes(MENU_IMAGE_PATH)
+    return image_bytes or IMAGE_BYTES
 
 def invalidate_services_cache():
     SERVICE_CACHE["data"] = []

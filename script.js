@@ -1883,26 +1883,50 @@ const drawRoundedRectPath = (ctx, x, y, width, height, radius = 24) => {
   ctx.arcTo(x, y, x + r, y, r);
   ctx.closePath();
 };
-const drawRoundedImage = (ctx, image, x, y, width, height, radius = 32, filter = 'saturate(1.05) contrast(1.05)') => {
+const createRoughOutlineFilter = (color = '', size = 6, jitter = 1.1) => {
+  if (!color || size <= 0) return '';
+  const offsets = [
+    { x: 0, y: 0, blur: 0.65 },
+    { x: 0.9, y: 0.4, blur: 0.85 },
+    { x: -0.8, y: 0.7, blur: 0.75 },
+    { x: 1, y: -0.6, blur: 0.8 },
+    { x: -1, y: -0.5, blur: 0.7 },
+    { x: 0.6, y: -1, blur: 0.9 },
+  ];
+  const unit = Math.max(size * 0.32, 0.5);
+  const blurBase = Math.max(size * 0.22, 0.5);
+  return offsets
+    .map(({ x, y, blur }) => {
+      const ox = (x * unit * jitter).toFixed(2);
+      const oy = (y * unit * jitter).toFixed(2);
+      const ob = Math.max(blur * blurBase, 0.4).toFixed(2);
+      return `drop-shadow(${ox}px ${oy}px ${ob}px ${color})`;
+    })
+    .join(' ');
+};
+const drawRoundedImage = (
+  ctx,
+  image,
+  x,
+  y,
+  width,
+  height,
+  radius = 32,
+  filter = 'saturate(1.05) contrast(1.05)',
+  options = {},
+) => {
   if (!image) return;
+  const { outlineColor = '', outlineSize = 6, outlineRoughness = 1.1 } = options;
+  const outlineFilter = outlineColor ? createRoughOutlineFilter(outlineColor, outlineSize, outlineRoughness) : '';
   ctx.save();
   drawRoundedRectPath(ctx, x, y, width, height, radius);
   ctx.shadowColor = 'rgba(0, 0, 0, 0.28)';
   ctx.shadowBlur = 26;
   ctx.shadowOffsetY = 18;
   ctx.clip();
-  ctx.filter = filter;
+  const composedFilter = [outlineFilter, filter].filter(Boolean).join(' ');
+  ctx.filter = composedFilter || 'none';
   drawCoverImage(ctx, image, x, y, width, height);
-  // Fade out bottom edge to avoid a hard cut line
-  const fadeHeight = Math.min(height * 0.28, 180);
-  const gradient = ctx.createLinearGradient(0, y + height - fadeHeight, 0, y + height);
-  gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-  gradient.addColorStop(1, 'rgba(0, 0, 0, 1)');
-  ctx.shadowColor = 'transparent';
-  ctx.filter = 'none';
-  ctx.globalCompositeOperation = 'destination-out';
-  ctx.fillStyle = gradient;
-  ctx.fillRect(x, y + height - fadeHeight, width, fadeHeight);
   ctx.restore();
 };
 const wrapTextLines = (ctx, text, maxWidth) => {
@@ -1955,7 +1979,9 @@ const BarberAvatarPicker = ({
   onChange,
   loadOptions,
   onUpload,
+  onCardUpload,
   onDelete,
+  onRegisterCardSaver,
   initialName = '',
   initialDescription = '',
 }) => {
@@ -1972,6 +1998,7 @@ const BarberAvatarPicker = ({
   });
   const [cardPhoto, setCardPhoto] = useState('');
   const [cardPreview, setCardPreview] = useState('');
+  const cardPreviewRef = useRef('');
   const [photoGrayscale, setPhotoGrayscale] = useState(true);
   const [rendering, setRendering] = useState(false);
   const [renderError, setRenderError] = useState('');
@@ -2268,7 +2295,11 @@ const BarberAvatarPicker = ({
         }
         if (profilePhoto) {
           const photoFilter = photoGrayscale ? 'grayscale(100%)' : 'saturate(1.05) contrast(1.05)';
-          drawRoundedImage(ctx, profilePhoto, photoX, photoY, photoWidth, photoHeight, 38, photoFilter);
+          drawRoundedImage(ctx, profilePhoto, photoX, photoY, photoWidth, photoHeight, 38, photoFilter, {
+            outlineColor: 'rgba(148, 163, 184, 0.95)',
+            outlineSize: 10,
+            outlineRoughness: 1.2,
+          });
         } else {
           ctx.save();
           ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
@@ -2295,33 +2326,29 @@ const BarberAvatarPicker = ({
       cancelled = true;
     };
   }, [cardFields.name, cardFields.description, cardFields.phrase, cardPhoto, photoGrayscale]);
-  const handleSaveCard = useCallback(async () => {
-    if (!cardPreview) {
-      setRenderError('Превью карточки не готово, нужно подождать.');
-      return;
+  useEffect(() => {
+    cardPreviewRef.current = cardPreview;
+  }, [cardPreview]);
+  const cardSaveHandler = useCallback(
+    async (barberId) => {
+      if (!barberId || !cardPreviewRef.current || typeof onCardUpload !== 'function') return null;
+      if (lastSavedPreviewRef.current === cardPreviewRef.current) return null;
+      const result = await onCardUpload({
+        barberId,
+        name: buildCardFileName(cardFields.name || 'barber-card'),
+        data: cardPreviewRef.current,
+      });
+      lastSavedPreviewRef.current = cardPreviewRef.current;
+      return result;
+    },
+    [onCardUpload, cardFields.name],
+  );
+  useEffect(() => {
+    if (typeof onRegisterCardSaver === 'function') {
+      lastSavedPreviewRef.current = null;
+      onRegisterCardSaver(cardSaveHandler);
     }
-    setActionBusy(true);
-    setActionError('');
-    try {
-      const payload = { name: buildCardFileName(cardFields.name || 'barber-card'), data: cardPreview };
-      let nextValue = cardPreview;
-      if (typeof onUpload === 'function') {
-        const result = await onUpload(payload);
-        const uploadedPath = result?.path || result?.image || null;
-        if (uploadedPath) {
-          nextValue = normalizeImagePath(uploadedPath);
-          await refreshAvatarOptions();
-        }
-      }
-      lastSavedPreviewRef.current = cardPreview;
-      onChange?.(nextValue);
-    } catch (error) {
-      setActionError(error.message || 'Не удалось сохранить карточку.');
-    } finally {
-      setActionBusy(false);
-    }
-  }, [cardPreview, cardFields.name, onUpload, onChange, refreshAvatarOptions]);
-
+  }, [cardSaveHandler, onRegisterCardSaver]);
   const handleDownloadCard = useCallback(() => {
     if (!cardPreview) return;
     const link = document.createElement('a');
@@ -2329,6 +2356,7 @@ const BarberAvatarPicker = ({
     link.download = buildCardFileName(cardFields.name || 'barber-card').replace(/\.jpg$/, '.png');
     link.click();
   }, [cardPreview, cardFields.name]);
+  const [cardDetailsOpen, setCardDetailsOpen] = useState(false);
   return (
     <div className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 shadow-2xl">
       <input
@@ -2349,8 +2377,8 @@ const BarberAvatarPicker = ({
         className="hidden"
         onChange={handleFileInputChange}
       />
-      <div className="grid gap-6 p-5 lg:grid-cols-3">
-        <div className="space-y-3 lg:col-span-2">
+      <div className="space-y-4 p-5">
+        <div className="space-y-3">
           <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-900">
             <canvas
               ref={canvasRef}
@@ -2365,7 +2393,7 @@ const BarberAvatarPicker = ({
               </div>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <button
               type="button"
               onClick={handleDownloadCard}
@@ -2374,129 +2402,137 @@ const BarberAvatarPicker = ({
             >
               Download PNG
             </button>
-            {previewSrc && <span className="text-xs text-slate-400">Current avatar already saved</span>}
+            <button
+              type="button"
+              onClick={() => setCardDetailsOpen((prev) => !prev)}
+              className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 transition hover:border-indigo-400 hover:text-white"
+            >
+              {cardDetailsOpen ? 'Скрыть ввод' : 'Редактировать данные'}
+            </button>
           </div>
           {(renderError || actionError) && <p className="text-sm text-rose-400">{renderError || actionError}</p>}
         </div>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-white">Card name</label>
-            <input
-              value={cardFields.name}
-              onChange={(event) => setCardFields((prev) => ({ ...prev, name: event.target.value }))}
-              placeholder="BARBER"
-              className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-white">Description (by lines)</label>
-            <textarea
-              rows={4}
-              value={cardFields.description}
-              onChange={(event) => setCardFields((prev) => ({ ...prev, description: event.target.value }))}
-              placeholder="Careful with details and brings haircuts to ideal"
-              className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
-            />
-            <p className="text-xs text-slate-500">Each line becomes a bullet with the reference font.</p>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-white">Favorite phrase</label>
-            <input
-              value={cardFields.phrase}
-              onChange={(event) => setCardFields((prev) => ({ ...prev, phrase: event.target.value }))}
-              placeholder="Client comfort first"
-              className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
-            />
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-white">Barber photo</p>
-              {photoPreview && (
-                <button type="button" onClick={() => setCardPhoto('')} className="text-xs text-rose-300 hover:text-rose-200">
-                  Reset
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/70 p-3">
-              <div className="h-16 w-16 overflow-hidden rounded-xl border border-slate-800 bg-slate-800">
-                {photoPreview ? (
-                  <img src={photoPreview} alt="Barber photo" className="h-full w-full object-cover" />
-                ) : (
-                  <DefaultProfileIcon className="h-full w-full bg-slate-900/60 text-slate-500" iconClassName="h-10 w-10" />
-                )}
+        <div
+          className={classNames(
+            'overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-900/60 transition-all duration-200',
+            cardDetailsOpen ? 'max-h-[2200px] opacity-100 p-4' : 'max-h-0 opacity-0 p-0'
+          )}
+        >
+          {cardDetailsOpen && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-white">Card name</label>
+                <input
+                  value={cardFields.name}
+                  onChange={(event) => setCardFields((prev) => ({ ...prev, name: event.target.value }))}
+                  placeholder="BARBER"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                />
               </div>
-              <div className="flex-1 space-y-1">
-                <p className="text-xs text-slate-400">
-                  Photo sits on the left like the reference; portrait shots work best.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => photoInputRef.current?.click()}
-                    className="rounded-xl border border-emerald-500/70 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:border-emerald-400 hover:text-white"
-                  >
-                    Upload photo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPhotoGrayscale((prev) => !prev)}
-                    className={classNames(
-                      'rounded-xl px-3 py-1.5 text-xs font-semibold transition',
-                      photoGrayscale
-                        ? 'border border-slate-600 bg-slate-800/70 text-slate-100 hover:border-slate-400'
-                        : 'border border-emerald-500/70 bg-emerald-500/10 text-emerald-200 hover:border-emerald-400 hover:text-white',
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-white">Description (by lines)</label>
+                <textarea
+                  rows={4}
+                  value={cardFields.description}
+                  onChange={(event) => setCardFields((prev) => ({ ...prev, description: event.target.value }))}
+                  placeholder="Careful with details and brings haircuts to ideal"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                />
+                <p className="text-xs text-slate-500">Each line becomes a bullet with the reference font.</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-white">Favorite phrase</label>
+                <input
+                  value={cardFields.phrase}
+                  onChange={(event) => setCardFields((prev) => ({ ...prev, phrase: event.target.value }))}
+                  placeholder="Client comfort first"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-white">Barber photo</p>
+                <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/70 p-3">
+                  <div className="h-16 w-16 overflow-hidden rounded-xl border border-slate-800 bg-slate-800">
+                    {photoPreview ? (
+                      <img src={photoPreview} alt="Barber photo" className="h-full w-full object-cover" />
+                    ) : (
+                      <DefaultProfileIcon className="h-full w-full bg-slate-900/60 text-slate-500" iconClassName="h-10 w-10" />
                     )}
-                  >
-                    {photoGrayscale ? 'B/W effect' : 'Color photo'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowGallery((prev) => !prev)}
-                    className="rounded-xl border border-slate-700 px-3 py-1.5 text-xs font-semibold text-indigo-200 transition hover:border-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
-                    disabled={loading || (!avatarOptions.length && !normalizedValue)}
-                  >
-                    {loading ? 'Loading...' : showGallery ? 'Hide gallery' : 'Show gallery'}
-                  </button>
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <p className="text-xs text-slate-400">
+                      Photo sits on the left like the reference; portrait shots work best.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => photoInputRef.current?.click()}
+                        className="rounded-xl border border-emerald-500/70 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:border-emerald-400 hover:text-white"
+                      >
+                        Upload photo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPhotoGrayscale((prev) => !prev)}
+                        className={classNames(
+                          'rounded-xl px-3 py-1.5 text-xs font-semibold transition',
+                          photoGrayscale
+                            ? 'border border-slate-600 bg-slate-800/70 text-slate-100 hover:border-slate-400'
+                            : 'border border-emerald-500/70 bg-emerald-500/10 text-emerald-200 hover:border-emerald-400 hover:text-white',
+                        )}
+                      >
+                        {photoGrayscale ? 'B/W effect' : 'Color photo'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowGallery((prev) => !prev)}
+                        className="rounded-xl border border-slate-700 px-3 py-1.5 text-xs font-semibold text-indigo-200 transition hover:border-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+                        disabled={loading || (!avatarOptions.length && !normalizedValue)}
+                      >
+                        {loading ? 'Loading...' : showGallery ? 'Hide gallery' : 'Show gallery'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-            </div>
-          </div>
-            {showGallery && availableOptions.length > 0 && (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {availableOptions.map((preset) => {
-                  const isSelected = preset === normalizedValue;
-                  return (
-                    <button
-                      type="button"
-                      key={preset}
-                      onClick={() => onChange(preset)}
-                      className={classNames(
-                        'group relative overflow-hidden rounded-2xl border p-1.5 transition hover:border-indigo-400 hover:bg-slate-800',
-                        isSelected ? 'border-indigo-500 bg-indigo-500/15' : 'border-slate-700 bg-slate-900',
-                      )}
-                    >
-                      <img src={resolveAssetUrl(preset)} alt="card preset" className="h-20 w-full rounded-xl object-cover" />
-                      {typeof onDelete === 'function' && (
+                {showGallery && availableOptions.length > 0 && (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {availableOptions.map((preset) => {
+                      const isSelected = preset === normalizedValue;
+                      return (
                         <button
                           type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleDeleteImage(preset);
-                          }}
-                          className="absolute right-1 top-1 rounded-full bg-slate-900/70 p-1 text-slate-200 opacity-0 transition hover:bg-rose-600/80 hover:text-white group-hover:opacity-100 disabled:cursor-not-allowed"
-                          disabled={actionBusy}
+                          key={preset}
+                          onClick={() => onChange(preset)}
+                          className={classNames(
+                            'group relative overflow-hidden rounded-2xl border p-1.5 transition hover:border-indigo-400 hover:bg-slate-800',
+                            isSelected ? 'border-indigo-500 bg-indigo-500/15' : 'border-slate-700 bg-slate-900',
+                          )}
                         >
-                          <IconTrash className="h-3.5 w-3.5" />
+                          <img src={resolveAssetUrl(preset)} alt="card preset" className="h-20 w-full rounded-xl object-cover" />
+                          {typeof onDelete === 'function' && (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleDeleteImage(preset);
+                              }}
+                              className="absolute right-1 top-1 rounded-full bg-slate-900/70 p-1 text-slate-200 opacity-0 transition hover:bg-rose-600/80 hover:text-white group-hover:opacity-100 disabled:cursor-not-allowed"
+                              disabled={actionBusy}
+                            >
+                              <IconTrash className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </button>
-                      )}
-                    </button>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                )}
+                {!avatarOptions.length && !loading && (
+                  <p className="text-sm text-slate-500">No cards yet. Save one to see it here.</p>
+                )}
               </div>
-            )}
-            {!avatarOptions.length && !loading && (
-              <p className="text-sm text-slate-500">No cards yet. Save one to see it here.</p>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -2609,6 +2645,7 @@ const BarbersView = ({
   positions = [],
   loadAvatarOptions,
   uploadAvatar,
+  uploadCard,
   deleteAvatar,
   onFieldChange,
   onSave,
@@ -2628,6 +2665,8 @@ const BarbersView = ({
   const activeBarber = barbers.find((barber) => barber.id === editorState.targetId) || null;
   const workingBarber = isCreateMode ? draftBarber : activeBarber;
   const [pendingAvatar, setPendingAvatar] = useState('');
+  const cardSaverRef = useRef(null);
+  const [savingBarber, setSavingBarber] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const sortedPositions = useMemo(() => {
     if (!Array.isArray(positions) || !positions.length) return [];
@@ -2645,6 +2684,7 @@ const BarbersView = ({
   useEffect(() => {
     if (!editorState.open) {
       setPendingAvatar('');
+      cardSaverRef.current = null;
       return;
     }
     if (isCreateMode) {
@@ -2679,21 +2719,41 @@ const BarbersView = ({
     const formatted = digits ? formatPhoneDisplay(rawValue) : '';
     handleFieldChange('phone', formatted);
   };
+  const registerCardSaver = useCallback((fn) => {
+    cardSaverRef.current = typeof fn === 'function' ? fn : null;
+  }, []);
   const handleAvatarChange = useCallback(
     (value) => {
       handleFieldChange('avatarUrl', value);
     },
     [handleFieldChange]
   );
-  const handleSave = () => {
-    if (isCreateMode) {
-      onAdd?.({ ...draftBarber, avatarUrl: pendingAvatar || '' });
-      setDraftBarber(buildNewBarberState());
-    } else if (activeBarber) {
-      const nextBarber = pendingAvatar !== undefined ? { ...activeBarber, avatarUrl: pendingAvatar || '' } : activeBarber;
-      onSave?.(nextBarber);
+  const handleSave = async () => {
+    if (!workingBarber) return;
+    setSavingBarber(true);
+    try {
+      let savedRecord = null;
+      if (isCreateMode) {
+        savedRecord = (await onAdd?.({ ...draftBarber, avatarUrl: pendingAvatar || '' })) || null;
+        setDraftBarber(buildNewBarberState());
+      } else if (activeBarber) {
+        const nextBarber = pendingAvatar !== undefined ? { ...activeBarber, avatarUrl: pendingAvatar || '' } : activeBarber;
+        savedRecord = (await onSave?.(nextBarber)) || nextBarber;
+      }
+      const targetBarber = savedRecord || (!isCreateMode ? activeBarber : null);
+      if (cardSaverRef.current && targetBarber?.id) {
+        try {
+          await cardSaverRef.current(targetBarber.id);
+        } catch (error) {
+          console.error('Card upload failed:', error);
+        }
+      }
+      closeEditor();
+    } catch (error) {
+      console.error('Barber save failed:', error);
+    } finally {
+      setSavingBarber(false);
     }
-    closeEditor();
   };
   const handleDelete = () => {
     if (!isCreateMode && activeBarber) {
@@ -2804,13 +2864,13 @@ const BarbersView = ({
             </button>
             <button
               onClick={handleSave}
-              disabled={!canSubmit}
+              disabled={!canSubmit || savingBarber}
               className={classNames(
                 'rounded-lg px-4 py-2 text-sm font-semibold text-white',
-                canSubmit ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-slate-700 text-slate-300'
+                canSubmit && !savingBarber ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-slate-700 text-slate-300'
               )}
             >
-              {isCreateMode ? 'Добавить' : 'Сохранить'}
+              {savingBarber ? 'Сохранение...' : isCreateMode ? 'Добавить' : 'Сохранить'}
             </button>
           </>
         }
@@ -2822,7 +2882,9 @@ const BarbersView = ({
               onChange={handleAvatarChange}
               loadOptions={loadAvatarOptions}
               onUpload={uploadAvatar}
+              onCardUpload={uploadCard}
               onDelete={deleteAvatar}
+              onRegisterCardSaver={registerCardSaver}
               initialName={workingBarber?.name || ''}
               initialDescription={workingBarber?.description || ''}
             />
@@ -6547,6 +6609,7 @@ const TablesWorkspace = ({
   onPreferredTableConsumed,
   onRequestConfirm = null,
   uploadAvatar,
+  uploadCard,
   deleteAvatar,
   loadAvatarOptions,
   onBlockClient,
@@ -6891,6 +6954,7 @@ const TablesWorkspace = ({
               onDelete={onDeleteBarber}
               loadAvatarOptions={loadAvatarAssets}
               uploadAvatar={uploadAvatar}
+              uploadCard={uploadCard}
               deleteAvatar={deleteAvatar}
             />
           )}
@@ -7987,13 +8051,15 @@ const handleBarberFieldChange = (id, field, value) => {
     return payload;
   };
   const handleSaveBarber = async (barber) => {
-    if (!barber?.id) return;
+    if (!barber?.id) return null;
     try {
       const response = await apiRequest(`/Barbers/${encodeURIComponent(barber.id)}`, { method: 'PUT', body: JSON.stringify(buildBarberPayload(barber)) });
       const updatedBarber = response || barber;
       setBarbers((prev) => prev.map((item) => (item.id === updatedBarber.id ? { ...item, ...updatedBarber } : item)));
+      return updatedBarber;
     } catch (error) {
       setGlobalError(error.message);
+      throw error;
     }
   };
   const handleDeleteBarber = async (barber) => {
@@ -8015,15 +8081,17 @@ const handleBarberFieldChange = (id, field, value) => {
   const handleAddBarber = async (payload) => {
     if (!payload.name || !payload.password) {
       setGlobalError('Заполните имя, логин и пароль барбера');
-      return;
+      return null;
     }
     try {
       const newBarberPayload = buildBarberPayload({ ...payload, id: undefined }, barbers.length);
       const { id, ...body } = newBarberPayload;
-      await apiRequest('/Barbers', { method: 'POST', body: JSON.stringify(body) });
+      const created = await apiRequest('/Barbers', { method: 'POST', body: JSON.stringify(body) });
       fetchAll();
+      return created || null;
     } catch (error) {
       setGlobalError(error.message || 'Не удалось добавить барбера');
+      throw error;
     }
   };
   const handleSaveService = useCallback(
@@ -8142,6 +8210,18 @@ const handleBarberFieldChange = (id, field, value) => {
       return apiRequest('/assets/avatars/upload', {
         method: 'POST',
         body: JSON.stringify({ name, data }),
+      });
+    },
+    [apiRequest]
+  );
+  const handleUploadCard = useCallback(
+    async ({ barberId, name, data }) => {
+      if (!barberId || !data) {
+        throw new Error('Нужны id барбера и данные карточки.');
+      }
+      return apiRequest('/assets/cards/upload', {
+        method: 'POST',
+        body: JSON.stringify({ barberId, name, data }),
       });
     },
     [apiRequest]
@@ -8523,6 +8603,7 @@ const handleBarberFieldChange = (id, field, value) => {
             onRequestConfirm={requestConfirm}
             onBlockClient={handleBlockClient}
             uploadAvatar={handleUploadAvatar}
+            uploadCard={handleUploadCard}
             deleteAvatar={handleDeleteAvatar}
             loadAvatarOptions={handleLoadAvatarOptions}
             dataTables={dataTables}

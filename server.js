@@ -36,6 +36,7 @@ const DEFAULT_BOT_DESCRIPTION =
 const DEFAULT_ABOUT_TEXT =
   "Текст в блоке «О нас»";
 const IMAGE_DIR = path.join(__dirname, "Image");
+const CARD_IMAGE_DIR = path.join(IMAGE_DIR, "tgbot");
 const MAX_AVATAR_FILE_SIZE = Number(
   process.env.MAX_AVATAR_FILE_SIZE || 5 * 1024 * 1024,
 );
@@ -1874,6 +1875,35 @@ app.post("/api/assets/avatars/upload", authenticateToken, async (req, res) => {
   }
 });
 
+
+
+app.post("/api/assets/cards/upload", authenticateToken, async (req, res) => {
+  try {
+    const { barberId, name, data } = req.body || {};
+    if (!barberId || !data) {
+      return res.status(400).json({ error: "Не хватает id барбера или файла карточки." });
+    }
+    const safeExtName = buildSafeImageFilename(name || `card-${barberId}.png`) || null;
+    const baseSafeId = normalizeText(String(barberId)).replace(/[^a-z0-9_-]/gi, "") || "card";
+    const ext = safeExtName ? path.extname(safeExtName) || ".png" : ".png";
+    const filename = `card-${baseSafeId}${ext.toLowerCase()}`;
+    await fs.ensureDir(CARD_IMAGE_DIR);
+    const buffer = decodeBase64Image(data);
+    if (!buffer.length) {
+      return res.status(400).json({ error: "Файл пуст." });
+    }
+    const targetPath = path.join(CARD_IMAGE_DIR, filename);
+    await fs.writeFile(targetPath, buffer);
+    res.json({ success: true, path: `/Image/tgbot/${filename}` });
+  } catch (error) {
+    console.error("Card upload error:", error);
+    res.status(500).json({
+      error: "Не удалось сохранить карточку барбера.",
+      details: error.message,
+    });
+  }
+});
+
 app.delete("/api/assets/avatars", authenticateToken, async (req, res) => {
   try {
     const { filename } = req.body || {};
@@ -2999,7 +3029,6 @@ const bootstrap = async () => {
   }
 };
 bootstrap();
-
 
 
 

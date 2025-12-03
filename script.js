@@ -1820,6 +1820,111 @@ const readFileAsDataUrl = (file) =>
     reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
     reader.readAsDataURL(file);
   });
+const rgbToHsl = (r, g, b) => {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const delta = max - min;
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+  if (delta !== 0) {
+    s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+    switch (max) {
+      case rn:
+        h = (gn - bn) / delta + (gn < bn ? 6 : 0);
+        break;
+      case gn:
+        h = (bn - rn) / delta + 2;
+        break;
+      default:
+        h = (rn - gn) / delta + 4;
+        break;
+    }
+    h *= 60;
+  }
+  return { h, s, l };
+};
+const stripGreenBackground = async (dataUrl, options = {}) => {
+  if (!dataUrl || typeof document === 'undefined') return dataUrl;
+  const {
+    keyHue,
+    hueTolerance = 24,
+    feather = 12,
+    satThreshold = 0.25,
+    greenBias = 16,
+    edgeBandRatio = 0.08,
+    sampleStep = 4,
+  } = options;
+  try {
+    const image = await loadImageElement(dataUrl);
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width || 1;
+    canvas.height = image.height || 1;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const { data } = imageData;
+    const w = canvas.width;
+    const h = canvas.height;
+    const band = Math.max(1, Math.round(Math.min(w, h) * edgeBandRatio));
+    const step = Math.max(1, sampleStep);
+    const greenHues = [];
+    const pushSample = (x, y) => {
+      const idx = (y * w + x) * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      if (g <= Math.max(r, b) + greenBias) return;
+      const { h: sampleHue, s } = rgbToHsl(r, g, b);
+      if (s < satThreshold) return;
+      greenHues.push(sampleHue);
+    };
+    if (!Number.isFinite(keyHue)) {
+      for (let y = 0; y < band; y += step) {
+        for (let x = 0; x < w; x += step) pushSample(x, y);
+      }
+      for (let y = h - band; y < h; y += step) {
+        for (let x = 0; x < w; x += step) pushSample(x, y);
+      }
+      for (let x = 0; x < band; x += step) {
+        for (let y = 0; y < h; y += step) pushSample(x, y);
+      }
+      for (let x = w - band; x < w; x += step) {
+        for (let y = 0; y < h; y += step) pushSample(x, y);
+      }
+    }
+    const detectedHue =
+      Number.isFinite(keyHue) || !greenHues.length
+        ? Number.isFinite(keyHue) ? keyHue : 110
+        : greenHues.reduce((sum, hue) => sum + hue, 0) / greenHues.length;
+    const hueFeatherStart = Math.max(0, hueTolerance - feather);
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const a = data[i + 3];
+      if (g <= Math.max(r, b) + greenBias) continue;
+      const { h: pixelHue, s } = rgbToHsl(r, g, b);
+      if (s < satThreshold) continue;
+      const hueDiff = Math.min(Math.abs(pixelHue - detectedHue), 360 - Math.abs(pixelHue - detectedHue));
+      if (hueDiff > hueTolerance + feather) continue;
+      if (hueDiff <= hueFeatherStart) {
+        data[i + 3] = 0;
+      } else {
+        const factor = Math.min(1, (hueDiff - hueFeatherStart) / Math.max(feather, 1));
+        data[i + 3] = Math.round(a * factor);
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+    return canvas.toDataURL('image/png');
+  } catch (error) {
+    console.warn('Chroma removal failed', error);
+    return dataUrl;
+  }
+};
 const CARD_CANVAS_WIDTH = 1360;
 const CARD_CANVAS_HEIGHT = 768;
 const CARD_BACKGROUND_IMAGE = resolveAssetUrl('card/background.jpg');
@@ -2056,10 +2161,11 @@ const BarberAvatarPicker = ({
     }
   }, [cardImageUrl, selectedCardMode]);
   useEffect(() => {
-    if (!cardPhoto && normalizedValue && !normalizedValue.endsWith('background.jpg')) {
-      setCardPhoto(normalizedValue);
-    }
-  }, [normalizedValue, cardPhoto]);
+    setCardPhoto((prev) => {
+      const nextPhoto = normalizedValue && !normalizedValue.endsWith('background.jpg') ? normalizedValue : '';
+      return nextPhoto === prev ? prev : nextPhoto;
+    });
+  }, [normalizedValue]);
   const availableOptions = useMemo(() => {
     if (!normalizedValue || avatarOptions.includes(normalizedValue)) return avatarOptions;
     return [normalizedValue, ...avatarOptions];
@@ -2105,6 +2211,15 @@ const BarberAvatarPicker = ({
       setLoading(false);
     }
   }, [requestAvatarOptions]);
+  const applyAvatarValue = useCallback(
+    (nextValue) => {
+      const normalized = normalizeImagePath(nextValue || '');
+      const safePhoto = normalized && !normalized.endsWith('background.jpg') ? normalized : '';
+      setCardPhoto(safePhoto);
+      onChange?.(normalized);
+    },
+    [onChange],
+  );
   const handleUploadFile = useCallback(
     async (file) => {
       if (!file || typeof onUpload !== 'function') return;
@@ -2120,12 +2235,11 @@ const BarberAvatarPicker = ({
       setActionBusy(true);
       try {
         const dataUrl = await readFileAsDataUrl(file);
-        const result = await onUpload({ name: file.name, data: dataUrl });
+        const cleanedDataUrl = await stripGreenBackground(dataUrl);
+        const result = await onUpload({ name: file.name, data: cleanedDataUrl });
         await refreshAvatarOptions();
-        const uploadedPath = result?.path || result?.image || null;
-        if (uploadedPath) {
-          onChange?.(normalizeImagePath(uploadedPath));
-        }
+        const uploadedPath = normalizeImagePath(result?.path || result?.image || '');
+        applyAvatarValue(uploadedPath);
         setShowGallery(true);
       } catch (error) {
         console.error('Avatar upload error', error);
@@ -2134,7 +2248,7 @@ const BarberAvatarPicker = ({
         setActionBusy(false);
       }
     },
-    [onUpload, onChange, refreshAvatarOptions],
+    [onUpload, refreshAvatarOptions, applyAvatarValue],
   );
   const handleFileInputChange = useCallback(
     (event) => {
@@ -2160,18 +2274,35 @@ const BarberAvatarPicker = ({
         return;
       }
       setRenderError('');
+      setActionError('');
+      let busy = false;
       try {
         const dataUrl = await readFileAsDataUrl(file);
-        const normalized = normalizeImagePath(dataUrl);
-        setCardPhoto(normalized);
+        const cleanedDataUrl = await stripGreenBackground(dataUrl);
+        let normalized = normalizeImagePath(cleanedDataUrl);
+        if (typeof onUpload === 'function') {
+          setActionBusy(true);
+          busy = true;
+          const result = await onUpload({ name: file.name, data: cleanedDataUrl });
+          const uploadedPath = normalizeImagePath(result?.path || result?.image || '');
+          if (uploadedPath) {
+            normalized = uploadedPath;
+          }
+        }
+        applyAvatarValue(normalized);
         setAvatarOptions((prev) => [normalized, ...prev.filter((item) => item !== normalized)]);
         setShowGallery(true);
-        onChange?.(normalized);
       } catch (error) {
+        console.error('Avatar photo upload error', error);
+        setActionError(error.message || 'Не удалось сохранить фото.');
         setRenderError(error.message || 'Не удалось сформировать превью карточки.');
+      } finally {
+        if (busy) {
+          setActionBusy(false);
+        }
       }
     },
-    [],
+    [onUpload, applyAvatarValue],
   );
   const handleDeleteImage = useCallback(
     async (target) => {
@@ -2181,8 +2312,9 @@ const BarberAvatarPicker = ({
       try {
         await onDelete(target);
         await refreshAvatarOptions();
-        if (normalizeImagePath(target) === normalizedValue) {
-          onChange?.('');
+        const normalizedTarget = normalizeImagePath(target);
+        if (normalizedTarget === normalizedValue) {
+          applyAvatarValue('');
         }
       } catch (error) {
         console.error('Avatar delete error', error);
@@ -2191,7 +2323,7 @@ const BarberAvatarPicker = ({
         setActionBusy(false);
       }
     },
-    [onDelete, refreshAvatarOptions, normalizedValue, onChange],
+    [onDelete, refreshAvatarOptions, normalizedValue, applyAvatarValue],
   );
   const previewSrc = normalizedValue ? resolveAssetUrl(normalizedValue) : '';
   const photoPreview = cardPhoto ? resolveAssetUrl(cardPhoto) : '';
@@ -2665,24 +2797,25 @@ const BarberAvatarPicker = ({
                 {showGallery && availableOptions.length > 0 && (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {availableOptions.map((preset) => {
-                      const isSelected = preset === normalizedValue;
+                      const normalizedPreset = normalizeImagePath(preset);
+                      const isSelected = normalizedPreset === normalizedValue;
                       return (
                         <button
                           type="button"
                           key={preset}
-                          onClick={() => onChange(preset)}
+                          onClick={() => applyAvatarValue(normalizedPreset)}
                           className={classNames(
                             'group relative overflow-hidden rounded-2xl border p-1.5 transition hover:border-indigo-400 hover:bg-slate-800',
                             isSelected ? 'border-indigo-500 bg-indigo-500/15' : 'border-slate-700 bg-slate-900',
                           )}
                         >
-                          <img src={resolveAssetUrl(preset)} alt="card preset" className="h-20 w-full rounded-xl object-cover" />
+                          <img src={resolveAssetUrl(normalizedPreset)} alt="card preset" className="h-20 w-full rounded-xl object-cover" />
                           {typeof onDelete === 'function' && (
                             <button
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                handleDeleteImage(preset);
+                                handleDeleteImage(normalizedPreset);
                               }}
                               className="absolute right-1 top-1 rounded-full bg-slate-900/70 p-1 text-slate-200 opacity-0 transition hover:bg-rose-600/80 hover:text-white group-hover:opacity-100 disabled:cursor-not-allowed"
                               disabled={actionBusy}
@@ -2849,20 +2982,36 @@ const BarbersView = ({
     () => sortedPositions.find((item) => item.id === workingBarber?.positionId) || null,
     [sortedPositions, workingBarber?.positionId]
   );
+  const avatarSyncRef = useRef({ id: null, avatar: '' });
   useEffect(() => {
     if (!editorState.open) {
       setPendingAvatar('');
       cardSaverRef.current = null;
+      avatarSyncRef.current = { id: null, avatar: '' };
       return;
     }
     if (isCreateMode) {
-      setPendingAvatar(draftBarber.avatarUrl || '');
-    } else if (activeBarber) {
-      setPendingAvatar(activeBarber.avatarUrl || '');
-    } else {
-      setPendingAvatar('');
+      const next = draftBarber.avatarUrl || '';
+      avatarSyncRef.current = { id: 'create', avatar: next };
+      setPendingAvatar(next);
+      return;
     }
-  }, [editorState.open, isCreateMode, draftBarber.avatarUrl, activeBarber?.avatarUrl, activeBarber]);
+    const targetId = activeBarber?.id || null;
+    const nextAvatar = activeBarber?.avatarUrl || '';
+    const { id: syncedId, avatar: syncedAvatar } = avatarSyncRef.current;
+    const normalizedNext = normalizeImagePath(nextAvatar);
+    const normalizedSynced = normalizeImagePath(syncedAvatar || '');
+    const barberChanged = syncedId !== targetId;
+    const avatarChanged = normalizedNext !== normalizedSynced;
+    if (!barberChanged && !avatarChanged) return;
+    setPendingAvatar((prev) => {
+      const normalizedPrev = normalizeImagePath(prev || '');
+      const allowSync = barberChanged || (avatarChanged && normalizedPrev === normalizedSynced);
+      if (!allowSync) return prev;
+      avatarSyncRef.current = { id: targetId, avatar: nextAvatar };
+      return nextAvatar;
+    });
+  }, [editorState.open, isCreateMode, draftBarber.avatarUrl, activeBarber?.id, activeBarber?.avatarUrl]);
   useEffect(() => {
     setShowPassword(false);
   }, [editorState.open, editorState.mode, editorState.targetId]);
@@ -8276,7 +8425,7 @@ const handleBarberFieldChange = (id, field, value) => {
     if (!barber?.id) return null;
     try {
       const response = await apiRequest(`/Barbers/${encodeURIComponent(barber.id)}`, { method: 'PUT', body: JSON.stringify(buildBarberPayload(barber)) });
-      const updatedBarber = response || barber;
+      const updatedBarber = { ...barber, ...(response || {}) }; // сохраняем локально выбранный avatarUrl, если сервер его не вернул
       setBarbers((prev) => prev.map((item) => (item.id === updatedBarber.id ? { ...item, ...updatedBarber } : item)));
       return updatedBarber;
     } catch (error) {

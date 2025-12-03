@@ -7857,51 +7857,69 @@ const LoginScreen = ({ onLogin, error, defaultRemember = false, onRememberChange
   };
   const suggestionPlaceholder = 'Например: +7 999 123-45-67';
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-md space-y-5 rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">
-        <div className="space-y-1 text-center">
-          <h1 className="text-2xl font-semibold text-white">HalfTime</h1>
-        </div>
-        <div>
-          <label className="text-sm text-slate-300">Номер телефона</label>
-          <input
-            type="tel"
-            value={phone}
-            onChange={(event) => handlePhoneInput(event.target.value)}
-            placeholder={suggestionPlaceholder}
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
-          />
-          <div className="mt-1 space-y-1">
-            <p className="text-xs text-slate-500">Номер телефона подтверждает, что вы из нашей команды.</p>
+    <div className="login-hero relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+      <div className="login-aurora login-aurora-emerald" />
+      <div className="login-aurora login-aurora-amber" />
+      <div className="login-aurora login-aurora-indigo" />
+      <div className="login-grid" />
+      <div className="login-fog" />
+      <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-10">
+        <form
+          onSubmit={handleSubmit}
+          className="w-full max-w-md space-y-6 rounded-3xl border border-white/10 bg-slate-900/80 p-8 shadow-[0_30px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl"
+        >
+          <div className="flex items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-100/70">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.9)]" />
+            <span>Внутренняя панель</span>
           </div>
-        </div>
-        <div>
-          <label className="text-sm text-slate-300">Пароль</label>
-          <input
-            name="sessionPassword"
-            aria-label="Пароль"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
-          />
-        </div>
-        <div className="flex items-center justify-between text-sm text-slate-300">
-          <label className="inline-flex items-center gap-2">
+          <div className="space-y-2 text-center">
+            <h1 className="text-3xl font-extrabold text-white">HalfTime</h1>
+            <p className="text-sm text-slate-400">Авторизация для команды барбершопа</p>
+          </div>
+          <div>
+            <label className="text-sm text-slate-300">Номер телефона</label>
             <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(event) => handleRememberToggle(event.target.checked)}
-              className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500"
+              type="tel"
+              value={phone}
+              onChange={(event) => handlePhoneInput(event.target.value)}
+              placeholder={suggestionPlaceholder}
+              className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white shadow-inner shadow-black/10 backdrop-blur focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
             />
-            <span>Запомнить меня</span>
-          </label>
-        </div>
-        {(validationError || error) && <ErrorBanner message={validationError || error} />}
-        <button type="submit" className="w-full rounded-lg bg-indigo-600 py-2 font-semibold text-white hover:bg-indigo-500">
-          Войти
-        </button>
-      </form>
+            <div className="mt-2 space-y-1 text-xs text-slate-400">
+              <p>Номер подтверждает, что вы из команды, поэтому вводите его в формате +7.</p>
+            </div>
+          </div>
+          <div>
+            <label className="text-sm text-slate-300">Пароль</label>
+            <input
+              name="sessionPassword"
+              aria-label="Пароль"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white shadow-inner shadow-black/10 backdrop-blur focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30"
+            />
+          </div>
+          <div className="flex items-center justify-between text-sm text-slate-200">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(event) => handleRememberToggle(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-400 focus:ring-indigo-400"
+              />
+              <span>Запомнить меня</span>
+            </label>
+          </div>
+          {(validationError || error) && <ErrorBanner message={validationError || error} />}
+          <button
+            type="submit"
+            className="w-full rounded-xl bg-gradient-to-r from-indigo-500 via-emerald-400 to-amber-400 py-3 font-semibold text-slate-900 shadow-lg shadow-emerald-900/30 transition duration-200 hover:scale-[1.01] hover:shadow-amber-400/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70"
+          >
+            Войти
+          </button>
+        </form>
+      </div>
     </div>
   );
 };

@@ -91,7 +91,7 @@ const numericFields = {
   Positions: ["commissionRate", "orderIndex"],
 };
 const booleanFields = {
-  Barbers: ["isActive"],
+  Barbers: ["isActive", "cardPhotoGrayscale", "cardPhotoOutline"],
   Services: ["isActive"],
   BotSettings: ["isBotEnabled"],
 };

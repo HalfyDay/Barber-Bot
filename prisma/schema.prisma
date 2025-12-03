@@ -76,6 +76,8 @@ model Barbers {
   cardPhrase      String   @default("")
   cardMode        String   @default("generated")
   cardImageUrl    String   @default("")
+  cardPhotoGrayscale Boolean @default(true)
+  cardPhotoOutline   Boolean @default(true)
   isActive    Boolean    @default(true)
   orderIndex  Int        @default(0)
   role        BarberRole @default(owner)

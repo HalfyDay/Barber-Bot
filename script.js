@@ -163,6 +163,8 @@ const buildNewBarberState = () => ({
   cardPhrase: '',
   cardMode: CARD_MODE_GENERATED,
   cardImageUrl: '',
+  cardPhotoGrayscale: true,
+  cardPhotoOutline: true,
   description: '',
   phone: '',
   telegramId: '',
@@ -2096,6 +2098,8 @@ const BarberAvatarPicker = ({
   initialCardTitle = '',
   initialCardDescription = '',
   initialCardPhrase = '',
+  initialPhotoGrayscale = true,
+  initialPhotoOutline = true,
   cardMode = CARD_MODE_GENERATED,
   cardImageUrl = '',
   onCardFieldsChange,
@@ -2119,8 +2123,8 @@ const BarberAvatarPicker = ({
   const cardPreviewRef = useRef('');
   const customCardInputRef = useRef(null);
   const [customCardImage, setCustomCardImage] = useState(() => normalizeImagePath(cardImageUrl || ''));
-  const [photoGrayscale, setPhotoGrayscale] = useState(true);
-  const [photoOutlineEnabled, setPhotoOutlineEnabled] = useState(true);
+  const [photoGrayscale, setPhotoGrayscale] = useState(() => initialPhotoGrayscale !== false);
+  const [photoOutlineEnabled, setPhotoOutlineEnabled] = useState(() => initialPhotoOutline !== false);
   const [rendering, setRendering] = useState(false);
   const [renderError, setRenderError] = useState('');
   const fileInputRef = useRef(null);
@@ -2140,14 +2144,26 @@ const BarberAvatarPicker = ({
       description: sanitizeCardText(initialCardDescription || initialDescription),
       phrase: sanitizeCardText(initialCardPhrase || ''),
     });
-  }, [initialName, initialDescription, initialCardTitle, initialCardDescription, initialCardPhrase]);
+    setPhotoGrayscale(initialPhotoGrayscale !== false);
+    setPhotoOutlineEnabled(initialPhotoOutline !== false);
+  }, [
+    initialName,
+    initialDescription,
+    initialCardTitle,
+    initialCardDescription,
+    initialCardPhrase,
+    initialPhotoGrayscale,
+    initialPhotoOutline,
+  ]);
   useEffect(() => {
     onCardFieldsChange?.({
       cardTitle: cardFields.name,
       cardDescription: cardFields.description,
       cardPhrase: cardFields.phrase,
+      cardPhotoGrayscale: photoGrayscale,
+      cardPhotoOutline: photoOutlineEnabled,
     });
-  }, [cardFields, onCardFieldsChange]);
+  }, [cardFields, photoGrayscale, photoOutlineEnabled, onCardFieldsChange]);
   useEffect(() => {
     setSelectedCardMode(normalizeCardMode(cardMode));
   }, [cardMode]);
@@ -2379,12 +2395,13 @@ const BarberAvatarPicker = ({
         ctx.fillStyle = CARD_NAME_COLOR;
         ctx.fillText(title, titleX, TITLE_BASE_Y);
         ctx.restore();
-        const phraseX = CARD_CANVAS_WIDTH * 0.52; // anchor phrase block
-        const descX = phraseX; // keep description text anchored
+        const phraseBgX = CARD_CANVAS_WIDTH * 0.4; // keep favorite phrase background anchored
+        const phraseTextX = phraseBgX + 20; // nudge phrase content slightly right
+        const descX = CARD_CANVAS_WIDTH * 0.5; // shift description block slightly left
         const descWidth = CARD_CANVAS_WIDTH - descX - 60;
-        const phraseWidth = CARD_CANVAS_WIDTH - phraseX - 30; // wider phrase text area
-        const descStartY = 400; // adjust to move description bullets up/down
-        const bulletX = descX - 14; // only bullets move left
+        const phraseWidth = CARD_CANVAS_WIDTH - phraseBgX - 80; // phrase area matches background anchor
+        const descStartY = 400; // move description block slightly lower
+        const bulletX = descX - 18; // keep bullets offset with new position
         let lineIndex = 0;
         ctx.font = '600 30px "Manrope", "Inter", sans-serif';
         ctx.fillStyle = CARD_TEXT_COLOR;
@@ -2414,43 +2431,16 @@ const BarberAvatarPicker = ({
             lineIndex += 1;
           });
         });
-        const phraseLabel = 'Любимая фраза:';
-        const phraseText = sanitizeCardText(cardFields.phrase || 'Комфорт клиента превыше всего');
-        const phraseY = CARD_CANVAS_HEIGHT - 190; // adjust this to move the quote block
-        const phraseBlockHeight = 180;
-        if (phraseBg) {
-          drawCoverImage(ctx, phraseBg, phraseX - 12, phraseY - 16, phraseWidth + 24, phraseBlockHeight + 24);
-        } else {
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
-          drawRoundedRectPath(ctx, phraseX, phraseY, phraseWidth, phraseBlockHeight, 18);
-          ctx.fill();
-        }
-        ctx.font = '700 28px "Manrope", "Inter", sans-serif';
-        const labelWidth = ctx.measureText(phraseLabel).width;
-        const labelPaddingX = 14;
-        const labelHeight = 40;
-        const labelY = phraseY + 20;
-        ctx.fillStyle = CARD_NAME_COLOR; // match name color for label background
-        drawRoundedRectPath(ctx, phraseX + 12, labelY, labelWidth + labelPaddingX * 2, labelHeight, 16);
-        ctx.fill();
-        ctx.fillStyle = '#f8fafc';
-        ctx.fillText(phraseLabel, phraseX + 12 + labelPaddingX, labelY + 8);
-        ctx.font = '800 30px "Manrope", "Inter", sans-serif';
-        ctx.fillStyle = '#0f172a'; // darker text for phrase
-        wrapTextLines(ctx, phraseText, phraseWidth - 28)
-          .slice(0, 3)
-          .forEach((line, idx) => {
-            ctx.fillText(line, phraseX + 16, phraseY + 70 + idx * 36); // move phrase text down
-          });
         const photoWidth = 380;
         const photoHeight = 470;
         const photoX = CARD_CANVAS_WIDTH * 0.18;
-        const photoY = 220; // adjust to move the barber photo block
+        const photoBaseY = 220;
+        const photoY = photoBaseY - 30; // lift only the uploaded photo
         if (photoBg) {
-          const bgWidth = photoWidth * 1.05;
-          const bgHeight = photoHeight * 0.55;
-          const bgX = photoX + (photoWidth - bgWidth) / 2;
-          const bgY = phraseY + phraseBlockHeight - bgHeight + 20; // under phrase block, no overlap
+          const bgWidth = photoWidth * 1.12;
+          const bgHeight = photoHeight * 0.62;
+          const bgX = photoX + (photoWidth - bgWidth) / 2 - 18;
+          const bgY = photoBaseY + photoHeight - bgHeight + 28; // keep background in place
           drawCoverImage(ctx, photoBg, bgX, bgY, bgWidth, bgHeight);
         }
         if (profilePhoto) {
@@ -2469,6 +2459,36 @@ const BarberAvatarPicker = ({
           ctx.fill();
           ctx.restore();
         }
+        const phraseLabel = 'Любимая фраза:';
+        const phraseText = sanitizeCardText(cardFields.phrase || 'Комфорт клиента превыше всего');
+        const phraseY = CARD_CANVAS_HEIGHT - 190; // adjust this to move the quote block
+        const phraseBlockHeight = 160;
+        if (phraseBg) {
+          const phraseBgShift = 20; // slightly smaller background footprint
+          const phraseBgYOffset = 10; // move background down a bit
+          drawCoverImage(ctx, phraseBg, phraseBgX - 6 - phraseBgShift, phraseY - 2 + phraseBgYOffset, phraseWidth + 10 + phraseBgShift, phraseBlockHeight + 8);
+        } else {
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+          drawRoundedRectPath(ctx, phraseBgX, phraseY, phraseWidth, phraseBlockHeight, 18);
+          ctx.fill();
+        }
+        ctx.font = '700 28px "Manrope", "Inter", sans-serif';
+        const labelWidth = ctx.measureText(phraseLabel).width;
+        const labelPaddingX = 14;
+        const labelHeight = 40;
+        const labelY = phraseY + 20;
+        ctx.fillStyle = CARD_NAME_COLOR; // match name color for label background
+        drawRoundedRectPath(ctx, phraseTextX + 12, labelY, labelWidth + labelPaddingX * 2, labelHeight, 16);
+        ctx.fill();
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillText(phraseLabel, phraseTextX + 12 + labelPaddingX, labelY + 8);
+        ctx.font = '800 30px "Manrope", "Inter", sans-serif';
+        ctx.fillStyle = '#0f172a'; // darker text for phrase
+        wrapTextLines(ctx, phraseText, phraseWidth - 20)
+          .slice(0, 3)
+          .forEach((line, idx) => {
+            ctx.fillText(line, phraseTextX + 16, phraseY + 70 + idx * 36); // move phrase text down
+          });
         const previewUrl = canvasRef.current.toDataURL('image/jpeg', 0.94);
         if (!cancelled) {
           setCardPreview(previewUrl);
@@ -3052,6 +3072,8 @@ const BarbersView = ({
         cardTitle: fields.cardTitle ?? fields.name ?? '',
         cardDescription: fields.cardDescription ?? fields.description ?? '',
         cardPhrase: fields.cardPhrase ?? fields.phrase ?? '',
+        cardPhotoGrayscale: fields.cardPhotoGrayscale !== false,
+        cardPhotoOutline: fields.cardPhotoOutline !== false,
       };
       if (isCreateMode) {
         setDraftBarber((prev) => ({ ...prev, ...nextFields }));
@@ -3245,6 +3267,8 @@ const BarbersView = ({
               initialCardTitle={workingBarber?.cardTitle || workingBarber?.name || ''}
               initialCardDescription={workingBarber?.cardDescription || workingBarber?.description || ''}
               initialCardPhrase={workingBarber?.cardPhrase || ''}
+              initialPhotoGrayscale={workingBarber?.cardPhotoGrayscale !== false}
+              initialPhotoOutline={workingBarber?.cardPhotoOutline !== false}
               cardMode={workingBarber?.cardMode || CARD_MODE_GENERATED}
               cardImageUrl={workingBarber?.cardImageUrl || ''}
               onCardFieldsChange={handleCardFieldsChange}
@@ -3386,11 +3410,9 @@ const BarberProfileView = ({
     () => (barber ? JSON.stringify({ ...barber, avatarUrl: pendingAvatar || '' }) : null),
     [barber, pendingAvatar],
   );
-  const lastSnapshotRef = useRef(null);
-  const initialSnapshotRef = useRef(true);
-  const autoSaveTimerRef = useRef(null);
-  const autoSaveResetRef = useRef(null);
-  const [autoSaveState, setAutoSaveState] = useState('idle');
+  const savedSnapshotRef = useRef(null);
+  const saveResetRef = useRef(null);
+  const [saveState, setSaveState] = useState('idle'); // idle | saving | saved | error
   useEffect(() => {
     setPendingAvatar(barber?.avatarUrl || '');
   }, [barber?.avatarUrl]);
@@ -3398,50 +3420,24 @@ const BarberProfileView = ({
     setShowPassword(false);
   }, [barber?.id]);
   useEffect(() => {
-    initialSnapshotRef.current = true;
-    lastSnapshotRef.current = null;
+    // reset baseline when открываем новый профиль или привязываем аватар
+    savedSnapshotRef.current = null;
+    setSaveState('idle');
   }, [barber?.id]);
+  useEffect(() => {
+    // once snapshot готов, фиксируем как baseline
+    if (!barber || !profileSnapshot || savedSnapshotRef.current) return;
+    savedSnapshotRef.current = profileSnapshot;
+  }, [barber, profileSnapshot]);
   useEffect(
     () => () => {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = null;
-      }
-      if (autoSaveResetRef.current) {
-        clearTimeout(autoSaveResetRef.current);
-        autoSaveResetRef.current = null;
+      if (saveResetRef.current) {
+        clearTimeout(saveResetRef.current);
+        saveResetRef.current = null;
       }
     },
     [],
   );
-  useEffect(() => {
-    if (!barber || !profileSnapshot || typeof onSave !== 'function') return undefined;
-    if (initialSnapshotRef.current) {
-      initialSnapshotRef.current = false;
-      lastSnapshotRef.current = profileSnapshot;
-      return undefined;
-    }
-    if (profileSnapshot === lastSnapshotRef.current) return undefined;
-    setAutoSaveState('pending');
-    const timer = setTimeout(async () => {
-      try {
-        await onSave({ ...barber, avatarUrl: pendingAvatar || '' });
-        lastSnapshotRef.current = profileSnapshot;
-        setAutoSaveState('saved');
-        if (autoSaveResetRef.current) {
-          clearTimeout(autoSaveResetRef.current);
-        }
-        autoSaveResetRef.current = setTimeout(() => setAutoSaveState('idle'), 2000);
-      } catch (error) {
-        console.error('Barber profile autosave error:', error);
-        setAutoSaveState('error');
-      }
-    }, 800);
-    autoSaveTimerRef.current = timer;
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [barber, profileSnapshot, onSave, pendingAvatar]);
   if (!barber) {
     return (
       <SectionCard title="Профиль сотрудника">
@@ -3461,6 +3457,25 @@ const BarberProfileView = ({
     const formatted = digits ? formatPhoneDisplay(rawValue) : '';
     handleFieldChange('phone', formatted);
   };
+  const hasChanges = Boolean(profileSnapshot && savedSnapshotRef.current && profileSnapshot !== savedSnapshotRef.current);
+  const handleSaveProfile = async () => {
+    if (!barber || typeof onSave !== 'function' || saveState === 'saving' || !profileSnapshot) return;
+    setSaveState('saving');
+    if (saveResetRef.current) {
+      clearTimeout(saveResetRef.current);
+      saveResetRef.current = null;
+    }
+    try {
+      await onSave({ ...barber, avatarUrl: pendingAvatar || '' });
+      savedSnapshotRef.current = profileSnapshot;
+      setSaveState('saved');
+      saveResetRef.current = setTimeout(() => setSaveState('idle'), 2000);
+    } catch (error) {
+      console.error('Barber profile save error:', error);
+      setSaveState('error');
+      saveResetRef.current = setTimeout(() => setSaveState('idle'), 3000);
+    }
+  };
   return (
     <div className="space-y-6">
       <SectionCard title="Мой профиль">
@@ -3476,6 +3491,8 @@ const BarberProfileView = ({
             initialCardTitle={barber?.cardTitle || barber?.name || ''}
             initialCardDescription={barber?.cardDescription || barber?.description || ''}
             initialCardPhrase={barber?.cardPhrase || ''}
+            initialPhotoGrayscale={barber?.cardPhotoGrayscale !== false}
+            initialPhotoOutline={barber?.cardPhotoOutline !== false}
             cardMode={barber?.cardMode || CARD_MODE_GENERATED}
             cardImageUrl={barber?.cardImageUrl || ''}
             onCardFieldsChange={(fields) => {
@@ -3483,6 +3500,8 @@ const BarberProfileView = ({
               onFieldChange?.(barber.id, 'cardTitle', fields.cardTitle ?? fields.name ?? '');
               onFieldChange?.(barber.id, 'cardDescription', fields.cardDescription ?? fields.description ?? '');
               onFieldChange?.(barber.id, 'cardPhrase', fields.cardPhrase ?? fields.phrase ?? '');
+              onFieldChange?.(barber.id, 'cardPhotoGrayscale', fields.cardPhotoGrayscale !== false);
+              onFieldChange?.(barber.id, 'cardPhotoOutline', fields.cardPhotoOutline !== false);
             }}
             onCardModeChange={(mode) => handleFieldChange('cardMode', normalizeCardMode(mode))}
             onCardImageChange={(path) => handleFieldChange('cardImageUrl', normalizeImagePath(path || ''))}
@@ -3576,12 +3595,26 @@ const BarberProfileView = ({
                 className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
               />
             </div>
-            <div className="flex justify-end text-xs text-slate-500">
-              {autoSaveState === 'pending'
-                ? 'Сохраняем изменения...'
-                : autoSaveState === 'error'
-                  ? 'Не удалось сохранить изменения'
-                  : 'Изменения сохраняются автоматически'}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+              <span>
+                {saveState === 'saving'
+                  ? 'Сохраняем изменения...'
+                  : saveState === 'error'
+                    ? 'Не удалось сохранить изменения'
+                    : saveState === 'saved'
+                      ? 'Сохранено'
+                      : hasChanges
+                        ? 'Есть несохраненные изменения'
+                        : 'Изменений нет'}
+              </span>
+              <button
+                type="button"
+                onClick={handleSaveProfile}
+                disabled={!hasChanges || saveState === 'saving'}
+                className="rounded-lg border border-slate-600 px-4 py-2 text-xs font-semibold text-white transition disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500 hover:border-emerald-400 hover:text-emerald-50"
+              >
+                {saveState === 'saving' ? 'Сохраняю...' : 'Сохранить'}
+              </button>
             </div>
           </div>
         </div>
@@ -8395,22 +8428,24 @@ const handleBarberFieldChange = (id, field, value) => {
   });
   const deriveBarberLogin = (barberData = {}) => resolveLogin(barberData.login || barberData.name || '');
   const buildBarberPayload = (barberData = {}, fallbackOrder = 0) => {
-  const payload = {
-    name: barberData.name || '',
-    nickname: null,
-    description: barberData.description || '',
-    rating: formatRatingValue(barberData.rating),
-    avatarUrl: barberData.avatarUrl || '',
-    cardTitle: sanitizeCardText(barberData.cardTitle || barberData.name || ''),
-    cardDescription: sanitizeCardText(barberData.cardDescription || ''),
-    cardPhrase: sanitizeCardText(barberData.cardPhrase || ''),
-    cardMode: normalizeCardMode(barberData.cardMode),
-    cardImageUrl: normalizeImagePath(barberData.cardImageUrl || ''),
-    color: barberData.color || '',
-    login: deriveBarberLogin(barberData),
-    password: barberData.password || '',
-    phone: barberData.phone || '',
-    telegramId: barberData.telegramId || '',
+    const payload = {
+      name: barberData.name || '',
+      nickname: null,
+      description: barberData.description || '',
+      rating: formatRatingValue(barberData.rating),
+      avatarUrl: barberData.avatarUrl || '',
+      cardTitle: sanitizeCardText(barberData.cardTitle || barberData.name || ''),
+      cardDescription: sanitizeCardText(barberData.cardDescription || ''),
+      cardPhrase: sanitizeCardText(barberData.cardPhrase || ''),
+      cardMode: normalizeCardMode(barberData.cardMode),
+      cardImageUrl: normalizeImagePath(barberData.cardImageUrl || ''),
+      cardPhotoGrayscale: barberData.cardPhotoGrayscale !== false,
+      cardPhotoOutline: barberData.cardPhotoOutline !== false,
+      color: barberData.color || '',
+      login: deriveBarberLogin(barberData),
+      password: barberData.password || '',
+      phone: barberData.phone || '',
+      telegramId: barberData.telegramId || '',
       isActive: barberData.isActive !== false,
       orderIndex: Number(barberData.orderIndex ?? fallbackOrder) || 0,
       role: normalizeRoleValue(barberData.role),

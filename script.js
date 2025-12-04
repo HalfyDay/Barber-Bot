@@ -3411,7 +3411,7 @@ const BarberProfileView = ({
   );
   const savedSnapshotRef = useRef(null);
   const saveResetRef = useRef(null);
-  const [saveState, setSaveState] = useState('idle'); // idle | saving | saved | error
+  const [saveState, setSaveState] = useState('idle');
   useEffect(() => {
     setPendingAvatar(barber?.avatarUrl || '');
   }, [barber?.avatarUrl]);

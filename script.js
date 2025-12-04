@@ -4024,11 +4024,11 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
   );
   return (
     <div className="space-y-6">
-      <SectionCard title="Расписание мастеров">
+      <SectionCard title="Расписание">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           {isStaffUser ? (
             <div className="space-y-1">
-              <label className="text-sm text-slate-400">Мастер</label>
+              <label className="text-sm text-slate-400">Мастер </label>
               <div className="w-64 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-white">
                 {staffDisplayName}
               </div>

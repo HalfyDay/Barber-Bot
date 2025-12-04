@@ -2665,7 +2665,6 @@ const BarberAvatarPicker = ({
                 Свое изобр.
               </button>
             </div>
-            <p className="text-xs text-slate-500">Предпросмотр для выбранного варианта.</p>
           </div>
           <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-900">
             <canvas
@@ -4028,7 +4027,7 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           {isStaffUser ? (
             <div className="space-y-1">
-              <label className="text-sm text-slate-400">Мастер </label>
+              <label className="text-sm text-slate-400">Мастер</label>
               <div className="w-64 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-white">
                 {staffDisplayName}
               </div>

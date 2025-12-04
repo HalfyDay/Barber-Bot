@@ -3419,7 +3419,6 @@ const BarberProfileView = ({
     setShowPassword(false);
   }, [barber?.id]);
   useEffect(() => {
-    // reset baseline when открываем новый профиль или привязываем аватар
     savedSnapshotRef.current = null;
     setSaveState('idle');
   }, [barber?.id]);

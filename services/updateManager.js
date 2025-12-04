@@ -95,8 +95,32 @@ const runPrismaMigrations = async () => {
     return;
   }
   const schemaArg = `--schema "${PRISMA_SCHEMA_PATH}"`;
-  await runCommand(`npx prisma migrate deploy ${schemaArg}`);
-  await runCommand(`npx prisma generate ${schemaArg}`);
+  const migrate = `npx prisma migrate deploy ${schemaArg}`;
+  const generate = `npx prisma generate ${schemaArg}`;
+  const commands = [migrate, generate];
+  for (const command of commands) {
+    let attempt = 0;
+    // Retry on SQLite lock errors to allow lingering connections to drain.
+    // Keeping the loop small avoids long UI hangs.
+    while (true) {
+      attempt += 1;
+      try {
+        await runCommand(command);
+        break;
+      } catch (error) {
+        const message = error?.message || '';
+        const isLocked = /database is locked/i.test(message);
+        if (!isLocked || attempt >= 3) {
+          throw error;
+        }
+        const delayMs = 1500 * attempt;
+        console.warn(
+          `[update] ${command} failed with database lock, retrying in ${delayMs}ms (attempt ${attempt}/3)`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
 };
 
 const fetchLatestRelease = async () => {

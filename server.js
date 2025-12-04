@@ -1411,6 +1411,7 @@ const performSystemUpdate = async () => {
     try {
       await prisma.$disconnect();
       prismaDisconnected = true;
+      await new Promise((resolve) => setTimeout(resolve, 500));
     } catch (disconnectError) {
       console.warn(
         "Failed to disconnect Prisma before update:",

@@ -7886,7 +7886,7 @@ const LoginScreen = ({ onLogin, error, defaultRemember = false, onRememberChange
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white shadow-inner shadow-black/10 backdrop-blur focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
             />
             <div className="mt-2 space-y-1 text-xs text-slate-400">
-              <p>Номер подтверждает, что вы из команды, поэтому вводите его в формате +7.</p>
+              <p>Номер подтверждает, что вы из команды.</p>
             </div>
           </div>
           <div>

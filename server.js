@@ -127,6 +127,19 @@ app.use(cors());
 app.use(express.json({ limit: "12mb" }));
 app.use(express.static(path.join(__dirname)));
 app.use("/Image", express.static(IMAGE_DIR));
+app.use((req, res, next) => {
+  if (
+    updateInProgress &&
+    req.path.startsWith("/api") &&
+    req.path !== "/api/system/update" &&
+    req.path !== "/api/system/restart"
+  ) {
+    return res
+      .status(503)
+      .json({ error: "Система обновляется, попробуйте позже." });
+  }
+  next();
+});
 app.post("/api/log", async (req, res) => {
   const payload = req.body || {};
   const isNoisyScriptError =
@@ -1389,17 +1402,38 @@ const performSystemUpdate = async () => {
   }
   updateInProgress = true;
   const realtimeWasRunning = Boolean(realtimeInterval);
+  let prismaDisconnected = false;
   try {
     console.log("[update] performSystemUpdate: stopping services...");
     stopRealtimeLoop();
     shutdownRealtimeClients();
     await stopBotProcess();
+    try {
+      await prisma.$disconnect();
+      prismaDisconnected = true;
+    } catch (disconnectError) {
+      console.warn(
+        "Failed to disconnect Prisma before update:",
+        disconnectError?.message || disconnectError,
+      );
+    }
     console.log("[update] performSystemUpdate: applying update...");
     const result = await applyUpdate();
     console.log("[update] performSystemUpdate: update applied");
     return result;
   } catch (error) {
     if (!restartScheduled) {
+      if (prismaDisconnected) {
+        try {
+          await prisma.$connect();
+          prismaDisconnected = false;
+        } catch (reconnectError) {
+          console.error(
+            "Failed to reconnect Prisma after update error:",
+            reconnectError?.message || reconnectError,
+          );
+        }
+      }
       if (realtimeWasRunning) {
         ensureRealtimeLoop();
       }
@@ -1407,6 +1441,16 @@ const performSystemUpdate = async () => {
     }
     throw error;
   } finally {
+    if (prismaDisconnected && !restartScheduled) {
+      try {
+        await prisma.$connect();
+      } catch (reconnectError) {
+        console.error(
+          "Failed to reconnect Prisma after update:",
+          reconnectError?.message || reconnectError,
+        );
+      }
+    }
     updateInProgress = false;
   }
 };

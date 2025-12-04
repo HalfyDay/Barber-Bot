@@ -13,6 +13,7 @@ const UPDATE_REPO = process.env.UPDATE_REPO || 'HalfyDay/Barber-Bot';
 const UPDATE_BRANCH = process.env.UPDATE_BRANCH || 'main';
 const UPDATE_REMOTE = process.env.UPDATE_REMOTE || 'origin';
 const UPDATE_CACHE_SECONDS = Number(process.env.UPDATE_CACHE_SECONDS || 600);
+const PRISMA_SCHEMA_PATH = path.join(PROJECT_ROOT, 'prisma', 'schema.prisma');
 
 let cachedUpdate = null;
 
@@ -87,6 +88,16 @@ const runCommand = (command, cwd = PROJECT_ROOT) =>
       resolve({ stdout, stderr });
     });
   });
+
+const runPrismaMigrations = async () => {
+  if (!fs.existsSync(PRISMA_SCHEMA_PATH)) {
+    console.warn('[update] Prisma schema not found, skipping migrations');
+    return;
+  }
+  const schemaArg = `--schema "${PRISMA_SCHEMA_PATH}"`;
+  await runCommand(`npx prisma migrate deploy ${schemaArg}`);
+  await runCommand(`npx prisma generate ${schemaArg}`);
+};
 
 const fetchLatestRelease = async () => {
   const response = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
@@ -227,6 +238,7 @@ const applyUpdate = async () => {
   try {
     await runCommand(`git fetch ${UPDATE_REMOTE} --tags`);
     await runCommand(`git pull ${UPDATE_REMOTE} ${UPDATE_BRANCH}`);
+    await runPrismaMigrations();
     await runCommand('npm run build:web');
     const python = process.env.BOT_PYTHON_PATH || (os.platform() === 'win32' ? 'python' : 'python3');
     const requirementsPath = path.join(PROJECT_ROOT, 'requirements.txt');

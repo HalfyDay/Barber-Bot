@@ -3360,13 +3360,13 @@ const BarbersView = ({
                     </select>
                   </div>
                 </div>
-                {/* <textarea
+                <textarea
                   value={workingBarber.description || ''}
                   onChange={(event) => handleFieldChange('description', event.target.value)}
                   placeholder="Описание"
                   rows={4}
                   className="col-span-2 w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
-                /> */}
+                />
                 <input
                   name="barberPhone"
                   aria-label="Телефон"

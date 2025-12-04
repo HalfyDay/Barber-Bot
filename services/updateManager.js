@@ -110,14 +110,23 @@ const runPrismaMigrations = async () => {
       } catch (error) {
         const message = error?.message || '';
         const isLocked = /database is locked/i.test(message);
-        if (!isLocked || attempt >= 3) {
-          throw error;
+        const isEpermPrismaEngine =
+          /query_engine.*\.dll/i.test(message) && /EPERM/i.test(message);
+        if (isEpermPrismaEngine) {
+          console.warn(
+            `[update] ${command} failed with EPERM on Prisma engine file, skipping generate to avoid lock; consider regenerating manually after restart. Details: ${message}`,
+          );
+          break;
         }
-        const delayMs = 1500 * attempt;
-        console.warn(
-          `[update] ${command} failed with database lock, retrying in ${delayMs}ms (attempt ${attempt}/3)`,
-        );
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        if (isLocked && attempt < 3) {
+          const delayMs = 1500 * attempt;
+          console.warn(
+            `[update] ${command} failed with database lock, retrying in ${delayMs}ms (attempt ${attempt}/3)`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue;
+        }
+        throw error;
       }
     }
   }

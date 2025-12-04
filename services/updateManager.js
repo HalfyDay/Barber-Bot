@@ -100,6 +100,7 @@ const runPrismaMigrations = async () => {
   const commands = [migrate, generate];
   for (const command of commands) {
     let attempt = 0;
+    const isGenerate = command.includes('prisma generate');
     // Retry on SQLite lock errors to allow lingering connections to drain.
     // Keeping the loop small avoids long UI hangs.
     while (true) {
@@ -112,9 +113,10 @@ const runPrismaMigrations = async () => {
         const isLocked = /database is locked/i.test(message);
         const isEpermPrismaEngine =
           /query_engine.*\.dll/i.test(message) && /EPERM/i.test(message);
-        if (isEpermPrismaEngine) {
+        const isEpermGenerate = isGenerate && /EPERM/i.test(message);
+        if (isEpermPrismaEngine || isEpermGenerate) {
           console.warn(
-            `[update] ${command} failed with EPERM on Prisma engine file, skipping generate to avoid lock; consider regenerating manually after restart. Details: ${message}`,
+            `[update] ${command} failed with EPERM (likely file lock), skipping generate to avoid lock; consider running "npx prisma generate --schema prisma\\schema.prisma" manually after restart. Details: ${message}`,
           );
           break;
         }

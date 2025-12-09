@@ -1051,7 +1051,7 @@ const buildDashboardSnapshot = async (identity = null) => {
   ]);
   const appointments = appointmentsRaw.map(mapAppointment);
   const now = new Date();
-  const todayKey = now.toISOString().slice(0, 10);
+  const todayKey = formatDateOnly(now);
   const yearAgo = new Date(now);
   yearAgo.setFullYear(yearAgo.getFullYear() - 1);
   const upcoming = appointments
@@ -1220,7 +1220,7 @@ const buildRealtimeAppointmentsPayload = async () => {
   ]);
   const mapped = appointmentsRaw.map(mapAppointment);
   const now = new Date();
-  const todayKey = now.toISOString().slice(0, 10);
+  const todayKey = formatDateOnly(now);
   const yearAgo = new Date(now);
   yearAgo.setFullYear(yearAgo.getFullYear() - 1);
   const upcoming = mapped

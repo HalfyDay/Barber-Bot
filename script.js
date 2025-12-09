@@ -76,7 +76,7 @@ const VISIBLE_TABLE_ORDER_BY_ROLE = {
   [ROLE_STAFF]: ['Appointments', 'Schedules', 'Services', 'Revenue'],
 };
 const TABLE_CONFIG = {
-  Appointments: { label: 'Записи', mode: 'data', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'asc' } },
+  Appointments: { label: 'Записи', mode: 'data', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'desc' } },
   Schedules: { label: 'Расписание', mode: 'custom' },
   Users: { label: 'Клиенты', mode: 'data', canCreate: true, defaultSort: { key: 'Name', direction: 'asc' } },
   Barbers: { label: 'Барберы', mode: 'custom' },
@@ -1558,11 +1558,14 @@ const DashboardView = ({
   onOpenProfile,
   onCreateAppointment,
   onNavigateTable,
+  onQuickUpdateStatus,
   availableTables = [],
   currentUser = null,
   currentBarber = null,
 }) => {
   if (!data) return <LoadingState />;
+  const [pendingStatusId, setPendingStatusId] = useState(null);
+  const nowTs = useNowTick(30000);
   const stats = data.stats || {};
   const upcomingRaw = data.appointments?.upcoming || [];
   const isStaffView = currentUser?.role === ROLE_STAFF;
@@ -1597,27 +1600,59 @@ const DashboardView = ({
       return candidate && staffNameSet.has(candidate);
     });
   }, [restrictUpcomingToStaff, staffNameSet, upcomingRaw]);
+  const normalizedUpcoming = useMemo(
+    () =>
+      upcomingSource.map((appt) => ({
+        ...appt,
+        Status: normalizeStatusValue(appt.Status),
+        startDate: getAppointmentStartDate(appt.Date, appt.Time, appt.startDateTime),
+        endDate: getAppointmentEndDate(appt.Date, appt.Time, appt.startDateTime),
+      })),
+    [upcomingSource]
+  );
   const upcomingList = useMemo(() => {
-    const nowTs = Date.now();
-    return upcomingSource
-      .map((appt) => {
-        const startDate = getAppointmentStartDate(appt.Date, appt.Time, appt.startDateTime);
-        const endDate = getAppointmentEndDate(appt.Date, appt.Time, appt.startDateTime);
-        return {
-          ...appt,
-          Status: normalizeStatusValue(appt.Status),
-          startDate,
-          endDate,
-        };
-      })
+    return normalizedUpcoming
       .filter((appt) => shouldDisplayAppointment(appt, nowTs))
       .sort((a, b) => {
-        const left = getAppointmentStartDate(a.Date, a.Time, a.startDateTime)?.getTime() || Number.MAX_SAFE_INTEGER;
-        const right = getAppointmentStartDate(b.Date, b.Time, b.startDateTime)?.getTime() || Number.MAX_SAFE_INTEGER;
+        const left = a.startDate?.getTime() || Number.MAX_SAFE_INTEGER;
+        const right = b.startDate?.getTime() || Number.MAX_SAFE_INTEGER;
         return left - right;
       })
       .slice(0, 12);
-  }, [upcomingSource]);
+  }, [normalizedUpcoming, nowTs]);
+  const overdueList = useMemo(() => {
+    return normalizedUpcoming
+      .map((appt) => {
+        const startTs = appt.startDate?.getTime() || null;
+        const endTs = appt.endDate?.getTime() || startTs;
+        return { ...appt, startTs, endTs };
+      })
+      .filter((appt) => isActiveAppointmentStatus(appt.Status) && appt.endTs && appt.endTs < nowTs)
+      .sort((a, b) => (b.endTs || 0) - (a.endTs || 0))
+      .slice(0, 12)
+      .map(({ startTs, endTs, ...rest }) => rest);
+  }, [normalizedUpcoming, nowTs]);
+  const handleStatusShortcut = useCallback(
+    async (appointment, status) => {
+      if (!appointment || !status) return;
+      const apptId = getRecordId(appointment);
+      if (!apptId) return;
+      const pendingKey = String(apptId);
+      if (typeof onQuickUpdateStatus !== 'function') {
+        onOpenAppointment?.(appointment, { allowDelete: true });
+        return;
+      }
+      setPendingStatusId(pendingKey);
+      try {
+        await onQuickUpdateStatus(appointment, status);
+      } catch (error) {
+        console.error('Quick status update failed', error);
+      } finally {
+        setPendingStatusId(null);
+      }
+    },
+    [onQuickUpdateStatus, onOpenAppointment]
+  );
   const formatGroupLabel = useCallback((dateValue) => {
     if (!dateValue || dateValue === 'Без даты') return 'Без даты';
     try {
@@ -1727,7 +1762,7 @@ const DashboardView = ({
                 </div>
                 <div className="grid gap-3 lg:grid-cols-2">
                   {group.items.map((appt) => {
-                    const inProgress = isAppointmentOngoing(appt);
+                    const inProgress = isAppointmentOngoing(appt, nowTs);
                     const cardProps = {
                       role: 'button',
                       tabIndex: 0,
@@ -1808,6 +1843,87 @@ const DashboardView = ({
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </SectionCard>
+      <SectionCard title="Просроченные активные">
+        {overdueList.length === 0 ? (
+          <p className="text-slate-400">Нет активных записей, время которых уже прошло.</p>
+        ) : (
+          <div className="space-y-3">
+            {overdueList.map((appt) => {
+              const apptId = String(
+                getRecordId(appt) || `${appt.Date || 'no-date'}-${appt.Time || 'no-time'}-${appt.CustomerName || 'no-name'}`
+              );
+              const { start, end } = parseTimeRangeParts(appt.Time);
+              const timeLabel = [start || '—', end ? `до ${end}` : ''].filter(Boolean).join(' ');
+              const statusLabel = normalizeStatusValue(appt.Status);
+              const isPending = pendingStatusId === apptId;
+              return (
+                <div
+                  key={apptId}
+                  className="rounded-2xl border border-amber-500/50 bg-amber-500/5 p-4 shadow-inner shadow-amber-900/20"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-[11px] uppercase tracking-[0.25em] text-amber-200/80">{formatDateBadgeLabel(appt.Date)}</p>
+                      <p className="text-xl font-semibold text-white sm:text-2xl">{timeLabel || 'Время не указано'}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={classNames(
+                          'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide sm:text-xs',
+                          getStatusBadgeClasses(statusLabel)
+                        )}
+                      >
+                        {statusLabel || 'Без статуса'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onOpenAppointment?.(appt, { allowDelete: true })}
+                        className="rounded-full border border-slate-700/70 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-indigo-400 hover:text-indigo-200"
+                      >
+                        Открыть
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-base font-semibold text-white">{appt.CustomerName || 'Без имени'}</p>
+                      {appt.Barber ? (
+                        <p className="text-sm text-slate-300">
+                          Барбер: <span className="font-semibold text-white">{appt.Barber}</span>
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleStatusShortcut(appt, STATUS_DONE)}
+                        disabled={isPending}
+                        className={classNames(
+                          'rounded-lg px-3 py-2 text-xs font-semibold text-white transition sm:text-sm',
+                          isPending ? 'cursor-wait bg-emerald-700/50' : 'bg-emerald-600 hover:bg-emerald-500'
+                        )}
+                      >
+                        {isPending ? 'Сохраняю...' : 'Выполнена'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStatusShortcut(appt, STATUS_NO_SHOW)}
+                        disabled={isPending}
+                        className={classNames(
+                          'rounded-lg px-3 py-2 text-xs font-semibold text-white transition sm:text-sm',
+                          isPending ? 'cursor-wait bg-amber-700/60' : 'bg-amber-600 hover:bg-amber-500'
+                        )}
+                      >
+                        {isPending ? 'Сохраняю...' : 'Неявка'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </SectionCard>
@@ -7114,6 +7230,18 @@ const TablesWorkspace = ({
       return normalized;
     });
   }, [setHiddenStatuses]);
+  useEffect(() => {
+    setSortConfigs((prev) => {
+      const current = prev?.Appointments;
+      if (current?.key === 'Date' && current?.direction === 'asc') {
+        return { ...prev, Appointments: { ...current, direction: 'desc' } };
+      }
+      if (current == null) {
+        return { ...prev, Appointments: { key: 'Date', direction: 'desc' } };
+      }
+      return prev;
+    });
+  }, [setSortConfigs]);
   const fetchTables = useCallback(async () => {
     setIsFetching(true);
     setTableError('');
@@ -8856,6 +8984,23 @@ const handleBarberFieldChange = (id, field, value) => {
       setGlobalError(error.message || 'Не удалось сохранить запись');
     }
   };
+  const handleQuickUpdateAppointmentStatus = useCallback(
+    async (appointment, nextStatus) => {
+      const id = getRecordId(appointment);
+      if (!id || !nextStatus) return;
+      try {
+        await apiRequest(`/Appointments/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          body: JSON.stringify({ Status: normalizeStatusValue(nextStatus) }),
+        });
+        fetchAll();
+      } catch (error) {
+        setGlobalError(error.message || 'Не удалось обновить статус записи');
+        throw error;
+      }
+    },
+    [apiRequest, fetchAll, setGlobalError]
+  );
   const handleDeleteAppointment = async (appointment) => {
     if (!appointment?.id) return;
     const confirmed = await requestConfirm({
@@ -8989,6 +9134,7 @@ const handleBarberFieldChange = (id, field, value) => {
             onOpenProfile={openProfile}
             onCreateAppointment={handleCreateAppointment}
             onNavigateTable={handleSidebarTableChange}
+            onQuickUpdateStatus={handleQuickUpdateAppointmentStatus}
             availableTables={visibleTableOrder}
             currentUser={session || null}
             currentBarber={currentBarber}
@@ -9091,6 +9237,7 @@ const handleBarberFieldChange = (id, field, value) => {
             onOpenProfile={openProfile}
             onCreateAppointment={handleCreateAppointment}
             onNavigateTable={handleSidebarTableChange}
+            onQuickUpdateStatus={handleQuickUpdateAppointmentStatus}
             availableTables={visibleTableOrder}
             currentUser={session || null}
             currentBarber={currentBarber}

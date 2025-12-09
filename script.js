@@ -962,7 +962,7 @@ const LiveBadge = ({ timestamp, status = 'unknown' }) => {
     </span>
   );
 };
-const IconTrash = ({ className = 'h-4 w-4' }) => (
+const IconTrash = ({ className = 'h-5 w-5' }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
@@ -979,7 +979,7 @@ const IconTrash = ({ className = 'h-4 w-4' }) => (
     <line x1="14" y1="11" x2="14" y2="17" />
   </svg>
 );
-const IconCheck = ({ className = 'h-4 w-4' }) => (
+const IconCheck = ({ className = 'h-5 w-5' }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
@@ -993,7 +993,7 @@ const IconCheck = ({ className = 'h-4 w-4' }) => (
     <polyline points="20 6 9 17 4 12" />
   </svg>
 );
-const IconClose = ({ className = 'h-4 w-4' }) => (
+const IconClose = ({ className = 'h-5 w-5' }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
@@ -1008,7 +1008,7 @@ const IconClose = ({ className = 'h-4 w-4' }) => (
     <line x1="6" y1="6" x2="18" y2="18" />
   </svg>
 );
-const IconSave = ({ className = 'h-4 w-4' }) => (
+const IconSave = ({ className = 'h-5 w-5' }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
@@ -1025,7 +1025,7 @@ const IconSave = ({ className = 'h-4 w-4' }) => (
     <path d="M12 11v6" />
   </svg>
 );
-const IconBan = ({ className = 'h-4 w-4' }) => (
+const IconBan = ({ className = 'h-5 w-5' }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
@@ -1041,7 +1041,7 @@ const IconBan = ({ className = 'h-4 w-4' }) => (
   </svg>
 );
 const RESPONSIVE_ACTION_BUTTON_CLASS =
-  'inline-flex items-center justify-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 sm:px-4 sm:py-2 sm:text-sm';
+  'inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 sm:px-4 sm:py-2 sm:text-sm';
 const IconDashboard = ({ className = 'h-5 w-5' }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -1846,7 +1846,7 @@ const DashboardView = ({
           </div>
         )}
       </SectionCard>
-      <SectionCard title="Просроченные активные">
+      <SectionCard title="Прошедшие">
         {overdueList.length === 0 ? (
           <p className="text-slate-400">Нет активных записей, время которых уже прошло.</p>
         ) : (
@@ -1859,35 +1859,31 @@ const DashboardView = ({
               const timeLabel = [start || '—', end ? `до ${end}` : ''].filter(Boolean).join(' ');
               const statusLabel = normalizeStatusValue(appt.Status);
               const isPending = pendingStatusId === apptId;
+              const handleOpen = () => onOpenAppointment?.(appt, { allowDelete: true });
               return (
                 <div
                   key={apptId}
-                  className="rounded-2xl border border-amber-500/50 bg-amber-500/5 p-4 shadow-inner shadow-amber-900/20"
+                  role="button"
+                  tabIndex={0}
+                  onClick={handleOpen}
+                  onKeyDown={(event) => event.key === 'Enter' && handleOpen()}
+                  className="rounded-2xl border border-amber-500/50 bg-amber-500/5 p-4 shadow-inner shadow-amber-900/20 transition hover:border-amber-400/80 hover:bg-amber-500/10 focus:outline-none focus:ring-2 focus:ring-amber-400/60"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-1">
                       <p className="text-[11px] uppercase tracking-[0.25em] text-amber-200/80">{formatDateBadgeLabel(appt.Date)}</p>
                       <p className="text-xl font-semibold text-white sm:text-2xl">{timeLabel || 'Время не указано'}</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={classNames(
-                          'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide sm:text-xs',
-                          getStatusBadgeClasses(statusLabel)
-                        )}
-                      >
-                        {statusLabel || 'Без статуса'}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => onOpenAppointment?.(appt, { allowDelete: true })}
-                        className="rounded-full border border-slate-700/70 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-indigo-400 hover:text-indigo-200"
-                      >
-                        Открыть
-                      </button>
-                    </div>
+                    <span
+                      className={classNames(
+                        'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide sm:text-xs',
+                        getStatusBadgeClasses(statusLabel)
+                      )}
+                    >
+                      {statusLabel || 'Без статуса'}
+                    </span>
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="mt-3 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1">
                       <p className="text-base font-semibold text-white">{appt.CustomerName || 'Без имени'}</p>
                       {appt.Barber ? (
@@ -1896,13 +1892,13 @@ const DashboardView = ({
                         </p>
                       ) : null}
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-nowrap sm:items-center sm:justify-end sm:gap-3">
                       <button
                         type="button"
                         onClick={() => handleStatusShortcut(appt, STATUS_DONE)}
                         disabled={isPending}
                         className={classNames(
-                          'rounded-lg px-3 py-2 text-xs font-semibold text-white transition sm:text-sm',
+                          'w-full justify-center rounded-lg px-4 py-3 text-sm font-semibold text-white transition sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
                           isPending ? 'cursor-wait bg-emerald-700/50' : 'bg-emerald-600 hover:bg-emerald-500'
                         )}
                       >
@@ -1913,7 +1909,7 @@ const DashboardView = ({
                         onClick={() => handleStatusShortcut(appt, STATUS_NO_SHOW)}
                         disabled={isPending}
                         className={classNames(
-                          'rounded-lg px-3 py-2 text-xs font-semibold text-white transition sm:text-sm',
+                          'w-full justify-center rounded-lg px-4 py-3 text-sm font-semibold text-white transition sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
                           isPending ? 'cursor-wait bg-amber-700/60' : 'bg-amber-600 hover:bg-amber-500'
                         )}
                       >
@@ -6304,7 +6300,7 @@ const ClientsList = ({
                 aria-label="Удалить"
                 title="Удалить"
               >
-                <IconTrash className="h-4 w-4" aria-hidden="true" />
+                <IconTrash className="h-5 w-5" aria-hidden="true" />
                 <span className="hidden sm:inline">Удалить</span>
               </button>
             )}
@@ -6321,7 +6317,7 @@ const ClientsList = ({
               aria-label={isBlocked ? 'Разблокировать клиента' : 'Заблокировать клиента'}
               title={isBlocked ? 'Разблокировать клиента' : 'Заблокировать клиента'}
             >
-              <IconBan className="h-4 w-4" aria-hidden="true" />
+              <IconBan className="h-5 w-5" aria-hidden="true" />
               <span className="hidden sm:inline">{isBlocked ? 'Разблокировать' : 'Заблокировать'}</span>
             </button>
             <button
@@ -6333,7 +6329,7 @@ const ClientsList = ({
               aria-label="Отмена"
               title="Отмена"
             >
-              <IconClose className="h-4 w-4" aria-hidden="true" />
+              <IconClose className="h-5 w-5" aria-hidden="true" />
               <span className="hidden sm:inline">Отмена</span>
             </button>
             <button
@@ -6345,7 +6341,7 @@ const ClientsList = ({
               aria-label="Сохранить"
               title="Сохранить"
             >
-              <IconSave className="h-4 w-4" aria-hidden="true" />
+              <IconSave className="h-5 w-5" aria-hidden="true" />
               <span className="hidden sm:inline">Сохранить</span>
             </button>
           </div>
@@ -6476,7 +6472,7 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
             aria-label="Отмена"
             title="Отмена"
           >
-            <IconClose className="h-4 w-4" aria-hidden="true" />
+            <IconClose className="h-5 w-5" aria-hidden="true" />
             <span className="hidden sm:inline">Отмена</span>
           </button>
           <button
@@ -6485,7 +6481,7 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
             aria-label="Сохранить"
             title="Сохранить"
           >
-            <IconSave className="h-4 w-4" aria-hidden="true" />
+            <IconSave className="h-5 w-5" aria-hidden="true" />
             <span className="hidden sm:inline">Сохранить</span>
           </button>
         </div>
@@ -6620,15 +6616,15 @@ const ProfileModal = ({ state, onClose, onBlockClient }) => {
             <button
               onClick={handleToggleBlock}
               disabled={blockBusy}
-              className={classNames(
-                RESPONSIVE_ACTION_BUTTON_CLASS,
-                isBlocked
-                  ? 'border border-amber-500 text-amber-200 hover:bg-amber-500/10'
-                  : 'border border-rose-500 text-rose-200 hover:bg-rose-500/10',
-                blockBusy && 'cursor-not-allowed opacity-60'
-              )}
-            >
-              <IconBan className="h-4 w-4" aria-hidden="true" />
+            className={classNames(
+              RESPONSIVE_ACTION_BUTTON_CLASS,
+              isBlocked
+                ? 'border border-amber-500 text-amber-200 hover:bg-amber-500/10'
+                : 'border border-rose-500 text-rose-200 hover:bg-rose-500/10',
+              blockBusy && 'cursor-not-allowed opacity-60'
+            )}
+          >
+              <IconBan className="h-5 w-5" aria-hidden="true" />
               <span className="hidden sm:inline">{isBlocked ? 'Разблокировать' : 'Заблокировать'}</span>
             </button>
           )}
@@ -6965,7 +6961,7 @@ const AppointmentModal = ({
               aria-label="Удалить"
               title="Удалить"
             >
-              <IconTrash className="h-4 w-4" aria-hidden="true" />
+              <IconTrash className="h-5 w-5" aria-hidden="true" />
               <span className="hidden sm:inline">Удалить</span>
             </button>
           )}
@@ -6976,7 +6972,7 @@ const AppointmentModal = ({
               aria-label="Выполнено"
               title="Выполнено"
             >
-              <IconCheck className="h-4 w-4" aria-hidden="true" />
+              <IconCheck className="h-5 w-5" aria-hidden="true" />
               <span className="hidden sm:inline">Выполнено</span>
             </button>
           )}
@@ -6986,7 +6982,7 @@ const AppointmentModal = ({
             aria-label="Отмена"
             title="Отмена"
           >
-            <IconClose className="h-4 w-4" aria-hidden="true" />
+            <IconClose className="h-5 w-5" aria-hidden="true" />
             <span className="hidden sm:inline">Отмена</span>
           </button>
           <button
@@ -6995,7 +6991,7 @@ const AppointmentModal = ({
             aria-label="Сохранить"
             title="Сохранить"
           >
-            <IconSave className="h-4 w-4" aria-hidden="true" />
+            <IconSave className="h-5 w-5" aria-hidden="true" />
             <span className="hidden sm:inline">Сохранить</span>
           </button>
         </div>

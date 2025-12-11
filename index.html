@@ -104,6 +104,11 @@
     </script>
     <!-- Основной JS-бандл интерфейса -->
     <script
+      src="bot-constructor.bundle.js"
+      defer
+      onerror="window.__logClient && window.__logClient({ level: 'error', type: 'resource-error', stage: 'bundle-load', message: 'Failed to load bot-constructor.bundle.js' })"
+    ></script>
+    <script
       src="script.bundle.js"
       defer
       onerror="window.__logClient && window.__logClient({ level: 'error', type: 'resource-error', stage: 'bundle-load', message: 'Failed to load script.bundle.js' })"

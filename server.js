@@ -31,12 +31,14 @@ const BACKUP_DIR = path.join(__dirname, "backups");
 const DB_PATH = path.join(__dirname, "prisma", "dev.db");
 const BACKUP_RETENTION_DAYS = 30;
 const CLIENT_ERROR_LOG = path.join(__dirname, "data", "client-error.log");
+const BOT_MENU_PATH = path.join(__dirname, "data", "bot-menu.json");
 const DEFAULT_BOT_DESCRIPTION =
   "Текст в Главном меню";
 const DEFAULT_ABOUT_TEXT =
   "Текст в блоке «О нас»";
 const IMAGE_DIR = path.join(__dirname, "Image");
 const CARD_IMAGE_DIR = path.join(IMAGE_DIR, "tgbot");
+const MENU_IMAGE_DIR = path.join(IMAGE_DIR, "menu_bots");
 const MAX_AVATAR_FILE_SIZE = Number(
   process.env.MAX_AVATAR_FILE_SIZE || 5 * 1024 * 1024,
 );
@@ -200,6 +202,218 @@ const normalizePhone = (phone) => {
 const normalizeLogin = (value) => normalizeText(value);
 const toLower = (value) => normalizeText(value).toLowerCase();
 const canonicalizeKey = (value) => normalizeText(value).toLowerCase();
+const BOT_MENU_BUTTON_TYPES = Object.freeze([
+  { id: "screen", label: "Переход на экран", description: "Открывает другой экран меню" },
+  { id: "staff", label: "Выбор сотрудника", description: "Показывает список барберов" },
+  { id: "service", label: "Выбор услуги", description: "Показывает услуги" },
+  { id: "date", label: "Выбор даты", description: "Запрашивает дату" },
+  { id: "time", label: "Выбор времени", description: "Запрашивает время" },
+  { id: "description", label: "Описание", description: "Показывает информационный блок" },
+  { id: "profile", label: "Профиль", description: "Открывает профиль пользователя" },
+  { id: "userAppointments", label: "Мои записи", description: "Показывает записи пользователя" },
+  { id: "custom", label: "Своя кнопка", description: "Произвольное действие/интент" },
+]);
+const BOT_MENU_TYPE_SET = new Set(BOT_MENU_BUTTON_TYPES.map((item) => item.id));
+const buildDefaultBotMenu = () => ({
+  version: 1,
+  updatedAt: new Date().toISOString(),
+  screens: [
+    {
+      id: "main",
+      title: "Главное меню",
+      message: "Добро пожаловать! Выберите действие.",
+      imageUrl: "",
+      buttons: [
+        { id: "book", label: "✂️ Записаться", type: "service", targetScreenId: "services", row: 0, order: 0 },
+        { id: "myAppointments", label: "📅 Мои записи", type: "userAppointments", targetScreenId: "appointments", row: 0, order: 1 },
+        { id: "profile", label: "👤 Профиль", type: "profile", targetScreenId: "profile", row: 1, order: 0 },
+        { id: "about", label: "ℹ️ О нас", type: "description", targetScreenId: "about", row: 1, order: 1 },
+      ],
+    },
+    {
+      id: "services",
+      title: "Выбор услуги",
+      message: "Выберите услугу для записи.",
+      imageUrl: "",
+      buttons: [
+        { id: "chooseService", label: "Выбор услуги", type: "service", targetScreenId: null, row: 0, order: 0 },
+        { id: "chooseBarber", label: "Выбор сотрудника", type: "staff", targetScreenId: "staff", row: 0, order: 1 },
+        { id: "chooseDate", label: "Выбор даты", type: "date", targetScreenId: "dates", row: 1, order: 0 },
+        { id: "chooseTime", label: "Выбор времени", type: "time", targetScreenId: "time", row: 1, order: 1 },
+        { id: "backToMainFromServices", label: "🏠 Главное меню", type: "screen", targetScreenId: "main", row: 2, order: 0 },
+      ],
+    },
+    {
+      id: "staff",
+      title: "Сотрудники",
+      message: "Кого записываем?",
+      imageUrl: "",
+      buttons: [
+        { id: "staffDate", label: "Выбор даты", type: "date", targetScreenId: "dates", row: 0, order: 0 },
+        { id: "backToServices", label: "Назад к услугам", type: "screen", targetScreenId: "services", row: 1, order: 0 },
+        { id: "backToMainFromStaff", label: "🏠 Главное меню", type: "screen", targetScreenId: "main", row: 1, order: 1 },
+      ],
+    },
+    {
+      id: "dates",
+      title: "Выбор даты",
+      message: "Выберите дату записи.",
+      imageUrl: "",
+      buttons: [
+        { id: "dateTime", label: "Выбор времени", type: "time", targetScreenId: "time", row: 0, order: 0 },
+        { id: "backToServicesFromDates", label: "Назад к услугам", type: "screen", targetScreenId: "services", row: 1, order: 0 },
+      ],
+    },
+    {
+      id: "time",
+      title: "Время",
+      message: "Выберите время и подтвердите.",
+      imageUrl: "",
+      buttons: [
+        { id: "confirmBooking", label: "Подтвердить запись", type: "custom", targetScreenId: null, row: 0, order: 0 },
+        { id: "backToDates", label: "Назад к дате", type: "screen", targetScreenId: "dates", row: 0, order: 1 },
+        { id: "backToMainFromTime", label: "🏠 Главное меню", type: "screen", targetScreenId: "main", row: 1, order: 0 },
+      ],
+    },
+    {
+      id: "about",
+      title: "О нас",
+      message: "Короткое описание салона.",
+      imageUrl: "",
+      buttons: [
+        { id: "backToMainFromAbout", label: "🏠 Главное меню", type: "screen", targetScreenId: "main", row: 0, order: 0 },
+      ],
+    },
+    {
+      id: "profile",
+      title: "Профиль",
+      message: "Ваши контакты и избранный барбер.",
+      imageUrl: "",
+      buttons: [
+        { id: "showAppointmentsFromProfile", label: "📅 Мои записи", type: "userAppointments", targetScreenId: "appointments", row: 0, order: 0 },
+        { id: "backToMainFromProfile", label: "🏠 Главное меню", type: "screen", targetScreenId: "main", row: 1, order: 0 },
+      ],
+    },
+    {
+      id: "appointments",
+      title: "Мои записи",
+      message: "Список ваших записей.",
+      imageUrl: "",
+      buttons: [
+        { id: "backToMainFromAppointments", label: "🏠 Главное меню", type: "screen", targetScreenId: "main", row: 0, order: 0 },
+      ],
+    },
+  ],
+});
+const sanitizeBotMenuButton = (button, index = 0, screenId = "screen") => {
+  const fallbackLabel = `Кнопка ${index + 1}`;
+  const id =
+    normalizeText(button?.id) ||
+    `btn_${canonicalizeKey(screenId) || "screen"}_${index + 1}`;
+  const typeRaw = normalizeText(button?.type || "screen");
+  const type = BOT_MENU_TYPE_SET.has(typeRaw) ? typeRaw : "screen";
+  const label =
+    normalizeText(button?.label || button?.text || fallbackLabel) ||
+    fallbackLabel;
+  const targetScreenId = normalizeText(
+    button?.targetScreenId || button?.target || "",
+  );
+  const payload =
+    button?.payload !== undefined && button?.payload !== null
+      ? String(button.payload)
+      : "";
+  const row =
+    Number.isFinite(button?.row) && button.row >= 0
+      ? Number(button.row)
+      : Math.floor(index / 2);
+  const order =
+    Number.isFinite(button?.order) && button.order >= 0
+      ? Number(button.order)
+      : index;
+  return {
+    id,
+    type,
+    label,
+    targetScreenId: targetScreenId || null,
+    payload,
+    row,
+    order,
+  };
+};
+const sanitizeBotMenuScreen = (screen, index = 0) => {
+  if (!screen || typeof screen !== "object") return null;
+  const id = normalizeText(screen.id) || `screen_${index + 1}`;
+  const title =
+    normalizeText(screen.title || screen.name || screen.caption) ||
+    `Экран ${index + 1}`;
+  const message = screen.message ?? screen.text ?? "";
+  const imageUrl = normalizeText(screen.imageUrl || screen.image || "");
+  const buttons = Array.isArray(screen.buttons)
+    ? screen.buttons.map((btn, btnIndex) =>
+        sanitizeBotMenuButton(btn, btnIndex, id),
+      )
+    : [];
+  return {
+    id,
+    title,
+    message,
+    imageUrl,
+    buttons,
+  };
+};
+const sanitizeBotMenuPayload = (payload, { stampUpdate = false } = {}) => {
+  const base = buildDefaultBotMenu();
+  const rawScreens =
+    Array.isArray(payload?.screens) && payload.screens.length
+      ? payload.screens
+      : base.screens;
+  const screens = rawScreens
+    .map((screen, index) => sanitizeBotMenuScreen(screen, index))
+    .filter(Boolean);
+  const uniqueScreens = [];
+  const seen = new Set();
+  for (const screen of screens) {
+    if (seen.has(screen.id)) continue;
+    seen.add(screen.id);
+    uniqueScreens.push(screen);
+  }
+  const version = Number(payload?.version) || 1;
+  const normalized = {
+    version,
+    updatedAt: stampUpdate
+      ? new Date().toISOString()
+      : payload?.updatedAt || base.updatedAt,
+    screens: uniqueScreens,
+  };
+  return { ...normalized, buttonTypes: BOT_MENU_BUTTON_TYPES };
+};
+const loadBotMenu = async () => {
+  await fs.ensureDir(path.dirname(BOT_MENU_PATH));
+  try {
+    if (!(await fs.pathExists(BOT_MENU_PATH))) {
+      const defaults = buildDefaultBotMenu();
+      await fs.writeJson(BOT_MENU_PATH, defaults, { spaces: 2 });
+      return { ...defaults, buttonTypes: BOT_MENU_BUTTON_TYPES };
+    }
+    const data = await fs.readJson(BOT_MENU_PATH);
+    return sanitizeBotMenuPayload(data);
+  } catch (error) {
+    console.error("Bot menu load failed, using defaults:", error.message);
+    const defaults = buildDefaultBotMenu();
+    return { ...defaults, buttonTypes: BOT_MENU_BUTTON_TYPES };
+  }
+};
+const saveBotMenu = async (payload) => {
+  const normalized = sanitizeBotMenuPayload(payload, { stampUpdate: true });
+  const persistable = {
+    version: normalized.version,
+    updatedAt: normalized.updatedAt,
+    screens: normalized.screens,
+  };
+  await fs.ensureDir(path.dirname(BOT_MENU_PATH));
+  await fs.writeJson(BOT_MENU_PATH, persistable, { spaces: 2 });
+  return { ...normalized, buttonTypes: BOT_MENU_BUTTON_TYPES };
+};
 let barberAliases = new Map();
 let barberAliasLookup = new Map();
 const loadBarberAliasesFromDisk = () => {
@@ -450,12 +664,12 @@ const decodeBase64Image = (input = "") => {
   return Buffer.from(payload, "base64");
 };
 
-const ensureUniqueImageName = async (filename) => {
+const ensureUniqueImageName = async (filename, targetDir = IMAGE_DIR) => {
   let attempt = 0;
   const ext = path.extname(filename);
   const base = path.basename(filename, ext);
   let candidate = filename;
-  while (await fs.pathExists(path.join(IMAGE_DIR, candidate))) {
+  while (await fs.pathExists(path.join(targetDir, candidate))) {
     attempt += 1;
     candidate = `${base}-${attempt}${ext}`;
   }
@@ -472,6 +686,20 @@ const listAvatarImages = async () => {
     return Array.from(new Set(images)).sort((a, b) => a.localeCompare(b, "ru"));
   } catch (error) {
     console.error("Avatar scan error:", error);
+    return [];
+  }
+};
+
+const listMenuImages = async () => {
+  try {
+    if (!(await fs.pathExists(MENU_IMAGE_DIR))) return [];
+    const entries = await fs.readdir(MENU_IMAGE_DIR, { withFileTypes: true });
+    const images = entries
+      .filter((entry) => entry.isFile() && IMAGE_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
+      .map((entry) => `/Image/menu_bots/${entry.name.replace(/\\/g, "/")}`);
+    return Array.from(new Set(images)).sort((a, b) => a.localeCompare(b, "ru"));
+  } catch (error) {
+    console.error("Menu image scan error:", error);
     return [];
   }
 };
@@ -1972,6 +2200,92 @@ app.delete("/api/assets/avatars", authenticateToken, async (req, res) => {
       error: "Не удалось удалить изображение.",
       details: error.message,
     });
+  }
+});
+
+app.get("/api/bot/menu/images", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для изменения меню бота." });
+  }
+  try {
+    const images = await listMenuImages();
+    res.json({ images });
+  } catch (error) {
+    console.error("Bot menu images fetch error:", error);
+    res.status(500).json({ error: "Не удалось загрузить галерею меню." });
+  }
+});
+
+app.post("/api/bot/menu/images", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для изменения меню бота." });
+  }
+  try {
+    const { name, data } = req.body || {};
+    if (!data) {
+      return res
+        .status(400)
+        .json({ error: "Не переданы данные изображения." });
+    }
+    const sanitizedName = buildSafeImageFilename(name || `menu-${Date.now()}.png`);
+    if (!sanitizedName) {
+      return res.status(400).json({ error: "Некорректное имя файла." });
+    }
+    await fs.ensureDir(MENU_IMAGE_DIR);
+    const buffer = decodeBase64Image(data);
+    if (!buffer.length) {
+      return res.status(400).json({ error: "Файл пуст." });
+    }
+    if (buffer.length > MAX_AVATAR_FILE_SIZE) {
+      return res.status(400).json({
+        error: `Файл слишком большой (до ${Math.floor(MAX_AVATAR_FILE_SIZE / (1024 * 1024))} МБ).`,
+      });
+    }
+    const filename = await ensureUniqueImageName(sanitizedName, MENU_IMAGE_DIR);
+    await fs.writeFile(path.join(MENU_IMAGE_DIR, filename), buffer);
+    const images = await listMenuImages();
+    res.json({ success: true, path: `/Image/menu_bots/${filename}`, images });
+  } catch (error) {
+    console.error("Bot menu image upload error:", error);
+    res.status(500).json({
+      error: "Не удалось сохранить изображение меню.",
+      details: error.message,
+    });
+  }
+});
+
+app.get("/api/bot/menu", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для изменения меню бота." });
+  }
+  try {
+    const menu = await loadBotMenu();
+    res.json(menu);
+  } catch (error) {
+    console.error("Bot menu fetch error:", error);
+    res.status(500).json({ error: "Не удалось загрузить меню бота." });
+  }
+});
+
+app.put("/api/bot/menu", authenticateToken, async (req, res) => {
+  if (!isOwnerRequest(req)) {
+    return res
+      .status(403)
+      .json({ error: "Недостаточно прав для изменения меню бота." });
+  }
+  const payload = req.body || {};
+  try {
+    const normalized = await saveBotMenu(payload);
+    res.json(normalized);
+  } catch (error) {
+    console.error("Bot menu save error:", error);
+    res.status(500).json({ error: "Не удалось сохранить меню бота." });
   }
 });
 

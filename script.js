@@ -1133,6 +1133,7 @@ const VIEW_TAB_ICONS = {
 };
 const SYSTEM_SUB_SECTIONS = Object.freeze([
   { id: 'bot', label: 'Бот' },
+  { id: 'constructor', label: 'Конструктор меню' },
   { id: 'system', label: 'Система' },
 ]);
 const UI_TEXT = Object.freeze({
@@ -1141,6 +1142,11 @@ const UI_TEXT = Object.freeze({
   newAppointmentCta: 'Новая запись',
   liveFallback: 'LIVE',
 });
+const BotMenuBuilder = (typeof window !== 'undefined' && window.BotMenuBuilder) || (() => (
+  <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6 text-slate-200">
+    Конструктор меню временно недоступен.
+  </div>
+));
 const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-w-3xl' }) => {
   if (!isOpen) return null;
   return (
@@ -7634,6 +7640,12 @@ const BotControlView = ({
   onUpdateToken = null,
   viewMode = 'bot',
   token = null,
+  menu = null,
+  onSaveMenu = null,
+  onReloadMenu = null,
+  menuSaving = false,
+  loadMenuImages = null,
+  uploadMenuImage = null,
   role = ROLE_OWNER,
 }) => {
   const [description, setDescription] = useState(settings?.botDescription || '');
@@ -7699,6 +7711,18 @@ const BotControlView = ({
   const isCreator = role === ROLE_CREATOR;
   const licenseList = Array.isArray(licenseStatus?.licenses) ? licenseStatus.licenses : [];
   const hasLicenseList = isCreator && licenseList.length > 0;
+  if (viewMode === 'constructor') {
+    return (
+      <BotMenuBuilder
+        menu={menu}
+        onSave={onSaveMenu}
+        onReload={onReloadMenu}
+        isSaving={menuSaving}
+        loadMenuImages={loadMenuImages}
+        onUploadMenuImage={uploadMenuImage}
+      />
+    );
+  }
   if (viewMode === 'system') {
     return (
       <div className="space-y-6">
@@ -8067,6 +8091,8 @@ const App = () => {
   const [botSettings, setBotSettings] = useState(null);
   const [botMessages, setBotMessages] = useState([]);
   const [botToken, setBotToken] = useState(null);
+  const [botMenu, setBotMenu] = useState(null);
+  const [botMenuSaving, setBotMenuSaving] = useState(false);
   const [licenseStatus, setLicenseStatus] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [optionsCache, setOptionsCache] = useState(null);
@@ -8205,6 +8231,8 @@ const App = () => {
     setBotSettings(null);
     setBotMessages([]);
     setBotToken(null);
+    setBotMenu(null);
+    setBotMenuSaving(false);
     setLicenseStatus(null);
     setUpdateInfo(null);
     setOptionsCache(null);
@@ -8310,6 +8338,9 @@ const apiRequest = useCallback(
       const botMessagesPromise = canAccessBot
         ? withFallback(apiRequest('/bot/messages'), [], 'Bot messages')
         : Promise.resolve([]);
+      const botMenuPromise = canAccessBot
+        ? withFallback(apiRequest('/bot/menu'), null, 'Bot menu')
+        : Promise.resolve(null);
       const licensePromise = canAccessSystem
         ? withFallback(apiRequest('/license/status'), null, 'License')
         : Promise.resolve(null);
@@ -8326,6 +8357,7 @@ const apiRequest = useCallback(
         barbersFull,
         botState,
         botMessagesPayload,
+        botMenuPayload,
         license,
         update,
         options,
@@ -8334,6 +8366,7 @@ const apiRequest = useCallback(
         barbersPromise,
         botStatusPromise,
         botMessagesPromise,
+        botMenuPromise,
         licensePromise,
         updatePromise,
         optionsPromise,
@@ -8358,6 +8391,8 @@ const apiRequest = useCallback(
       setBotStatus(botState.status);
       setBotToken(botState.token || null);
       setBotMessages(canAccessBot ? botMessagesPayload || [] : []);
+      setBotMenu(canAccessBot ? botMenuPayload : null);
+      setBotMenuSaving(false);
       setLicenseStatus(canAccessSystem ? license : null);
       setUpdateInfo(canAccessSystem ? normalizeUpdateInfo(update) : null);
       const normalizedOptions = { ...options, statuses: normalizeStatusList(options.statuses || []) };
@@ -8824,6 +8859,71 @@ const handleBarberFieldChange = (id, field, value) => {
       setGlobalError(error.message || 'Не удалось сохранить настройки');
     }
   };
+  const handleReloadBotMenu = useCallback(
+    async () => {
+      if (!canAccessBot) return null;
+      try {
+        const menu = await apiRequest('/bot/menu');
+        setBotMenu(menu);
+        return menu;
+      } catch (error) {
+        setGlobalError(error.message || 'Не удалось загрузить меню бота');
+        throw error;
+      }
+    },
+    [apiRequest, canAccessBot]
+  );
+  const handleLoadMenuImages = useCallback(
+    async () => {
+      if (!canAccessBot) return [];
+      try {
+        const response = await apiRequest('/bot/menu/images');
+        return Array.isArray(response?.images) ? response.images : [];
+      } catch (error) {
+        // При отсутствии эндпоинта/404 просто возвращаем пустую галерею без глобальной ошибки
+        console.warn('Menu images load skipped', error);
+        return [];
+      }
+    },
+    [apiRequest, canAccessBot]
+  );
+  const handleUploadMenuImage = useCallback(
+    async (file) => {
+      if (!canAccessBot || !file) return null;
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const response = await apiRequest('/bot/menu/images', {
+          method: 'POST',
+          body: JSON.stringify({ name: file.name, data: dataUrl }),
+        });
+        return response || null;
+      } catch (error) {
+        setGlobalError(error.message || 'Не удалось загрузить изображение меню');
+        throw error;
+      }
+    },
+    [apiRequest, canAccessBot]
+  );
+  const handleSaveBotMenu = useCallback(
+    async (menuDraft) => {
+      if (!canAccessBot) return null;
+      setBotMenuSaving(true);
+      try {
+        const saved = await apiRequest('/bot/menu', {
+          method: 'PUT',
+          body: JSON.stringify(menuDraft || {}),
+        });
+        setBotMenu(saved);
+        return saved;
+      } catch (error) {
+        setGlobalError(error.message || 'Не удалось сохранить меню бота');
+        throw error;
+      } finally {
+        setBotMenuSaving(false);
+      }
+    },
+    [apiRequest, canAccessBot]
+  );
   const handleSaveMessage = async (id, draft, persist) => {
     if (!persist) {
       setBotMessages((prev) => prev.map((message) => (message.id === id ? { ...draft } : message)));
@@ -9215,16 +9315,22 @@ const handleBarberFieldChange = (id, field, value) => {
             updateInfo={updateInfo}
             onRefreshUpdate={handleRefreshUpdate}
             onApplyUpdate={handleApplyUpdate}
-          onRestartSystem={handleRestartSystem}
-          pendingReloadReason={pendingReloadReason}
-          systemBusy={systemBusy}
-          token={botToken}
-          onUpdateToken={handleUpdateBotToken}
-          section={resolvedSystemSection}
-          onSectionChange={setSystemSection}
-          role={role}
-        />
-      );
+            menu={botMenu}
+            onSaveMenu={handleSaveBotMenu}
+            onReloadMenu={handleReloadBotMenu}
+            loadMenuImages={handleLoadMenuImages}
+            uploadMenuImage={handleUploadMenuImage}
+            menuSaving={botMenuSaving}
+            onRestartSystem={handleRestartSystem}
+            pendingReloadReason={pendingReloadReason}
+            systemBusy={systemBusy}
+            token={botToken}
+            onUpdateToken={handleUpdateBotToken}
+            section={resolvedSystemSection}
+            onSectionChange={setSystemSection}
+            role={role}
+          />
+        );
       default:
         return (
           <DashboardView

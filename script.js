@@ -1150,14 +1150,22 @@ const BotMenuBuilder = (typeof window !== 'undefined' && window.BotMenuBuilder) 
 const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-w-3xl' }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
-      <div className={`max-h-[90vh] w-full ${maxWidthClass} overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl`}>
-        <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-          <h3 className="text-lg font-semibold text-white">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white">x</button>
+    <div className="fixed inset-0 z-50 flex items-stretch justify-stretch overflow-y-auto bg-black/60 p-0 sm:items-center sm:justify-center sm:px-4 sm:py-6">
+      <div
+        className={`flex h-full max-h-[100dvh] min-h-0 w-full ${maxWidthClass} flex-col overflow-hidden border border-slate-700 bg-slate-900 shadow-2xl rounded-none sm:h-auto sm:rounded-2xl`}
+      >
+        <div className="flex min-w-0 items-center justify-between gap-3 border-b border-slate-800 px-4 py-3 sm:px-6 sm:py-4">
+          <h3 className="min-w-0 flex-1 truncate text-lg font-semibold text-white">{title}</h3>
+          <button type="button" onClick={onClose} className="flex-shrink-0 text-slate-400 hover:text-white" aria-label="Закрыть">
+            x
+          </button>
         </div>
-        <div className="max-h-[70vh] overflow-y-auto px-6 py-4 space-y-4">{children}</div>
-        {footer && <div className="flex justify-end gap-3 border-t border-slate-800 px-6 py-4">{footer}</div>}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4 sm:px-6">{children}</div>
+        {footer && (
+          <div className="flex flex-wrap justify-end gap-2 border-t border-slate-800 px-4 py-3 pb-[env(safe-area-inset-bottom)] sm:gap-3 sm:px-6 sm:py-4">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1899,25 +1907,35 @@ const DashboardView = ({
                       ) : null}
                     </div>
                     <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-nowrap sm:items-center sm:justify-end sm:gap-3">
-                      <button
-                        type="button"
-                        onClick={() => handleStatusShortcut(appt, STATUS_DONE)}
-                        disabled={isPending}
-                        className={classNames(
-                          'w-full justify-center rounded-lg px-4 py-3 text-sm font-semibold text-white transition sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
-                          isPending ? 'cursor-wait bg-emerald-700/50' : 'bg-emerald-600 hover:bg-emerald-500'
-                        )}
+	                      <button
+	                        type="button"
+	                        onClick={(event) => {
+	                          event.preventDefault();
+	                          event.stopPropagation();
+	                          handleStatusShortcut(appt, STATUS_DONE);
+	                        }}
+	                        onKeyDown={(event) => event.stopPropagation()}
+	                        disabled={isPending}
+	                        className={classNames(
+	                          'w-full justify-center rounded-lg px-4 py-3 text-sm font-semibold text-white transition sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
+	                          isPending ? 'cursor-wait bg-emerald-700/50' : 'bg-emerald-600 hover:bg-emerald-500'
+	                        )}
                       >
                         {isPending ? 'Сохраняю...' : 'Выполнена'}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleStatusShortcut(appt, STATUS_NO_SHOW)}
-                        disabled={isPending}
-                        className={classNames(
-                          'w-full justify-center rounded-lg px-4 py-3 text-sm font-semibold text-white transition sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
-                          isPending ? 'cursor-wait bg-amber-700/60' : 'bg-amber-600 hover:bg-amber-500'
-                        )}
+	                      <button
+	                        type="button"
+	                        onClick={(event) => {
+	                          event.preventDefault();
+	                          event.stopPropagation();
+	                          handleStatusShortcut(appt, STATUS_NO_SHOW);
+	                        }}
+	                        onKeyDown={(event) => event.stopPropagation()}
+	                        disabled={isPending}
+	                        className={classNames(
+	                          'w-full justify-center rounded-lg px-4 py-3 text-sm font-semibold text-white transition sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
+	                          isPending ? 'cursor-wait bg-amber-700/60' : 'bg-amber-600 hover:bg-amber-500'
+	                        )}
                       >
                         {isPending ? 'Сохраняю...' : 'Неявка'}
                       </button>
@@ -5348,7 +5366,7 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
     onChange(next);
   };
   return (
-    <div className="space-y-3">
+    <div className="w-full min-w-0 space-y-3">
       {label && (
         <div className="flex items-center justify-between text-sm">
           <label className="text-slate-300">{label}</label>
@@ -5372,7 +5390,7 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
           ))}
         </div>
       )}
-      <div className="rounded-2xl border border-slate-700 bg-slate-900/60">
+      <div className="w-full min-w-0 rounded-2xl border border-slate-700 bg-slate-900/60">
         <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-2">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
             <path
@@ -6955,15 +6973,15 @@ const AppointmentModal = ({
   };
   return (
     <Modal
-      title={isNew ? 'Новая запись' : `Редактирование записи ${draft.CustomerName || ''}`}
-      isOpen={open}
-      onClose={onClose}
-      footer={
-        <div className="flex flex-nowrap items-center justify-end gap-2 sm:gap-3">
-          {!isNew && canDelete && (
-            <button
-              onClick={() => onDelete?.(draft)}
-              className={classNames(actionButtonClass, 'border border-rose-600 text-rose-200 hover:bg-rose-500/10')}
+	      title={isNew ? 'Новая запись' : (draft.CustomerName || 'Без имени')}
+	      isOpen={open}
+	      onClose={onClose}
+	      footer={
+	        <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap sm:gap-3">
+	          {!isNew && canDelete && (
+	            <button
+	              onClick={() => onDelete?.(draft)}
+	              className={classNames(actionButtonClass, 'border border-rose-600 text-rose-200 hover:bg-rose-500/10')}
               aria-label="Удалить"
               title="Удалить"
             >
@@ -7009,11 +7027,11 @@ const AppointmentModal = ({
       {validationWarning && (
         <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-400/10 px-4 py-2 text-sm text-amber-200">{validationWarning}</div>
       )}
-      <div className="grid gap-3 mobile-grid-2 md:grid-cols-2">
-        <ClientLookupInput
-          label="Имя клиента"
-          value={draft.CustomerName || ''}
-          onChange={(nextValue) => handleChange('CustomerName', nextValue)}
+	      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+	        <ClientLookupInput
+	          label="Имя клиента"
+	          value={draft.CustomerName || ''}
+	          onChange={(nextValue) => handleChange('CustomerName', nextValue)}
           clients={clients}
           onSelectClient={handleClientAutoFill}
         />
@@ -7053,13 +7071,13 @@ const AppointmentModal = ({
               {status}
             </option>
           ))}
-        </select>
-        <div className="col-span-2">
-          <MultiSelectCheckboxes
-            label="Услуги"
-            options={options.services || []}
-            value={servicesSelection}
-            onChange={(selected) => handleChange('Services', selected.join(', '))}
+	        </select>
+	        <div className="col-span-full w-full min-w-0">
+	          <MultiSelectCheckboxes
+	            label="Услуги"
+	            options={options.services || []}
+	            value={servicesSelection}
+	            onChange={(selected) => handleChange('Services', selected.join(', '))}
             placeholder="Нет доступных услуг"
           />
         </div>
@@ -8318,13 +8336,15 @@ const apiRequest = useCallback(
     () => apiRequest('/assets/avatars'),
     [apiRequest]
   );
-  const fetchAll = useCallback(async () => {
-    if (!session?.token) return;
-    setLoading(true);
-    setGlobalError('');
-    try {
-      const overview = await apiRequest('/dashboard/overview');
-      setDashboard(overview);
+  const fetchAll = useCallback(async ({ silent = false } = {}) => {
+	    if (!session?.token) return;
+	    if (!silent) {
+	      setLoading(true);
+	      setGlobalError('');
+	    }
+	    try {
+	      const overview = await apiRequest('/dashboard/overview');
+	      setDashboard(overview);
       const withFallback = (request, fallback, label) =>
         request.catch((error) => {
           console.warn(`${label} fetch skipped:`, error?.message || error);
@@ -8397,13 +8417,17 @@ const apiRequest = useCallback(
       setUpdateInfo(canAccessSystem ? normalizeUpdateInfo(update) : null);
       const normalizedOptions = { ...options, statuses: normalizeStatusList(options.statuses || []) };
       setOptionsCache(normalizedOptions);
-    } catch (error) {
-      console.error(error);
-      setGlobalError(error.message || 'Не удалось загрузить данные.');
-    } finally {
-      setLoading(false);
-    }
-  }, [apiRequest, canAccessBot, canAccessSystem, session?.token]);
+	    } catch (error) {
+	      console.error(error);
+	      if (!silent) {
+	        setGlobalError(error.message || 'Не удалось загрузить данные.');
+	      }
+	    } finally {
+	      if (!silent) {
+	        setLoading(false);
+	      }
+	    }
+	  }, [apiRequest, canAccessBot, canAccessSystem, session?.token]);
   const handleBlockClient = useCallback(
     async (clientId, blocked = true) => {
       if (!clientId) throw new Error('No client id');
@@ -9067,53 +9091,53 @@ const handleBarberFieldChange = (id, field, value) => {
       setGlobalError(error.message || 'Не удалось начать создание записи');
     }
   }, [ensureOptions, fetchAppointmentContext, session, setGlobalError]);
-  const handleSaveAppointment = async ({ id, payload, isNew }) => {
-    try {
-      if (isNew) {
-        await apiRequest('/Appointments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      } else if (id) {
-        await apiRequest(`/Appointments/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
-      }
-      setAppointmentModal(buildAppointmentModalState());
-      fetchAll();
-    } catch (error) {
-      setGlobalError(error.message || 'Не удалось сохранить запись');
-    }
-  };
-  const handleQuickUpdateAppointmentStatus = useCallback(
-    async (appointment, nextStatus) => {
-      const id = getRecordId(appointment);
-      if (!id || !nextStatus) return;
-      try {
-        await apiRequest(`/Appointments/${encodeURIComponent(id)}`, {
-          method: 'PUT',
-          body: JSON.stringify({ Status: normalizeStatusValue(nextStatus) }),
-        });
-        fetchAll();
-      } catch (error) {
-        setGlobalError(error.message || 'Не удалось обновить статус записи');
-        throw error;
-      }
-    },
-    [apiRequest, fetchAll, setGlobalError]
-  );
-  const handleDeleteAppointment = async (appointment) => {
-    if (!appointment?.id) return;
-    const confirmed = await requestConfirm({
-      title: 'Удалить запись?',
-      message: 'Запись будет удалена без возможности восстановления.',
+	  const handleSaveAppointment = async ({ id, payload, isNew }) => {
+	    try {
+	      if (isNew) {
+	        await apiRequest('/Appointments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+	      } else if (id) {
+	        await apiRequest(`/Appointments/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+	      }
+	      setAppointmentModal(buildAppointmentModalState());
+	      fetchAll({ silent: true });
+	    } catch (error) {
+	      setGlobalError(error.message || 'Не удалось сохранить запись');
+	    }
+	  };
+	  const handleQuickUpdateAppointmentStatus = useCallback(
+	    async (appointment, nextStatus) => {
+	      const id = getRecordId(appointment);
+	      if (!id || !nextStatus) return;
+	      try {
+	        await apiRequest(`/Appointments/${encodeURIComponent(id)}`, {
+	          method: 'PUT',
+	          body: JSON.stringify({ Status: normalizeStatusValue(nextStatus) }),
+	        });
+	        fetchAll({ silent: true });
+	      } catch (error) {
+	        setGlobalError(error.message || 'Не удалось обновить статус записи');
+	        throw error;
+	      }
+	    },
+	    [apiRequest, fetchAll, setGlobalError]
+	  );
+	  const handleDeleteAppointment = async (appointment) => {
+	    if (!appointment?.id) return;
+	    const confirmed = await requestConfirm({
+	      title: 'Удалить запись?',
+	      message: 'Запись будет удалена без возможности восстановления.',
       confirmLabel: 'Удалить',
       tone: 'danger',
     });
     if (!confirmed) return;
-    try {
-      await apiRequest(`/Appointments/${encodeURIComponent(appointment.id)}`, { method: 'DELETE' });
-      setAppointmentModal(buildAppointmentModalState());
-      fetchAll();
-    } catch (error) {
-      setGlobalError(error.message || 'Не удалось удалить запись');
-    }
-  };
+	    try {
+	      await apiRequest(`/Appointments/${encodeURIComponent(appointment.id)}`, { method: 'DELETE' });
+	      setAppointmentModal(buildAppointmentModalState());
+	      fetchAll({ silent: true });
+	    } catch (error) {
+	      setGlobalError(error.message || 'Не удалось удалить запись');
+	    }
+	  };
   const triggerAppReload = useCallback(() => {
     const reloadWithBypass = () => {
       const url = new URL(window.location.href);

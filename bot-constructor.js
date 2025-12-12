@@ -442,6 +442,25 @@ const ChatPreview = ({
 
   useEffect(() => {
     if (!dragState) return;
+    const bodyStyle = typeof document !== "undefined" ? document.body?.style : null;
+    const previousBodyStyles = bodyStyle
+      ? {
+          overflow: bodyStyle.overflow,
+          touchAction: bodyStyle.touchAction,
+          overscrollBehavior: bodyStyle.overscrollBehavior,
+        }
+      : null;
+
+    if (bodyStyle) {
+      bodyStyle.overflow = "hidden";
+      bodyStyle.touchAction = "none";
+      bodyStyle.overscrollBehavior = "none";
+    }
+
+    const preventScroll = (event) => {
+      event.preventDefault();
+    };
+
     const handleMove = (event) => {
       event.preventDefault();
       dragMoveCoordsRef.current = { x: event.clientX, y: event.clientY };
@@ -484,6 +503,16 @@ const ChatPreview = ({
       event.preventDefault();
       commitDrop(event);
     };
+    const handleCancel = (event) => {
+      event?.preventDefault?.();
+      clearPreview();
+      setDraggingId(null);
+      dragPayloadRef.current = null;
+      setDragState(null);
+      setDropRowHighlight(null);
+      setDropOrderHighlight(null);
+      onDropZoneHoverChange?.(null);
+    };
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -495,18 +524,28 @@ const ChatPreview = ({
         setDropOrderHighlight(null);
       }
     };
+    document.addEventListener("touchmove", preventScroll, { passive: false });
     document.addEventListener("pointermove", handleMove, { passive: false });
     document.addEventListener("pointerup", handleUp, { passive: false });
+    document.addEventListener("pointercancel", handleCancel, { passive: false });
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       if (dragMoveFrameRef.current) {
         cancelAnimationFrame(dragMoveFrameRef.current);
         dragMoveFrameRef.current = null;
       }
+      document.removeEventListener("touchmove", preventScroll);
       document.removeEventListener("pointermove", handleMove);
       document.removeEventListener("pointerup", handleUp);
+      document.removeEventListener("pointercancel", handleCancel);
       document.removeEventListener("keydown", handleKeyDown);
       onDropZoneHoverChange?.(null);
+
+      if (bodyStyle && previousBodyStyles) {
+        bodyStyle.overflow = previousBodyStyles.overflow;
+        bodyStyle.touchAction = previousBodyStyles.touchAction;
+        bodyStyle.overscrollBehavior = previousBodyStyles.overscrollBehavior;
+      }
     };
   }, [bottomRowValue, dragState, dropZones, isInsideDropZone, onDropZoneHoverChange, topRowValue]);
 
@@ -523,6 +562,13 @@ const ChatPreview = ({
       if (!event || !isEditing) return;
       event.preventDefault();
       event.stopPropagation();
+      try {
+        if (typeof event.pointerId === "number") {
+          originNode?.setPointerCapture?.(event.pointerId);
+        }
+      } catch {
+        // ignore pointer capture failures
+      }
       dragPayloadRef.current = payload;
       setDropRowHighlight(payload.fromRow ?? null);
       setDropOrderHighlight(payload.fromOrder ?? null);
@@ -818,7 +864,7 @@ const ChatPreview = ({
                         </div>
                       )}
                       <div
-                        className={`relative flex flex-wrap gap-2 rounded-2xl bg-white/5 p-2 ring-1 ring-white/10 transition-all duration-200 ${
+                        className={`relative grid grid-cols-2 gap-2 rounded-2xl bg-white/5 p-2 ring-1 ring-white/10 transition-all duration-200 lg:flex lg:flex-wrap ${
                           dropRowHighlight === rowId ? "ring-2 ring-emerald-400/70 bg-emerald-500/10 scale-[1.01]" : ""
                         }`}
                         data-row-id={rowId}
@@ -864,7 +910,7 @@ const ChatPreview = ({
                           const renderPlaceholder = (key) => (
                             <div
                               key={key}
-                              className="pointer-events-none h-[44px] min-w-[140px] flex-1 rounded-xl border border-dashed border-emerald-300/70 bg-emerald-200/10"
+                              className="pointer-events-none h-[44px] w-full min-w-0 rounded-xl border border-dashed border-emerald-300/70 bg-emerald-200/10 lg:min-w-[140px] lg:flex-1"
                             />
                           );
                           const visibleButtons = row.buttons.filter((btn) => btn.id !== draggingId);
@@ -887,6 +933,7 @@ const ChatPreview = ({
                                 data-drag-id={btn.id}
                                 data-order={btn.order ?? index}
                                 draggable={false}
+                                style={isEditing ? { touchAction: "none" } : undefined}
                                 onPointerDown={(e) => {
                                   if (!isEditing) return;
                                   beginDrag(
@@ -901,7 +948,7 @@ const ChatPreview = ({
                                     e,
                                   );
                                 }}
-                                className={`group relative flex min-w-[140px] flex-1 items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-[0_20px_40px_rgba(99,102,241,0.35)] ${
+                                className={`group relative flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-[0_20px_40px_rgba(99,102,241,0.35)] lg:min-w-[140px] lg:flex-1 ${
                                   isEditing ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
                                 } ${
                                   draggingId === btn.id ? "opacity-40 border-white/20 bg-white/10" : "border-white/10 bg-white/5"
@@ -1447,11 +1494,12 @@ const ButtonPalette = ({ onAdd, onRemove, onHoverChange, isEditing, isHighlighte
           <p className="text-[11px] text-slate-300">Листайте горизонтально и перетаскивайте на экран</p>
         </div>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-3">
         {BOT_BUTTON_TYPES.map((item) => (
           <div
             key={item.id}
             draggable={false}
+            style={isEditing ? { touchAction: "none" } : undefined}
             onPointerDown={(e) => startPaletteDrag(item, e)}
             onPointerUp={(e) => {
               e.preventDefault();
@@ -1468,7 +1516,7 @@ const ButtonPalette = ({ onAdd, onRemove, onHoverChange, isEditing, isHighlighte
               if (!isEditing) return;
               onAdd?.(item.id);
             }}
-            className={`group relative flex min-w-[140px] items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-[0_18px_40px_rgba(99,102,241,0.35)] ${
+            className={`group relative flex min-w-0 items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-[0_18px_40px_rgba(99,102,241,0.35)] lg:min-w-[140px] ${
               isEditing ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed opacity-60"
             }`}
           >

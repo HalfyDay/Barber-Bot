@@ -818,6 +818,34 @@ def get_busy_intervals(barber: str, date_str: str) -> list[tuple[int, int]]:
                     intervals.append(parsed)
     return intervals
 
+def _get_working_hours_from_cursor(cursor: sqlite3.Cursor, barber: str, date_str: str) -> tuple[int, int] | None:
+    cursor.execute(
+        "SELECT Week FROM Schedules WHERE Barber = ? AND Date = ?",
+        (barber, date_str),
+    )
+    row = cursor.fetchone()
+    if row and row["Week"] and row["Week"] != "0":
+        return _parse_working_hours(row["Week"])
+    return None
+
+def _get_busy_intervals_from_cursor(cursor: sqlite3.Cursor, barber: str, date_str: str) -> list[tuple[int, int]]:
+    intervals: list[tuple[int, int]] = []
+    cursor.execute(
+        "SELECT Time, Status FROM Appointments WHERE Barber = ? AND Date = ?",
+        (barber, date_str),
+    )
+    rows = cursor.fetchall()
+    for row in rows:
+        status = row["Status"]
+        if not status_is_blocking(status):
+            continue
+        tf = (row["Time"] or "").strip()
+        if "-" in tf:
+            parsed = _parse_working_hours(tf)
+            if parsed:
+                intervals.append(parsed)
+    return intervals
+
 def _parse_working_hours(wh: str) -> tuple[int, int] | None:
     if not wh or "-" not in wh:
         return None
@@ -1624,6 +1652,7 @@ async def show_available_dates(query, ctx) -> int:
         if has_slot:
             available_dates.append(date_str)
     if not available_dates:
+        await query.answer()
         chat_id, msg_id = ctx.user_data.get(
             "bot_msg", (query.message.chat_id, query.message.message_id)
         )
@@ -1651,6 +1680,9 @@ async def show_available_dates(query, ctx) -> int:
     rows.append([InlineKeyboardButton("⬅ Назад", callback_data="book_back_services")])
     rows.append([InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")])
     caption = f"<b>3-й шаг: выберите дату:</b>\n\nДлительность: <b>{total_min} мин</b>"
+    flash_notice = ctx.user_data.pop("flash_notice", None)
+    if flash_notice:
+        caption = f"<b>Внимание:</b> {flash_notice}\n\n{caption}"
     await query.answer()
     await ctx.bot.edit_message_caption(
         chat_id=query.message.chat_id,
@@ -1691,9 +1723,13 @@ async def show_available_times(query, ctx) -> int:
     rows = [buttons[i : i + 4] for i in range(0, len(buttons), 4)]
     rows.append([InlineKeyboardButton("⬅ Назад", callback_data="book_back_dates")])
     rows.append([InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")])
+    caption = "<b>4-й шаг: выберите время:</b>"
+    flash_notice = ctx.user_data.pop("flash_notice", None)
+    if flash_notice:
+        caption = f"<b>Внимание:</b> {flash_notice}\n\n{caption}"
     await query.answer()
     await query.edit_message_caption(
-        "<b>4-й шаг: выберите время:</b>",
+        caption,
         reply_markup=InlineKeyboardMarkup(rows),
         parse_mode="HTML",
     )
@@ -1767,7 +1803,6 @@ async def book_back_time_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def book_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Подтверждает и сохраняет запись в БД."""
     query = update.callback_query
-    await query.answer()
     choice = query.data.split("|", 1)[1]
     chat_id, msg_id = query.message.chat_id, query.message.message_id
     if choice == "yes":
@@ -1804,7 +1839,11 @@ async def book_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         services_str = ", ".join(ctx.user_data["services_list"])
         barber_chat_id = parse_chat_id(barber_info.get("telegramId"))
         new_id = str(uuid.uuid4())
+        redirect_target: str | None = None  # "times" | "dates"
+        redirect_alert: str | None = None
+        fatal_caption: str | None = None
         with get_db_connection() as conn:
+            conn.execute("PRAGMA busy_timeout = 5000")
             cursor = conn.cursor()
             if "name" not in ctx.user_data or "phone" not in ctx.user_data:
                 cursor.execute(
@@ -1815,37 +1854,105 @@ async def book_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                     ctx.user_data["name"] = user_rec["Name"]
                     ctx.user_data["phone"] = user_rec["Phone"]
                 else:
-                    await query.edit_message_caption(
-                        "Ошибка: ваш профиль не найден. Пожалуйста, пройдите регистрацию командой /start.",
-                        parse_mode="HTML",
-                    )
-                    return ConversationHandler.END
-            record_tuple = (
-                new_id,
-                str(user_id),
-                ctx.user_data.get("name"),
-                ctx.user_data.get("phone"),
-                barber_name,
-                appointment_date,
-                time_range,
-                "Активная",
-                services_str,
-                False,
-                False,
-            )
-            cursor.execute(
-                "INSERT INTO Appointments (id, UserID, CustomerName, Phone, Barber, Date, Time, Status, Services, Reminder2hClientSent, Reminder2hBarberSent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                record_tuple,
-            )
-            conn.commit()
-            if not barber_chat_id:
-                barber_cursor = conn.cursor()
-                barber_cursor.execute(
-                    "SELECT telegramId FROM Barbers WHERE name = ?", (barber_name,)
-                )
-                barber_record = barber_cursor.fetchone()
-                if barber_record:
-                    barber_chat_id = parse_chat_id(barber_record["telegramId"])
+                    fatal_caption = "Ошибка: ваш профиль не найден. Пожалуйста, пройдите регистрацию командой /start."
+
+            if not fatal_caption:
+                try:
+                    conn.execute("BEGIN IMMEDIATE")
+                    parsed_range = _parse_working_hours(time_range)
+                    if not parsed_range:
+                        redirect_target = "times"
+                        redirect_alert = "Не удалось распознать выбранное время. Пожалуйста, выберите слот заново."
+                    else:
+                        start_min, end_min = parsed_range
+                        if end_min <= start_min:
+                            redirect_target = "times"
+                            redirect_alert = "Некорректный интервал времени. Пожалуйста, выберите слот заново."
+                        else:
+                            start_label = (
+                                time_range.split(" - ")[0].strip()
+                                if " - " in time_range
+                                else time_range.split("-")[0].strip()
+                            )
+                            try:
+                                dt_start_naive = datetime.datetime.fromisoformat(
+                                    f"{appointment_date}T{start_label}"
+                                )
+                                dt_start = dt_start_naive.replace(tzinfo=ZONE)
+                            except Exception:
+                                dt_start = None
+                            min_allowed = datetime.datetime.now(tz=ZONE) + datetime.timedelta(
+                                hours=get_min_lead_hours()
+                            )
+                            if not dt_start or dt_start < min_allowed:
+                                redirect_target = "times"
+                                redirect_alert = "Это время уже недоступно (слишком близко или прошло). Выберите другое."
+                            else:
+                                working_hours = _get_working_hours_from_cursor(cursor, barber_name, appointment_date)
+                                if not working_hours:
+                                    redirect_target = "dates"
+                                    redirect_alert = "Барбер не работает в выбранную дату. Выберите другую дату."
+                                else:
+                                    day_start, day_end = working_hours
+                                    if start_min < day_start or end_min > day_end:
+                                        redirect_target = "times"
+                                        redirect_alert = "Выбранное время больше не входит в рабочие часы. Выберите другое время."
+                                    else:
+                                        busy = _get_busy_intervals_from_cursor(cursor, barber_name, appointment_date)
+                                        duration = end_min - start_min
+                                        if not can_fit(start_min, duration, busy):
+                                            redirect_target = "times"
+                                            redirect_alert = "К сожалению, это время уже занято. Выберите другое время."
+
+                    if redirect_target:
+                        conn.rollback()
+                    else:
+                        record_tuple = (
+                            new_id,
+                            str(user_id),
+                            ctx.user_data.get("name"),
+                            ctx.user_data.get("phone"),
+                            barber_name,
+                            appointment_date,
+                            time_range,
+                            "Активная",
+                            services_str,
+                            False,
+                            False,
+                        )
+                        cursor.execute(
+                            "INSERT INTO Appointments (id, UserID, CustomerName, Phone, Barber, Date, Time, Status, Services, Reminder2hClientSent, Reminder2hBarberSent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            record_tuple,
+                        )
+                        conn.commit()
+                        if not barber_chat_id:
+                            barber_cursor = conn.cursor()
+                            barber_cursor.execute(
+                                "SELECT telegramId FROM Barbers WHERE name = ?", (barber_name,)
+                            )
+                            barber_record = barber_cursor.fetchone()
+                            if barber_record:
+                                barber_chat_id = parse_chat_id(barber_record["telegramId"])
+                except sqlite3.Error as exc:
+                    logger.warning("Booking confirm failed: %s", exc)
+                    try:
+                        conn.rollback()
+                    except sqlite3.Error:
+                        pass
+                    fatal_caption = "Не удалось оформить запись. Попробуйте еще раз."
+
+        if fatal_caption:
+            await query.answer(fatal_caption, show_alert=True)
+            await query.edit_message_caption(fatal_caption, parse_mode="HTML")
+            return ConversationHandler.END
+
+        if redirect_target:
+            ctx.user_data.pop("time_range", None)
+            ctx.user_data["flash_notice"] = redirect_alert or "Выбранное время недоступно. Выберите другое."
+            if redirect_target == "dates":
+                return await show_available_dates(query, ctx)
+            return await show_available_times(query, ctx)
+        await query.answer()
         barber_notified = False
         if barber_chat_id:
             start_time = (
@@ -1877,6 +1984,7 @@ async def book_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             ctx, chat_id, msg_id, IMAGE_BYTES, res, main_menu_kb(query.from_user.id)
         )
     else:
+        await query.answer()
         await safe_upsert_menu(
             ctx,
             chat_id,

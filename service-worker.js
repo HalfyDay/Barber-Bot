@@ -1,14 +1,14 @@
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const CACHE_PREFIX = "barber-bot-cache";
 const CACHE_NAME = `${CACHE_PREFIX}-${CACHE_VERSION}`;
-const OFFLINE_URL = "/";
+const OFFLINE_URL = "/panel/";
 const STATIC_ASSETS = [
   OFFLINE_URL,
-  "/index.html",
-  "/styles.css",
-  "/manifest.webmanifest"
+  "/panel/index.html",
+  "/panel/styles.css",
+  "/panel/manifest.webmanifest"
 ];
-const BUNDLE_ASSET = "/script.bundle.js";
+const BUNDLE_ASSET = "/panel/script.bundle.js";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -54,7 +54,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname === "/styles.css") {
+  if (url.pathname === "/panel/styles.css") {
     event.respondWith(staleWhileRevalidate(request));
     return;
   }

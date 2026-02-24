@@ -16,19 +16,26 @@ const {
   startLicenseWatcher,
 } = require("./services/licenseGuard");
 const { checkForUpdates, applyUpdate } = require("./services/updateManager");
+const { createHomeUsersStore, normalizeHomePhone } = require("./services/homeUsersDb");
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-secret";
 const TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "30d";
+const HOME_JWT_SECRET = process.env.HOME_JWT_SECRET || `${JWT_SECRET}:home`;
+const HOME_TOKEN_EXPIRES_IN = process.env.HOME_JWT_EXPIRES_IN || "30d";
 const TOKEN_REFRESH_THRESHOLD_MS =
   Number(process.env.JWT_REFRESH_THRESHOLD_MS) || 3 * 24 * 60 * 60 * 1000;
+const HOME_TOKEN_REFRESH_THRESHOLD_MS =
+  Number(process.env.HOME_JWT_REFRESH_THRESHOLD_MS) || 3 * 24 * 60 * 60 * 1000;
 const WARNING_LOOKBACK_DAYS =
   Number(process.env.WARNING_LOOKBACK_DAYS || 90) || 90;
 const WARNING_BLOCK_THRESHOLD =
   Number(process.env.WARNING_BLOCK_THRESHOLD || 3) || 3;
 const BACKUP_DIR = path.join(__dirname, "backups");
 const DB_PATH = path.join(__dirname, "prisma", "dev.db");
+const HOME_USERS_DB_PATH =
+  process.env.HOME_USERS_DB_PATH || path.join(__dirname, "data", "home-users.db");
 const BACKUP_RETENTION_DAYS = 30;
 const CLIENT_ERROR_LOG = path.join(__dirname, "data", "client-error.log");
 const BOT_MENU_PATH = path.join(__dirname, "data", "bot-menu.json");
@@ -106,6 +113,7 @@ const CREATOR_ACCOUNT = {
   name: "Создатель",
   username: "creator",
 };
+const homeUsersStore = createHomeUsersStore(HOME_USERS_DB_PATH);
 let botProcess = null;
 const botRuntime = {
   running: false,
@@ -127,7 +135,14 @@ const restartCommand = () => {
 };
 app.use(cors());
 app.use(express.json({ limit: "12mb" }));
-app.use(express.static(path.join(__dirname)));
+app.get("/", (req, res) => {
+  res.redirect(302, "/home");
+});
+app.use("/home", express.static(path.join(__dirname, "home")));
+app.use("/panel", express.static(path.join(__dirname)));
+app.get(/^\/panel(?:\/.*)?$/, (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
 app.use("/Image", express.static(IMAGE_DIR));
 app.use((req, res, next) => {
   if (
@@ -198,6 +213,17 @@ const normalizePhone = (phone) => {
   }
   if (digits.startsWith("7")) return `+${digits}`;
   return digits.startsWith("+") ? digits : `+${digits}`;
+};
+const resolveHomeAssetPath = (value) => {
+  const normalized = normalizeText(value);
+  if (!normalized) return "";
+  if (/^(https?:)?\/\//i.test(normalized) || normalized.startsWith("data:")) {
+    return normalized;
+  }
+  const sanitized = normalized.replace(/\\/g, "/").replace(/^\.\/+/, "");
+  if (sanitized.startsWith("/")) return sanitized;
+  if (sanitized.startsWith("Image/")) return `/${sanitized}`;
+  return `/Image/${sanitized}`;
 };
 const normalizeLogin = (value) => normalizeText(value);
 const toLower = (value) => normalizeText(value).toLowerCase();
@@ -966,6 +992,69 @@ const authenticateStream = (req, res, next) => {
     req.identity = identity;
     if (shouldRefreshToken(payload, expired)) {
       refreshSessionToken(res, identity);
+    }
+    return next();
+  } catch (error) {
+    return res.sendStatus(403);
+  }
+};
+const buildHomeIdentity = (payload = {}) => ({
+  userId: normalizeText(payload.userId || payload.id),
+  phone: normalizeHomePhone(payload.phone || payload.username || ""),
+  displayName: normalizeText(payload.displayName || payload.name || payload.phone || ""),
+  scope: "home_client",
+});
+const signHomeSessionToken = (identity) =>
+  jwt.sign(
+    {
+      userId: identity.userId,
+      phone: identity.phone,
+      displayName: identity.displayName,
+      scope: "home_client",
+    },
+    HOME_JWT_SECRET,
+    { expiresIn: HOME_TOKEN_EXPIRES_IN },
+  );
+const verifyHomeTokenGracefully = (token) => {
+  try {
+    const payload = jwt.verify(token, HOME_JWT_SECRET);
+    return { payload, expired: false };
+  } catch (error) {
+    if (error?.name !== "TokenExpiredError") throw error;
+    const payload = jwt.verify(token, HOME_JWT_SECRET, { ignoreExpiration: true });
+    return { payload, expired: true };
+  }
+};
+const shouldRefreshHomeToken = (payload, expired) => {
+  if (expired) return true;
+  if (!payload?.exp) return false;
+  const expiresAtMs = payload.exp * 1000;
+  return expiresAtMs - Date.now() <= HOME_TOKEN_REFRESH_THRESHOLD_MS;
+};
+const refreshHomeSessionToken = (res, identity) => {
+  try {
+    const nextToken = signHomeSessionToken(identity);
+    res.setHeader("x-home-session-token", nextToken);
+  } catch (error) {
+    console.warn("home token refresh failed:", error?.message || error);
+  }
+};
+const authenticateHomeToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(" ")[1];
+  if (!token) return res.sendStatus(401);
+  try {
+    const { payload, expired } = verifyHomeTokenGracefully(token);
+    if (payload?.scope !== "home_client") {
+      return res.sendStatus(403);
+    }
+    const identity = buildHomeIdentity(payload || {});
+    if (!identity.userId || !identity.phone) {
+      return res.sendStatus(403);
+    }
+    req.homeUser = identity;
+    if (shouldRefreshHomeToken(payload, expired)) {
+      refreshHomeSessionToken(res, identity);
     }
     return next();
   } catch (error) {
@@ -1895,6 +1984,141 @@ const handleLogin = async (req, res) => {
 };
 app.get("/api/login/options", handleLoginOptions);
 app.post("/api/login", handleLogin);
+app.get("/api/auth/me", authenticateToken, (req, res) => {
+  const identity = resolveUserIdentity(req.user || req.identity || {});
+  res.json({
+    authenticated: true,
+    username: identity.username || null,
+    displayName: identity.barberName || identity.username || null,
+    barberId: identity.barberId || null,
+    role: identity.role || null,
+    barberName: identity.barberName || null,
+  });
+});
+app.post("/api/home/auth/register", (req, res) => {
+  try {
+    const phone = normalizeText(req.body?.phone);
+    const password = normalizeText(req.body?.password);
+    const displayName = normalizeText(req.body?.displayName) || phone;
+    if (!phone || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Введите номер телефона и пароль.",
+      });
+    }
+    const user = homeUsersStore.registerUser({ phone, password, displayName });
+    const identity = buildHomeIdentity({
+      userId: user.id,
+      phone: user.phone,
+      displayName: user.displayName,
+    });
+    const token = signHomeSessionToken(identity);
+    return res.status(201).json({
+      success: true,
+      token,
+      user,
+    });
+  } catch (error) {
+    if (error?.code === "USER_EXISTS") {
+      return res.status(409).json({ success: false, message: error.message });
+    }
+    if (error?.code === "INVALID_PHONE" || error?.code === "WEAK_PASSWORD") {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+    console.error("Home register error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Ошибка регистрации. Попробуйте позже." });
+  }
+});
+app.post("/api/home/auth/login", (req, res) => {
+  try {
+    const phone = normalizeText(req.body?.phone);
+    const password = normalizeText(req.body?.password);
+    if (!phone || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Введите номер телефона и пароль.",
+      });
+    }
+    const user = homeUsersStore.authenticateUser({ phone, password });
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Неверный номер телефона или пароль.",
+      });
+    }
+    const identity = buildHomeIdentity({
+      userId: user.id,
+      phone: user.phone,
+      displayName: user.displayName,
+    });
+    const token = signHomeSessionToken(identity);
+    return res.json({
+      success: true,
+      token,
+      user,
+    });
+  } catch (error) {
+    console.error("Home login error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Ошибка входа. Попробуйте позже." });
+  }
+});
+app.get("/api/home/auth/me", authenticateHomeToken, (req, res) => {
+  const identity = req.homeUser || {};
+  const user = homeUsersStore.getById(identity.userId);
+  if (!user) return res.sendStatus(401);
+  return res.json({
+    authenticated: true,
+    user,
+  });
+});
+app.get("/api/home/barbers", authenticateHomeToken, async (req, res) => {
+  try {
+    const barbers = await prisma.barbers.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        nickname: true,
+        description: true,
+        color: true,
+        rating: true,
+        orderIndex: true,
+        avatarUrl: true,
+        cardImageUrl: true,
+        cardTitle: true,
+      },
+      orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+    });
+    const fallbackImage = "/Image/card/Barber_photo.png";
+    const payload = barbers.map((barber) => {
+      const displayName =
+        normalizeText(barber.cardTitle) ||
+        normalizeText(barber.nickname) ||
+        normalizeText(barber.name) ||
+        "Барбер";
+      const cardImage = resolveHomeAssetPath(barber.cardImageUrl);
+      const avatarImage = resolveHomeAssetPath(barber.avatarUrl);
+      return {
+        id: barber.id,
+        name: displayName,
+        fullName: normalizeText(barber.name) || displayName,
+        description: normalizeText(barber.description),
+        color: normalizeText(barber.color) || "#17c8c0",
+        rating: normalizeText(barber.rating),
+        imageUrl: cardImage || avatarImage || fallbackImage,
+        thumbnailUrl: avatarImage || cardImage || fallbackImage,
+      };
+    });
+    return res.json({ barbers: payload });
+  } catch (error) {
+    console.error("Home barbers load error:", error);
+    return res.status(500).json({ error: "Не удалось загрузить список барберов." });
+  }
+});
 app.use("/api", (req, res, next) => {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(" ")[1];
@@ -3362,6 +3586,7 @@ const gracefulShutdown = async () => {
     await stopBotProcess();
     await stopHttpServer();
     await prisma.$disconnect();
+    homeUsersStore.close();
     process.exit(0);
   } catch (error) {
     console.error("Shutdown error:", error);

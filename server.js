@@ -136,9 +136,14 @@ const restartCommand = () => {
 app.use(cors());
 app.use(express.json({ limit: "12mb" }));
 app.get("/", (req, res) => {
-  res.redirect(302, "/home");
+  res.redirect(302, "/login");
 });
-app.use("/home", express.static(path.join(__dirname, "home")));
+app.use("/login", express.static(path.join(__dirname, "login")));
+app.use("/booking", express.static(path.join(__dirname, "home")));
+app.use("/home", express.static(path.join(__dirname, "home-page")));
+app.use("/referral", express.static(path.join(__dirname, "referral")));
+app.use("/shop", express.static(path.join(__dirname, "shop")));
+app.use("/profile", express.static(path.join(__dirname, "profile")));
 app.use("/panel", express.static(path.join(__dirname)));
 app.get(/^\/panel(?:\/.*)?$/, (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));

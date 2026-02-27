@@ -907,6 +907,52 @@ const countBlockedClientsFromAppointments = (
   return blocked;
 };
 const BLOCKLIST_FILE = path.join(__dirname, "data", "blocked-users.json");
+const HOME_AUTH_COLUMNS = [
+  { name: "HomePasswordHash", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomePasswordHash" TEXT' },
+  { name: "HomePasswordSalt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomePasswordSalt" TEXT' },
+  { name: "HomeIsActive", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomeIsActive" BOOLEAN NOT NULL DEFAULT true' },
+  { name: "HomeCreatedAt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomeCreatedAt" TEXT' },
+  { name: "HomeUpdatedAt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomeUpdatedAt" TEXT' },
+  { name: "HomeLastLoginAt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomeLastLoginAt" TEXT' },
+];
+const ensureUsersHomeAuthColumns = () => {
+  let db = null;
+  try {
+    db = new SqliteDatabase(DB_PATH);
+    const tableExists = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'Users' LIMIT 1",
+      )
+      .get();
+    if (!tableExists) return;
+    const columns = db.prepare('PRAGMA table_info("Users")').all();
+    const existing = new Set(columns.map((row) => normalizeText(row?.name)));
+    const added = [];
+    HOME_AUTH_COLUMNS.forEach(({ name, ddl }) => {
+      if (existing.has(name)) return;
+      db.prepare(ddl).run();
+      added.push(name);
+    });
+    if (added.length) {
+      console.log(
+        `[db] Added missing Users columns: ${added.join(", ")}`,
+      );
+    }
+  } catch (error) {
+    console.warn(
+      "Users schema reconcile warning:",
+      error?.message || error,
+    );
+  } finally {
+    if (db) {
+      try {
+        db.close();
+      } catch {
+        // ignore
+      }
+    }
+  }
+};
 const readBlockedUsers = async () => {
   try {
     const payload = await fs.readJson(BLOCKLIST_FILE);
@@ -4383,6 +4429,7 @@ process.on("SIGINT", gracefulShutdown);
 process.on("SIGTERM", gracefulShutdown);
 const bootstrap = async () => {
   try {
+    ensureUsersHomeAuthColumns();
     try {
       await ensureLicenseValid(true);
     } catch (licenseError) {

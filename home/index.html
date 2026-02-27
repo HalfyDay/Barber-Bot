@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
@@ -14,15 +14,50 @@
     <section id="booking-screen" class="booking-screen" hidden>
       <div class="booking-stack">
         <div class="booking-layer booking-layer-stripes" aria-hidden="true"></div>
-        <div class="booking-layer booking-layer-dark" aria-hidden="true">
-          <div class="booking-dark-center-shape" aria-hidden="true">
-            <div class="booking-dark-lower-figure" aria-hidden="true">
-              <div class="booking-dark-lower-figure-dark" aria-hidden="true"></div>
+        <div class="booking-layer booking-layer-dark">
+          <div id="booking-dark-center-shape" class="booking-dark-center-shape">
+            <div class="booking-dark-lower-figure">
+              <div class="booking-dark-lower-info">
+                <p id="barber-layer-name" class="booking-dark-lower-name">БАРБЕР</p>
+                <p id="barber-layer-phrase" class="booking-dark-lower-phrase">—</p>
+                <p id="barber-layer-services" class="booking-dark-lower-services">Количество услуг: 0</p>
+              </div>
+              <div class="booking-dark-lower-figure-dark" aria-hidden="true">
+                <img
+                  id="barber-layer-image"
+                  class="booking-dark-layer-image"
+                  src="/Image/card/Barber_photo.png"
+                  alt="Барбер"
+                />
+              </div>
             </div>
+            <section id="booking-flow" class="booking-flow" hidden aria-live="polite">
+              <div class="booking-flow-top">
+                <p id="booking-flow-step" class="booking-flow-step">Шаг 1</p>
+              </div>
+              <h3 id="booking-flow-title" class="booking-flow-title">Выберите услугу</h3>
+              <p id="booking-flow-meta" class="booking-flow-meta"></p>
+              <div id="booking-flow-content" class="booking-flow-content"></div>
+              <p id="booking-flow-status" class="booking-flow-status"></p>
+            </section>
           </div>
+          <div id="booking-services-actions-external" class="booking-services-actions-external" hidden></div>
           <h2 class="booking-dark-notch-title" aria-hidden="true">
             <span class="booking-dark-notch-title-left">ЗАП</span><span class="booking-dark-notch-title-right">ИСЬ</span>
           </h2>
+          <div class="carousel-nav booking-dark-pager" aria-label="Навигация по барберам">
+            <button id="prev-barber" type="button" class="nav-arrow" aria-label="Предыдущий барбер"><img src="/Image/site/left.svg" alt="" /></button>
+            <div id="barber-dots" class="barber-dots"></div>
+            <span id="barber-counter" class="barber-counter">0/0</span>
+            <button id="next-barber" type="button" class="nav-arrow" aria-label="Следующий барбер"><img src="/Image/site/right.svg" alt="" /></button>
+          </div>
+          <button id="book-button-dark" type="button" class="booking-dark-book-btn">ЗАПИСАТЬСЯ</button>
+          <button id="booking-flow-confirm" type="button" class="booking-flow-confirm-btn" hidden>
+            ПОДТВЕРДИТЬ ЗАПИСЬ
+          </button>
+          <button id="booking-flow-back" type="button" class="booking-flow-back-corner" aria-label="Назад">
+            <span aria-hidden="true">‹</span>
+          </button>
         </div>
         <div class="booking-layer booking-layer-nav-field" aria-hidden="true"></div>
 
@@ -47,12 +82,6 @@
           </div>
 
           <p id="booking-subtitle" class="booking-subtitle"></p>
-
-          <div class="carousel-nav">
-            <button id="prev-barber" type="button" class="nav-arrow" aria-label="Предыдущий барбер">&#8249;</button>
-            <div id="barber-dots" class="barber-dots"></div>
-            <button id="next-barber" type="button" class="nav-arrow" aria-label="Следующий барбер">&#8250;</button>
-          </div>
 
           <div id="barber-thumbs" class="barber-thumbs"></div>
 

@@ -3,10 +3,11 @@ const express = require("express");
 const { PrismaClient } = require("@prisma/client");
 const cors = require("cors");
 const path = require("path");
-const { randomUUID, createHash } = require("crypto");
+const { randomUUID, createHash, randomBytes, scryptSync, timingSafeEqual } = require("crypto");
 const jwt = require("jsonwebtoken");
 const cron = require("node-cron");
 const fs = require("fs-extra");
+const SqliteDatabase = require("better-sqlite3");
 const { spawn } = require("child_process");
 const os = require("os");
 const {
@@ -16,7 +17,6 @@ const {
   startLicenseWatcher,
 } = require("./services/licenseGuard");
 const { checkForUpdates, applyUpdate } = require("./services/updateManager");
-const { createHomeUsersStore, normalizeHomePhone } = require("./services/homeUsersDb");
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
@@ -34,7 +34,7 @@ const WARNING_BLOCK_THRESHOLD =
   Number(process.env.WARNING_BLOCK_THRESHOLD || 3) || 3;
 const BACKUP_DIR = path.join(__dirname, "backups");
 const DB_PATH = path.join(__dirname, "prisma", "dev.db");
-const HOME_USERS_DB_PATH =
+const LEGACY_HOME_USERS_DB_PATH =
   process.env.HOME_USERS_DB_PATH || path.join(__dirname, "data", "home-users.db");
 const BACKUP_RETENTION_DAYS = 30;
 const CLIENT_ERROR_LOG = path.join(__dirname, "data", "client-error.log");
@@ -74,6 +74,7 @@ const CONFIRMED_STATUS_TOKENS = [
 ];
 const ACTIVE_STATUS_TOKENS = ["active", "актив", "в работе"];
 const BLOCKED_STATUS_TOKENS = ["block", "заблок", "отмен", "неяв", "noshow"];
+const SLOT_BLOCK_TOKENS = ["block", "блок"];
 const tableToModelMap = {
   Appointments: "appointments",
   Schedules: "schedules",
@@ -113,7 +114,8 @@ const CREATOR_ACCOUNT = {
   name: "Создатель",
   username: "creator",
 };
-const homeUsersStore = createHomeUsersStore(HOME_USERS_DB_PATH);
+const HOME_PASSWORD_HASH_LENGTH = 64;
+const HOME_MIN_PASSWORD_LENGTH = 4;
 let botProcess = null;
 const botRuntime = {
   running: false,
@@ -1005,7 +1007,7 @@ const authenticateStream = (req, res, next) => {
 };
 const buildHomeIdentity = (payload = {}) => ({
   userId: normalizeText(payload.userId || payload.id),
-  phone: normalizeHomePhone(payload.phone || payload.username || ""),
+  phone: normalizePhone(payload.phone || payload.username || ""),
   displayName: normalizeText(payload.displayName || payload.name || payload.phone || ""),
   scope: "home_client",
 });
@@ -1065,6 +1067,232 @@ const authenticateHomeToken = (req, res, next) => {
   } catch (error) {
     return res.sendStatus(403);
   }
+};
+const HOME_USER_SELECT = {
+  id: true,
+  Name: true,
+  Phone: true,
+  homePasswordHash: true,
+  homePasswordSalt: true,
+  homeIsActive: true,
+  homeCreatedAt: true,
+  homeUpdatedAt: true,
+  homeLastLoginAt: true,
+};
+const buildHomeAuthError = (message, code) => {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+};
+const hashHomePassword = (password, saltHex = "") => {
+  const safePassword = normalizeText(password);
+  if (!safePassword) {
+    throw buildHomeAuthError("Пароль не может быть пустым.", "INVALID_PASSWORD");
+  }
+  if (safePassword.length < HOME_MIN_PASSWORD_LENGTH) {
+    throw buildHomeAuthError(
+      `Пароль должен быть не короче ${HOME_MIN_PASSWORD_LENGTH} символов.`,
+      "WEAK_PASSWORD",
+    );
+  }
+  const salt = saltHex ? Buffer.from(saltHex, "hex") : randomBytes(16);
+  const hash = scryptSync(safePassword, salt, HOME_PASSWORD_HASH_LENGTH);
+  return {
+    saltHex: salt.toString("hex"),
+    hashHex: hash.toString("hex"),
+  };
+};
+const verifyHomePassword = (password, hashHex, saltHex) => {
+  if (!password || !hashHex || !saltHex) return false;
+  try {
+    const computed = scryptSync(password, Buffer.from(saltHex, "hex"), HOME_PASSWORD_HASH_LENGTH);
+    const stored = Buffer.from(hashHex, "hex");
+    if (computed.length !== stored.length) return false;
+    return timingSafeEqual(computed, stored);
+  } catch {
+    return false;
+  }
+};
+const toPublicHomeUser = (row = {}) => {
+  const phone = normalizePhone(row.Phone || "");
+  const displayName = normalizeText(row.Name || row.Phone || "");
+  return {
+    id: row.id || null,
+    phone: phone || null,
+    displayName: displayName || phone || null,
+    createdAt: row.homeCreatedAt || null,
+    lastLoginAt: row.homeLastLoginAt || null,
+  };
+};
+const shouldHydrateUserNameFromHome = (name, phone) => {
+  const safeName = normalizeText(name);
+  if (!safeName) return true;
+  const safePhone = normalizePhone(phone);
+  if (!safePhone) return false;
+  return canonicalizeKey(safeName) === canonicalizeKey(safePhone);
+};
+const findHomeUserByPhone = async (phone) => {
+  const safePhone = normalizePhone(phone);
+  if (!safePhone) return null;
+  const users = await prisma.users.findMany({
+    where: { Phone: { not: null } },
+    select: HOME_USER_SELECT,
+  });
+  const matches = users.filter((row) => normalizePhone(row.Phone || "") === safePhone);
+  if (!matches.length) return null;
+  return (
+    matches.find(
+      (row) =>
+        row.homeIsActive !== false &&
+        normalizeText(row.homePasswordHash) &&
+        normalizeText(row.homePasswordSalt),
+    ) || matches[0]
+  );
+};
+const findHomeUserById = async (userId) => {
+  const safeUserId = normalizeText(userId);
+  if (!safeUserId) return null;
+  const row = await prisma.users.findUnique({
+    where: { id: safeUserId },
+    select: HOME_USER_SELECT,
+  });
+  if (!row) return null;
+  if (row.homeIsActive === false) return null;
+  if (!normalizeText(row.homePasswordHash) || !normalizeText(row.homePasswordSalt)) {
+    return null;
+  }
+  return row;
+};
+const readLegacyHomeUsers = () => {
+  if (!fs.existsSync(LEGACY_HOME_USERS_DB_PATH)) return [];
+  let db = null;
+  try {
+    db = new SqliteDatabase(LEGACY_HOME_USERS_DB_PATH, {
+      readonly: true,
+      fileMustExist: true,
+    });
+    const tableExists = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'home_users' LIMIT 1",
+      )
+      .get();
+    if (!tableExists) return [];
+    return db
+      .prepare(
+        `SELECT id, phone, display_name, password_hash, password_salt, is_active, created_at, updated_at, last_login_at
+         FROM home_users`,
+      )
+      .all();
+  } catch (error) {
+    console.warn("Legacy home users read warning:", error?.message || error);
+    return [];
+  } finally {
+    if (db) {
+      try {
+        db.close();
+      } catch {
+        // ignore
+      }
+    }
+  }
+};
+const migrateLegacyHomeUsersToUsers = async () => {
+  const legacyUsers = readLegacyHomeUsers();
+  if (!legacyUsers.length) {
+    return { created: 0, updated: 0, total: 0 };
+  }
+  const users = await prisma.users.findMany({ select: HOME_USER_SELECT });
+  const usersById = new Map();
+  const usersByPhone = new Map();
+  users.forEach((row) => {
+    const safeId = normalizeText(row.id);
+    if (safeId) usersById.set(safeId, row);
+    const safePhone = normalizePhone(row.Phone || "");
+    if (safePhone && !usersByPhone.has(safePhone)) {
+      usersByPhone.set(safePhone, row);
+    }
+  });
+  let created = 0;
+  let updated = 0;
+  for (const legacy of legacyUsers) {
+    const legacyId = normalizeText(legacy?.id);
+    const legacyPhone = normalizePhone(legacy?.phone || "");
+    const legacyHash = normalizeText(legacy?.password_hash);
+    const legacySalt = normalizeText(legacy?.password_salt);
+    if (!legacyId || !legacyPhone || !legacyHash || !legacySalt) continue;
+    const legacyDisplayName =
+      normalizeText(legacy?.display_name) || legacyPhone;
+    const legacyActive = Number(legacy?.is_active) === 1;
+    const existing = usersById.get(legacyId) || usersByPhone.get(legacyPhone);
+    if (existing) {
+      const patch = {};
+      if (!normalizePhone(existing.Phone || "")) patch.Phone = legacyPhone;
+      if (
+        legacyDisplayName &&
+        shouldHydrateUserNameFromHome(existing.Name, existing.Phone)
+      ) {
+        patch.Name = legacyDisplayName;
+      }
+      if (!normalizeText(existing.homePasswordHash)) {
+        patch.homePasswordHash = legacyHash;
+      }
+      if (!normalizeText(existing.homePasswordSalt)) {
+        patch.homePasswordSalt = legacySalt;
+      }
+      if (!normalizeText(existing.homeCreatedAt) && normalizeText(legacy?.created_at)) {
+        patch.homeCreatedAt = normalizeText(legacy.created_at);
+      }
+      if (
+        normalizeText(legacy?.updated_at) &&
+        (!normalizeText(existing.homeUpdatedAt) ||
+          normalizeText(legacy.updated_at) > normalizeText(existing.homeUpdatedAt))
+      ) {
+        patch.homeUpdatedAt = normalizeText(legacy.updated_at);
+      }
+      if (
+        normalizeText(legacy?.last_login_at) &&
+        (!normalizeText(existing.homeLastLoginAt) ||
+          normalizeText(legacy.last_login_at) > normalizeText(existing.homeLastLoginAt))
+      ) {
+        patch.homeLastLoginAt = normalizeText(legacy.last_login_at);
+      }
+      if (existing.homeIsActive !== legacyActive) {
+        patch.homeIsActive = legacyActive;
+      }
+      if (Object.keys(patch).length) {
+        const next = await prisma.users.update({
+          where: { id: existing.id },
+          data: patch,
+          select: HOME_USER_SELECT,
+        });
+        updated += 1;
+        usersById.set(normalizeText(next.id), next);
+        const nextPhone = normalizePhone(next.Phone || "");
+        if (nextPhone) usersByPhone.set(nextPhone, next);
+      }
+      continue;
+    }
+    const createdUser = await prisma.users.create({
+      data: {
+        id: legacyId,
+        Name: legacyDisplayName,
+        Phone: legacyPhone,
+        TelegramID: null,
+        Barber: null,
+        homePasswordHash: legacyHash,
+        homePasswordSalt: legacySalt,
+        homeIsActive: legacyActive,
+        homeCreatedAt: normalizeText(legacy?.created_at) || new Date().toISOString(),
+        homeUpdatedAt: normalizeText(legacy?.updated_at) || new Date().toISOString(),
+        homeLastLoginAt: normalizeText(legacy?.last_login_at) || null,
+      },
+      select: HOME_USER_SELECT,
+    });
+    created += 1;
+    usersById.set(normalizeText(createdUser.id), createdUser);
+    usersByPhone.set(legacyPhone, createdUser);
+  }
+  return { created, updated, total: legacyUsers.length };
 };
 const listBackups = async () => {
   await fs.ensureDir(BACKUP_DIR);
@@ -1252,6 +1480,172 @@ const getServiceCatalog = async (includeInactive = true, identity = null) => {
     }, {}),
   }));
   return filterServicesForIdentity(mapped, identity);
+};
+const getHomeBookingSettings = async () => {
+  const settings = await getBotSettings();
+  const bookingLimit = Math.max(1, Number(settings?.bookingLimit) || 2);
+  const minLeadHours = Math.max(1, Number(settings?.minLeadHours) || 2);
+  const maxDaysAhead = Math.max(1, Math.min(30, Number(settings?.maxDaysAhead) || 14));
+  return { bookingLimit, minLeadHours, maxDaysAhead };
+};
+const parseTimeLabelToMinutes = (value) => {
+  const text = normalizeText(value);
+  const match = text.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
+};
+const parseWorkingRange = (value) => {
+  const text = normalizeText(value);
+  if (!text || text === "0" || !text.includes("-")) return null;
+  const [startRaw, endRaw] = text.split("-", 2);
+  const start = parseTimeLabelToMinutes(startRaw);
+  const end = parseTimeLabelToMinutes(endRaw);
+  if (start == null || end == null || end <= start) return null;
+  return [start, end];
+};
+const formatMinutesAsClock = (minutes) => {
+  const safeMinutes = Number(minutes);
+  if (!Number.isFinite(safeMinutes) || safeMinutes < 0) return "00:00";
+  const normalized = Math.floor(safeMinutes);
+  const hours = Math.floor(normalized / 60);
+  const mins = normalized % 60;
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+};
+const canFitTimeRange = (startMinute, duration, busyIntervals = []) => {
+  const endMinute = startMinute + duration;
+  if (endMinute > 24 * 60) return false;
+  for (const [busyStart, busyEnd] of busyIntervals) {
+    if (startMinute < busyEnd && endMinute > busyStart) {
+      return false;
+    }
+  }
+  return true;
+};
+const isSlotBlockingStatus = (status) => {
+  const lowered = toLower(status);
+  return isActiveStatus(status) || SLOT_BLOCK_TOKENS.some((token) => lowered.includes(token));
+};
+const isIsoDateKey = (value) => /^\d{4}-\d{2}-\d{2}$/.test(normalizeText(value));
+const parseServiceIdsInput = (value) => {
+  if (Array.isArray(value)) {
+    return Array.from(
+      new Set(
+        value
+          .map((item) => normalizeText(item))
+          .filter(Boolean),
+      ),
+    );
+  }
+  const text = normalizeText(value);
+  if (!text) return [];
+  return Array.from(
+    new Set(
+      text
+        .split(",")
+        .map((item) => normalizeText(item))
+        .filter(Boolean),
+    ),
+  );
+};
+const resolveBookableServicesForBarber = (services = [], barberId) => {
+  const safeBarberId = normalizeText(barberId);
+  return services
+    .map((service) => {
+      const priceRaw = service?.prices?.[safeBarberId] ?? service?.prices?.[String(safeBarberId)];
+      const price = Number(priceRaw);
+      if (!Number.isFinite(price) || price <= 0) return null;
+      return {
+        id: normalizeText(service?.id),
+        name: normalizeText(service?.name),
+        description: normalizeText(service?.description),
+        duration: Math.max(0, Number(service?.duration) || 0),
+        price,
+      };
+    })
+    .filter((item) => item && item.id && item.name);
+};
+const getWorkingHoursForBarberDate = async (db, barberName, dateKey) => {
+  const schedule = await db.schedules.findFirst({
+    where: { Barber: barberName, Date: dateKey },
+    select: { Week: true },
+  });
+  return parseWorkingRange(schedule?.Week);
+};
+const getBusyIntervalsForBarberDate = async (db, barberName, dateKey) => {
+  const rows = await db.appointments.findMany({
+    where: { Barber: barberName, Date: dateKey },
+    select: { Time: true, Status: true },
+  });
+  return rows.reduce((acc, row) => {
+    if (!isSlotBlockingStatus(row?.Status)) return acc;
+    const parsed = parseWorkingRange(row?.Time);
+    if (parsed) acc.push(parsed);
+    return acc;
+  }, []);
+};
+const buildTimeSlotsForDate = ({
+  dateKey,
+  workingHours,
+  busyIntervals,
+  totalDuration,
+  minAllowedDate,
+}) => {
+  if (!workingHours) return [];
+  const [startDay, endDay] = workingHours;
+  if (endDay - startDay < totalDuration) return [];
+  const slots = [];
+  for (let minute = startDay; minute <= endDay - totalDuration; minute += 60) {
+    const startLabel = formatMinutesAsClock(minute);
+    const endLabel = formatMinutesAsClock(minute + totalDuration);
+    const slotDate = new Date(`${dateKey}T${startLabel}:00`);
+    if (Number.isNaN(slotDate.getTime())) continue;
+    if (slotDate < minAllowedDate) continue;
+    if (!canFitTimeRange(minute, totalDuration, busyIntervals)) continue;
+    slots.push({
+      start: startLabel,
+      end: endLabel,
+      label: `${startLabel} - ${endLabel}`,
+    });
+  }
+  return slots;
+};
+const countHomeUserActiveAppointments = async (userId) => {
+  const safeUserId = normalizeText(userId);
+  if (!safeUserId) return 0;
+  const rows = await prisma.appointments.findMany({
+    where: { UserID: safeUserId },
+    select: { Status: true },
+  });
+  return rows.reduce((acc, row) => (isActiveStatus(row?.Status) ? acc + 1 : acc), 0);
+};
+const resolveHomeBookingUser = async (req) => {
+  const identity = req.homeUser || {};
+  const userId = normalizeText(identity.userId);
+  if (!userId) return null;
+  const stored = await findHomeUserById(userId);
+  if (!stored) return null;
+  return {
+    id: stored.id,
+    phone: normalizePhone(stored.Phone || identity.phone || ""),
+    displayName: normalizeText(
+      stored.Name || identity.displayName || stored.Phone || identity.phone,
+    ),
+  };
+};
+const buildDateWindow = (maxDaysAhead) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Array.from({ length: maxDaysAhead }).map((_, offset) => {
+    const current = new Date(today);
+    current.setDate(today.getDate() + offset);
+    const key = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(
+      current.getDate(),
+    ).padStart(2, "0")}`;
+    return { date: current, key };
+  });
 };
 const buildClientRows = (users, appointments, manualBlockedSet = new Set()) => {
   const now = new Date();
@@ -2000,18 +2394,64 @@ app.get("/api/auth/me", authenticateToken, (req, res) => {
     barberName: identity.barberName || null,
   });
 });
-app.post("/api/home/auth/register", (req, res) => {
+app.post("/api/home/auth/register", async (req, res) => {
   try {
-    const phone = normalizeText(req.body?.phone);
+    const phoneInput = normalizeText(req.body?.phone);
+    const safePhone = normalizePhone(phoneInput);
     const password = normalizeText(req.body?.password);
-    const displayName = normalizeText(req.body?.displayName) || phone;
-    if (!phone || !password) {
+    if (!safePhone || !password) {
       return res.status(400).json({
         success: false,
         message: "Введите номер телефона и пароль.",
       });
     }
-    const user = homeUsersStore.registerUser({ phone, password, displayName });
+    const displayName = normalizeText(req.body?.displayName) || safePhone;
+    const { hashHex, saltHex } = hashHomePassword(password);
+    const now = new Date().toISOString();
+    const existing = await findHomeUserByPhone(safePhone);
+    let row;
+    if (existing && normalizeText(existing.homePasswordHash)) {
+      return res.status(409).json({
+        success: false,
+        message: "Пользователь с таким номером уже зарегистрирован.",
+      });
+    }
+    if (existing) {
+      const patch = {
+        Phone: safePhone,
+        homePasswordHash: hashHex,
+        homePasswordSalt: saltHex,
+        homeIsActive: true,
+        homeCreatedAt: existing.homeCreatedAt || now,
+        homeUpdatedAt: now,
+      };
+      if (shouldHydrateUserNameFromHome(existing.Name, existing.Phone)) {
+        patch.Name = displayName;
+      }
+      row = await prisma.users.update({
+        where: { id: existing.id },
+        data: patch,
+        select: HOME_USER_SELECT,
+      });
+    } else {
+      row = await prisma.users.create({
+        data: {
+          id: randomUUID(),
+          Name: displayName,
+          Phone: safePhone,
+          TelegramID: null,
+          Barber: null,
+          homePasswordHash: hashHex,
+          homePasswordSalt: saltHex,
+          homeIsActive: true,
+          homeCreatedAt: now,
+          homeUpdatedAt: now,
+          homeLastLoginAt: null,
+        },
+        select: HOME_USER_SELECT,
+      });
+    }
+    const user = toPublicHomeUser(row);
     const identity = buildHomeIdentity({
       userId: user.id,
       phone: user.phone,
@@ -2024,10 +2464,11 @@ app.post("/api/home/auth/register", (req, res) => {
       user,
     });
   } catch (error) {
-    if (error?.code === "USER_EXISTS") {
-      return res.status(409).json({ success: false, message: error.message });
-    }
-    if (error?.code === "INVALID_PHONE" || error?.code === "WEAK_PASSWORD") {
+    if (
+      error?.code === "INVALID_PASSWORD" ||
+      error?.code === "INVALID_PHONE" ||
+      error?.code === "WEAK_PASSWORD"
+    ) {
       return res.status(400).json({ success: false, message: error.message });
     }
     console.error("Home register error:", error);
@@ -2036,23 +2477,41 @@ app.post("/api/home/auth/register", (req, res) => {
       .json({ success: false, message: "Ошибка регистрации. Попробуйте позже." });
   }
 });
-app.post("/api/home/auth/login", (req, res) => {
+app.post("/api/home/auth/login", async (req, res) => {
   try {
-    const phone = normalizeText(req.body?.phone);
+    const phoneInput = normalizeText(req.body?.phone);
+    const safePhone = normalizePhone(phoneInput);
     const password = normalizeText(req.body?.password);
-    if (!phone || !password) {
+    if (!safePhone || !password) {
       return res.status(400).json({
         success: false,
         message: "Введите номер телефона и пароль.",
       });
     }
-    const user = homeUsersStore.authenticateUser({ phone, password });
-    if (!user) {
+    const existing = await findHomeUserByPhone(safePhone);
+    if (
+      !existing ||
+      existing.homeIsActive === false ||
+      !normalizeText(existing.homePasswordHash) ||
+      !normalizeText(existing.homePasswordSalt) ||
+      !verifyHomePassword(password, existing.homePasswordHash, existing.homePasswordSalt)
+    ) {
       return res.status(401).json({
         success: false,
         message: "Неверный номер телефона или пароль.",
       });
     }
+    const now = new Date().toISOString();
+    const updated = await prisma.users.update({
+      where: { id: existing.id },
+      data: {
+        homeIsActive: true,
+        homeLastLoginAt: now,
+        homeUpdatedAt: now,
+      },
+      select: HOME_USER_SELECT,
+    });
+    const user = toPublicHomeUser(updated);
     const identity = buildHomeIdentity({
       userId: user.id,
       phone: user.phone,
@@ -2071,10 +2530,11 @@ app.post("/api/home/auth/login", (req, res) => {
       .json({ success: false, message: "Ошибка входа. Попробуйте позже." });
   }
 });
-app.get("/api/home/auth/me", authenticateHomeToken, (req, res) => {
+app.get("/api/home/auth/me", authenticateHomeToken, async (req, res) => {
   const identity = req.homeUser || {};
-  const user = homeUsersStore.getById(identity.userId);
-  if (!user) return res.sendStatus(401);
+  const stored = await findHomeUserById(identity.userId);
+  if (!stored) return res.sendStatus(401);
+  const user = toPublicHomeUser(stored);
   return res.json({
     authenticated: true,
     user,
@@ -2082,24 +2542,40 @@ app.get("/api/home/auth/me", authenticateHomeToken, (req, res) => {
 });
 app.get("/api/home/barbers", authenticateHomeToken, async (req, res) => {
   try {
-    const barbers = await prisma.barbers.findMany({
-      where: { isActive: true },
-      select: {
-        id: true,
-        name: true,
-        nickname: true,
-        description: true,
-        color: true,
-        rating: true,
-        orderIndex: true,
-        avatarUrl: true,
-        cardImageUrl: true,
-        cardTitle: true,
-      },
-      orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
-    });
+    const [barbers, servicesCatalog] = await Promise.all([
+      prisma.barbers.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          name: true,
+          nickname: true,
+          description: true,
+          color: true,
+          rating: true,
+          orderIndex: true,
+          avatarUrl: true,
+          cardImageUrl: true,
+          cardTitle: true,
+          cardPhrase: true,
+        },
+        orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+      }),
+      getServiceCatalog(false),
+    ]);
+    const getBarberServicesCount = (barberId) =>
+      servicesCatalog.reduce((count, service) => {
+        const rawPrice = service?.prices?.[barberId] ?? service?.prices?.[String(barberId)];
+        const price = Number(rawPrice);
+        return Number.isFinite(price) && price > 0 ? count + 1 : count;
+      }, 0);
+    const barbersWithServices = barbers
+      .map((barber) => ({
+        ...barber,
+        servicesCount: getBarberServicesCount(barber.id),
+      }))
+      .filter((barber) => barber.servicesCount > 0);
     const fallbackImage = "/Image/card/Barber_photo.png";
-    const payload = barbers.map((barber) => {
+    const payload = barbersWithServices.map((barber) => {
       const displayName =
         normalizeText(barber.cardTitle) ||
         normalizeText(barber.nickname) ||
@@ -2114,14 +2590,320 @@ app.get("/api/home/barbers", authenticateHomeToken, async (req, res) => {
         description: normalizeText(barber.description),
         color: normalizeText(barber.color) || "#17c8c0",
         rating: normalizeText(barber.rating),
+        originalImageUrl: avatarImage || cardImage || fallbackImage,
         imageUrl: cardImage || avatarImage || fallbackImage,
         thumbnailUrl: avatarImage || cardImage || fallbackImage,
+        phrase: normalizeText(barber.cardPhrase) || normalizeText(barber.description),
+        servicesCount: barber.servicesCount,
       };
     });
     return res.json({ barbers: payload });
   } catch (error) {
     console.error("Home barbers load error:", error);
     return res.status(500).json({ error: "Не удалось загрузить список барберов." });
+  }
+});
+app.get("/api/home/booking/services", authenticateHomeToken, async (req, res) => {
+  try {
+    const homeUser = await resolveHomeBookingUser(req);
+    if (!homeUser) return res.sendStatus(401);
+    const barberId = normalizeText(req.query?.barberId);
+    if (!barberId) {
+      return res.status(400).json({ error: "Укажите barberId выбранного барбера." });
+    }
+
+    const [settings, activeAppointments, barbers, servicesCatalog] = await Promise.all([
+      getHomeBookingSettings(),
+      countHomeUserActiveAppointments(homeUser.id),
+      getBarbers({ includeInactive: false }),
+      getServiceCatalog(false),
+    ]);
+    const barber = barbers.find((item) => normalizeText(item.id) === barberId);
+    if (!barber) {
+      return res.status(404).json({ error: "Барбер не найден." });
+    }
+    const services = resolveBookableServicesForBarber(servicesCatalog, barber.id);
+    const canBook = activeAppointments < settings.bookingLimit;
+    const message = canBook
+      ? ""
+      : `У вас уже есть ${settings.bookingLimit} активных записей.`;
+
+    return res.json({
+      canBook,
+      message,
+      bookingLimit: settings.bookingLimit,
+      activeAppointments,
+      barber: {
+        id: barber.id,
+        name: normalizeText(barber.name),
+        phrase: normalizeText(barber.cardPhrase) || normalizeText(barber.description),
+      },
+      services,
+    });
+  } catch (error) {
+    console.error("Home booking services error:", error);
+    return res.status(500).json({ error: "Не удалось загрузить услуги для записи." });
+  }
+});
+app.get("/api/home/booking/dates", authenticateHomeToken, async (req, res) => {
+  try {
+    const homeUser = await resolveHomeBookingUser(req);
+    if (!homeUser) return res.sendStatus(401);
+    const barberId = normalizeText(req.query?.barberId);
+    const serviceIds = parseServiceIdsInput(req.query?.serviceIds);
+    if (!barberId || !serviceIds.length) {
+      return res.status(400).json({ error: "Выберите барбера и услугу." });
+    }
+
+    const [settings, activeAppointments, barbers, servicesCatalog] = await Promise.all([
+      getHomeBookingSettings(),
+      countHomeUserActiveAppointments(homeUser.id),
+      getBarbers({ includeInactive: false }),
+      getServiceCatalog(false),
+    ]);
+    if (activeAppointments >= settings.bookingLimit) {
+      return res.status(409).json({
+        error: `У вас уже есть ${settings.bookingLimit} активных записей.`,
+      });
+    }
+    const barber = barbers.find((item) => normalizeText(item.id) === barberId);
+    if (!barber) {
+      return res.status(404).json({ error: "Барбер не найден." });
+    }
+
+    const bookableServices = resolveBookableServicesForBarber(servicesCatalog, barber.id);
+    const selectedServices = serviceIds
+      .map((id) => bookableServices.find((service) => service.id === id))
+      .filter(Boolean);
+    if (!selectedServices.length) {
+      return res.status(400).json({ error: "У выбранного барбера нет такой услуги." });
+    }
+
+    const totalDuration = Math.max(
+      selectedServices.reduce((sum, service) => sum + Math.max(0, Number(service.duration) || 0), 0),
+      15,
+    );
+    const minAllowedDate = new Date(Date.now() + settings.minLeadHours * 60 * 60 * 1000);
+    const dateWindow = buildDateWindow(settings.maxDaysAhead);
+    const dates = [];
+
+    for (const entry of dateWindow) {
+      const workingHours = await getWorkingHoursForBarberDate(prisma, barber.name, entry.key);
+      if (!workingHours) continue;
+      const busyIntervals = await getBusyIntervalsForBarberDate(prisma, barber.name, entry.key);
+      const slots = buildTimeSlotsForDate({
+        dateKey: entry.key,
+        workingHours,
+        busyIntervals,
+        totalDuration,
+        minAllowedDate,
+      });
+      if (slots.length) dates.push(entry.key);
+    }
+
+    return res.json({
+      dateCount: dates.length,
+      dates,
+      totalDuration,
+      services: selectedServices,
+    });
+  } catch (error) {
+    console.error("Home booking dates error:", error);
+    return res.status(500).json({ error: "Не удалось получить доступные даты." });
+  }
+});
+app.get("/api/home/booking/times", authenticateHomeToken, async (req, res) => {
+  try {
+    const homeUser = await resolveHomeBookingUser(req);
+    if (!homeUser) return res.sendStatus(401);
+    const barberId = normalizeText(req.query?.barberId);
+    const serviceIds = parseServiceIdsInput(req.query?.serviceIds);
+    const dateKey = normalizeText(req.query?.date);
+    if (!barberId || !serviceIds.length || !dateKey) {
+      return res.status(400).json({ error: "Выберите услугу и дату." });
+    }
+    if (!isIsoDateKey(dateKey)) {
+      return res.status(400).json({ error: "Некорректная дата." });
+    }
+
+    const [settings, activeAppointments, barbers, servicesCatalog] = await Promise.all([
+      getHomeBookingSettings(),
+      countHomeUserActiveAppointments(homeUser.id),
+      getBarbers({ includeInactive: false }),
+      getServiceCatalog(false),
+    ]);
+    if (activeAppointments >= settings.bookingLimit) {
+      return res.status(409).json({
+        error: `У вас уже есть ${settings.bookingLimit} активных записей.`,
+      });
+    }
+    const barber = barbers.find((item) => normalizeText(item.id) === barberId);
+    if (!barber) {
+      return res.status(404).json({ error: "Барбер не найден." });
+    }
+    const bookableServices = resolveBookableServicesForBarber(servicesCatalog, barber.id);
+    const selectedServices = serviceIds
+      .map((id) => bookableServices.find((service) => service.id === id))
+      .filter(Boolean);
+    if (!selectedServices.length) {
+      return res.status(400).json({ error: "У выбранного барбера нет такой услуги." });
+    }
+
+    const totalDuration = Math.max(
+      selectedServices.reduce((sum, service) => sum + Math.max(0, Number(service.duration) || 0), 0),
+      15,
+    );
+    const workingHours = await getWorkingHoursForBarberDate(prisma, barber.name, dateKey);
+    if (!workingHours) {
+      return res.json({ date: dateKey, totalDuration, times: [] });
+    }
+    const busyIntervals = await getBusyIntervalsForBarberDate(prisma, barber.name, dateKey);
+    const minAllowedDate = new Date(Date.now() + settings.minLeadHours * 60 * 60 * 1000);
+    const times = buildTimeSlotsForDate({
+      dateKey,
+      workingHours,
+      busyIntervals,
+      totalDuration,
+      minAllowedDate,
+    });
+
+    return res.json({
+      date: dateKey,
+      totalDuration,
+      times,
+    });
+  } catch (error) {
+    console.error("Home booking times error:", error);
+    return res.status(500).json({ error: "Не удалось получить доступное время." });
+  }
+});
+app.post("/api/home/booking/appointments", authenticateHomeToken, async (req, res) => {
+  try {
+    const homeUser = await resolveHomeBookingUser(req);
+    if (!homeUser) return res.sendStatus(401);
+
+    const barberId = normalizeText(req.body?.barberId);
+    const serviceIds = parseServiceIdsInput(req.body?.serviceIds);
+    const dateKey = normalizeText(req.body?.date);
+    const startTime = normalizeText(req.body?.startTime);
+    if (!barberId || !serviceIds.length || !dateKey || !startTime) {
+      return res.status(400).json({ error: "Заполните барбера, услугу, дату и время." });
+    }
+    if (!isIsoDateKey(dateKey)) {
+      return res.status(400).json({ error: "Некорректная дата." });
+    }
+    const startMinute = parseTimeLabelToMinutes(startTime);
+    if (startMinute == null) {
+      return res.status(400).json({ error: "Некорректное время." });
+    }
+
+    const [settings, barbers, servicesCatalog] = await Promise.all([
+      getHomeBookingSettings(),
+      getBarbers({ includeInactive: false }),
+      getServiceCatalog(false),
+    ]);
+    const barber = barbers.find((item) => normalizeText(item.id) === barberId);
+    if (!barber) {
+      return res.status(404).json({ error: "Барбер не найден." });
+    }
+    const bookableServices = resolveBookableServicesForBarber(servicesCatalog, barber.id);
+    const selectedServices = serviceIds
+      .map((id) => bookableServices.find((service) => service.id === id))
+      .filter(Boolean);
+    if (!selectedServices.length) {
+      return res.status(400).json({ error: "У выбранного барбера нет такой услуги." });
+    }
+    const totalDuration = Math.max(
+      selectedServices.reduce((sum, service) => sum + Math.max(0, Number(service.duration) || 0), 0),
+      15,
+    );
+    const minAllowedDate = new Date(Date.now() + settings.minLeadHours * 60 * 60 * 1000);
+
+    let createdAppointment = null;
+    try {
+      createdAppointment = await prisma.$transaction(async (tx) => {
+        const activeRows = await tx.appointments.findMany({
+          where: { UserID: homeUser.id },
+          select: { Status: true },
+        });
+        const activeCount = activeRows.reduce(
+          (acc, row) => (isActiveStatus(row?.Status) ? acc + 1 : acc),
+          0,
+        );
+        if (activeCount >= settings.bookingLimit) {
+          throw new Error("LIMIT_REACHED");
+        }
+
+        const workingHours = await getWorkingHoursForBarberDate(tx, barber.name, dateKey);
+        if (!workingHours) {
+          throw new Error("NO_SCHEDULE");
+        }
+        const [startDay, endDay] = workingHours;
+        if (startMinute < startDay || startMinute + totalDuration > endDay) {
+          throw new Error("OUTSIDE_WORKING_HOURS");
+        }
+
+        const startLabel = formatMinutesAsClock(startMinute);
+        const endLabel = formatMinutesAsClock(startMinute + totalDuration);
+        const startDate = new Date(`${dateKey}T${startLabel}:00`);
+        if (Number.isNaN(startDate.getTime()) || startDate < minAllowedDate) {
+          throw new Error("LEAD_TIME");
+        }
+
+        const busyIntervals = await getBusyIntervalsForBarberDate(tx, barber.name, dateKey);
+        if (!canFitTimeRange(startMinute, totalDuration, busyIntervals)) {
+          throw new Error("SLOT_TAKEN");
+        }
+
+        return tx.appointments.create({
+          data: {
+            id: randomUUID(),
+            UserID: homeUser.id,
+            CustomerName: homeUser.displayName || homeUser.phone || "Клиент",
+            Phone: homeUser.phone || null,
+            Barber: barber.name,
+            Date: dateKey,
+            Time: `${startLabel} - ${endLabel}`,
+            Status: "Активная",
+            Services: selectedServices.map((service) => service.name).join(", "),
+            Reminder2hClientSent: false,
+            Reminder2hBarberSent: false,
+          },
+        });
+      });
+    } catch (error) {
+      if (error?.message === "LIMIT_REACHED") {
+        return res
+          .status(409)
+          .json({ error: `У вас уже есть ${settings.bookingLimit} активных записей.` });
+      }
+      if (error?.message === "NO_SCHEDULE") {
+        return res.status(409).json({ error: "На выбранную дату у барбера нет расписания." });
+      }
+      if (error?.message === "OUTSIDE_WORKING_HOURS") {
+        return res.status(409).json({ error: "Время выходит за рабочий диапазон барбера." });
+      }
+      if (error?.message === "LEAD_TIME") {
+        return res.status(409).json({ error: "Это время недоступно из-за ограничения minLeadHours." });
+      }
+      if (error?.message === "SLOT_TAKEN") {
+        return res.status(409).json({ error: "Слот уже занят. Выберите другое время." });
+      }
+      throw error;
+    }
+
+    return res.status(201).json({
+      appointment: {
+        id: createdAppointment.id,
+        barberName: createdAppointment.Barber,
+        date: createdAppointment.Date,
+        time: createdAppointment.Time,
+        services: createdAppointment.Services,
+      },
+    });
+  } catch (error) {
+    console.error("Home booking create error:", error);
+    return res.status(500).json({ error: "Не удалось создать запись." });
   }
 });
 app.use("/api", (req, res, next) => {
@@ -2131,7 +2913,7 @@ app.use("/api", (req, res, next) => {
     try {
       const { payload } = verifyTokenGracefully(token);
       const identity = resolveUserIdentity(payload || {});
-      if (isCreatorIdentity(identity)) {
+      if (isCreatorIdentity(identity) || isOwnerIdentity(identity)) {
         req.identity = identity;
         req.user = identity;
         return next();
@@ -3591,7 +4373,6 @@ const gracefulShutdown = async () => {
     await stopBotProcess();
     await stopHttpServer();
     await prisma.$disconnect();
-    homeUsersStore.close();
     process.exit(0);
   } catch (error) {
     console.error("Shutdown error:", error);
@@ -3602,8 +4383,21 @@ process.on("SIGINT", gracefulShutdown);
 process.on("SIGTERM", gracefulShutdown);
 const bootstrap = async () => {
   try {
-    await ensureLicenseValid(true);
+    try {
+      await ensureLicenseValid(true);
+    } catch (licenseError) {
+      console.warn(
+        "License validation failed during bootstrap, server will continue in restricted mode:",
+        licenseError?.message || licenseError,
+      );
+    }
     startLicenseWatcher();
+    const legacyMigration = await migrateLegacyHomeUsersToUsers();
+    if (legacyMigration.created || legacyMigration.updated) {
+      console.log(
+        `Legacy home users migrated: created=${legacyMigration.created}, updated=${legacyMigration.updated}, total=${legacyMigration.total}`,
+      );
+    }
     await ensureBootstrapData();
     await seedServicesFromCost();
     await ensureBotProcessState();

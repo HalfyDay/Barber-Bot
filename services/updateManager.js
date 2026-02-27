@@ -13,7 +13,9 @@ const UPDATE_REPO = process.env.UPDATE_REPO || 'HalfyDay/Barber-Bot';
 const UPDATE_BRANCH = process.env.UPDATE_BRANCH || 'main';
 const UPDATE_REMOTE = process.env.UPDATE_REMOTE || 'origin';
 const UPDATE_CACHE_SECONDS = Number(process.env.UPDATE_CACHE_SECONDS || 600);
+const UPDATE_GITHUB_TOKEN = process.env.UPDATE_GITHUB_TOKEN || process.env.GITHUB_TOKEN || '';
 const PRISMA_SCHEMA_PATH = path.join(PROJECT_ROOT, 'prisma', 'schema.prisma');
+const MIGRATION_REMOVE_HOME_DISPLAY_NAME = '20260227193000_remove_home_display_name';
 
 let cachedUpdate = null;
 
@@ -57,6 +59,10 @@ const popStash = async (stashRef) => {
 };
 
 const normalizeVersion = (value = '') => value.toString().trim().replace(/^v/, '');
+const normalizeCommitHash = (value) => {
+  const normalized = String(value || '').trim();
+  return /^[0-9a-f]{40}$/i.test(normalized) ? normalized.toLowerCase() : null;
+};
 const versionToTuple = (value) =>
   normalizeVersion(value)
     .split(/\./)
@@ -89,6 +95,28 @@ const runCommand = (command, cwd = PROJECT_ROOT) =>
     });
   });
 
+const buildGithubHeaders = () => {
+  const headers = {
+    'User-Agent': 'HalfTime-Updater',
+    Accept: 'application/vnd.github+json',
+  };
+  if (UPDATE_GITHUB_TOKEN) {
+    headers.Authorization = `Bearer ${UPDATE_GITHUB_TOKEN}`;
+  }
+  return headers;
+};
+
+const canAutoResolveHomeDisplayNameMigration = (message = '') => {
+  if (!message) return false;
+  const hasMigrationName = new RegExp(
+    `Migration name:\\s*${MIGRATION_REMOVE_HOME_DISPLAY_NAME}`,
+    'i',
+  ).test(message);
+  const hasP3018 = /\bP3018\b/i.test(message);
+  const missingColumn = /no such column:\s*"?HomeDisplayName"?/i.test(message);
+  return hasMigrationName && hasP3018 && missingColumn;
+};
+
 const runPrismaMigrations = async () => {
   if (!fs.existsSync(PRISMA_SCHEMA_PATH)) {
     console.warn('[update] Prisma schema not found, skipping migrations');
@@ -98,6 +126,7 @@ const runPrismaMigrations = async () => {
   const migrate = `npx prisma migrate deploy ${schemaArg}`;
   const generate = `npx prisma generate ${schemaArg}`;
   const commands = [migrate, generate];
+  let homeDisplayNameMigrationResolved = false;
   for (const command of commands) {
     let attempt = 0;
     const isGenerate = command.includes('prisma generate');
@@ -110,6 +139,20 @@ const runPrismaMigrations = async () => {
         break;
       } catch (error) {
         const message = error?.message || '';
+        if (
+          !homeDisplayNameMigrationResolved &&
+          command === migrate &&
+          canAutoResolveHomeDisplayNameMigration(message)
+        ) {
+          console.warn(
+            `[update] ${MIGRATION_REMOVE_HOME_DISPLAY_NAME} failed because HomeDisplayName column is already missing; marking migration as applied and retrying migrate deploy.`,
+          );
+          await runCommand(
+            `npx prisma migrate resolve --applied ${MIGRATION_REMOVE_HOME_DISPLAY_NAME} ${schemaArg}`,
+          );
+          homeDisplayNameMigrationResolved = true;
+          continue;
+        }
         const isLocked = /database is locked/i.test(message);
         const isEpermPrismaEngine =
           /query_engine.*\.dll/i.test(message) && /EPERM/i.test(message);
@@ -136,7 +179,7 @@ const runPrismaMigrations = async () => {
 
 const fetchLatestRelease = async () => {
   const response = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
-    headers: { 'User-Agent': 'HalfTime-Updater' },
+    headers: buildGithubHeaders(),
   });
   if (response.status === 404) {
     return null;
@@ -153,13 +196,13 @@ const fetchLatestRelease = async () => {
     publishedAt: payload.published_at,
     url: payload.html_url,
     source: 'release',
-    commit: payload.target_commitish || null,
+    commit: normalizeCommitHash(payload.target_commitish),
   };
 };
 
 const fetchBranchHead = async () => {
   const response = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/commits/${UPDATE_BRANCH}`, {
-    headers: { 'User-Agent': 'HalfTime-Updater' },
+    headers: buildGithubHeaders(),
   });
   if (!response.ok) {
     throw new Error(`GitHub API error: ${response.status}`);
@@ -170,7 +213,30 @@ const fetchBranchHead = async () => {
     publishedAt: payload.commit?.author?.date,
     url: payload.html_url,
     source: 'branch',
-    commit: payload.sha || null,
+    commit: normalizeCommitHash(payload.sha),
+  };
+};
+
+const fetchBranchHeadFromRemote = async () => {
+  const command = `git ls-remote --heads ${UPDATE_REMOTE} ${UPDATE_BRANCH}`;
+  const { stdout } = await runCommand(command);
+  const line = (stdout || '')
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .find(Boolean);
+  if (!line) {
+    throw new Error('git ls-remote returned empty response');
+  }
+  const sha = line.split(/\s+/)[0]?.trim();
+  if (!normalizeCommitHash(sha)) {
+    throw new Error(`Unexpected ls-remote output: ${line}`);
+  }
+  return {
+    version: sha.slice(0, 12),
+    publishedAt: null,
+    url: null,
+    source: 'git-remote',
+    commit: normalizeCommitHash(sha),
   };
 };
 
@@ -218,17 +284,26 @@ const checkForUpdates = async (force = false) => {
   try {
     branchInfo = await fetchBranchHead();
   } catch (branchError) {
-    console.warn('[updates] \u041e\u0448\u0438\u0431\u043a\u0430 \u043f\u0440\u0438 \u0437\u0430\u043f\u0440\u043e\u0441\u0435 \u0432\u0435\u0442\u043a\u0438:', branchError);
-    note =
-      note ||
-      '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u0432\u0435\u0442\u043a\u0443: ' +
-        (branchError?.message || 'GitHub API error');
-    branchInfo = null;
+    console.warn('[updates] GitHub branch API failed, trying git remote:', branchError);
+    try {
+      branchInfo = await fetchBranchHeadFromRemote();
+      note =
+        note ||
+        'GitHub API недоступен, использован git remote: ' +
+          (branchError?.message || 'GitHub API error');
+    } catch (remoteError) {
+      console.warn('[updates] Git remote branch lookup failed:', remoteError);
+      note =
+        note ||
+        '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u0432\u0435\u0442\u043a\u0443: ' +
+          (branchError?.message || 'GitHub API error');
+      branchInfo = null;
+    }
   }
 
   const packageJson = readLocalPackage();
   const currentVersion = packageJson.version || '0.0.0';
-  const currentCommit = await getLocalCommitHash();
+  const currentCommit = normalizeCommitHash(await getLocalCommitHash());
   const fallbackSnapshot = releaseInfo || branchInfo || { version: currentVersion, publishedAt: null, url: null, source: 'local', commit: currentCommit };
   const latestSnapshot = releaseInfo || branchInfo || fallbackSnapshot;
   const latestVersion = latestSnapshot?.version || currentVersion;

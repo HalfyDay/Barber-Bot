@@ -1,8 +1,11 @@
 (function () {
   const HOME_API_BASE_URL = `${window.location.origin}/api/home/auth`;
+  const HOME_TELEGRAM_AUTH_START_API_URL = `${HOME_API_BASE_URL}/telegram/start`;
+  const HOME_TELEGRAM_AUTH_STATUS_API_URL = `${HOME_API_BASE_URL}/telegram/status`;
   const SESSION_STORAGE_KEY = "home-user-session";
   const REMEMBER_STORAGE_KEY = "home-user-remember";
   const HOME_PAGE_URL = "/booking/";
+  const TELEGRAM_AUTH_POLL_INTERVAL_MS = 2000;
 
   const loginTab = document.getElementById("tab-login");
   const registerTab = document.getElementById("tab-register");
@@ -35,6 +38,10 @@
     document.body.classList.remove("checking");
     return;
   }
+
+  let telegramPollTimer = null;
+  let telegramAuthRequestId = "";
+  let telegramAuthFinished = false;
 
   const getStorageArea = (type) => {
     try {
@@ -391,8 +398,105 @@
     setStatus("Восстановление пароля пока не подключено.", "error");
   };
 
-  const handleTelegramLogin = () => {
-    setStatus("Вход через Telegram пока не подключен.", "error");
+  const setTelegramPending = (isPending) => {
+    telegramButton.disabled = Boolean(isPending);
+    telegramButton.style.opacity = isPending ? "0.72" : "1";
+    telegramButton.style.cursor = isPending ? "not-allowed" : "pointer";
+  };
+
+  const stopTelegramPolling = () => {
+    if (telegramPollTimer) {
+      window.clearTimeout(telegramPollTimer);
+      telegramPollTimer = null;
+    }
+  };
+
+  const finishTelegramFlow = () => {
+    stopTelegramPolling();
+    telegramAuthFinished = true;
+    telegramAuthRequestId = "";
+    setTelegramPending(false);
+  };
+
+  const scheduleTelegramPolling = () => {
+    stopTelegramPolling();
+    if (!telegramAuthRequestId || telegramAuthFinished) return;
+    telegramPollTimer = window.setTimeout(() => {
+      void pollTelegramAuthStatus();
+    }, TELEGRAM_AUTH_POLL_INTERVAL_MS);
+  };
+
+  const pollTelegramAuthStatus = async () => {
+    if (!telegramAuthRequestId || telegramAuthFinished) return;
+    try {
+      const response = await fetch(
+        `${HOME_TELEGRAM_AUTH_STATUS_API_URL}?requestId=${encodeURIComponent(telegramAuthRequestId)}`,
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setStatus(
+          normalizeText(payload?.message) || "Ошибка проверки Telegram-авторизации.",
+          "error",
+        );
+        finishTelegramFlow();
+        return;
+      }
+      if (!payload?.done) {
+        scheduleTelegramPolling();
+        return;
+      }
+      if (payload?.success && payload?.token && payload?.user) {
+        const sessionPayload = buildSessionPayload({
+          token: payload.token,
+          user: payload.user,
+        });
+        persistRememberChoice(true);
+        persistSessionPayload(sessionPayload, true);
+        finishTelegramFlow();
+        redirectToHome();
+        return;
+      }
+      setStatus(
+        normalizeText(payload?.message) || "Telegram-авторизация не завершена.",
+        "error",
+      );
+      finishTelegramFlow();
+    } catch {
+      scheduleTelegramPolling();
+    }
+  };
+
+  const handleTelegramLogin = async () => {
+    setStatus("");
+    setTelegramPending(true);
+    telegramAuthFinished = false;
+    telegramAuthRequestId = "";
+    stopTelegramPolling();
+    try {
+      const response = await fetch(HOME_TELEGRAM_AUTH_START_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.requestId || !payload?.code) {
+        setStatus(
+          normalizeText(payload?.message) || "Не удалось запустить Telegram-авторизацию.",
+          "error",
+        );
+        setTelegramPending(false);
+        return;
+      }
+      telegramAuthRequestId = normalizeText(payload.requestId);
+      const commandText = normalizeText(payload.command || `/site_login ${payload.code}`);
+      setStatus(`Отправьте в бота команду ${commandText} и завершите вход в Telegram.`);
+      if (normalizeText(payload.botLink)) {
+        window.open(payload.botLink, "_blank", "noopener,noreferrer");
+      }
+      scheduleTelegramPolling();
+    } catch {
+      setStatus("Сервер недоступен. Попробуйте позже.", "error");
+      setTelegramPending(false);
+    }
   };
 
   const handleTogglePassword = () => {
@@ -416,6 +520,7 @@
     forgotLink.addEventListener("click", handleForgotPassword);
     telegramButton.addEventListener("click", handleTelegramLogin);
     togglePasswordButton.addEventListener("click", handleTogglePassword);
+    window.addEventListener("beforeunload", stopTelegramPolling);
 
     const restoredSession = await tryRestoreSession();
     if (restoredSession) {

@@ -116,6 +116,12 @@ const CREATOR_ACCOUNT = {
 };
 const HOME_PASSWORD_HASH_LENGTH = 64;
 const HOME_MIN_PASSWORD_LENGTH = 4;
+const HOME_TELEGRAM_AUTH_TTL_MS =
+  Number(process.env.HOME_TELEGRAM_AUTH_TTL_MS) || 10 * 60 * 1000;
+const TELEGRAM_BOT_USERNAME = (process.env.TELEGRAM_BOT_USERNAME || "")
+  .toString()
+  .trim()
+  .replace(/^@+/, "");
 let botProcess = null;
 const botRuntime = {
   running: false,
@@ -915,6 +921,128 @@ const HOME_AUTH_COLUMNS = [
   { name: "HomeUpdatedAt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomeUpdatedAt" TEXT' },
   { name: "HomeLastLoginAt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomeLastLoginAt" TEXT' },
 ];
+const TELEGRAM_AUTH_REQUESTS_TABLE = "TelegramAuthRequests";
+const TELEGRAM_AUTH_STATUS_PENDING = "pending";
+const TELEGRAM_AUTH_STATUS_COMPLETED = "completed";
+const TELEGRAM_AUTH_STATUS_FAILED = "failed";
+const TELEGRAM_AUTH_STATUS_EXPIRED = "expired";
+const withTelegramAuthDb = (runner) => {
+  let db = null;
+  try {
+    db = new SqliteDatabase(DB_PATH);
+    return runner(db);
+  } finally {
+    if (db) {
+      try {
+        db.close();
+      } catch {
+        // ignore
+      }
+    }
+  }
+};
+const ensureTelegramAuthRequestsTable = () => {
+  try {
+    withTelegramAuthDb((db) => {
+      db.exec(
+        `CREATE TABLE IF NOT EXISTS "${TELEGRAM_AUTH_REQUESTS_TABLE}" (
+          id TEXT PRIMARY KEY,
+          code TEXT NOT NULL UNIQUE,
+          status TEXT NOT NULL,
+          telegramId TEXT,
+          phone TEXT,
+          displayName TEXT,
+          userId TEXT,
+          errorMessage TEXT,
+          createdAt TEXT NOT NULL,
+          expiresAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL
+        )`,
+      );
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS "idx_${TELEGRAM_AUTH_REQUESTS_TABLE}_status_expires"
+         ON "${TELEGRAM_AUTH_REQUESTS_TABLE}" (status, expiresAt)`,
+      );
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS "idx_${TELEGRAM_AUTH_REQUESTS_TABLE}_code"
+         ON "${TELEGRAM_AUTH_REQUESTS_TABLE}" (code)`,
+      );
+    });
+  } catch (error) {
+    console.warn(
+      "Telegram auth schema reconcile warning:",
+      error?.message || error,
+    );
+  }
+};
+const markExpiredTelegramAuthRequests = () => {
+  const nowIso = new Date().toISOString();
+  const staleBefore = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    withTelegramAuthDb((db) => {
+      db.prepare(
+        `UPDATE "${TELEGRAM_AUTH_REQUESTS_TABLE}"
+         SET status = ?, updatedAt = ?
+         WHERE status = ? AND expiresAt <= ?`,
+      ).run(
+        TELEGRAM_AUTH_STATUS_EXPIRED,
+        nowIso,
+        TELEGRAM_AUTH_STATUS_PENDING,
+        nowIso,
+      );
+      db.prepare(
+        `DELETE FROM "${TELEGRAM_AUTH_REQUESTS_TABLE}"
+         WHERE status IN (?, ?, ?) AND updatedAt <= ?`,
+      ).run(
+        TELEGRAM_AUTH_STATUS_COMPLETED,
+        TELEGRAM_AUTH_STATUS_FAILED,
+        TELEGRAM_AUTH_STATUS_EXPIRED,
+        staleBefore,
+      );
+    });
+  } catch (error) {
+    console.warn(
+      "Telegram auth expiry reconcile warning:",
+      error?.message || error,
+    );
+  }
+};
+const createTelegramAuthCode = () =>
+  String((randomBytes(4).readUInt32BE(0) % 900000) + 100000);
+const createTelegramAuthRequest = () => {
+  const nowIso = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + HOME_TELEGRAM_AUTH_TTL_MS).toISOString();
+  return withTelegramAuthDb((db) => {
+    const insert = db.prepare(
+      `INSERT INTO "${TELEGRAM_AUTH_REQUESTS_TABLE}"
+        (id, code, status, telegramId, phone, displayName, userId, errorMessage, createdAt, expiresAt, updatedAt)
+       VALUES
+        (@id, @code, @status, NULL, NULL, NULL, NULL, NULL, @createdAt, @expiresAt, @updatedAt)`,
+    );
+    const maxAttempts = 8;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const candidate = {
+        id: randomUUID(),
+        code: createTelegramAuthCode(),
+        status: TELEGRAM_AUTH_STATUS_PENDING,
+        createdAt: nowIso,
+        expiresAt,
+        updatedAt: nowIso,
+      };
+      try {
+        insert.run(candidate);
+        return candidate;
+      } catch (error) {
+        const isUniqueCodeConflict =
+          normalizeText(error?.code) === "SQLITE_CONSTRAINT_UNIQUE" ||
+          normalizeText(error?.message).includes("UNIQUE constraint failed");
+        if (isUniqueCodeConflict) continue;
+        throw error;
+      }
+    }
+    throw new Error("Не удалось сгенерировать одноразовый код Telegram авторизации.");
+  });
+};
 const ensureUsersHomeAuthColumns = () => {
   let db = null;
   try {
@@ -2574,6 +2702,152 @@ app.post("/api/home/auth/login", async (req, res) => {
     return res
       .status(500)
       .json({ success: false, message: "Ошибка входа. Попробуйте позже." });
+  }
+});
+app.post("/api/home/auth/telegram/start", async (req, res) => {
+  try {
+    markExpiredTelegramAuthRequests();
+    const request = createTelegramAuthRequest();
+    const botLink = TELEGRAM_BOT_USERNAME
+      ? `https://t.me/${encodeURIComponent(
+          TELEGRAM_BOT_USERNAME,
+        )}?start=${encodeURIComponent(`site_login_${request.code}`)}`
+      : null;
+    return res.status(201).json({
+      success: true,
+      requestId: request.id,
+      code: request.code,
+      command: `/site_login ${request.code}`,
+      expiresAt: request.expiresAt,
+      botLink,
+      botUsername: TELEGRAM_BOT_USERNAME || null,
+    });
+  } catch (error) {
+    console.error("Home telegram auth start error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Не удалось запустить авторизацию через Telegram.",
+    });
+  }
+});
+app.get("/api/home/auth/telegram/status", async (req, res) => {
+  const requestId = normalizeText(req.query?.requestId);
+  if (!requestId) {
+    return res.status(400).json({
+      success: false,
+      done: true,
+      message: "Укажите requestId.",
+    });
+  }
+  try {
+    markExpiredTelegramAuthRequests();
+    const row = withTelegramAuthDb((db) =>
+      db
+        .prepare(
+          `SELECT id, code, status, telegramId, phone, displayName, userId, errorMessage, expiresAt, updatedAt
+           FROM "${TELEGRAM_AUTH_REQUESTS_TABLE}"
+           WHERE id = ? LIMIT 1`,
+        )
+        .get(requestId),
+    );
+    if (!row) {
+      return res.status(404).json({
+        success: false,
+        done: true,
+        message: "Сессия Telegram авторизации не найдена или уже завершена.",
+      });
+    }
+    if (row.status === TELEGRAM_AUTH_STATUS_COMPLETED) {
+      const userId = normalizeText(row.userId);
+      if (!userId) {
+        return res.status(409).json({
+          success: false,
+          done: true,
+          message: "Авторизация в Telegram завершена некорректно. Повторите попытку.",
+        });
+      }
+      const userRow = await prisma.users.findUnique({
+        where: { id: userId },
+        select: HOME_USER_SELECT,
+      });
+      if (
+        !userRow ||
+        userRow.homeIsActive === false ||
+        !normalizeText(userRow.homePasswordHash) ||
+        !normalizeText(userRow.homePasswordSalt)
+      ) {
+        return res.status(409).json({
+          success: false,
+          done: true,
+          message:
+            "Профиль найден, но пароль для входа на сайт не настроен. Повторите Telegram-авторизацию.",
+        });
+      }
+      const now = new Date().toISOString();
+      const updated = await prisma.users.update({
+        where: { id: userRow.id },
+        data: {
+          homeIsActive: true,
+          homeLastLoginAt: now,
+          homeUpdatedAt: now,
+        },
+        select: HOME_USER_SELECT,
+      });
+      const user = toPublicHomeUser(updated);
+      const identity = buildHomeIdentity({
+        userId: user.id,
+        phone: user.phone,
+        displayName: user.displayName,
+      });
+      const token = signHomeSessionToken(identity);
+      try {
+        withTelegramAuthDb((db) =>
+          db
+            .prepare(`DELETE FROM "${TELEGRAM_AUTH_REQUESTS_TABLE}" WHERE id = ?`)
+            .run(requestId),
+        );
+      } catch (cleanupError) {
+        console.warn(
+          "Telegram auth request cleanup warning:",
+          cleanupError?.message || cleanupError,
+        );
+      }
+      return res.json({
+        success: true,
+        done: true,
+        token,
+        user,
+      });
+    }
+    if (
+      row.status === TELEGRAM_AUTH_STATUS_FAILED ||
+      row.status === TELEGRAM_AUTH_STATUS_EXPIRED
+    ) {
+      return res.json({
+        success: false,
+        done: true,
+        status: row.status,
+        message:
+          normalizeText(row.errorMessage) ||
+          (row.status === TELEGRAM_AUTH_STATUS_EXPIRED
+            ? "Код Telegram авторизации истек. Запросите новый."
+            : "Telegram авторизация завершилась с ошибкой."),
+      });
+    }
+    return res.json({
+      success: true,
+      done: false,
+      status: row.status,
+      expiresAt: row.expiresAt || null,
+      updatedAt: row.updatedAt || null,
+    });
+  } catch (error) {
+    console.error("Home telegram auth status error:", error);
+    return res.status(500).json({
+      success: false,
+      done: true,
+      message: "Не удалось проверить Telegram авторизацию.",
+    });
   }
 });
 app.get("/api/home/auth/me", authenticateHomeToken, async (req, res) => {
@@ -4430,6 +4704,8 @@ process.on("SIGTERM", gracefulShutdown);
 const bootstrap = async () => {
   try {
     ensureUsersHomeAuthColumns();
+    ensureTelegramAuthRequestsTable();
+    markExpiredTelegramAuthRequests();
     try {
       await ensureLicenseValid(true);
     } catch (licenseError) {

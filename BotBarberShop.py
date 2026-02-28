@@ -1,8 +1,10 @@
 ﻿import logging
 import json
 import datetime
+import hashlib
 import io
 import re
+import secrets
 import sqlite3
 import uuid
 import time
@@ -75,7 +77,10 @@ with open(IMAGE_FILE, "rb") as f:
     CANCEL_CONFIRM,
     CHANGE_PHONE,
     CHANGE_NAME,
-) = range(12)
+    SITE_AUTH_PHONE,
+    SITE_AUTH_NAME,
+    SITE_AUTH_PASSWORD,
+) = range(15)
 
 # ---
 # --- Помощник для работы с БД ---
@@ -105,7 +110,47 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     columns = {row["name"] for row in cursor.fetchall()}
     if "LastHaircutReminderSent" not in columns:
         cursor.execute("ALTER TABLE Users ADD COLUMN LastHaircutReminderSent TEXT")
-        conn.commit()
+    home_columns = {
+        "HomePasswordHash": "ALTER TABLE Users ADD COLUMN HomePasswordHash TEXT",
+        "HomePasswordSalt": "ALTER TABLE Users ADD COLUMN HomePasswordSalt TEXT",
+        "HomeIsActive": "ALTER TABLE Users ADD COLUMN HomeIsActive BOOLEAN NOT NULL DEFAULT 1",
+        "HomeCreatedAt": "ALTER TABLE Users ADD COLUMN HomeCreatedAt TEXT",
+        "HomeUpdatedAt": "ALTER TABLE Users ADD COLUMN HomeUpdatedAt TEXT",
+        "HomeLastLoginAt": "ALTER TABLE Users ADD COLUMN HomeLastLoginAt TEXT",
+    }
+    for column_name, ddl in home_columns.items():
+        if column_name not in columns:
+            cursor.execute(ddl)
+    cursor.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS "{TELEGRAM_AUTH_REQUESTS_TABLE}" (
+            id TEXT PRIMARY KEY,
+            code TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL,
+            telegramId TEXT,
+            phone TEXT,
+            displayName TEXT,
+            userId TEXT,
+            errorMessage TEXT,
+            createdAt TEXT NOT NULL,
+            expiresAt TEXT NOT NULL,
+            updatedAt TEXT NOT NULL
+        )
+        """
+    )
+    cursor.execute(
+        f"""
+        CREATE INDEX IF NOT EXISTS "idx_{TELEGRAM_AUTH_REQUESTS_TABLE}_status_expires"
+        ON "{TELEGRAM_AUTH_REQUESTS_TABLE}" (status, expiresAt)
+        """
+    )
+    cursor.execute(
+        f"""
+        CREATE INDEX IF NOT EXISTS "idx_{TELEGRAM_AUTH_REQUESTS_TABLE}_code"
+        ON "{TELEGRAM_AUTH_REQUESTS_TABLE}" (code)
+        """
+    )
+    conn.commit()
 
 def load_blocked_user_ids() -> set[str]:
     """Читает список вручную заблокированных клиентов из веб-панели."""
@@ -466,9 +511,66 @@ except Exception:
     # Запасной вариант, если автоматическое определение не сработает
     ZONE = ZoneInfo("Europe/Chisinau")
 PHONE_PATTERN = re.compile(r"^\+?\d{10,15}$")
+SITE_LOGIN_CODE_PATTERN = re.compile(r"^\d{6}$")
+TELEGRAM_AUTH_REQUESTS_TABLE = "TelegramAuthRequests"
+TELEGRAM_AUTH_STATUS_PENDING = "pending"
+TELEGRAM_AUTH_STATUS_COMPLETED = "completed"
+TELEGRAM_AUTH_STATUS_FAILED = "failed"
+TELEGRAM_AUTH_STATUS_EXPIRED = "expired"
+HOME_MIN_PASSWORD_LENGTH = 4
 
 def normalize_token(value: str | None) -> str:
     return (value or "").strip().lower()
+
+def normalize_phone(value: str | None) -> str:
+    raw = re.sub(r"[^\d+]", "", (value or "").strip())
+    if not raw:
+        return ""
+    digits = raw[1:] if raw.startswith("+") else raw
+    if not digits:
+        return ""
+    if len(digits) == 10:
+        return f"+7{digits}"
+    if len(digits) == 11:
+        if digits.startswith("8"):
+            return f"+7{digits[1:]}"
+        if digits.startswith("7"):
+            return f"+{digits}"
+    if digits.startswith("7"):
+        return f"+{digits}"
+    return f"+{digits}"
+
+def now_iso() -> str:
+    return (
+        datetime.datetime.now(datetime.timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+
+def hash_home_password(password: str) -> tuple[str, str]:
+    safe_password = (password or "").strip()
+    if len(safe_password) < HOME_MIN_PASSWORD_LENGTH:
+        raise ValueError(
+            f"Пароль должен быть не короче {HOME_MIN_PASSWORD_LENGTH} символов."
+        )
+    salt = secrets.token_bytes(16)
+    hashed = hashlib.scrypt(
+        safe_password.encode("utf-8"),
+        salt=salt,
+        n=16384,
+        r=8,
+        p=1,
+        dklen=64,
+    )
+    return hashed.hex(), salt.hex()
+
+def parse_site_login_code(raw_value: str | None) -> str:
+    code = (raw_value or "").strip()
+    if not code:
+        return ""
+    if code.startswith("site_login_"):
+        code = code.split("_", 2)[-1].strip()
+    return code
 
 def format_rating_stars(value) -> str:
     if value is None:
@@ -928,10 +1030,580 @@ def contact_kb():
         one_time_keyboard=True,
     )
 
+def find_user_by_phone(cursor: sqlite3.Cursor, phone: str):
+    cursor.execute(
+        "SELECT id, Name, Phone, HomePasswordHash, HomePasswordSalt, HomeCreatedAt "
+        "FROM Users WHERE Phone IS NOT NULL"
+    )
+    rows = cursor.fetchall()
+    for row in rows:
+        if normalize_phone(row["Phone"]) == phone:
+            return row
+    return None
+
+def update_telegram_auth_request(
+    cursor: sqlite3.Cursor,
+    request_id: str,
+    status: str,
+    *,
+    telegram_id: str | None = None,
+    phone: str | None = None,
+    display_name: str | None = None,
+    user_id: str | None = None,
+    error_message: str | None = None,
+) -> None:
+    cursor.execute(
+        f"""
+        UPDATE "{TELEGRAM_AUTH_REQUESTS_TABLE}"
+        SET status = ?,
+            telegramId = COALESCE(?, telegramId),
+            phone = COALESCE(?, phone),
+            displayName = COALESCE(?, displayName),
+            userId = COALESCE(?, userId),
+            errorMessage = ?,
+            updatedAt = ?
+        WHERE id = ?
+        """,
+        (
+            status,
+            telegram_id,
+            phone,
+            display_name,
+            user_id,
+            error_message,
+            now_iso(),
+            request_id,
+        ),
+    )
+
+def clear_site_auth_state(ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    ctx.user_data.pop("site_auth", None)
+
+async def begin_site_login_flow(
+    update: Update,
+    ctx: ContextTypes.DEFAULT_TYPE,
+    code_raw: str | None,
+):
+    code = parse_site_login_code(code_raw)
+    if not SITE_LOGIN_CODE_PATTERN.match(code):
+        await update.message.reply_text(
+            "Неверный код. Запросите вход на сайте и отправьте /site_login <код>."
+        )
+        return MENU
+    user_id = update.effective_user.id
+    try:
+        with get_db_connection() as conn:
+            if not conn:
+                await update.message.reply_text("База данных недоступна. Попробуйте позже.")
+                return MENU
+            cursor = conn.cursor()
+            current_time = now_iso()
+            cursor.execute(
+                f"""
+                UPDATE "{TELEGRAM_AUTH_REQUESTS_TABLE}"
+                SET status = ?, updatedAt = ?
+                WHERE status = ? AND expiresAt <= ?
+                """,
+                (
+                    TELEGRAM_AUTH_STATUS_EXPIRED,
+                    current_time,
+                    TELEGRAM_AUTH_STATUS_PENDING,
+                    current_time,
+                ),
+            )
+            cursor.execute(
+                f"""
+                SELECT id, code, status, telegramId, expiresAt
+                FROM "{TELEGRAM_AUTH_REQUESTS_TABLE}"
+                WHERE code = ?
+                LIMIT 1
+                """,
+                (code,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                conn.commit()
+                await update.message.reply_text(
+                    "Код не найден или уже использован. Запросите новый код на сайте."
+                )
+                return MENU
+            request_id = str(row["id"])
+            status = str(row["status"] or "")
+            if status in (
+                TELEGRAM_AUTH_STATUS_COMPLETED,
+                TELEGRAM_AUTH_STATUS_FAILED,
+                TELEGRAM_AUTH_STATUS_EXPIRED,
+            ):
+                conn.commit()
+                await update.message.reply_text(
+                    "Этот код уже завершен. Запросите новый код на сайте."
+                )
+                return MENU
+            expires_at = str(row["expiresAt"] or "")
+            if expires_at and expires_at <= current_time:
+                update_telegram_auth_request(
+                    cursor,
+                    request_id,
+                    TELEGRAM_AUTH_STATUS_EXPIRED,
+                    error_message="Код авторизации истек.",
+                )
+                conn.commit()
+                await update.message.reply_text(
+                    "Код истек. Нажмите Telegram-вход на сайте еще раз."
+                )
+                return MENU
+            request_telegram_id = str(row["telegramId"] or "").strip()
+            if request_telegram_id and request_telegram_id != str(user_id):
+                conn.commit()
+                await update.message.reply_text(
+                    "Этот код уже привязан к другому Telegram аккаунту."
+                )
+                return MENU
+            update_telegram_auth_request(
+                cursor,
+                request_id,
+                TELEGRAM_AUTH_STATUS_PENDING,
+                telegram_id=str(user_id),
+                error_message=None,
+            )
+            conn.commit()
+        ctx.user_data["site_auth"] = {
+            "request_id": request_id,
+            "code": code,
+            "mode": "",
+            "phone": "",
+            "display_name": "",
+            "user_id": "",
+        }
+        await update.message.reply_text(
+            "Отправьте номер телефона (кнопкой ниже или вручную).",
+            reply_markup=contact_kb(),
+        )
+        return SITE_AUTH_PHONE
+    except Exception as exc:
+        logger.exception("Ошибка запуска site login: %s", exc)
+        await update.message.reply_text("Не удалось запустить вход. Попробуйте позже.")
+        return MENU
+
+async def site_login_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    code = parse_site_login_code(ctx.args[0] if ctx.args else "")
+    return await begin_site_login_flow(update, ctx, code)
+
+async def site_auth_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    auth_state = ctx.user_data.get("site_auth") or {}
+    request_id = str(auth_state.get("request_id") or "").strip()
+    if not request_id:
+        clear_site_auth_state(ctx)
+        await update.message.reply_text("Сессия входа не найдена. Запросите код на сайте.")
+        return MENU
+    raw_phone = (
+        update.message.contact.phone_number
+        if update.message.contact
+        else (update.message.text or "").strip()
+    )
+    safe_phone = normalize_phone(raw_phone)
+    if not PHONE_PATTERN.match(safe_phone):
+        await update.message.reply_text("Неверный номер. Пример: +79991234567.")
+        return SITE_AUTH_PHONE
+
+    user_id = update.effective_user.id
+    try:
+        with get_db_connection() as conn:
+            if not conn:
+                await update.message.reply_text("База данных недоступна. Попробуйте позже.")
+                return SITE_AUTH_PHONE
+            cursor = conn.cursor()
+            current_time = now_iso()
+            cursor.execute(
+                f"""
+                SELECT id, status, telegramId, expiresAt
+                FROM "{TELEGRAM_AUTH_REQUESTS_TABLE}"
+                WHERE id = ?
+                LIMIT 1
+                """,
+                (request_id,),
+            )
+            request_row = cursor.fetchone()
+            if not request_row:
+                clear_site_auth_state(ctx)
+                await update.message.reply_text("Сессия входа не найдена. Запросите новый код.")
+                return MENU
+            request_status = str(request_row["status"] or "")
+            expires_at = str(request_row["expiresAt"] or "")
+            request_telegram_id = str(request_row["telegramId"] or "").strip()
+            if request_telegram_id and request_telegram_id != str(user_id):
+                clear_site_auth_state(ctx)
+                await update.message.reply_text("Этот код уже использует другой Telegram аккаунт.")
+                return MENU
+            if request_status in (
+                TELEGRAM_AUTH_STATUS_COMPLETED,
+                TELEGRAM_AUTH_STATUS_FAILED,
+                TELEGRAM_AUTH_STATUS_EXPIRED,
+            ):
+                clear_site_auth_state(ctx)
+                await update.message.reply_text("Код уже неактивен. Запросите новый на сайте.")
+                return MENU
+            if expires_at and expires_at <= current_time:
+                update_telegram_auth_request(
+                    cursor,
+                    request_id,
+                    TELEGRAM_AUTH_STATUS_EXPIRED,
+                    error_message="Код авторизации истек.",
+                )
+                conn.commit()
+                clear_site_auth_state(ctx)
+                await update.message.reply_text("Код истек. Запросите новый в форме входа.")
+                return MENU
+
+            existing = find_user_by_phone(cursor, safe_phone)
+            if existing:
+                has_password = bool(
+                    (existing["HomePasswordHash"] or "").strip()
+                    and (existing["HomePasswordSalt"] or "").strip()
+                )
+                if has_password:
+                    display_name = (existing["Name"] or "").strip() or safe_phone
+                    cursor.execute(
+                        "UPDATE Users SET TelegramID = NULL WHERE TelegramID = ? AND id <> ?",
+                        (str(user_id), str(existing["id"])),
+                    )
+                    cursor.execute(
+                        """
+                        UPDATE Users
+                        SET TelegramID = ?,
+                            Phone = ?,
+                            HomeIsActive = 1,
+                            HomeUpdatedAt = ?,
+                            HomeLastLoginAt = ?
+                        WHERE id = ?
+                        """,
+                        (str(user_id), safe_phone, current_time, current_time, existing["id"]),
+                    )
+                    update_telegram_auth_request(
+                        cursor,
+                        request_id,
+                        TELEGRAM_AUTH_STATUS_COMPLETED,
+                        telegram_id=str(user_id),
+                        phone=safe_phone,
+                        display_name=display_name,
+                        user_id=str(existing["id"]),
+                        error_message=None,
+                    )
+                    conn.commit()
+                    clear_site_auth_state(ctx)
+                    await update.message.reply_text(
+                        "Авторизация завершена. Возвращайтесь на сайт.",
+                        reply_markup=main_menu_kb(user_id),
+                    )
+                    return MENU
+
+                auth_state["mode"] = "existing_without_password"
+                auth_state["phone"] = safe_phone
+                auth_state["user_id"] = str(existing["id"])
+                auth_state["display_name"] = (existing["Name"] or "").strip()
+                ctx.user_data["site_auth"] = auth_state
+                update_telegram_auth_request(
+                    cursor,
+                    request_id,
+                    TELEGRAM_AUTH_STATUS_PENDING,
+                    telegram_id=str(user_id),
+                    phone=safe_phone,
+                    display_name=auth_state["display_name"] or None,
+                    user_id=str(existing["id"]),
+                    error_message=None,
+                )
+                conn.commit()
+                await update.message.reply_text(
+                    f"Номер найден. Придумайте пароль (минимум {HOME_MIN_PASSWORD_LENGTH} символа)."
+                )
+                return SITE_AUTH_PASSWORD
+
+            auth_state["mode"] = "new_user"
+            auth_state["phone"] = safe_phone
+            auth_state["display_name"] = ""
+            auth_state["user_id"] = ""
+            ctx.user_data["site_auth"] = auth_state
+            update_telegram_auth_request(
+                cursor,
+                request_id,
+                TELEGRAM_AUTH_STATUS_PENDING,
+                telegram_id=str(user_id),
+                phone=safe_phone,
+                error_message=None,
+            )
+            conn.commit()
+            await update.message.reply_text("Номер не найден. Введите ФИО для нового аккаунта.")
+            return SITE_AUTH_NAME
+    except Exception as exc:
+        logger.exception("Ошибка обработки телефона для site login: %s", exc)
+        await update.message.reply_text("Не удалось обработать номер. Попробуйте позже.")
+        return SITE_AUTH_PHONE
+
+async def site_auth_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    auth_state = ctx.user_data.get("site_auth") or {}
+    request_id = str(auth_state.get("request_id") or "").strip()
+    if not request_id:
+        clear_site_auth_state(ctx)
+        await update.message.reply_text("Сессия входа не найдена. Запросите код на сайте.")
+        return MENU
+    full_name = (update.message.text or "").strip()
+    if len(full_name.split()) < 2:
+        await update.message.reply_text("Введите ФИО полностью (минимум имя и фамилия).")
+        return SITE_AUTH_NAME
+    auth_state["display_name"] = full_name
+    ctx.user_data["site_auth"] = auth_state
+    try:
+        with get_db_connection() as conn:
+            if not conn:
+                await update.message.reply_text("База данных недоступна. Попробуйте позже.")
+                return SITE_AUTH_NAME
+            cursor = conn.cursor()
+            update_telegram_auth_request(
+                cursor,
+                request_id,
+                TELEGRAM_AUTH_STATUS_PENDING,
+                display_name=full_name,
+                error_message=None,
+            )
+            conn.commit()
+    except Exception as exc:
+        logger.exception("Ошибка сохранения ФИО для site login: %s", exc)
+        await update.message.reply_text("Не удалось сохранить ФИО. Повторите ввод.")
+        return SITE_AUTH_NAME
+    await update.message.reply_text(
+        f"Отлично. Теперь придумайте пароль (минимум {HOME_MIN_PASSWORD_LENGTH} символа)."
+    )
+    return SITE_AUTH_PASSWORD
+
+async def site_auth_password(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    auth_state = ctx.user_data.get("site_auth") or {}
+    request_id = str(auth_state.get("request_id") or "").strip()
+    mode = str(auth_state.get("mode") or "").strip()
+    safe_phone = str(auth_state.get("phone") or "").strip()
+    if not request_id or not mode or not safe_phone:
+        clear_site_auth_state(ctx)
+        await update.message.reply_text("Сессия входа потеряна. Запросите новый код на сайте.")
+        return MENU
+    password = (update.message.text or "").strip()
+    try:
+        password_hash, password_salt = hash_home_password(password)
+    except ValueError as exc:
+        await update.message.reply_text(str(exc))
+        return SITE_AUTH_PASSWORD
+
+    user_id = update.effective_user.id
+    try:
+        with get_db_connection() as conn:
+            if not conn:
+                await update.message.reply_text("База данных недоступна. Попробуйте позже.")
+                return SITE_AUTH_PASSWORD
+            cursor = conn.cursor()
+            current_time = now_iso()
+            cursor.execute(
+                f"""
+                SELECT id, status, telegramId, expiresAt
+                FROM "{TELEGRAM_AUTH_REQUESTS_TABLE}"
+                WHERE id = ?
+                LIMIT 1
+                """,
+                (request_id,),
+            )
+            request_row = cursor.fetchone()
+            if not request_row:
+                clear_site_auth_state(ctx)
+                await update.message.reply_text("Сессия входа не найдена. Запросите новый код.")
+                return MENU
+            request_status = str(request_row["status"] or "")
+            expires_at = str(request_row["expiresAt"] or "")
+            request_telegram_id = str(request_row["telegramId"] or "").strip()
+            if request_telegram_id and request_telegram_id != str(user_id):
+                clear_site_auth_state(ctx)
+                await update.message.reply_text("Этот код уже используется другим аккаунтом.")
+                return MENU
+            if request_status in (
+                TELEGRAM_AUTH_STATUS_COMPLETED,
+                TELEGRAM_AUTH_STATUS_FAILED,
+                TELEGRAM_AUTH_STATUS_EXPIRED,
+            ):
+                clear_site_auth_state(ctx)
+                await update.message.reply_text("Код уже неактивен. Запросите новый на сайте.")
+                return MENU
+            if expires_at and expires_at <= current_time:
+                update_telegram_auth_request(
+                    cursor,
+                    request_id,
+                    TELEGRAM_AUTH_STATUS_EXPIRED,
+                    error_message="Код авторизации истек.",
+                )
+                conn.commit()
+                clear_site_auth_state(ctx)
+                await update.message.reply_text("Код истек. Запросите новый в форме входа.")
+                return MENU
+
+            if mode == "existing_without_password":
+                existing_user_id = str(auth_state.get("user_id") or "").strip()
+                if not existing_user_id:
+                    existing = find_user_by_phone(cursor, safe_phone)
+                    if not existing:
+                        update_telegram_auth_request(
+                            cursor,
+                            request_id,
+                            TELEGRAM_AUTH_STATUS_FAILED,
+                            error_message="Пользователь с указанным номером не найден.",
+                        )
+                        conn.commit()
+                        clear_site_auth_state(ctx)
+                        await update.message.reply_text(
+                            "Пользователь не найден. Запросите новый код на сайте."
+                        )
+                        return MENU
+                    existing_user_id = str(existing["id"])
+                cursor.execute(
+                    "SELECT id, Name FROM Users WHERE id = ? LIMIT 1",
+                    (existing_user_id,),
+                )
+                existing_row = cursor.fetchone()
+                if not existing_row:
+                    update_telegram_auth_request(
+                        cursor,
+                        request_id,
+                        TELEGRAM_AUTH_STATUS_FAILED,
+                        error_message="Пользователь не найден.",
+                    )
+                    conn.commit()
+                    clear_site_auth_state(ctx)
+                    await update.message.reply_text(
+                        "Пользователь не найден. Запросите новый код на сайте."
+                    )
+                    return MENU
+                display_name = (
+                    auth_state.get("display_name")
+                    or (existing_row["Name"] or "").strip()
+                    or safe_phone
+                )
+                cursor.execute(
+                    "UPDATE Users SET TelegramID = NULL WHERE TelegramID = ? AND id <> ?",
+                    (str(user_id), existing_user_id),
+                )
+                cursor.execute(
+                    """
+                    UPDATE Users
+                    SET TelegramID = ?,
+                        Phone = ?,
+                        Name = COALESCE(NULLIF(Name, ''), ?),
+                        HomePasswordHash = ?,
+                        HomePasswordSalt = ?,
+                        HomeIsActive = 1,
+                        HomeCreatedAt = COALESCE(HomeCreatedAt, ?),
+                        HomeUpdatedAt = ?,
+                        HomeLastLoginAt = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        str(user_id),
+                        safe_phone,
+                        display_name,
+                        password_hash,
+                        password_salt,
+                        current_time,
+                        current_time,
+                        current_time,
+                        existing_user_id,
+                    ),
+                )
+                update_telegram_auth_request(
+                    cursor,
+                    request_id,
+                    TELEGRAM_AUTH_STATUS_COMPLETED,
+                    telegram_id=str(user_id),
+                    phone=safe_phone,
+                    display_name=display_name,
+                    user_id=existing_user_id,
+                    error_message=None,
+                )
+                conn.commit()
+                clear_site_auth_state(ctx)
+                await update.message.reply_text(
+                    "Готово. Telegram привязан, пароль установлен, вход на сайте завершен.",
+                    reply_markup=main_menu_kb(user_id),
+                )
+                return MENU
+
+            if mode == "new_user":
+                display_name = (auth_state.get("display_name") or "").strip() or safe_phone
+                new_user_id = str(uuid.uuid4())
+                cursor.execute(
+                    "UPDATE Users SET TelegramID = NULL WHERE TelegramID = ?",
+                    (str(user_id),),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO Users (
+                        id,
+                        TelegramID,
+                        Name,
+                        Phone,
+                        Barber,
+                        HomePasswordHash,
+                        HomePasswordSalt,
+                        HomeIsActive,
+                        HomeCreatedAt,
+                        HomeUpdatedAt,
+                        HomeLastLoginAt
+                    ) VALUES (?, ?, ?, ?, NULL, ?, ?, 1, ?, ?, ?)
+                    """,
+                    (
+                        new_user_id,
+                        str(user_id),
+                        display_name,
+                        safe_phone,
+                        password_hash,
+                        password_salt,
+                        current_time,
+                        current_time,
+                        current_time,
+                    ),
+                )
+                update_telegram_auth_request(
+                    cursor,
+                    request_id,
+                    TELEGRAM_AUTH_STATUS_COMPLETED,
+                    telegram_id=str(user_id),
+                    phone=safe_phone,
+                    display_name=display_name,
+                    user_id=new_user_id,
+                    error_message=None,
+                )
+                conn.commit()
+                clear_site_auth_state(ctx)
+                await update.message.reply_text(
+                    "Готово. Аккаунт создан, Telegram привязан, вход на сайте завершен.",
+                    reply_markup=main_menu_kb(user_id),
+                )
+                return MENU
+
+            update_telegram_auth_request(
+                cursor,
+                request_id,
+                TELEGRAM_AUTH_STATUS_FAILED,
+                error_message="Неизвестный режим site login.",
+            )
+            conn.commit()
+            clear_site_auth_state(ctx)
+            await update.message.reply_text("Сессия входа повреждена. Запросите новый код.")
+            return MENU
+    except Exception as exc:
+        logger.exception("Ошибка установки пароля в site login: %s", exc)
+        await update.message.reply_text("Не удалось установить пароль. Попробуйте еще раз.")
+        return SITE_AUTH_PASSWORD
+
 # ---------- Обработчики ----------
 
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Приветствие и точка входа /start."""
+    deep_link_code = parse_site_login_code(ctx.args[0] if ctx.args else "")
+    if deep_link_code:
+        return await begin_site_login_flow(update, ctx, deep_link_code)
     user_id = update.effective_user.id
     registered = False
     settings = load_bot_settings()
@@ -2014,7 +2686,10 @@ def main():
         )
         logger.info("Задача для проверки напоминаний запланирована (каждые 10 минут).")
     conv = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+        entry_points=[
+            CommandHandler("start", start),
+            CommandHandler("site_login", site_login_cmd),
+        ],
         states={
             REG_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, reg_name)],
             REG_PHONE: [
@@ -2085,8 +2760,23 @@ def main():
                 ),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, change_name),
             ],
+            SITE_AUTH_PHONE: [
+                MessageHandler(
+                    (filters.TEXT | filters.CONTACT) & ~filters.COMMAND,
+                    site_auth_phone,
+                )
+            ],
+            SITE_AUTH_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, site_auth_name)
+            ],
+            SITE_AUTH_PASSWORD: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, site_auth_password)
+            ],
         },
-        fallbacks=[CommandHandler("start", start)],
+        fallbacks=[
+            CommandHandler("start", start),
+            CommandHandler("site_login", site_login_cmd),
+        ],
         allow_reentry=True,
         # ЗМЕНЕНЕ: Явно указываем, что состояние диалога нужно сохранять
         persistent=True,

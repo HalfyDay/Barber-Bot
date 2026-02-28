@@ -487,10 +487,13 @@
         return;
       }
       telegramAuthRequestId = normalizeText(payload.requestId);
-      const commandText = normalizeText(payload.command || `/site_login ${payload.code}`);
-      setStatus(`Отправьте в бота команду ${commandText} и завершите вход в Telegram.`);
+      setStatus("Подтвердите вход в Telegram, затем вернитесь на сайт.");
       if (normalizeText(payload.botLink)) {
         window.open(payload.botLink, "_blank", "noopener,noreferrer");
+      } else {
+        setStatus("Не удалось открыть Telegram-бота. Попробуйте позже.", "error");
+        setTelegramPending(false);
+        return;
       }
       scheduleTelegramPolling();
     } catch {

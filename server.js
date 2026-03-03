@@ -118,6 +118,8 @@ const HOME_PASSWORD_HASH_LENGTH = 64;
 const HOME_MIN_PASSWORD_LENGTH = 4;
 const HOME_TELEGRAM_AUTH_TTL_MS =
   Number(process.env.HOME_TELEGRAM_AUTH_TTL_MS) || 10 * 60 * 1000;
+const HOME_PROFILE_CHANGE_COOLDOWN_MS =
+  Number(process.env.HOME_PROFILE_CHANGE_COOLDOWN_MS) || 30 * 24 * 60 * 60 * 1000;
 const TELEGRAM_BOT_USERNAME = (process.env.TELEGRAM_BOT_USERNAME || "")
   .toString()
   .trim()
@@ -914,18 +916,23 @@ const countBlockedClientsFromAppointments = (
 };
 const BLOCKLIST_FILE = path.join(__dirname, "data", "blocked-users.json");
 const HOME_AUTH_COLUMNS = [
+  { name: "LastNameChanged", ddl: 'ALTER TABLE "Users" ADD COLUMN "LastNameChanged" TEXT' },
   { name: "HomePasswordHash", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomePasswordHash" TEXT' },
   { name: "HomePasswordSalt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomePasswordSalt" TEXT' },
   { name: "HomeIsActive", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomeIsActive" BOOLEAN NOT NULL DEFAULT true' },
   { name: "HomeCreatedAt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomeCreatedAt" TEXT' },
   { name: "HomeUpdatedAt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomeUpdatedAt" TEXT' },
   { name: "HomeLastLoginAt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomeLastLoginAt" TEXT' },
+  { name: "HomePhoneChangedAt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomePhoneChangedAt" TEXT' },
+  { name: "HomeTelegramChangedAt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomeTelegramChangedAt" TEXT' },
 ];
 const TELEGRAM_AUTH_REQUESTS_TABLE = "TelegramAuthRequests";
 const TELEGRAM_AUTH_STATUS_PENDING = "pending";
 const TELEGRAM_AUTH_STATUS_COMPLETED = "completed";
 const TELEGRAM_AUTH_STATUS_FAILED = "failed";
 const TELEGRAM_AUTH_STATUS_EXPIRED = "expired";
+const TELEGRAM_AUTH_FLOW_LOGIN = "login";
+const TELEGRAM_AUTH_FLOW_PROFILE_LINK = "profile_link";
 const withTelegramAuthDb = (runner) => {
   let db = null;
   try {
@@ -949,6 +956,8 @@ const ensureTelegramAuthRequestsTable = () => {
           id TEXT PRIMARY KEY,
           code TEXT NOT NULL UNIQUE,
           status TEXT NOT NULL,
+          flow TEXT NOT NULL DEFAULT '${TELEGRAM_AUTH_FLOW_LOGIN}',
+          targetUserId TEXT,
           telegramId TEXT,
           phone TEXT,
           displayName TEXT,
@@ -966,6 +975,22 @@ const ensureTelegramAuthRequestsTable = () => {
       db.exec(
         `CREATE INDEX IF NOT EXISTS "idx_${TELEGRAM_AUTH_REQUESTS_TABLE}_code"
          ON "${TELEGRAM_AUTH_REQUESTS_TABLE}" (code)`,
+      );
+      const columns = db.prepare(`PRAGMA table_info("${TELEGRAM_AUTH_REQUESTS_TABLE}")`).all();
+      const existing = new Set(columns.map((row) => normalizeText(row?.name)));
+      if (!existing.has("flow")) {
+        db.prepare(
+          `ALTER TABLE "${TELEGRAM_AUTH_REQUESTS_TABLE}" ADD COLUMN flow TEXT NOT NULL DEFAULT '${TELEGRAM_AUTH_FLOW_LOGIN}'`,
+        ).run();
+      }
+      if (!existing.has("targetUserId")) {
+        db.prepare(
+          `ALTER TABLE "${TELEGRAM_AUTH_REQUESTS_TABLE}" ADD COLUMN targetUserId TEXT`,
+        ).run();
+      }
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS "idx_${TELEGRAM_AUTH_REQUESTS_TABLE}_flow_target"
+         ON "${TELEGRAM_AUTH_REQUESTS_TABLE}" (flow, targetUserId)`,
       );
     });
   } catch (error) {
@@ -1009,15 +1034,15 @@ const markExpiredTelegramAuthRequests = () => {
 };
 const createTelegramAuthCode = () =>
   String((randomBytes(4).readUInt32BE(0) % 900000) + 100000);
-const createTelegramAuthRequest = () => {
+const createTelegramAuthRequest = ({ flow = TELEGRAM_AUTH_FLOW_LOGIN, targetUserId = null } = {}) => {
   const nowIso = new Date().toISOString();
   const expiresAt = new Date(Date.now() + HOME_TELEGRAM_AUTH_TTL_MS).toISOString();
   return withTelegramAuthDb((db) => {
     const insert = db.prepare(
       `INSERT INTO "${TELEGRAM_AUTH_REQUESTS_TABLE}"
-        (id, code, status, telegramId, phone, displayName, userId, errorMessage, createdAt, expiresAt, updatedAt)
+        (id, code, status, flow, targetUserId, telegramId, phone, displayName, userId, errorMessage, createdAt, expiresAt, updatedAt)
        VALUES
-        (@id, @code, @status, NULL, NULL, NULL, NULL, NULL, @createdAt, @expiresAt, @updatedAt)`,
+        (@id, @code, @status, @flow, @targetUserId, NULL, NULL, NULL, NULL, NULL, @createdAt, @expiresAt, @updatedAt)`,
     );
     const maxAttempts = 8;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -1025,6 +1050,8 @@ const createTelegramAuthRequest = () => {
         id: randomUUID(),
         code: createTelegramAuthCode(),
         status: TELEGRAM_AUTH_STATUS_PENDING,
+        flow: normalizeText(flow) || TELEGRAM_AUTH_FLOW_LOGIN,
+        targetUserId: normalizeText(targetUserId) || null,
         createdAt: nowIso,
         expiresAt,
         updatedAt: nowIso,
@@ -1042,6 +1069,56 @@ const createTelegramAuthRequest = () => {
     }
     throw new Error("Не удалось сгенерировать одноразовый код Telegram авторизации.");
   });
+};
+const getTelegramAuthRequestById = (requestId) =>
+  withTelegramAuthDb((db) =>
+    db
+      .prepare(
+        `SELECT id, code, status, flow, targetUserId, telegramId, phone, displayName, userId, errorMessage, createdAt, expiresAt, updatedAt
+         FROM "${TELEGRAM_AUTH_REQUESTS_TABLE}"
+         WHERE id = ? LIMIT 1`,
+      )
+      .get(requestId),
+  );
+const updateTelegramAuthRequestById = (requestId, patch = {}) => {
+  const fields = [];
+  const values = [];
+  const assignTextField = (column, rawValue) => {
+    if (rawValue === undefined) return;
+    fields.push(`${column} = ?`);
+    values.push(rawValue == null ? null : String(rawValue));
+  };
+  assignTextField("status", patch.status);
+  assignTextField("flow", patch.flow);
+  assignTextField("targetUserId", patch.targetUserId);
+  assignTextField("telegramId", patch.telegramId);
+  assignTextField("phone", patch.phone);
+  assignTextField("displayName", patch.displayName);
+  assignTextField("userId", patch.userId);
+  assignTextField("errorMessage", patch.errorMessage);
+  fields.push("updatedAt = ?");
+  values.push(new Date().toISOString());
+  if (!fields.length) return;
+  withTelegramAuthDb((db) => {
+    db.prepare(
+      `UPDATE "${TELEGRAM_AUTH_REQUESTS_TABLE}"
+       SET ${fields.join(", ")}
+       WHERE id = ?`,
+    ).run(...values, requestId);
+  });
+};
+const deleteTelegramAuthRequestById = (requestId) =>
+  withTelegramAuthDb((db) =>
+    db
+      .prepare(`DELETE FROM "${TELEGRAM_AUTH_REQUESTS_TABLE}" WHERE id = ?`)
+      .run(requestId),
+  );
+const toTelegramIdNumber = (value) => {
+  const text = normalizeText(value);
+  if (!text) return null;
+  const parsed = Number(text);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
 };
 const ensureUsersHomeAuthColumns = () => {
   let db = null;
@@ -1253,6 +1330,13 @@ const HOME_USER_SELECT = {
   homeUpdatedAt: true,
   homeLastLoginAt: true,
 };
+const HOME_PROFILE_SELECT = {
+  ...HOME_USER_SELECT,
+  LastNameChanged: true,
+  homePhoneChangedAt: true,
+  homeTelegramChangedAt: true,
+  TelegramID: true,
+};
 const buildHomeAuthError = (message, code) => {
   const error = new Error(message);
   error.code = code;
@@ -1298,12 +1382,90 @@ const toPublicHomeUser = (row = {}) => {
     lastLoginAt: row.homeLastLoginAt || null,
   };
 };
+const toDateMs = (value) => {
+  const safeValue = normalizeText(value);
+  if (!safeValue) return null;
+  const parsed = Date.parse(safeValue);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+};
+const toIsoFromMs = (ms) => {
+  if (!Number.isFinite(ms)) return null;
+  try {
+    return new Date(ms).toISOString();
+  } catch {
+    return null;
+  }
+};
+const buildMonthlyLimit = (lastChangedAtRaw) => {
+  const lastChangedAt = normalizeText(lastChangedAtRaw) || null;
+  const lastMs = toDateMs(lastChangedAt);
+  if (!lastMs) {
+    return {
+      lastChangedAt: null,
+      nextAllowedAt: null,
+      isLocked: false,
+    };
+  }
+  const nextAllowedMs = lastMs + HOME_PROFILE_CHANGE_COOLDOWN_MS;
+  return {
+    lastChangedAt,
+    nextAllowedAt: toIsoFromMs(nextAllowedMs),
+    isLocked: nextAllowedMs > Date.now(),
+  };
+};
+const formatLimitDateRu = (isoDate) => {
+  const ms = toDateMs(isoDate);
+  if (!ms) return "";
+  return new Date(ms).toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+const buildLimitBlockedMessage = (fieldLabel, limitState) => {
+  const dateLabel = formatLimitDateRu(limitState?.nextAllowedAt);
+  if (!dateLabel) {
+    return `Поле «${fieldLabel}» можно менять не чаще одного раза в 30 дней.`;
+  }
+  return `Поле «${fieldLabel}» можно менять не чаще одного раза в 30 дней. Доступно после ${dateLabel}.`;
+};
+const toPublicHomeProfile = (row = {}) => {
+  const user = toPublicHomeUser(row);
+  const telegramId = normalizeText(row.TelegramID);
+  return {
+    ...user,
+    telegramId: telegramId || null,
+    telegramLinked: Boolean(telegramId),
+    limits: {
+      name: buildMonthlyLimit(row.LastNameChanged),
+      phone: buildMonthlyLimit(row.homePhoneChangedAt),
+      telegram: buildMonthlyLimit(row.homeTelegramChangedAt),
+    },
+  };
+};
 const shouldHydrateUserNameFromHome = (name, phone) => {
   const safeName = normalizeText(name);
   if (!safeName) return true;
   const safePhone = normalizePhone(phone);
   if (!safePhone) return false;
   return canonicalizeKey(safeName) === canonicalizeKey(safePhone);
+};
+const findHomeUserByTelegramId = async (telegramId) => {
+  const safeTelegramId = normalizeText(telegramId);
+  if (!safeTelegramId) return null;
+  const users = await prisma.users.findMany({
+    where: { TelegramID: { not: null } },
+    select: {
+      ...HOME_USER_SELECT,
+      TelegramID: true,
+    },
+  });
+  return (
+    users.find((row) => normalizeText(row?.TelegramID) === safeTelegramId) || null
+  );
 };
 const findHomeUserByPhone = async (phone) => {
   const safePhone = normalizePhone(phone);
@@ -2707,7 +2869,9 @@ app.post("/api/home/auth/login", async (req, res) => {
 app.post("/api/home/auth/telegram/start", async (req, res) => {
   try {
     markExpiredTelegramAuthRequests();
-    const request = createTelegramAuthRequest();
+    const request = createTelegramAuthRequest({
+      flow: TELEGRAM_AUTH_FLOW_LOGIN,
+    });
     const botLink = TELEGRAM_BOT_USERNAME
       ? `https://t.me/${encodeURIComponent(
           TELEGRAM_BOT_USERNAME,
@@ -2741,15 +2905,7 @@ app.get("/api/home/auth/telegram/status", async (req, res) => {
   }
   try {
     markExpiredTelegramAuthRequests();
-    const row = withTelegramAuthDb((db) =>
-      db
-        .prepare(
-          `SELECT id, code, status, telegramId, phone, displayName, userId, errorMessage, expiresAt, updatedAt
-           FROM "${TELEGRAM_AUTH_REQUESTS_TABLE}"
-           WHERE id = ? LIMIT 1`,
-        )
-        .get(requestId),
-    );
+    const row = getTelegramAuthRequestById(requestId);
     if (!row) {
       return res.status(404).json({
         success: false,
@@ -2757,66 +2913,114 @@ app.get("/api/home/auth/telegram/status", async (req, res) => {
         message: "Сессия Telegram авторизации не найдена или уже завершена.",
       });
     }
+    if (
+      normalizeText(row.flow || TELEGRAM_AUTH_FLOW_LOGIN) !==
+      TELEGRAM_AUTH_FLOW_LOGIN
+    ) {
+      return res.status(409).json({
+        success: false,
+        done: true,
+        message: "Этот запрос предназначен для другого сценария Telegram.",
+      });
+    }
     if (row.status === TELEGRAM_AUTH_STATUS_COMPLETED) {
-      const userId = normalizeText(row.userId);
-      if (!userId) {
-        return res.status(409).json({
-          success: false,
-          done: true,
-          message: "Авторизация в Telegram завершена некорректно. Повторите попытку.",
+      const rowUserId = normalizeText(row.userId);
+      let userRow = rowUserId
+        ? await prisma.users.findUnique({
+            where: { id: rowUserId },
+            select: { ...HOME_USER_SELECT, TelegramID: true },
+          })
+        : null;
+      const safeTelegramId = normalizeText(row.telegramId);
+      if (!userRow && safeTelegramId) {
+        userRow = await findHomeUserByTelegramId(safeTelegramId);
+      }
+      const safePhone = normalizePhone(row.phone || userRow?.Phone || "");
+      if (!userRow && safePhone) {
+        userRow = await findHomeUserByPhone(safePhone);
+      }
+      const resolvedUserId = normalizeText(userRow?.id);
+      const resolvedDisplayName =
+        normalizeText(row.displayName || userRow?.Name || "") || null;
+      if (
+        resolvedUserId &&
+        (resolvedUserId !== rowUserId ||
+          safePhone !== normalizePhone(row.phone || "") ||
+          resolvedDisplayName !== normalizeText(row.displayName || ""))
+      ) {
+        updateTelegramAuthRequestById(requestId, {
+          userId: resolvedUserId,
+          phone: safePhone || null,
+          displayName: resolvedDisplayName,
+          errorMessage: null,
         });
       }
-      const userRow = await prisma.users.findUnique({
-        where: { id: userId },
-        select: HOME_USER_SELECT,
-      });
-      if (
-        !userRow ||
-        userRow.homeIsActive === false ||
-        !normalizeText(userRow.homePasswordHash) ||
-        !normalizeText(userRow.homePasswordSalt)
-      ) {
+      const hasPassword = Boolean(
+        userRow &&
+          normalizeText(userRow.homePasswordHash) &&
+          normalizeText(userRow.homePasswordSalt),
+      );
+      if (userRow && userRow.homeIsActive !== false && hasPassword && safePhone) {
+        const now = new Date().toISOString();
+        const patch = {
+          Phone: safePhone,
+          homeIsActive: true,
+          homeLastLoginAt: now,
+          homeUpdatedAt: now,
+        };
+        const telegramIdAsNumber = toTelegramIdNumber(row.telegramId);
+        if (telegramIdAsNumber !== null) {
+          patch.TelegramID = telegramIdAsNumber;
+        }
+        if (
+          resolvedDisplayName &&
+          shouldHydrateUserNameFromHome(userRow.Name, userRow.Phone)
+        ) {
+          patch.Name = resolvedDisplayName;
+        }
+        const updated = await prisma.users.update({
+          where: { id: userRow.id },
+          data: patch,
+          select: HOME_USER_SELECT,
+        });
+        const user = toPublicHomeUser(updated);
+        const identity = buildHomeIdentity({
+          userId: user.id,
+          phone: user.phone,
+          displayName: user.displayName,
+        });
+        const token = signHomeSessionToken(identity);
+        try {
+          deleteTelegramAuthRequestById(requestId);
+        } catch (cleanupError) {
+          console.warn(
+            "Telegram auth request cleanup warning:",
+            cleanupError?.message || cleanupError,
+          );
+        }
+        return res.json({
+          success: true,
+          done: true,
+          token,
+          user,
+        });
+      }
+      if (!safePhone) {
         return res.status(409).json({
           success: false,
           done: true,
           message:
-            "Профиль найден, но пароль для входа на сайт не настроен. Повторите Telegram-авторизацию.",
+            "Для входа нужен подтвержденный номер телефона в Telegram. Нажмите вход через Telegram снова.",
         });
-      }
-      const now = new Date().toISOString();
-      const updated = await prisma.users.update({
-        where: { id: userRow.id },
-        data: {
-          homeIsActive: true,
-          homeLastLoginAt: now,
-          homeUpdatedAt: now,
-        },
-        select: HOME_USER_SELECT,
-      });
-      const user = toPublicHomeUser(updated);
-      const identity = buildHomeIdentity({
-        userId: user.id,
-        phone: user.phone,
-        displayName: user.displayName,
-      });
-      const token = signHomeSessionToken(identity);
-      try {
-        withTelegramAuthDb((db) =>
-          db
-            .prepare(`DELETE FROM "${TELEGRAM_AUTH_REQUESTS_TABLE}" WHERE id = ?`)
-            .run(requestId),
-        );
-      } catch (cleanupError) {
-        console.warn(
-          "Telegram auth request cleanup warning:",
-          cleanupError?.message || cleanupError,
-        );
       }
       return res.json({
         success: true,
         done: true,
-        token,
-        user,
+        needsSetup: true,
+        requestId,
+        setupMode: userRow ? "set_password" : "register",
+        phone: safePhone,
+        displayName: resolvedDisplayName,
       });
     }
     if (
@@ -2850,6 +3054,190 @@ app.get("/api/home/auth/telegram/status", async (req, res) => {
     });
   }
 });
+app.post("/api/home/auth/telegram/complete", async (req, res) => {
+  const requestId = normalizeText(req.body?.requestId);
+  const displayNameInput = normalizeText(req.body?.displayName);
+  const phoneInput = normalizeText(req.body?.phone);
+  const password = normalizeText(req.body?.password);
+  if (!requestId || !password) {
+    return res.status(400).json({
+      success: false,
+      message: "Недостаточно данных для завершения Telegram-входа.",
+    });
+  }
+  try {
+    markExpiredTelegramAuthRequests();
+    const row = getTelegramAuthRequestById(requestId);
+    if (!row) {
+      return res.status(404).json({
+        success: false,
+        message: "Сессия Telegram авторизации не найдена.",
+      });
+    }
+    if (
+      normalizeText(row.flow || TELEGRAM_AUTH_FLOW_LOGIN) !==
+      TELEGRAM_AUTH_FLOW_LOGIN
+    ) {
+      return res.status(409).json({
+        success: false,
+        message: "Этот запрос Telegram не предназначен для завершения входа.",
+      });
+    }
+    if (row.status !== TELEGRAM_AUTH_STATUS_COMPLETED) {
+      return res.status(409).json({
+        success: false,
+        message:
+          row.status === TELEGRAM_AUTH_STATUS_EXPIRED
+            ? "Код Telegram авторизации истек. Запросите новый."
+            : "Telegram авторизация еще не завершена.",
+      });
+    }
+    const safeTelegramId = normalizeText(row.telegramId);
+    const telegramIdAsNumber = toTelegramIdNumber(safeTelegramId);
+    let userRow = null;
+    const rowUserId = normalizeText(row.userId);
+    if (rowUserId) {
+      userRow = await prisma.users.findUnique({
+        where: { id: rowUserId },
+        select: { ...HOME_USER_SELECT, TelegramID: true },
+      });
+    }
+    if (!userRow && safeTelegramId) {
+      userRow = await findHomeUserByTelegramId(safeTelegramId);
+    }
+    const safePhone = normalizePhone(phoneInput || row.phone || userRow?.Phone || "");
+    if (!safePhone) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Телефон не подтвержден. Нажмите вход через Telegram снова и отправьте контакт.",
+      });
+    }
+    const phoneMatches = await prisma.users.findMany({
+      where: { Phone: { not: null } },
+      select: {
+        id: true,
+        Phone: true,
+        homePasswordHash: true,
+        homePasswordSalt: true,
+        homeIsActive: true,
+      },
+    });
+    const conflict = phoneMatches.find(
+      (row) =>
+        row.id !== userRow?.id &&
+        normalizePhone(row.Phone || "") === safePhone &&
+        row.homeIsActive !== false &&
+        normalizeText(row.homePasswordHash) &&
+        normalizeText(row.homePasswordSalt),
+    );
+    if (conflict) {
+      return res.status(409).json({
+        success: false,
+        message: "Этот номер уже используется другим аккаунтом.",
+      });
+    }
+    const { hashHex, saltHex } = hashHomePassword(password);
+    const now = new Date().toISOString();
+    let persisted;
+    if (userRow) {
+      const nextDisplayName =
+        displayNameInput || normalizeText(row.displayName || userRow.Name || "");
+      const patch = {
+        Phone: safePhone,
+        homePasswordHash: hashHex,
+        homePasswordSalt: saltHex,
+        homeIsActive: true,
+        homeCreatedAt: userRow.homeCreatedAt || now,
+        homeUpdatedAt: now,
+        homeLastLoginAt: now,
+      };
+      if (telegramIdAsNumber !== null) {
+        patch.TelegramID = telegramIdAsNumber;
+      }
+      if (
+        nextDisplayName &&
+        shouldHydrateUserNameFromHome(userRow.Name, userRow.Phone)
+      ) {
+        patch.Name = nextDisplayName;
+      }
+      persisted = await prisma.users.update({
+        where: { id: userRow.id },
+        data: patch,
+        select: HOME_USER_SELECT,
+      });
+      updateTelegramAuthRequestById(requestId, {
+        userId: userRow.id,
+        phone: safePhone,
+        displayName: nextDisplayName || null,
+        errorMessage: null,
+      });
+    } else {
+      const nextDisplayName = displayNameInput;
+      if (!nextDisplayName) {
+        return res.status(400).json({
+          success: false,
+          message: "Введите ФИО для нового аккаунта.",
+        });
+      }
+      persisted = await prisma.users.create({
+        data: {
+          id: randomUUID(),
+          Name: nextDisplayName,
+          Phone: safePhone,
+          TelegramID: telegramIdAsNumber,
+          Barber: null,
+          homePasswordHash: hashHex,
+          homePasswordSalt: saltHex,
+          homeIsActive: true,
+          homeCreatedAt: now,
+          homeUpdatedAt: now,
+          homeLastLoginAt: now,
+        },
+        select: HOME_USER_SELECT,
+      });
+      updateTelegramAuthRequestById(requestId, {
+        userId: persisted.id,
+        phone: safePhone,
+        displayName: nextDisplayName,
+        errorMessage: null,
+      });
+    }
+    const user = toPublicHomeUser(persisted);
+    const identity = buildHomeIdentity({
+      userId: user.id,
+      phone: user.phone,
+      displayName: user.displayName,
+    });
+    const token = signHomeSessionToken(identity);
+    try {
+      deleteTelegramAuthRequestById(requestId);
+    } catch (cleanupError) {
+      console.warn(
+        "Telegram auth request cleanup warning:",
+        cleanupError?.message || cleanupError,
+      );
+    }
+    return res.json({
+      success: true,
+      token,
+      user,
+    });
+  } catch (error) {
+    if (
+      error?.code === "INVALID_PASSWORD" ||
+      error?.code === "WEAK_PASSWORD" ||
+      error?.code === "INVALID_PHONE"
+    ) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+    console.error("Home telegram auth complete error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Не удалось завершить вход через Telegram.",
+    });
+  }
+});
 app.get("/api/home/auth/me", authenticateHomeToken, async (req, res) => {
   const identity = req.homeUser || {};
   const stored = await findHomeUserById(identity.userId);
@@ -2859,6 +3247,417 @@ app.get("/api/home/auth/me", authenticateHomeToken, async (req, res) => {
     authenticated: true,
     user,
   });
+});
+app.get("/api/home/profile", authenticateHomeToken, async (req, res) => {
+  try {
+    const userId = normalizeText(req.homeUser?.userId);
+    if (!userId) return res.sendStatus(401);
+    const stored = await prisma.users.findUnique({
+      where: { id: userId },
+      select: HOME_PROFILE_SELECT,
+    });
+    if (
+      !stored ||
+      stored.homeIsActive === false ||
+      !normalizeText(stored.homePasswordHash) ||
+      !normalizeText(stored.homePasswordSalt)
+    ) {
+      return res.sendStatus(401);
+    }
+    return res.json({
+      success: true,
+      user: toPublicHomeProfile(stored),
+      botUsername: TELEGRAM_BOT_USERNAME || null,
+    });
+  } catch (error) {
+    console.error("Home profile read error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Не удалось загрузить профиль.",
+    });
+  }
+});
+app.put("/api/home/profile", authenticateHomeToken, async (req, res) => {
+  try {
+    const userId = normalizeText(req.homeUser?.userId);
+    if (!userId) return res.sendStatus(401);
+    const current = await prisma.users.findUnique({
+      where: { id: userId },
+      select: HOME_PROFILE_SELECT,
+    });
+    if (
+      !current ||
+      current.homeIsActive === false ||
+      !normalizeText(current.homePasswordHash) ||
+      !normalizeText(current.homePasswordSalt)
+    ) {
+      return res.sendStatus(401);
+    }
+
+    const displayNameInput = normalizeText(req.body?.displayName);
+    const phoneInput = normalizeText(req.body?.phone);
+    const passwordInput = normalizeText(req.body?.password);
+    const safePhone = normalizePhone(phoneInput || current.Phone || "");
+    if (!safePhone) {
+      return res.status(400).json({
+        success: false,
+        message: "Введите корректный номер телефона.",
+      });
+    }
+
+    const currentPhone = normalizePhone(current.Phone || "");
+    if (safePhone !== currentPhone) {
+      const phoneMatches = await prisma.users.findMany({
+        where: { Phone: { not: null } },
+        select: {
+          id: true,
+          Phone: true,
+          homePasswordHash: true,
+          homePasswordSalt: true,
+          homeIsActive: true,
+        },
+      });
+      const conflict = phoneMatches.find(
+        (row) =>
+          row.id !== userId &&
+          normalizePhone(row.Phone || "") === safePhone &&
+          row.homeIsActive !== false &&
+          normalizeText(row.homePasswordHash) &&
+          normalizeText(row.homePasswordSalt),
+      );
+      if (conflict) {
+        return res.status(409).json({
+          success: false,
+          message: "Этот номер уже используется другим аккаунтом.",
+        });
+      }
+    }
+
+    const currentDisplayName = normalizeText(
+      current.Name || current.Phone || safePhone,
+    );
+    const nextDisplayName = displayNameInput || currentDisplayName;
+    const nameChanged = nextDisplayName !== currentDisplayName;
+    const phoneChanged = safePhone !== currentPhone;
+    const limits = toPublicHomeProfile(current)?.limits || {};
+    if (nameChanged && limits?.name?.isLocked) {
+      return res.status(429).json({
+        success: false,
+        message: buildLimitBlockedMessage("ФИО", limits.name),
+      });
+    }
+    if (phoneChanged && limits?.phone?.isLocked) {
+      return res.status(429).json({
+        success: false,
+        message: buildLimitBlockedMessage("Телефон", limits.phone),
+      });
+    }
+
+    const now = new Date().toISOString();
+    const patch = {
+      Name: nextDisplayName,
+      Phone: safePhone,
+      homeIsActive: true,
+      homeCreatedAt: current.homeCreatedAt || now,
+      homeUpdatedAt: now,
+    };
+    if (nameChanged) {
+      patch.LastNameChanged = now;
+    }
+    if (phoneChanged) {
+      patch.homePhoneChangedAt = now;
+    }
+    if (passwordInput) {
+      const { hashHex, saltHex } = hashHomePassword(passwordInput);
+      patch.homePasswordHash = hashHex;
+      patch.homePasswordSalt = saltHex;
+    }
+
+    const updated = await prisma.users.update({
+      where: { id: userId },
+      data: patch,
+      select: HOME_PROFILE_SELECT,
+    });
+    const user = toPublicHomeProfile(updated);
+    const identity = buildHomeIdentity({
+      userId: user.id,
+      phone: user.phone,
+      displayName: user.displayName,
+    });
+    const token = signHomeSessionToken(identity);
+    res.setHeader("x-home-session-token", token);
+    return res.json({
+      success: true,
+      token,
+      user,
+    });
+  } catch (error) {
+    if (
+      error?.code === "INVALID_PASSWORD" ||
+      error?.code === "INVALID_PHONE" ||
+      error?.code === "WEAK_PASSWORD"
+    ) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+    console.error("Home profile update error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Не удалось сохранить изменения профиля.",
+    });
+  }
+});
+app.post("/api/home/profile/telegram/start", authenticateHomeToken, async (req, res) => {
+  try {
+    const userId = normalizeText(req.homeUser?.userId);
+    if (!userId) return res.sendStatus(401);
+    const current = await prisma.users.findUnique({
+      where: { id: userId },
+      select: HOME_PROFILE_SELECT,
+    });
+    if (
+      !current ||
+      current.homeIsActive === false ||
+      !normalizeText(current.homePasswordHash) ||
+      !normalizeText(current.homePasswordSalt)
+    ) {
+      return res.sendStatus(401);
+    }
+    if (normalizeText(current.TelegramID)) {
+      return res.status(409).json({
+        success: false,
+        message: "Telegram уже привязан к этому аккаунту.",
+      });
+    }
+    const limits = toPublicHomeProfile(current)?.limits || {};
+    if (limits?.telegram?.isLocked) {
+      return res.status(429).json({
+        success: false,
+        message: buildLimitBlockedMessage("Telegram", limits.telegram),
+      });
+    }
+    markExpiredTelegramAuthRequests();
+    const request = createTelegramAuthRequest({
+      flow: TELEGRAM_AUTH_FLOW_PROFILE_LINK,
+      targetUserId: userId,
+    });
+    const botLink = TELEGRAM_BOT_USERNAME
+      ? `https://t.me/${encodeURIComponent(
+          TELEGRAM_BOT_USERNAME,
+        )}?start=${encodeURIComponent(`site_login_${request.code}`)}`
+      : null;
+    return res.status(201).json({
+      success: true,
+      requestId: request.id,
+      code: request.code,
+      command: `/site_login ${request.code}`,
+      expiresAt: request.expiresAt,
+      botLink,
+      botUsername: TELEGRAM_BOT_USERNAME || null,
+    });
+  } catch (error) {
+    console.error("Home profile telegram start error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Не удалось запустить привязку Telegram.",
+    });
+  }
+});
+app.get("/api/home/profile/telegram/status", authenticateHomeToken, async (req, res) => {
+  const requestId = normalizeText(req.query?.requestId);
+  if (!requestId) {
+    return res.status(400).json({
+      success: false,
+      done: true,
+      message: "Укажите requestId.",
+    });
+  }
+  try {
+    const userId = normalizeText(req.homeUser?.userId);
+    if (!userId) return res.sendStatus(401);
+    markExpiredTelegramAuthRequests();
+    const row = getTelegramAuthRequestById(requestId);
+    if (!row) {
+      return res.status(404).json({
+        success: false,
+        done: true,
+        message: "Сессия привязки Telegram не найдена.",
+      });
+    }
+    if (
+      normalizeText(row.flow || TELEGRAM_AUTH_FLOW_LOGIN) !==
+      TELEGRAM_AUTH_FLOW_PROFILE_LINK
+    ) {
+      return res.status(409).json({
+        success: false,
+        done: true,
+        message: "Этот запрос Telegram относится к другому сценарию.",
+      });
+    }
+    if (normalizeText(row.targetUserId) !== userId) {
+      return res.status(403).json({
+        success: false,
+        done: true,
+        message: "Этот запрос привязки создан для другого пользователя.",
+      });
+    }
+    if (row.status === TELEGRAM_AUTH_STATUS_COMPLETED) {
+      const safeTelegramId = normalizeText(row.telegramId);
+      if (!safeTelegramId) {
+        updateTelegramAuthRequestById(requestId, {
+          status: TELEGRAM_AUTH_STATUS_FAILED,
+          errorMessage: "Telegram ID не получен. Запустите привязку заново.",
+        });
+        return res.status(409).json({
+          success: false,
+          done: true,
+          message: "Telegram ID не получен. Запустите привязку заново.",
+        });
+      }
+      const telegramIdAsNumber = toTelegramIdNumber(safeTelegramId);
+      if (telegramIdAsNumber === null) {
+        updateTelegramAuthRequestById(requestId, {
+          status: TELEGRAM_AUTH_STATUS_FAILED,
+          errorMessage: "Некорректный Telegram ID.",
+        });
+        return res.status(409).json({
+          success: false,
+          done: true,
+          message: "Некорректный Telegram ID. Запустите привязку заново.",
+        });
+      }
+      const current = await prisma.users.findUnique({
+        where: { id: userId },
+        select: HOME_PROFILE_SELECT,
+      });
+      if (
+        !current ||
+        current.homeIsActive === false ||
+        !normalizeText(current.homePasswordHash) ||
+        !normalizeText(current.homePasswordSalt)
+      ) {
+        return res.sendStatus(401);
+      }
+      const limits = toPublicHomeProfile(current)?.limits || {};
+      if (limits?.telegram?.isLocked) {
+        updateTelegramAuthRequestById(requestId, {
+          status: TELEGRAM_AUTH_STATUS_FAILED,
+          errorMessage: buildLimitBlockedMessage("Telegram", limits.telegram),
+        });
+        return res.status(429).json({
+          success: false,
+          done: true,
+          message: buildLimitBlockedMessage("Telegram", limits.telegram),
+        });
+      }
+      const linkedUser = await findHomeUserByTelegramId(safeTelegramId);
+      if (linkedUser && linkedUser.id !== userId) {
+        updateTelegramAuthRequestById(requestId, {
+          status: TELEGRAM_AUTH_STATUS_FAILED,
+          errorMessage: "Этот Telegram уже привязан к другому аккаунту.",
+        });
+        return res.json({
+          success: false,
+          done: true,
+          message: "Этот Telegram уже привязан к другому аккаунту.",
+        });
+      }
+      const updated = await prisma.users.update({
+        where: { id: userId },
+        data: {
+          TelegramID: telegramIdAsNumber,
+          homeUpdatedAt: new Date().toISOString(),
+          homeTelegramChangedAt: new Date().toISOString(),
+        },
+        select: HOME_PROFILE_SELECT,
+      });
+      try {
+        deleteTelegramAuthRequestById(requestId);
+      } catch (cleanupError) {
+        console.warn(
+          "Telegram profile link request cleanup warning:",
+          cleanupError?.message || cleanupError,
+        );
+      }
+      return res.json({
+        success: true,
+        done: true,
+        user: toPublicHomeProfile(updated),
+      });
+    }
+    if (
+      row.status === TELEGRAM_AUTH_STATUS_FAILED ||
+      row.status === TELEGRAM_AUTH_STATUS_EXPIRED
+    ) {
+      return res.json({
+        success: false,
+        done: true,
+        status: row.status,
+        message:
+          normalizeText(row.errorMessage) ||
+          (row.status === TELEGRAM_AUTH_STATUS_EXPIRED
+            ? "Код привязки Telegram истек. Запросите новый."
+            : "Привязка Telegram завершилась с ошибкой."),
+      });
+    }
+    return res.json({
+      success: true,
+      done: false,
+      status: row.status,
+      expiresAt: row.expiresAt || null,
+      updatedAt: row.updatedAt || null,
+    });
+  } catch (error) {
+    console.error("Home profile telegram status error:", error);
+    return res.status(500).json({
+      success: false,
+      done: true,
+      message: "Не удалось проверить привязку Telegram.",
+    });
+  }
+});
+app.post("/api/home/profile/telegram/unlink", authenticateHomeToken, async (req, res) => {
+  try {
+    const userId = normalizeText(req.homeUser?.userId);
+    if (!userId) return res.sendStatus(401);
+    const current = await prisma.users.findUnique({
+      where: { id: userId },
+      select: HOME_PROFILE_SELECT,
+    });
+    if (
+      !current ||
+      current.homeIsActive === false ||
+      !normalizeText(current.homePasswordHash) ||
+      !normalizeText(current.homePasswordSalt)
+    ) {
+      return res.sendStatus(401);
+    }
+    const limits = toPublicHomeProfile(current)?.limits || {};
+    if (limits?.telegram?.isLocked) {
+      return res.status(429).json({
+        success: false,
+        message: buildLimitBlockedMessage("Telegram", limits.telegram),
+      });
+    }
+    const updated = await prisma.users.update({
+      where: { id: userId },
+      data: {
+        TelegramID: null,
+        homeUpdatedAt: new Date().toISOString(),
+        homeTelegramChangedAt: new Date().toISOString(),
+      },
+      select: HOME_PROFILE_SELECT,
+    });
+    return res.json({
+      success: true,
+      user: toPublicHomeProfile(updated),
+    });
+  } catch (error) {
+    console.error("Home profile telegram unlink error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Не удалось отвязать Telegram.",
+    });
+  }
 });
 app.get("/api/home/barbers", authenticateHomeToken, async (req, res) => {
   try {

@@ -20,6 +20,8 @@ model Users {
   homeCreatedAt        String?    @map("HomeCreatedAt")
   homeUpdatedAt        String?    @map("HomeUpdatedAt")
   homeLastLoginAt      String?    @map("HomeLastLoginAt")
+  homePhoneChangedAt   String?    @map("HomePhoneChangedAt")
+  homeTelegramChangedAt String?   @map("HomeTelegramChangedAt")
 
   @@map("Users")
 }

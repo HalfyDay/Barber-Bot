@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import json
 import datetime
 import io
@@ -1447,7 +1447,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     registered = False
     settings = load_bot_settings()
-    description = settings.get("botDescription") or "Добро пожаловать в HalfTime!"
+    description = settings.get("botDescription") or "Добро пожаловать в BrotherShop!"
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT 1 FROM Users WHERE TelegramID = ?", (user_id,))
@@ -2621,3 +2621,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

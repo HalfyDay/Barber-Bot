@@ -8,7 +8,7 @@ const fetch =
 
 const LICENSE_SOURCE =
   process.env.LICENSE_SOURCE ||
-  'https://raw.githubusercontent.com/HalfyDay/Barber-Bot/main/licenses.json';
+  'https://raw.githubusercontent.com/HalfyDay/BrotherShop/main/licenses.json';
 const LICENSE_REFRESH_SECONDS = Number(process.env.LICENSE_REFRESH_SECONDS || 3600);
 const LOCAL_LICENSE_FILE = path.join(__dirname, '..', 'data', 'licenses.json');
 
@@ -36,7 +36,7 @@ const readLocalLicenses = () => {
 const fetchRemoteLicenses = async () => {
   try {
     const response = await fetch(`${LICENSE_SOURCE}?${Date.now()}`, {
-      headers: { 'User-Agent': 'HalfTime-License-Checker' },
+      headers: { 'User-Agent': 'BrotherShop-License-Checker' },
     });
     if (!response.ok) throw new Error(`Код ответа ${response.status}`);
     const payload = await response.json();
@@ -154,3 +154,4 @@ module.exports = {
   licenseMiddleware,
   startLicenseWatcher,
 };
+

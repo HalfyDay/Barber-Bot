@@ -23,6 +23,8 @@ model Users {
   homePhoneChangedAt   String?    @map("HomePhoneChangedAt")
   homeTelegramChangedAt String?   @map("HomeTelegramChangedAt")
 
+  @@index([Phone])
+  @@index([TelegramID])
   @@map("Users")
 }
 model Appointments {

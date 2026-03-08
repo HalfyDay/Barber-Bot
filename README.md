@@ -1,91 +1,83 @@
-# HalfTime
+# BrotherShop
 
-РџРѕР»РЅРѕС†РµРЅРЅРѕРµ РѕР±Р»Р°РєРѕ РґР»СЏ СѓРїСЂР°РІР»РµРЅРёСЏ Р±Р°СЂР±РµСЂС€РѕРїРѕРј: РІРµР±вЂ‘CRM РЅР° Express/React, TelegramвЂ‘Р±РѕС‚ РЅР° python-telegram-bot Рё СЃРµСЂРІРёСЃС‹ Р±СЌРєР°РїРѕРІ/РѕР±РЅРѕРІР»РµРЅРёР№/Р»РёС†РµРЅР·РёР№. Р РµРїРѕР·РёС‚РѕСЂРёР№ СЃРѕРґРµСЂР¶РёС‚ backend, С„СЂРѕРЅС‚РµРЅРґ Рё СЂР°Р±РѕС‡РёРµ СЃРєСЂРёРїС‚С‹.
+Web CRM + site for a barbershop.
+Stack: Node.js, Express, Prisma, SQLite, Python Telegram bot.
 
-## Р’РѕР·РјРѕР¶РЅРѕСЃС‚Рё
-- РЎРѕРІСЂРµРјРµРЅРЅС‹Р№ SPA РЅР° React + Tailwind РґР»СЏ СЂР°СЃРїРёСЃР°РЅРёР№, СѓСЃР»СѓРі Рё РїРµСЂСЃРѕРЅР°Р»Р°.
-- REST/WS API РЅР° Express + Prisma РїРѕРІРµСЂС… SQLite (С„Р°Р№Р» `prisma/dev.db`).
-- Telegram-Р±РѕС‚ (`BotBarberShop.py`) РґР»СЏ Р·Р°РїРёСЃРё РєР»РёРµРЅС‚РѕРІ Рё СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёРё СЃ CRM.
-- РџР»Р°РЅРёСЂРѕРІС‰РёРє СЂРµР·РµСЂРІРЅС‹С… РєРѕРїРёР№ Рё Р°РІС‚РѕРѕР±РЅРѕРІР»РµРЅРёР№, СЂР°Р±РѕС‚Р°СЋС‰РёР№ С‡РµСЂРµР· GitHub.
-- Р›РёС†РµРЅР·РёРѕРЅРЅР°СЏ Р·Р°С‰РёС‚Р° СЃ РїРѕРґРґРµСЂР¶РєРѕР№ СѓРґР°Р»С‘РЅРЅРѕРіРѕ Рё Р»РѕРєР°Р»СЊРЅРѕРіРѕ СЃРїРёСЃРєР° РєР»СЋС‡РµР№.
+## Project structure
+- `server.js` - main API and runtime orchestration
+- `BotBrotherShop.py` - Telegram bot
+- `script.js` / `script.bundle.js` - web client logic
+- `prisma/` - schema and migrations
+- `services/` - update/license and helper services
+- `scripts/` - Ubuntu deploy and healthcheck scripts
+- `deploy/systemd/` - ready systemd service file
 
-## РЎС‚СЂСѓРєС‚СѓСЂР° РїСЂРѕРµРєС‚Р°
-```
-в”њв”Ђв”Ђ server.js          # Express API + РёРЅС‚РµРіСЂР°С†РёСЏ СЃ Р±РѕС‚РѕРј
-в”њв”Ђв”Ђ BotBarberShop.py   # telegram-Р±РѕС‚
-в”њв”Ђв”Ђ script.js          # SPA (React) + Tailwind
-в”њв”Ђв”Ђ prisma/            # Prisma schema + migrations
-в”њв”Ђв”Ђ services/          # licenseGuard, updateManager Рё РґСЂ.
-в”њв”Ђв”Ђ data/              # runtime JSON (РёРіРЅРѕСЂРёСЂСѓРµС‚СЃСЏ РІ Git)
-в””в”Ђв”Ђ Image/             # СЃС‚Р°С‚РёС‡РµСЃРєРёРµ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ
-```
+## Local run
+1. Install dependencies:
+   - `npm install`
+   - `python -m venv .venv`
+   - Windows: `.venv\Scripts\python -m pip install -r requirements.txt`
+   - Linux/macOS: `.venv/bin/python -m pip install -r requirements.txt`
+2. Create `.env` from `.env.example`.
+3. Apply DB migrations and generate Prisma client:
+   - `npx prisma migrate deploy`
+   - `npx prisma generate`
+4. Build web bundle:
+   - `npm run build:web`
+5. Start:
+   - `npm start`
 
-## РўСЂРµР±РѕРІР°РЅРёСЏ
-- Node.js 20+ / npm 10+
-- Python 3.11+ (СЃРѕРІРјРµСЃС‚РёРјРѕ СЃ 3.10) + pip
-- SQLite (РґР»СЏ Prisma)
-- Git + РґРѕСЃС‚СѓРї Рє GitHub (РґР»СЏ Р»РёС†РµРЅР·РёРё Рё РѕР±РЅРѕРІР»РµРЅРёР№)
+## Ubuntu deploy
+1. Install base packages:
+   - `sudo apt update`
+   - `sudo apt install -y git curl build-essential python3 python3-venv sqlite3`
+2. Install Node.js 20+.
+3. Clone repo and configure `.env`.
+4. Run deploy script:
+   - `chmod +x scripts/deploy-ubuntu.sh`
+   - `./scripts/deploy-ubuntu.sh`
 
-## Р‘С‹СЃС‚СЂС‹Р№ СЃС‚Р°СЂС‚
-1. `git clone https://github.com/HalfyDay/Barber-Bot.git` Рё `cd Barber-Bot`.
-2. РЎРєРѕРїРёСЂСѓР№С‚Рµ `.env.example` в†’ `.env` Рё Р·Р°РїРѕР»РЅРёС‚Рµ РєР»СЋС‡Рё (СЃРј. РЅРёР¶Рµ).
-3. Node-Р·Р°РІРёСЃРёРјРѕСЃС‚Рё: `npm install`.
-4. Python-Р·Р°РІРёСЃРёРјРѕСЃС‚Рё: `python -m pip install -r requirements.txt`.
-5. РџРѕРґРіРѕС‚РѕРІСЊС‚Рµ Р±Р°Р·Сѓ Рё Prisma Client:
-   ```bash
-   npx prisma migrate deploy
-   npx prisma generate
-   ```
-6. РЎРѕР±РµСЂРёС‚Рµ С„СЂРѕРЅС‚РµРЅРґ (Tailwind + Babel):
-   ```bash
-   npm run build:web
-   ```
-7. Р—Р°РїСѓСЃС‚РёС‚Рµ СЃРµСЂРІРёСЃ: `npm start`.
+`scripts/deploy-ubuntu.sh` always removes `node_modules` and runs `npm ci`.
+This avoids Windows/Linux native binary mismatch issues.
+The script also creates `.venv` and installs Python deps there.
 
-> Telegram-С‚РѕРєРµРЅ СЃРѕС…СЂР°РЅСЏР№С‚Рµ С‡РµСЂРµР· РёРЅС‚РµСЂС„РµР№СЃ (вЂњРЎРёСЃС‚РµРјР° в†’ Telegram-Р±РѕС‚вЂќ). CRM РїРёС€РµС‚ С‚РѕРєРµРЅ РІ С‚Р°Р±Р»РёС†Сѓ `BotSettings` Рё РїРµСЂРµР·Р°РїСѓСЃРєР°РµС‚ Р±РѕС‚Р°. РџРµСЂРµРјРµРЅРЅР°СЏ `TELEGRAM_BOT_TOKEN` РІ `.env` СЃР»СѓР¶РёС‚ С‚РѕР»СЊРєРѕ РґР»СЏ РїРµСЂРІРѕРіРѕ Р·Р°РїСѓСЃРєР°.
+## systemd service
+Service template:
+- [deploy/systemd/brothershop.service](deploy/systemd/brothershop.service)
 
-## РџРµСЂРµРјРµРЅРЅС‹Рµ РѕРєСЂСѓР¶РµРЅРёСЏ
-| РљР»СЋС‡ | РќР°Р·РЅР°С‡РµРЅРёРµ |
-| --- | --- |
-| `PORT` | РџРѕСЂС‚ Express (РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ 3000) |
-| `JWT_SECRET` | РЎРµРєСЂРµС‚ РґР»СЏ JWT |
-| `DATABASE_URL` | РџСѓС‚СЊ Рє SQLite (`file:./dev.db`) |
-| `TELEGRAM_BOT_TOKEN` (РѕРїС†.) | Р’СЂРµРјРµРЅРЅС‹Р№ С‚РѕРєРµРЅ РґРѕ СЃРѕС…СЂР°РЅРµРЅРёСЏ С‡РµСЂРµР· CRM |
-| `TELEGRAM_ADMIN_IDS` | ID Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂРѕРІ С‡РµСЂРµР· Р·Р°РїСЏС‚СѓСЋ |
-| `BARBER_LICENSE_KEY` | Р’Р°С€ Р»РёС†РµРЅР·РёРѕРЅРЅС‹Р№ РєР»СЋС‡ |
-| `LICENSE_SOURCE` | URL РґРѕ JSON СЃРѕ СЃРїРёСЃРєРѕРј Р»РёС†РµРЅР·РёР№ (raw GitHub) |
-| `BOT_PYTHON_PATH` / `BOT_COMMAND` | РџСѓС‚СЊ РёР»Рё РєРѕРјР°РЅРґР° РґР»СЏ Р·Р°РїСѓСЃРєР° Р±РѕС‚Р° |
-| `UPDATE_REPO` / `UPDATE_BRANCH` | РќР°СЃС‚СЂРѕР№РєРё Р°РІС‚РѕРѕР±РЅРѕРІР»РµРЅРёСЏ |
+Install steps (adjust user/path if needed):
+1. Create service user:
+   - `sudo useradd --system --home /opt/brothershop --shell /usr/sbin/nologin brothershop`
+2. Set ownership:
+   - `sudo chown -R brothershop:brothershop /opt/brothershop`
+3. Make scripts executable:
+   - `chmod +x /opt/brothershop/scripts/deploy-ubuntu.sh`
+   - `chmod +x /opt/brothershop/scripts/systemd-healthcheck.sh`
+4. Install unit:
+   - `sudo cp /opt/brothershop/deploy/systemd/brothershop.service /etc/systemd/system/brothershop.service`
+   - `sudo systemctl daemon-reload`
+   - `sudo systemctl enable --now brothershop`
+5. Check status/logs:
+   - `sudo systemctl status brothershop`
+   - `journalctl -u brothershop -f`
 
-`config.py` РёСЃРїРѕР»СЊР·СѓРµС‚ `python-dotenv`, РїРѕСЌС‚РѕРјСѓ `.env` РµРґРёРЅ РґР»СЏ Node Рё Python.
+## Health endpoint and checks
+- API health endpoint: `GET /api/health` (path can be changed by `HEALTHCHECK_PATH`).
+- Service post-start healthcheck script:
+  - [scripts/systemd-healthcheck.sh](scripts/systemd-healthcheck.sh)
+- Update alerts file:
+  - `data/update-alert.log`
 
-## Р›РёС†РµРЅР·РёСЂРѕРІР°РЅРёРµ
-- Р’ `LICENSE_SOURCE` СѓРєР°Р¶РёС‚Рµ `https://raw.githubusercontent.com/HalfyDay/Barber-Bot/main/licenses.json` РёР»Рё СЃРІРѕР№ URL.
-- JSON РґРѕР»Р¶РµРЅ РІС‹РіР»СЏРґРµС‚СЊ С‚Р°Рє:
-  ```json
-  {
-    "licenses": [
-      { "key": "key_1299896", "expiresAt": "2099-12-31T23:59:59Z" }
-    ]
-  }
-  ```
-- Р¤Р°Р№Р» `data/licenses.json` (Р»РѕРєР°Р»СЊРЅС‹Р№ fallback) С…СЂР°РЅРёС‚СЃСЏ РЅР° СЃРµСЂРІРµСЂРµ Рё РёРіРЅРѕСЂРёСЂСѓРµС‚СЃСЏ Git. РџСЂРё РЅРµРґРѕСЃС‚СѓРїРЅРѕРј GitHub РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РёРјРµРЅРЅРѕ РѕРЅ.
+## Important env vars for production
+- `APP_RESTART_MODE=auto` (`auto|spawn|exit`)
+- `BACKUP_CRON_EXPRESSION` (default `0 3 * * *`)
+- `BACKUP_CRON_TIMEZONE` (example `Asia/Irkutsk`)
+- `UPDATE_NPM_INSTALL_COMMAND` (default `npm ci`)
+- `HEALTHCHECK_PATH` (default `/api/health`)
+- `POST_RESTART_HEALTHCHECK_ENABLED=true`
+- `POST_RESTART_HEALTHCHECK_TIMEOUT_MS=45000`
+- `POST_RESTART_HEALTHCHECK_INTERVAL_MS=1500`
+- `POST_RESTART_HEALTHCHECK_HOST=127.0.0.1`
+- `UPDATE_COMMAND_MAX_BUFFER_BYTES=10485760`
+- `BOT_PYTHON_PATH=/opt/brothershop/.venv/bin/python`
 
-## Р¤СЂРѕРЅС‚РµРЅРґ Рё СЃР±РѕСЂРєР°
-- Tailwind РёСЃС…РѕРґРЅРёРєРё Р»РµР¶Р°С‚ РІ `styles.tailwind.css`, РєРѕРЅС„РёРі вЂ” РІ `tailwind.config.js`.
-- `npm run build:web` = `tailwindcss -i styles.tailwind.css -o styles.css --minify` + Babel (`script.js` в†’ `script.bundle.js`).
-- Service Worker РєРµС€РёСЂСѓРµС‚ `styles.css` Рё `script.bundle.js`. РџРѕСЃР»Рµ РґРµРїР»РѕСЏ РґРµР»Р°Р№С‚Рµ вЂњР¶С‘СЃС‚РєРѕРµ РѕР±РЅРѕРІР»РµРЅРёРµвЂќ РёР»Рё РјРµРЅСЏР№С‚Рµ `CACHE_VERSION` РІ `service-worker.js`, С‡С‚РѕР±С‹ РєР»РёРµРЅС‚С‹ РїРѕР»СѓС‡РёР»Рё РЅРѕРІСѓСЋ РІРµСЂСЃРёСЋ.
-
-## npm-СЃРєСЂРёРїС‚С‹
-| РЎРєСЂРёРїС‚ | РћРїРёСЃР°РЅРёРµ |
-| --- | --- |
-| `npm start` | Express API + Р·Р°РїСѓСЃРє Telegram-Р±РѕС‚Р° |
-| `npm run build:css` | РўРѕР»СЊРєРѕ Tailwind в†’ `styles.css` |
-| `npm run build:web` | РџРѕР»РЅС‹Р№ Р±РёР»Рґ С„СЂРѕРЅС‚РµРЅРґР° (CSS + Babel) |
-| `npm test` | Р—Р°РіР»СѓС€РєР° РґР»СЏ СЃРѕР±СЃС‚РІРµРЅРЅС‹С… С‚РµСЃС‚РѕРІ |
-
-## РћР±СЃР»СѓР¶РёРІР°РЅРёРµ
-- РџРµСЂРµРґ СЂРµР»РёР·РѕРј Р·Р°РїСѓСЃРєР°Р№С‚Рµ `npm run build:web`, С‡С‚РѕР±С‹ `script.bundle.js` Рё `styles.css` Р±С‹Р»Рё Р°РєС‚СѓР°Р»СЊРЅС‹РјРё.
-- Р РµР·РµСЂРІРЅС‹Рµ РєРѕРїРёРё (`backups/`) РјРѕР¶РЅРѕ СЃРѕР·РґР°РІР°С‚СЊ С‡РµСЂРµР· cron (СЃРј. `server.js`) РёР»Рё API `/api/backups`.
-- Р”Р»СЏ РЅРµСЃС‚Р°РЅРґР°СЂС‚РЅРѕРіРѕ Р·Р°РїСѓСЃРєР° Python-Р±РѕС‚Р° Р·Р°РґР°Р№С‚Рµ `BOT_COMMAND="python -m BotBarberShop"` РёР»Рё `BOT_PYTHON_PATH`.
-- Р”РёСЂРµРєС‚РѕСЂРёСЏ `data/` РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ С‚РѕР»СЊРєРѕ РґР»СЏ runtime-С„Р°Р№Р»РѕРІ Рё РЅРµ РїРѕРїР°РґР°РµС‚ РІ Git. РЎРµРєСЂРµС‚С‹ (.env, dev.db, licenses.json) С…СЂР°РЅРёС‚Рµ Р»РѕРєР°Р»СЊРЅРѕ Рё РЅР° GitHub РЅРµ РїСѓР±Р»РёРєСѓР№С‚Рµ.

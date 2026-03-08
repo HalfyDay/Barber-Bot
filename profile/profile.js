@@ -178,6 +178,11 @@
     lastChangedAt: normalizeText(limit?.lastChangedAt) || null,
     nextAllowedAt: normalizeText(limit?.nextAllowedAt) || null,
   });
+  const normalizeTelegramLimit = (limit) => ({
+    isLocked: false,
+    lastChangedAt: normalizeText(limit?.lastChangedAt) || null,
+    nextAllowedAt: null,
+  });
 
   const buildSessionPayload = (payload = {}) => ({
     token: normalizeText(payload.token),
@@ -300,11 +305,10 @@
 
   const updateTelegramButtons = () => {
     const linked = Boolean(state.profile?.telegramLinked);
-    const lockTelegram = Boolean(state.profile?.limits?.telegram?.isLocked);
     telegramLinkButton.hidden = linked;
     telegramUnlinkButton.hidden = !linked;
-    telegramLinkButton.disabled = state.telegramPending || lockTelegram;
-    telegramUnlinkButton.disabled = state.telegramPending || lockTelegram;
+    telegramLinkButton.disabled = state.telegramPending;
+    telegramUnlinkButton.disabled = state.telegramPending;
   };
 
   const setTelegramPending = (isPending) => {
@@ -383,7 +387,7 @@
       limits: {
         name: normalizeLimit(safeLimits.name),
         phone: normalizeLimit(safeLimits.phone),
-        telegram: normalizeLimit(safeLimits.telegram),
+        telegram: normalizeTelegramLimit(safeLimits.telegram),
       },
     };
 

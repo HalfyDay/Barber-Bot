@@ -9,12 +9,20 @@ const fetch =
   globalThis.fetch ||
   ((...args) => import('node-fetch').then(({ default: nodeFetch }) => nodeFetch(...args)));
 
-const UPDATE_REPO = process.env.UPDATE_REPO || 'HalfyDay/Barber-Bot';
+const UPDATE_REPO = process.env.UPDATE_REPO || 'HalfyDay/BrotherShop';
 const UPDATE_BRANCH = process.env.UPDATE_BRANCH || 'main';
 const UPDATE_REMOTE = process.env.UPDATE_REMOTE || 'origin';
 const UPDATE_CACHE_SECONDS = Number(process.env.UPDATE_CACHE_SECONDS || 600);
 const UPDATE_GITHUB_TOKEN = process.env.UPDATE_GITHUB_TOKEN || process.env.GITHUB_TOKEN || '';
+const UPDATE_NPM_INSTALL_COMMAND =
+  process.env.UPDATE_NPM_INSTALL_COMMAND || 'npm ci';
+const UPDATE_COMMAND_MAX_BUFFER_BYTES =
+  Number(process.env.UPDATE_COMMAND_MAX_BUFFER_BYTES) || 10 * 1024 * 1024;
 const PRISMA_SCHEMA_PATH = path.join(PROJECT_ROOT, 'prisma', 'schema.prisma');
+const PRISMA_SCHEMA_RELATIVE_PATH = path
+  .relative(PROJECT_ROOT, PRISMA_SCHEMA_PATH)
+  .split(path.sep)
+  .join('/');
 const MIGRATION_REMOVE_HOME_DISPLAY_NAME = '20260227193000_remove_home_display_name';
 
 let cachedUpdate = null;
@@ -84,7 +92,7 @@ const compareVersions = (current, latest) => {
 const runCommand = (command, cwd = PROJECT_ROOT) =>
   new Promise((resolve, reject) => {
     console.log(`[update] run: ${command}`);
-    exec(command, { cwd }, (error, stdout, stderr) => {
+    exec(command, { cwd, maxBuffer: UPDATE_COMMAND_MAX_BUFFER_BYTES }, (error, stdout, stderr) => {
       if (error) {
         return reject(new Error(`${command} >> ${stderr || error.message}`));
       }
@@ -97,7 +105,7 @@ const runCommand = (command, cwd = PROJECT_ROOT) =>
 
 const buildGithubHeaders = () => {
   const headers = {
-    'User-Agent': 'HalfTime-Updater',
+    'User-Agent': 'BrotherShop-Updater',
     Accept: 'application/vnd.github+json',
   };
   if (UPDATE_GITHUB_TOKEN) {
@@ -159,7 +167,7 @@ const runPrismaMigrations = async () => {
         const isEpermGenerate = isGenerate && /EPERM/i.test(message);
         if (isEpermPrismaEngine || isEpermGenerate) {
           console.warn(
-            `[update] ${command} failed with EPERM (likely file lock), skipping generate to avoid lock; consider running "npx prisma generate --schema prisma\\schema.prisma" manually after restart. Details: ${message}`,
+            `[update] ${command} failed with EPERM (likely file lock), skipping generate to avoid lock; consider running "npx prisma generate --schema ${PRISMA_SCHEMA_RELATIVE_PATH}" manually after restart. Details: ${message}`,
           );
           break;
         }
@@ -347,7 +355,8 @@ const applyUpdate = async () => {
   const stashRef = await stashWorkingTree();
   try {
     await runCommand(`git fetch ${UPDATE_REMOTE} --tags`);
-    await runCommand(`git pull ${UPDATE_REMOTE} ${UPDATE_BRANCH}`);
+    await runCommand(`git pull --ff-only ${UPDATE_REMOTE} ${UPDATE_BRANCH}`);
+    await runCommand(UPDATE_NPM_INSTALL_COMMAND);
     await runPrismaMigrations();
     await runCommand('npm run build:web');
     const python = process.env.BOT_PYTHON_PATH || (os.platform() === 'win32' ? 'python' : 'python3');
@@ -372,3 +381,4 @@ module.exports = {
   checkForUpdates,
   applyUpdate,
 };
+

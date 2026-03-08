@@ -3,9 +3,14 @@
   const HOME_TELEGRAM_AUTH_START_API_URL = `${HOME_API_BASE_URL}/telegram/start`;
   const HOME_TELEGRAM_AUTH_STATUS_API_URL = `${HOME_API_BASE_URL}/telegram/status`;
   const HOME_TELEGRAM_AUTH_COMPLETE_API_URL = `${HOME_API_BASE_URL}/telegram/complete`;
+  const BARBER_LOGIN_API_URL = `${window.location.origin}/api/login`;
+  const BARBER_AUTH_ME_API_URL = `${window.location.origin}/api/auth/me`;
   const SESSION_STORAGE_KEY = "home-user-session";
   const REMEMBER_STORAGE_KEY = "home-user-remember";
+  const BARBER_SESSION_STORAGE_KEY = "barber-session";
+  const BARBER_REMEMBER_STORAGE_KEY = "barber-session-remember";
   const HOME_PAGE_URL = "/booking/";
+  const PANEL_PAGE_URL = "/home/";
   const TELEGRAM_AUTH_POLL_FAST_INTERVAL_MS = 700;
   const TELEGRAM_AUTH_POLL_SLOW_INTERVAL_MS = 1500;
   const TELEGRAM_AUTH_POLL_FAST_ATTEMPTS = 6;
@@ -220,8 +225,26 @@
     },
   });
 
+  const buildBarberSessionPayload = (payload = {}) => ({
+    token: normalizeText(payload.token),
+    username: normalizeText(payload.username || payload.login),
+    displayName: normalizeText(payload.displayName || payload.barberName || payload.username),
+    barberId: normalizeText(payload.barberId || payload.id),
+    role: normalizeText(payload.role),
+    barberName: normalizeText(payload.barberName || payload.displayName || payload.username),
+    phone: normalizePhone(payload.phone),
+  });
+
   const persistRememberChoice = (remember) => {
     safeStorageSet(getStorageArea("local"), REMEMBER_STORAGE_KEY, remember ? "1" : "0");
+  };
+
+  const persistBarberRememberChoice = (remember) => {
+    safeStorageSet(
+      getStorageArea("local"),
+      BARBER_REMEMBER_STORAGE_KEY,
+      remember ? "1" : "0",
+    );
   };
 
   const persistSessionPayload = (payload, remember) => {
@@ -237,9 +260,27 @@
     }
   };
 
+  const persistBarberSessionPayload = (payload, remember) => {
+    const serialized = JSON.stringify(payload);
+    const localStore = getStorageArea("local");
+    const sessionStore = getStorageArea("session");
+    if (remember) {
+      safeStorageSet(localStore, BARBER_SESSION_STORAGE_KEY, serialized);
+      safeStorageRemove(sessionStore, BARBER_SESSION_STORAGE_KEY);
+    } else {
+      safeStorageSet(sessionStore, BARBER_SESSION_STORAGE_KEY, serialized);
+      safeStorageRemove(localStore, BARBER_SESSION_STORAGE_KEY);
+    }
+  };
+
   const clearSessionPayload = () => {
     safeStorageRemove(getStorageArea("local"), SESSION_STORAGE_KEY);
     safeStorageRemove(getStorageArea("session"), SESSION_STORAGE_KEY);
+  };
+
+  const clearBarberSessionPayload = () => {
+    safeStorageRemove(getStorageArea("local"), BARBER_SESSION_STORAGE_KEY);
+    safeStorageRemove(getStorageArea("session"), BARBER_SESSION_STORAGE_KEY);
   };
 
   const loadPersistedSession = () => {
@@ -263,6 +304,27 @@
     return { session: null, remember };
   };
 
+  const loadPersistedBarberSession = () => {
+    const localRaw = safeStorageGet(getStorageArea("local"), BARBER_SESSION_STORAGE_KEY);
+    if (localRaw) {
+      try {
+        return { session: buildBarberSessionPayload(JSON.parse(localRaw)), remember: true };
+      } catch {
+        // ignore
+      }
+    }
+    const sessionRaw = safeStorageGet(getStorageArea("session"), BARBER_SESSION_STORAGE_KEY);
+    if (sessionRaw) {
+      try {
+        return { session: buildBarberSessionPayload(JSON.parse(sessionRaw)), remember: false };
+      } catch {
+        // ignore
+      }
+    }
+    const remember = safeStorageGet(getStorageArea("local"), BARBER_REMEMBER_STORAGE_KEY) === "1";
+    return { session: null, remember };
+  };
+
   const validateSessionToken = async (token) => {
     if (!token) return null;
     try {
@@ -282,6 +344,10 @@
     window.location.replace(HOME_PAGE_URL);
   };
 
+  const redirectToPanel = () => {
+    window.location.replace(PANEL_PAGE_URL);
+  };
+
   const tryRestoreSession = async () => {
     const persisted = loadPersistedSession();
     if (!persisted.session?.token) return null;
@@ -296,6 +362,18 @@
     });
     persistSessionPayload(nextPayload, persisted.remember);
     return nextPayload;
+  };
+
+  const tryRestoreBarberSession = async () => {
+    const persisted = loadPersistedBarberSession();
+    if (!persisted.session?.token) return null;
+    const checked = await validateBarberSessionToken(persisted.session.token);
+    if (!checked?.session?.token) {
+      clearBarberSessionPayload();
+      return null;
+    }
+    persistBarberSessionPayload(checked.session, persisted.remember);
+    return checked.session;
   };
 
   const setStatus = (text, type = "default") => {
@@ -349,26 +427,75 @@
     }
 
     try {
-      const response = await fetch(`${HOME_API_BASE_URL}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: normalizedPhone, password }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload?.success || !payload?.token || !payload?.user) {
-        setStatus(payload?.message || "Не удалось выполнить вход.", "error");
+      let homeResponse = null;
+      let homePayload = {};
+      let homeError = null;
+      try {
+        homeResponse = await fetch(`${HOME_API_BASE_URL}/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: normalizedPhone, password }),
+        });
+        homePayload = await homeResponse.json().catch(() => ({}));
+      } catch (error) {
+        homeError = error;
+      }
+      if (homeResponse?.ok && homePayload?.success && homePayload?.token && homePayload?.user) {
+        const sessionPayload = buildSessionPayload({
+          token: homePayload.token,
+          user: homePayload.user,
+        });
+        clearBarberSessionPayload();
+        persistRememberChoice(true);
+        persistSessionPayload(sessionPayload, true);
+        redirectToHome();
+        return;
+      }
+
+      let barberResponse = null;
+      let barberPayload = {};
+      let barberError = null;
+      try {
+        barberResponse = await fetch(BARBER_LOGIN_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: normalizedPhone, password }),
+        });
+        barberPayload = await barberResponse.json().catch(() => ({}));
+      } catch (error) {
+        barberError = error;
+      }
+      if (barberResponse?.ok && barberPayload?.success && barberPayload?.token) {
+        const barberSessionPayload = buildBarberSessionPayload({
+          token: barberPayload.token,
+          username: barberPayload.username,
+          displayName: barberPayload.displayName,
+          barberId: barberPayload.barberId,
+          role: barberPayload.role,
+          barberName: barberPayload.barberName,
+          phone: barberPayload.phone || normalizedPhone,
+        });
+        clearSessionPayload();
+        persistBarberRememberChoice(true);
+        persistBarberSessionPayload(barberSessionPayload, true);
+        redirectToPanel();
+        return;
+      }
+
+      if (homeError && barberError) {
+        setStatus("Сервер недоступен. Попробуйте позже.", "error");
         setPending(loginForm, false);
         return;
       }
-      const sessionPayload = buildSessionPayload({
-        token: payload.token,
-        user: payload.user,
-      });
-      persistRememberChoice(true);
-      persistSessionPayload(sessionPayload, true);
-      redirectToHome();
+      setStatus(
+        normalizeText(homePayload?.message) ||
+          normalizeText(barberPayload?.message) ||
+          "Не удалось выполнить вход.",
+        "error",
+      );
+      setPending(loginForm, false);
     } catch {
-      setStatus("Сервер недоступен. Попробуйте позже.", "error");
+      setStatus("Не удалось выполнить вход. Попробуйте позже.", "error");
       setPending(loginForm, false);
     }
   };
@@ -412,6 +539,7 @@
         token: payload.token,
         user: payload.user,
       });
+      clearBarberSessionPayload();
       persistRememberChoice(true);
       persistSessionPayload(sessionPayload, true);
       redirectToHome();
@@ -483,6 +611,7 @@
           token: payload.token,
           user: payload.user,
         });
+        clearBarberSessionPayload();
         persistRememberChoice(true);
         persistSessionPayload(sessionPayload, true);
         resetTelegramSetupState();
@@ -510,12 +639,37 @@
         token: payload.token,
         user: payload.user,
       });
+      clearBarberSessionPayload();
       persistRememberChoice(true);
       persistSessionPayload(sessionPayload, true);
       redirectToHome();
     } catch {
       setStatus("Сервер недоступен. Попробуйте позже.", "error");
       setPending(registerForm, false);
+    }
+  };
+
+  const validateBarberSessionToken = async (token) => {
+    if (!token) return null;
+    try {
+      const response = await fetch(BARBER_AUTH_ME_API_URL, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) return null;
+      const payload = await response.json().catch(() => ({}));
+      const refreshed = response.headers.get("x-session-token");
+      return {
+        session: buildBarberSessionPayload({
+          token: refreshed || token,
+          username: payload?.username,
+          displayName: payload?.displayName,
+          barberId: payload?.barberId,
+          role: payload?.role,
+          barberName: payload?.barberName,
+        }),
+      };
+    } catch {
+      return null;
     }
   };
 
@@ -631,6 +785,7 @@
           token: payload.token,
           user: payload.user,
         });
+        clearBarberSessionPayload();
         persistRememberChoice(true);
         persistSessionPayload(sessionPayload, true);
         finishTelegramFlow();
@@ -725,9 +880,14 @@
       }
     });
 
-    const restoredSession = await tryRestoreSession();
-    if (restoredSession) {
+    const restoredHomeSession = await tryRestoreSession();
+    if (restoredHomeSession) {
       redirectToHome();
+      return;
+    }
+    const restoredBarberSession = await tryRestoreBarberSession();
+    if (restoredBarberSession) {
+      redirectToPanel();
       return;
     }
 

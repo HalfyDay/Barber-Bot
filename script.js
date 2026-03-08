@@ -1,4 +1,4 @@
-﻿const { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, Fragment } = React;
+const { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, Fragment } = React;
 const { createPortal, createRoot } = ReactDOM;
 const sendClientLog = (data) => {
   try {
@@ -8037,7 +8037,7 @@ const LoginScreen = ({ onLogin, error, defaultRemember = false, onRememberChange
             <span>Внутренняя панель</span>
           </div>
           <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-extrabold text-white">HalfTime</h1>
+            <h1 className="text-3xl font-extrabold text-white">BrotherShop</h1>
             <p className="text-sm text-slate-400">Авторизация для команды барбершопа</p>
           </div>
           <div>
@@ -9516,3 +9516,4 @@ const renderApp = () => {
   }
 };
 renderApp();
+

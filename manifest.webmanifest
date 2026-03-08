@@ -1,9 +1,9 @@
 {
-  "name": "HalfTime",
-  "short_name": "HalfTime",
-  "description": "Барбер CRM с управлением записью клиентов и барбершопом.",
+  "name": "BrotherShop",
+  "short_name": "BrotherShop",
+  "description": "BrotherShop CRM with booking, client records, and team workflows.",
   "lang": "ru-RU",
-  "id": "halftime-crm",
+  "id": "brothershop-crm",
   "start_url": "/panel/?source=pwa",
   "scope": "/panel/",
   "display": "standalone",

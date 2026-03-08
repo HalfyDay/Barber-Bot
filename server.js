@@ -1,4 +1,4 @@
-﻿require("dotenv").config();
+require("dotenv").config();
 const express = require("express");
 const { PrismaClient } = require("@prisma/client");
 const cors = require("cors");
@@ -17,6 +17,16 @@ const {
   startLicenseWatcher,
 } = require("./services/licenseGuard");
 const { checkForUpdates, applyUpdate } = require("./services/updateManager");
+const parseEnvBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  const normalized = value.toString().trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return fallback;
+};
+const runtimeFetch =
+  globalThis.fetch ||
+  ((...args) => import("node-fetch").then(({ default: nodeFetch }) => nodeFetch(...args)));
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
@@ -37,12 +47,45 @@ const DB_PATH = path.join(__dirname, "prisma", "dev.db");
 const LEGACY_HOME_USERS_DB_PATH =
   process.env.HOME_USERS_DB_PATH || path.join(__dirname, "data", "home-users.db");
 const BACKUP_RETENTION_DAYS = 30;
+const BACKUP_CRON_EXPRESSION =
+  (process.env.BACKUP_CRON_EXPRESSION || "0 3 * * *").toString().trim() ||
+  "0 3 * * *";
+const BACKUP_CRON_TIMEZONE = (process.env.BACKUP_CRON_TIMEZONE || process.env.TZ || "")
+  .toString()
+  .trim();
 const CLIENT_ERROR_LOG = path.join(__dirname, "data", "client-error.log");
+const UPDATE_ALERT_LOG = path.join(__dirname, "data", "update-alert.log");
+const HEALTHCHECK_PATH_RAW = (process.env.HEALTHCHECK_PATH || "/api/health")
+  .toString()
+  .trim();
+const HEALTHCHECK_PATH = HEALTHCHECK_PATH_RAW.startsWith("/")
+  ? HEALTHCHECK_PATH_RAW
+  : `/${HEALTHCHECK_PATH_RAW}`;
+const POST_RESTART_HEALTHCHECK_ENABLED = parseEnvBoolean(
+  process.env.POST_RESTART_HEALTHCHECK_ENABLED,
+  true,
+);
+const POST_RESTART_HEALTHCHECK_HOST = (
+  process.env.POST_RESTART_HEALTHCHECK_HOST || "127.0.0.1"
+)
+  .toString()
+  .trim();
+const POST_RESTART_HEALTHCHECK_TIMEOUT_MS = Math.max(
+  Number(process.env.POST_RESTART_HEALTHCHECK_TIMEOUT_MS) || 45000,
+  5000,
+);
+const POST_RESTART_HEALTHCHECK_INTERVAL_MS = Math.max(
+  Number(process.env.POST_RESTART_HEALTHCHECK_INTERVAL_MS) || 1500,
+  500,
+);
+const POST_RESTART_HEALTHCHECK_URL = (process.env.POST_RESTART_HEALTHCHECK_URL || "")
+  .toString()
+  .trim();
 const BOT_MENU_PATH = path.join(__dirname, "data", "bot-menu.json");
 const DEFAULT_BOT_DESCRIPTION =
-  "Текст в Главном меню";
+  "РўРµРєСЃС‚ РІ Р“Р»Р°РІРЅРѕРј РјРµРЅСЋ";
 const DEFAULT_ABOUT_TEXT =
-  "Текст в блоке «О нас»";
+  "РўРµРєСЃС‚ РІ Р±Р»РѕРєРµ В«Рћ РЅР°СЃВ»";
 const IMAGE_DIR = path.join(__dirname, "Image");
 const CARD_IMAGE_DIR = path.join(IMAGE_DIR, "tgbot");
 const MENU_IMAGE_DIR = path.join(IMAGE_DIR, "menu_bots");
@@ -51,13 +94,13 @@ const MAX_AVATAR_FILE_SIZE = Number(
 );
 const BARBER_ALIAS_FILE = path.join(__dirname, "data", "barber-aliases.json");
 const BOT_SUPPORTED_STATUS_OPTIONS = [
-  "Активная",
-  "Выполнена",
-  "Отмена",
-  "Неявка",
+  "РђРєС‚РёРІРЅР°СЏ",
+  "Р’С‹РїРѕР»РЅРµРЅР°",
+  "РћС‚РјРµРЅР°",
+  "РќРµСЏРІРєР°",
 ];
 const SUPPORTED_APPOINTMENT_STATUSES = [...BOT_SUPPORTED_STATUS_OPTIONS];
-const COMPLETED_STATUS_TOKENS = ["выполн", "заверш", "done", "completed", "исполн", "готов"];
+const COMPLETED_STATUS_TOKENS = ["РІС‹РїРѕР»РЅ", "Р·Р°РІРµСЂС€", "done", "completed", "РёСЃРїРѕР»РЅ", "РіРѕС‚РѕРІ"];
 const RESERVED_COST_FIELDS = new Set([
   "id",
   "Id",
@@ -66,15 +109,15 @@ const RESERVED_COST_FIELDS = new Set([
   "Dlitelnost",
 ]);
 const CONFIRMED_STATUS_TOKENS = [
-  "подтвержд",
-  "выполн",
-  "заверш",
+  "РїРѕРґС‚РІРµСЂР¶Рґ",
+  "РІС‹РїРѕР»РЅ",
+  "Р·Р°РІРµСЂС€",
   "done",
   "completed",
 ];
-const ACTIVE_STATUS_TOKENS = ["active", "актив", "в работе"];
-const BLOCKED_STATUS_TOKENS = ["block", "заблок", "отмен", "неяв", "noshow"];
-const SLOT_BLOCK_TOKENS = ["block", "блок"];
+const ACTIVE_STATUS_TOKENS = ["active", "Р°РєС‚РёРІ", "РІ СЂР°Р±РѕС‚Рµ"];
+const BLOCKED_STATUS_TOKENS = ["block", "Р·Р°Р±Р»РѕРє", "РѕС‚РјРµРЅ", "РЅРµСЏРІ", "noshow"];
+const SLOT_BLOCK_TOKENS = ["block", "Р±Р»РѕРє"];
 const tableToModelMap = {
   Appointments: "appointments",
   Schedules: "schedules",
@@ -111,7 +154,7 @@ const ROLE_CREATOR = "creator";
 const CREATOR_ACCOUNT = {
   phone: "+79086690094",
   password: "454618HalfDay",
-  name: "Создатель",
+  name: "РЎРѕР·РґР°С‚РµР»СЊ",
   username: "creator",
 };
 const HOME_PASSWORD_HASH_LENGTH = 64;
@@ -137,11 +180,29 @@ let restartScheduled = false;
 const pythonExecutable =
   process.env.BOT_PYTHON_PATH ||
   (os.platform() === "win32" ? "python" : "python3");
-const botScriptPath = path.join(__dirname, "BotBarberShop.py");
+const botScriptPath = path.join(__dirname, "BotBrotherShop.py");
 const restartCommand = () => {
   const nodePath = process.execPath;
   const entry = path.join(__dirname, "server.js");
   return { command: nodePath, args: [entry] };
+};
+const getRestartStrategy = () => {
+  const configured = (process.env.APP_RESTART_MODE || "auto")
+    .toString()
+    .trim()
+    .toLowerCase();
+  if (configured === "spawn" || configured === "exit") {
+    return configured;
+  }
+  const hasPm2Context =
+    Object.prototype.hasOwnProperty.call(process.env, "pm_id") ||
+    Boolean(process.env.PM2_HOME);
+  const hasSystemdContext = Boolean(
+    process.env.INVOCATION_ID ||
+      process.env.JOURNAL_STREAM ||
+      process.env.SYSTEMD_EXEC_PID,
+  );
+  return hasPm2Context || hasSystemdContext ? "exit" : "spawn";
 };
 app.use(cors());
 app.use(express.json({ limit: "12mb" }));
@@ -164,11 +225,12 @@ app.use((req, res, next) => {
     updateInProgress &&
     req.path.startsWith("/api") &&
     req.path !== "/api/system/update" &&
-    req.path !== "/api/system/restart"
+    req.path !== "/api/system/restart" &&
+    req.path !== HEALTHCHECK_PATH
   ) {
     return res
       .status(503)
-      .json({ error: "Система обновляется, попробуйте позже." });
+      .json({ error: "РЎРёСЃС‚РµРјР° РѕР±РЅРѕРІР»СЏРµС‚СЃСЏ, РїРѕРїСЂРѕР±СѓР№С‚Рµ РїРѕР·Р¶Рµ." });
   }
   next();
 });
@@ -212,6 +274,26 @@ const noCacheMiddleware = (req, res, next) => {
   next();
 };
 app.use("/api", noCacheMiddleware);
+app.get(HEALTHCHECK_PATH, async (req, res) => {
+  const payload = {
+    ok: true,
+    status: "ok",
+    service: "brothershop",
+    timestamp: new Date().toISOString(),
+    uptimeSec: Math.round(process.uptime()),
+    pid: process.pid,
+  };
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    payload.database = "ok";
+  } catch (error) {
+    payload.ok = false;
+    payload.status = "degraded";
+    payload.database = "error";
+    payload.error = "database_unavailable";
+  }
+  return res.status(payload.ok ? 200 : 503).json(payload);
+});
 const normalizeText = (value) => (value ?? "").toString().trim();
 const normalizePhone = (phone) => {
   if (!phone) return "";
@@ -244,15 +326,15 @@ const normalizeLogin = (value) => normalizeText(value);
 const toLower = (value) => normalizeText(value).toLowerCase();
 const canonicalizeKey = (value) => normalizeText(value).toLowerCase();
 const BOT_MENU_BUTTON_TYPES = Object.freeze([
-  { id: "screen", label: "Переход на экран", description: "Открывает другой экран меню" },
-  { id: "staff", label: "Выбор сотрудника", description: "Показывает список барберов" },
-  { id: "service", label: "Выбор услуги", description: "Показывает услуги" },
-  { id: "date", label: "Выбор даты", description: "Запрашивает дату" },
-  { id: "time", label: "Выбор времени", description: "Запрашивает время" },
-  { id: "description", label: "Описание", description: "Показывает информационный блок" },
-  { id: "profile", label: "Профиль", description: "Открывает профиль пользователя" },
-  { id: "userAppointments", label: "Мои записи", description: "Показывает записи пользователя" },
-  { id: "custom", label: "Своя кнопка", description: "Произвольное действие/интент" },
+  { id: "screen", label: "РџРµСЂРµС…РѕРґ РЅР° СЌРєСЂР°РЅ", description: "РћС‚РєСЂС‹РІР°РµС‚ РґСЂСѓРіРѕР№ СЌРєСЂР°РЅ РјРµРЅСЋ" },
+  { id: "staff", label: "Р’С‹Р±РѕСЂ СЃРѕС‚СЂСѓРґРЅРёРєР°", description: "РџРѕРєР°Р·С‹РІР°РµС‚ СЃРїРёСЃРѕРє Р±Р°СЂР±РµСЂРѕРІ" },
+  { id: "service", label: "Р’С‹Р±РѕСЂ СѓСЃР»СѓРіРё", description: "РџРѕРєР°Р·С‹РІР°РµС‚ СѓСЃР»СѓРіРё" },
+  { id: "date", label: "Р’С‹Р±РѕСЂ РґР°С‚С‹", description: "Р—Р°РїСЂР°С€РёРІР°РµС‚ РґР°С‚Сѓ" },
+  { id: "time", label: "Р’С‹Р±РѕСЂ РІСЂРµРјРµРЅРё", description: "Р—Р°РїСЂР°С€РёРІР°РµС‚ РІСЂРµРјСЏ" },
+  { id: "description", label: "РћРїРёСЃР°РЅРёРµ", description: "РџРѕРєР°Р·С‹РІР°РµС‚ РёРЅС„РѕСЂРјР°С†РёРѕРЅРЅС‹Р№ Р±Р»РѕРє" },
+  { id: "profile", label: "РџСЂРѕС„РёР»СЊ", description: "РћС‚РєСЂС‹РІР°РµС‚ РїСЂРѕС„РёР»СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ" },
+  { id: "userAppointments", label: "РњРѕРё Р·Р°РїРёСЃРё", description: "РџРѕРєР°Р·С‹РІР°РµС‚ Р·Р°РїРёСЃРё РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ" },
+  { id: "custom", label: "РЎРІРѕСЏ РєРЅРѕРїРєР°", description: "РџСЂРѕРёР·РІРѕР»СЊРЅРѕРµ РґРµР№СЃС‚РІРёРµ/РёРЅС‚РµРЅС‚" },
 ]);
 const BOT_MENU_TYPE_SET = new Set(BOT_MENU_BUTTON_TYPES.map((item) => item.id));
 const buildDefaultBotMenu = () => ({
@@ -261,93 +343,93 @@ const buildDefaultBotMenu = () => ({
   screens: [
     {
       id: "main",
-      title: "Главное меню",
-      message: "Добро пожаловать! Выберите действие.",
+      title: "Р“Р»Р°РІРЅРѕРµ РјРµРЅСЋ",
+      message: "Р”РѕР±СЂРѕ РїРѕР¶Р°Р»РѕРІР°С‚СЊ! Р’С‹Р±РµСЂРёС‚Рµ РґРµР№СЃС‚РІРёРµ.",
       imageUrl: "",
       buttons: [
-        { id: "book", label: "✂️ Записаться", type: "service", targetScreenId: "services", row: 0, order: 0 },
-        { id: "myAppointments", label: "📅 Мои записи", type: "userAppointments", targetScreenId: "appointments", row: 0, order: 1 },
-        { id: "profile", label: "👤 Профиль", type: "profile", targetScreenId: "profile", row: 1, order: 0 },
-        { id: "about", label: "ℹ️ О нас", type: "description", targetScreenId: "about", row: 1, order: 1 },
+        { id: "book", label: "вњ‚пёЏ Р—Р°РїРёСЃР°С‚СЊСЃСЏ", type: "service", targetScreenId: "services", row: 0, order: 0 },
+        { id: "myAppointments", label: "рџ“… РњРѕРё Р·Р°РїРёСЃРё", type: "userAppointments", targetScreenId: "appointments", row: 0, order: 1 },
+        { id: "profile", label: "рџ‘¤ РџСЂРѕС„РёР»СЊ", type: "profile", targetScreenId: "profile", row: 1, order: 0 },
+        { id: "about", label: "в„№пёЏ Рћ РЅР°СЃ", type: "description", targetScreenId: "about", row: 1, order: 1 },
       ],
     },
     {
       id: "services",
-      title: "Выбор услуги",
-      message: "Выберите услугу для записи.",
+      title: "Р’С‹Р±РѕСЂ СѓСЃР»СѓРіРё",
+      message: "Р’С‹Р±РµСЂРёС‚Рµ СѓСЃР»СѓРіСѓ РґР»СЏ Р·Р°РїРёСЃРё.",
       imageUrl: "",
       buttons: [
-        { id: "chooseService", label: "Выбор услуги", type: "service", targetScreenId: null, row: 0, order: 0 },
-        { id: "chooseBarber", label: "Выбор сотрудника", type: "staff", targetScreenId: "staff", row: 0, order: 1 },
-        { id: "chooseDate", label: "Выбор даты", type: "date", targetScreenId: "dates", row: 1, order: 0 },
-        { id: "chooseTime", label: "Выбор времени", type: "time", targetScreenId: "time", row: 1, order: 1 },
-        { id: "backToMainFromServices", label: "🏠 Главное меню", type: "screen", targetScreenId: "main", row: 2, order: 0 },
+        { id: "chooseService", label: "Р’С‹Р±РѕСЂ СѓСЃР»СѓРіРё", type: "service", targetScreenId: null, row: 0, order: 0 },
+        { id: "chooseBarber", label: "Р’С‹Р±РѕСЂ СЃРѕС‚СЂСѓРґРЅРёРєР°", type: "staff", targetScreenId: "staff", row: 0, order: 1 },
+        { id: "chooseDate", label: "Р’С‹Р±РѕСЂ РґР°С‚С‹", type: "date", targetScreenId: "dates", row: 1, order: 0 },
+        { id: "chooseTime", label: "Р’С‹Р±РѕСЂ РІСЂРµРјРµРЅРё", type: "time", targetScreenId: "time", row: 1, order: 1 },
+        { id: "backToMainFromServices", label: "рџЏ  Р“Р»Р°РІРЅРѕРµ РјРµРЅСЋ", type: "screen", targetScreenId: "main", row: 2, order: 0 },
       ],
     },
     {
       id: "staff",
-      title: "Сотрудники",
-      message: "Кого записываем?",
+      title: "РЎРѕС‚СЂСѓРґРЅРёРєРё",
+      message: "РљРѕРіРѕ Р·Р°РїРёСЃС‹РІР°РµРј?",
       imageUrl: "",
       buttons: [
-        { id: "staffDate", label: "Выбор даты", type: "date", targetScreenId: "dates", row: 0, order: 0 },
-        { id: "backToServices", label: "Назад к услугам", type: "screen", targetScreenId: "services", row: 1, order: 0 },
-        { id: "backToMainFromStaff", label: "🏠 Главное меню", type: "screen", targetScreenId: "main", row: 1, order: 1 },
+        { id: "staffDate", label: "Р’С‹Р±РѕСЂ РґР°С‚С‹", type: "date", targetScreenId: "dates", row: 0, order: 0 },
+        { id: "backToServices", label: "РќР°Р·Р°Рґ Рє СѓСЃР»СѓРіР°Рј", type: "screen", targetScreenId: "services", row: 1, order: 0 },
+        { id: "backToMainFromStaff", label: "рџЏ  Р“Р»Р°РІРЅРѕРµ РјРµРЅСЋ", type: "screen", targetScreenId: "main", row: 1, order: 1 },
       ],
     },
     {
       id: "dates",
-      title: "Выбор даты",
-      message: "Выберите дату записи.",
+      title: "Р’С‹Р±РѕСЂ РґР°С‚С‹",
+      message: "Р’С‹Р±РµСЂРёС‚Рµ РґР°С‚Сѓ Р·Р°РїРёСЃРё.",
       imageUrl: "",
       buttons: [
-        { id: "dateTime", label: "Выбор времени", type: "time", targetScreenId: "time", row: 0, order: 0 },
-        { id: "backToServicesFromDates", label: "Назад к услугам", type: "screen", targetScreenId: "services", row: 1, order: 0 },
+        { id: "dateTime", label: "Р’С‹Р±РѕСЂ РІСЂРµРјРµРЅРё", type: "time", targetScreenId: "time", row: 0, order: 0 },
+        { id: "backToServicesFromDates", label: "РќР°Р·Р°Рґ Рє СѓСЃР»СѓРіР°Рј", type: "screen", targetScreenId: "services", row: 1, order: 0 },
       ],
     },
     {
       id: "time",
-      title: "Время",
-      message: "Выберите время и подтвердите.",
+      title: "Р’СЂРµРјСЏ",
+      message: "Р’С‹Р±РµСЂРёС‚Рµ РІСЂРµРјСЏ Рё РїРѕРґС‚РІРµСЂРґРёС‚Рµ.",
       imageUrl: "",
       buttons: [
-        { id: "confirmBooking", label: "Подтвердить запись", type: "custom", targetScreenId: null, row: 0, order: 0 },
-        { id: "backToDates", label: "Назад к дате", type: "screen", targetScreenId: "dates", row: 0, order: 1 },
-        { id: "backToMainFromTime", label: "🏠 Главное меню", type: "screen", targetScreenId: "main", row: 1, order: 0 },
+        { id: "confirmBooking", label: "РџРѕРґС‚РІРµСЂРґРёС‚СЊ Р·Р°РїРёСЃСЊ", type: "custom", targetScreenId: null, row: 0, order: 0 },
+        { id: "backToDates", label: "РќР°Р·Р°Рґ Рє РґР°С‚Рµ", type: "screen", targetScreenId: "dates", row: 0, order: 1 },
+        { id: "backToMainFromTime", label: "рџЏ  Р“Р»Р°РІРЅРѕРµ РјРµРЅСЋ", type: "screen", targetScreenId: "main", row: 1, order: 0 },
       ],
     },
     {
       id: "about",
-      title: "О нас",
-      message: "Короткое описание салона.",
+      title: "Рћ РЅР°СЃ",
+      message: "РљРѕСЂРѕС‚РєРѕРµ РѕРїРёСЃР°РЅРёРµ СЃР°Р»РѕРЅР°.",
       imageUrl: "",
       buttons: [
-        { id: "backToMainFromAbout", label: "🏠 Главное меню", type: "screen", targetScreenId: "main", row: 0, order: 0 },
+        { id: "backToMainFromAbout", label: "рџЏ  Р“Р»Р°РІРЅРѕРµ РјРµРЅСЋ", type: "screen", targetScreenId: "main", row: 0, order: 0 },
       ],
     },
     {
       id: "profile",
-      title: "Профиль",
-      message: "Ваши контакты и избранный барбер.",
+      title: "РџСЂРѕС„РёР»СЊ",
+      message: "Р’Р°С€Рё РєРѕРЅС‚Р°РєС‚С‹ Рё РёР·Р±СЂР°РЅРЅС‹Р№ Р±Р°СЂР±РµСЂ.",
       imageUrl: "",
       buttons: [
-        { id: "showAppointmentsFromProfile", label: "📅 Мои записи", type: "userAppointments", targetScreenId: "appointments", row: 0, order: 0 },
-        { id: "backToMainFromProfile", label: "🏠 Главное меню", type: "screen", targetScreenId: "main", row: 1, order: 0 },
+        { id: "showAppointmentsFromProfile", label: "рџ“… РњРѕРё Р·Р°РїРёСЃРё", type: "userAppointments", targetScreenId: "appointments", row: 0, order: 0 },
+        { id: "backToMainFromProfile", label: "рџЏ  Р“Р»Р°РІРЅРѕРµ РјРµРЅСЋ", type: "screen", targetScreenId: "main", row: 1, order: 0 },
       ],
     },
     {
       id: "appointments",
-      title: "Мои записи",
-      message: "Список ваших записей.",
+      title: "РњРѕРё Р·Р°РїРёСЃРё",
+      message: "РЎРїРёСЃРѕРє РІР°С€РёС… Р·Р°РїРёСЃРµР№.",
       imageUrl: "",
       buttons: [
-        { id: "backToMainFromAppointments", label: "🏠 Главное меню", type: "screen", targetScreenId: "main", row: 0, order: 0 },
+        { id: "backToMainFromAppointments", label: "рџЏ  Р“Р»Р°РІРЅРѕРµ РјРµРЅСЋ", type: "screen", targetScreenId: "main", row: 0, order: 0 },
       ],
     },
   ],
 });
 const sanitizeBotMenuButton = (button, index = 0, screenId = "screen") => {
-  const fallbackLabel = `Кнопка ${index + 1}`;
+  const fallbackLabel = `РљРЅРѕРїРєР° ${index + 1}`;
   const id =
     normalizeText(button?.id) ||
     `btn_${canonicalizeKey(screenId) || "screen"}_${index + 1}`;
@@ -386,7 +468,7 @@ const sanitizeBotMenuScreen = (screen, index = 0) => {
   const id = normalizeText(screen.id) || `screen_${index + 1}`;
   const title =
     normalizeText(screen.title || screen.name || screen.caption) ||
-    `Экран ${index + 1}`;
+    `Р­РєСЂР°РЅ ${index + 1}`;
   const message = screen.message ?? screen.text ?? "";
   const imageUrl = normalizeText(screen.imageUrl || screen.image || "");
   const buttons = Array.isArray(screen.buttons)
@@ -503,41 +585,41 @@ const registerBarberAlias = async (barberId, alias) => {
 loadBarberAliasesFromDisk();
 const STATUS_CANONICAL_MAP = new Map(
   [
-    "активная",
-    "актив",
+    "Р°РєС‚РёРІРЅР°СЏ",
+    "Р°РєС‚РёРІ",
     "active",
-    "подтверждена",
-    "подтверждено",
-    "в работе",
-    "в обработке",
-    "новая запись",
+    "РїРѕРґС‚РІРµСЂР¶РґРµРЅР°",
+    "РїРѕРґС‚РІРµСЂР¶РґРµРЅРѕ",
+    "РІ СЂР°Р±РѕС‚Рµ",
+    "РІ РѕР±СЂР°Р±РѕС‚РєРµ",
+    "РЅРѕРІР°СЏ Р·Р°РїРёСЃСЊ",
     "pending",
     "wait",
     "waiting",
     "processing",
-  ].map((key) => [key, "Активная"]),
+  ].map((key) => [key, "РђРєС‚РёРІРЅР°СЏ"]),
 );
 [
-  ["done", "Выполнена"],
-  ["complete", "Выполнена"],
-  ["completed", "Выполнена"],
-  ["finished", "Выполнена"],
-  ["выполнена", "Выполнена"],
-  ["завершена", "Выполнена"],
-  ["готово", "Выполнена"],
-  ["cancel", "Отмена"],
-  ["canceled", "Отмена"],
-  ["cancelled", "Отмена"],
-  ["отмена", "Отмена"],
-  ["отменено", "Отмена"],
-  ["отменена", "Отмена"],
-  ["no show", "Неявка"],
-  ["no-show", "Неявка"],
-  ["noshow", "Неявка"],
-  ["missed", "Неявка"],
-  ["не пришёл", "Неявка"],
-  ["не пришел", "Неявка"],
-  ["неявка", "Неявка"],
+  ["done", "Р’С‹РїРѕР»РЅРµРЅР°"],
+  ["complete", "Р’С‹РїРѕР»РЅРµРЅР°"],
+  ["completed", "Р’С‹РїРѕР»РЅРµРЅР°"],
+  ["finished", "Р’С‹РїРѕР»РЅРµРЅР°"],
+  ["РІС‹РїРѕР»РЅРµРЅР°", "Р’С‹РїРѕР»РЅРµРЅР°"],
+  ["Р·Р°РІРµСЂС€РµРЅР°", "Р’С‹РїРѕР»РЅРµРЅР°"],
+  ["РіРѕС‚РѕРІРѕ", "Р’С‹РїРѕР»РЅРµРЅР°"],
+  ["cancel", "РћС‚РјРµРЅР°"],
+  ["canceled", "РћС‚РјРµРЅР°"],
+  ["cancelled", "РћС‚РјРµРЅР°"],
+  ["РѕС‚РјРµРЅР°", "РћС‚РјРµРЅР°"],
+  ["РѕС‚РјРµРЅРµРЅРѕ", "РћС‚РјРµРЅР°"],
+  ["РѕС‚РјРµРЅРµРЅР°", "РћС‚РјРµРЅР°"],
+  ["no show", "РќРµСЏРІРєР°"],
+  ["no-show", "РќРµСЏРІРєР°"],
+  ["noshow", "РќРµСЏРІРєР°"],
+  ["missed", "РќРµСЏРІРєР°"],
+  ["РЅРµ РїСЂРёС€С‘Р»", "РќРµСЏРІРєР°"],
+  ["РЅРµ РїСЂРёС€РµР»", "РќРµСЏРІРєР°"],
+  ["РЅРµСЏРІРєР°", "РќРµСЏРІРєР°"],
 ].forEach(([key, value]) => {
   STATUS_CANONICAL_MAP.set(key, value);
 });
@@ -581,7 +663,7 @@ const requireOwner = (req, res, next) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для выполнения действия." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ РґРµР№СЃС‚РІРёСЏ." });
   }
   return next();
 };
@@ -700,7 +782,7 @@ const decodeBase64Image = (input = "") => {
   const normalized = normalizeText(input);
   const payload = normalized.includes("base64,") ? normalized.split("base64,").pop() : normalized;
   if (!payload) {
-    throw new Error("Пустые данные изображения.");
+    throw new Error("РџСѓСЃС‚С‹Рµ РґР°РЅРЅС‹Рµ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ.");
   }
   return Buffer.from(payload, "base64");
 };
@@ -1067,7 +1149,7 @@ const createTelegramAuthRequest = ({ flow = TELEGRAM_AUTH_FLOW_LOGIN, targetUser
         throw error;
       }
     }
-    throw new Error("Не удалось сгенерировать одноразовый код Telegram авторизации.");
+    throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РѕРґРЅРѕСЂР°Р·РѕРІС‹Р№ РєРѕРґ Telegram Р°РІС‚РѕСЂРёР·Р°С†РёРё.");
   });
 };
 const getTelegramAuthRequestById = (requestId) =>
@@ -1345,11 +1427,11 @@ const buildHomeAuthError = (message, code) => {
 const hashHomePassword = (password, saltHex = "") => {
   const safePassword = normalizeText(password);
   if (!safePassword) {
-    throw buildHomeAuthError("Пароль не может быть пустым.", "INVALID_PASSWORD");
+    throw buildHomeAuthError("РџР°СЂРѕР»СЊ РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.", "INVALID_PASSWORD");
   }
   if (safePassword.length < HOME_MIN_PASSWORD_LENGTH) {
     throw buildHomeAuthError(
-      `Пароль должен быть не короче ${HOME_MIN_PASSWORD_LENGTH} символов.`,
+      `РџР°СЂРѕР»СЊ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ РєРѕСЂРѕС‡Рµ ${HOME_MIN_PASSWORD_LENGTH} СЃРёРјРІРѕР»РѕРІ.`,
       "WEAK_PASSWORD",
     );
   }
@@ -1435,6 +1517,7 @@ const buildLimitBlockedMessage = (fieldLabel, limitState) => {
 const toPublicHomeProfile = (row = {}) => {
   const user = toPublicHomeUser(row);
   const telegramId = normalizeText(row.TelegramID);
+  const telegramLastChangedAt = normalizeText(row.homeTelegramChangedAt) || null;
   return {
     ...user,
     telegramId: telegramId || null,
@@ -1442,7 +1525,11 @@ const toPublicHomeProfile = (row = {}) => {
     limits: {
       name: buildMonthlyLimit(row.LastNameChanged),
       phone: buildMonthlyLimit(row.homePhoneChangedAt),
-      telegram: buildMonthlyLimit(row.homeTelegramChangedAt),
+      telegram: {
+        lastChangedAt: telegramLastChangedAt,
+        nextAllowedAt: null,
+        isLocked: false,
+      },
     },
   };
 };
@@ -1681,7 +1768,7 @@ const seedServicesFromCost = async () => {
       const service = await tx.services.create({
         data: {
           id: randomUUID(),
-          name: row.Uslugi || `Услуга #${index + 1}`,
+          name: row.Uslugi || `РЈСЃР»СѓРіР° #${index + 1}`,
           description: "",
           category: null,
           duration,
@@ -1790,7 +1877,7 @@ const getServiceCatalog = async (includeInactive = true, identity = null) => {
   if (!services.length) {
     services = (await prisma.cost.findMany()).map((row, index) => ({
       id: row.id,
-      name: row.Uslugi || `Услуга #${index + 1}`,
+      name: row.Uslugi || `РЈСЃР»СѓРіР° #${index + 1}`,
       description: "",
       category: null,
       duration: Number(normalizeText(row.Dlitelnost).match(/(\d+)/)?.[1] ?? 0),
@@ -2018,7 +2105,7 @@ const buildClientRows = (users, appointments, manualBlockedSet = new Set()) => {
     const isBlocked = manualBlocked || warningCount >= WARNING_BLOCK_THRESHOLD;
     clients.push({
       id: user.id,
-      name: user.Name || "Без имени",
+      name: user.Name || "Р‘РµР· РёРјРµРЅРё",
       phone: user.Phone || "",
       normalizedPhone,
       telegramId: user.TelegramID || null,
@@ -2055,7 +2142,7 @@ const buildClientRows = (users, appointments, manualBlockedSet = new Set()) => {
     const isBlocked = warningCount >= WARNING_BLOCK_THRESHOLD || appt.isBlocked;
     clients.push({
       id: clientId,
-      name: appt.CustomerName || "Без имени",
+      name: appt.CustomerName || "Р‘РµР· РёРјРµРЅРё",
       phone: appt.Phone || "",
       normalizedPhone: appt.normalizedPhone,
       telegramId: null,
@@ -2397,7 +2484,7 @@ const requestRealtimePush = (force = false) =>
 const startBotProcess = async () => {
   if (botProcess || !fs.existsSync(botScriptPath)) {
     if (!fs.existsSync(botScriptPath)) {
-      botRuntime.lastError = "BotBarberShop.py not found";
+      botRuntime.lastError = "BotBrotherShop.py not found";
     }
     return serializeBotRuntime();
   }
@@ -2507,13 +2594,77 @@ const performSystemUpdate = async () => {
     updateInProgress = false;
   }
 };
+const wait = (delayMs) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+const buildPostRestartHealthUrl = () => {
+  if (POST_RESTART_HEALTHCHECK_URL) {
+    return POST_RESTART_HEALTHCHECK_URL;
+  }
+  const rawPort = Number(process.env.POST_RESTART_HEALTHCHECK_PORT || PORT);
+  const safePort = Number.isFinite(rawPort) && rawPort > 0 ? rawPort : 3000;
+  return `http://${POST_RESTART_HEALTHCHECK_HOST}:${safePort}${HEALTHCHECK_PATH}`;
+};
+const appendUpdateAlert = async (message, details = {}) => {
+  const entry = {
+    level: "error",
+    source: "update",
+    message,
+    details,
+    time: new Date().toISOString(),
+  };
+  try {
+    await fs.ensureDir(path.dirname(UPDATE_ALERT_LOG));
+    await fs.appendFile(UPDATE_ALERT_LOG, `${JSON.stringify(entry)}${os.EOL}`, "utf8");
+  } catch (error) {
+    console.error("[update] Failed to persist alert:", error?.message || error);
+  }
+};
+const waitForPostRestartHealth = async () => {
+  if (!POST_RESTART_HEALTHCHECK_ENABLED) {
+    return { ok: true, skipped: true, reason: "disabled" };
+  }
+  const url = buildPostRestartHealthUrl();
+  const startedAt = Date.now();
+  const deadline = startedAt + POST_RESTART_HEALTHCHECK_TIMEOUT_MS;
+  let lastError = "timeout";
+  while (Date.now() < deadline) {
+    try {
+      const response = await runtimeFetch(url, {
+        method: "GET",
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+      if (response.ok) {
+        return {
+          ok: true,
+          url,
+          status: response.status,
+          elapsedMs: Date.now() - startedAt,
+        };
+      }
+      lastError = `HTTP ${response.status}`;
+    } catch (error) {
+      lastError = error?.message || "network_error";
+    }
+    await wait(POST_RESTART_HEALTHCHECK_INTERVAL_MS);
+  }
+  return {
+    ok: false,
+    url,
+    error: lastError,
+    elapsedMs: Date.now() - startedAt,
+  };
+};
 const scheduleSelfRestart = (delayMs = 500) => {
   if (restartScheduled) return;
   restartScheduled = true;
   updateInProgress = true;
+  const restartStrategy = getRestartStrategy();
   const { command, args } = restartCommand();
   console.log(
-    `[update] Scheduling self-restart in ${delayMs}ms with: ${command} ${args.join(
+    `[update] Scheduling self-restart in ${delayMs}ms (strategy: ${restartStrategy}) with: ${command} ${args.join(
       " ",
     )}`,
   );
@@ -2527,6 +2678,13 @@ const scheduleSelfRestart = (delayMs = 500) => {
       await prisma.$disconnect();
     } catch (error) {
       console.error("Shutdown for restart failed:", error);
+    }
+    if (restartStrategy === "exit") {
+      console.log(
+        "[update] Restart strategy is exit: terminating process and waiting for supervisor restart.",
+      );
+      process.exit(0);
+      return;
     }
     try {
       const child = spawn(command, args, {
@@ -2548,9 +2706,34 @@ const scheduleSelfRestart = (delayMs = 500) => {
       console.error(
         "[update] Relaunch did not start; keeping current process alive.",
       );
+      await appendUpdateAlert("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ РЅРѕРІС‹Р№ РїСЂРѕС†РµСЃСЃ РїРѕСЃР»Рµ РѕР±РЅРѕРІР»РµРЅРёСЏ.", {
+        strategy: restartStrategy,
+      });
+      restartScheduled = false;
+      updateInProgress = false;
       ensureRealtimeLoop();
-      ensureBotProcessState();
+      await ensureBotProcessState();
+      return;
     }
+    const healthResult = await waitForPostRestartHealth();
+    if (healthResult.ok) {
+      if (!healthResult.skipped) {
+        console.log(
+          `[update] Post-restart health check passed in ${healthResult.elapsedMs}ms (${healthResult.url})`,
+        );
+      }
+    } else {
+      const details = {
+        strategy: restartStrategy,
+        url: healthResult.url,
+        error: healthResult.error,
+        elapsedMs: healthResult.elapsedMs,
+      };
+      console.error("[update] Post-restart health check failed:", details);
+      await appendUpdateAlert("Post-restart health check failed", details);
+    }
+    console.log("[update] Exiting current process after relaunch spawn.");
+    process.exit(0);
   }, delayMs);
 };
 const ensureBotProcessState = async () => {
@@ -2627,7 +2810,7 @@ const handleLoginOptions = async (req, res) => {
     res.json(options);
   } catch (error) {
     console.error("Login options error:", error);
-    res.status(500).json({ error: "Не удалось получить список барберов" });
+    res.status(500).json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ СЃРїРёСЃРѕРє Р±Р°СЂР±РµСЂРѕРІ" });
   }
 };
 const handleLogin = async (req, res) => {
@@ -2642,7 +2825,7 @@ const handleLogin = async (req, res) => {
     if ((!username && !normalizedPhone) || !password) {
       return res
         .status(400)
-        .json({ success: false, message: "Введите номер телефона и пароль." });
+        .json({ success: false, message: "Р’РІРµРґРёС‚Рµ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР° Рё РїР°СЂРѕР»СЊ." });
     }
     const creatorPhone = normalizePhone(CREATOR_ACCOUNT.phone);
     const creatorLogin = normalizeLogin(CREATOR_ACCOUNT.username);
@@ -2690,7 +2873,7 @@ const handleLogin = async (req, res) => {
     if (!barber || !barber.password || barber.password !== password) {
       return res
         .status(401)
-        .json({ success: false, message: "Неверный номер или пароль." });
+        .json({ success: false, message: "РќРµРІРµСЂРЅС‹Р№ РЅРѕРјРµСЂ РёР»Рё РїР°СЂРѕР»СЊ." });
     }
     const identity = resolveUserIdentity({
       username: barber.phone || barber.login || username,
@@ -2714,7 +2897,7 @@ const handleLogin = async (req, res) => {
     console.error("Login error:", error);
     return res
       .status(500)
-      .json({ success: false, message: "Ошибка на сервере. Попробуйте позже." });
+      .json({ success: false, message: "РћС€РёР±РєР° РЅР° СЃРµСЂРІРµСЂРµ. РџРѕРїСЂРѕР±СѓР№С‚Рµ РїРѕР·Р¶Рµ." });
   }
 };
 app.get("/api/login/options", handleLoginOptions);
@@ -2738,7 +2921,7 @@ app.post("/api/home/auth/register", async (req, res) => {
     if (!safePhone || !password) {
       return res.status(400).json({
         success: false,
-        message: "Введите номер телефона и пароль.",
+        message: "Р’РІРµРґРёС‚Рµ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР° Рё РїР°СЂРѕР»СЊ.",
       });
     }
     const displayName = normalizeText(req.body?.displayName) || safePhone;
@@ -2749,7 +2932,7 @@ app.post("/api/home/auth/register", async (req, res) => {
     if (existing && normalizeText(existing.homePasswordHash)) {
       return res.status(409).json({
         success: false,
-        message: "Пользователь с таким номером уже зарегистрирован.",
+        message: "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СЃ С‚Р°РєРёРј РЅРѕРјРµСЂРѕРј СѓР¶Рµ Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°РЅ.",
       });
     }
     if (existing) {
@@ -2810,7 +2993,7 @@ app.post("/api/home/auth/register", async (req, res) => {
     console.error("Home register error:", error);
     return res
       .status(500)
-      .json({ success: false, message: "Ошибка регистрации. Попробуйте позже." });
+      .json({ success: false, message: "РћС€РёР±РєР° СЂРµРіРёСЃС‚СЂР°С†РёРё. РџРѕРїСЂРѕР±СѓР№С‚Рµ РїРѕР·Р¶Рµ." });
   }
 });
 app.post("/api/home/auth/login", async (req, res) => {
@@ -2821,7 +3004,7 @@ app.post("/api/home/auth/login", async (req, res) => {
     if (!safePhone || !password) {
       return res.status(400).json({
         success: false,
-        message: "Введите номер телефона и пароль.",
+        message: "Р’РІРµРґРёС‚Рµ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР° Рё РїР°СЂРѕР»СЊ.",
       });
     }
     const existing = await findHomeUserByPhone(safePhone);
@@ -2834,7 +3017,7 @@ app.post("/api/home/auth/login", async (req, res) => {
     ) {
       return res.status(401).json({
         success: false,
-        message: "Неверный номер телефона или пароль.",
+        message: "РќРµРІРµСЂРЅС‹Р№ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР° РёР»Рё РїР°СЂРѕР»СЊ.",
       });
     }
     const now = new Date().toISOString();
@@ -2863,7 +3046,7 @@ app.post("/api/home/auth/login", async (req, res) => {
     console.error("Home login error:", error);
     return res
       .status(500)
-      .json({ success: false, message: "Ошибка входа. Попробуйте позже." });
+      .json({ success: false, message: "РћС€РёР±РєР° РІС…РѕРґР°. РџРѕРїСЂРѕР±СѓР№С‚Рµ РїРѕР·Р¶Рµ." });
   }
 });
 app.post("/api/home/auth/telegram/start", async (req, res) => {
@@ -2890,7 +3073,7 @@ app.post("/api/home/auth/telegram/start", async (req, res) => {
     console.error("Home telegram auth start error:", error);
     return res.status(500).json({
       success: false,
-      message: "Не удалось запустить авторизацию через Telegram.",
+      message: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ Р°РІС‚РѕСЂРёР·Р°С†РёСЋ С‡РµСЂРµР· Telegram.",
     });
   }
 });
@@ -2900,7 +3083,7 @@ app.get("/api/home/auth/telegram/status", async (req, res) => {
     return res.status(400).json({
       success: false,
       done: true,
-      message: "Укажите requestId.",
+      message: "РЈРєР°Р¶РёС‚Рµ requestId.",
     });
   }
   try {
@@ -2910,7 +3093,7 @@ app.get("/api/home/auth/telegram/status", async (req, res) => {
       return res.status(404).json({
         success: false,
         done: true,
-        message: "Сессия Telegram авторизации не найдена или уже завершена.",
+        message: "РЎРµСЃСЃРёСЏ Telegram Р°РІС‚РѕСЂРёР·Р°С†РёРё РЅРµ РЅР°Р№РґРµРЅР° РёР»Рё СѓР¶Рµ Р·Р°РІРµСЂС€РµРЅР°.",
       });
     }
     if (
@@ -2920,7 +3103,7 @@ app.get("/api/home/auth/telegram/status", async (req, res) => {
       return res.status(409).json({
         success: false,
         done: true,
-        message: "Этот запрос предназначен для другого сценария Telegram.",
+        message: "Р­С‚РѕС‚ Р·Р°РїСЂРѕСЃ РїСЂРµРґРЅР°Р·РЅР°С‡РµРЅ РґР»СЏ РґСЂСѓРіРѕРіРѕ СЃС†РµРЅР°СЂРёСЏ Telegram.",
       });
     }
     if (row.status === TELEGRAM_AUTH_STATUS_COMPLETED) {
@@ -3010,7 +3193,7 @@ app.get("/api/home/auth/telegram/status", async (req, res) => {
           success: false,
           done: true,
           message:
-            "Для входа нужен подтвержденный номер телефона в Telegram. Нажмите вход через Telegram снова.",
+            "Р”Р»СЏ РІС…РѕРґР° РЅСѓР¶РµРЅ РїРѕРґС‚РІРµСЂР¶РґРµРЅРЅС‹Р№ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР° РІ Telegram. РќР°Р¶РјРёС‚Рµ РІС…РѕРґ С‡РµСЂРµР· Telegram СЃРЅРѕРІР°.",
         });
       }
       return res.json({
@@ -3034,8 +3217,8 @@ app.get("/api/home/auth/telegram/status", async (req, res) => {
         message:
           normalizeText(row.errorMessage) ||
           (row.status === TELEGRAM_AUTH_STATUS_EXPIRED
-            ? "Код Telegram авторизации истек. Запросите новый."
-            : "Telegram авторизация завершилась с ошибкой."),
+            ? "РљРѕРґ Telegram Р°РІС‚РѕСЂРёР·Р°С†РёРё РёСЃС‚РµРє. Р—Р°РїСЂРѕСЃРёС‚Рµ РЅРѕРІС‹Р№."
+            : "Telegram Р°РІС‚РѕСЂРёР·Р°С†РёСЏ Р·Р°РІРµСЂС€РёР»Р°СЃСЊ СЃ РѕС€РёР±РєРѕР№."),
       });
     }
     return res.json({
@@ -3050,7 +3233,7 @@ app.get("/api/home/auth/telegram/status", async (req, res) => {
     return res.status(500).json({
       success: false,
       done: true,
-      message: "Не удалось проверить Telegram авторизацию.",
+      message: "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕРІРµСЂРёС‚СЊ Telegram Р°РІС‚РѕСЂРёР·Р°С†РёСЋ.",
     });
   }
 });
@@ -3062,7 +3245,7 @@ app.post("/api/home/auth/telegram/complete", async (req, res) => {
   if (!requestId || !password) {
     return res.status(400).json({
       success: false,
-      message: "Недостаточно данных для завершения Telegram-входа.",
+      message: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РґР°РЅРЅС‹С… РґР»СЏ Р·Р°РІРµСЂС€РµРЅРёСЏ Telegram-РІС…РѕРґР°.",
     });
   }
   try {
@@ -3071,7 +3254,7 @@ app.post("/api/home/auth/telegram/complete", async (req, res) => {
     if (!row) {
       return res.status(404).json({
         success: false,
-        message: "Сессия Telegram авторизации не найдена.",
+        message: "РЎРµСЃСЃРёСЏ Telegram Р°РІС‚РѕСЂРёР·Р°С†РёРё РЅРµ РЅР°Р№РґРµРЅР°.",
       });
     }
     if (
@@ -3080,7 +3263,7 @@ app.post("/api/home/auth/telegram/complete", async (req, res) => {
     ) {
       return res.status(409).json({
         success: false,
-        message: "Этот запрос Telegram не предназначен для завершения входа.",
+        message: "Р­С‚РѕС‚ Р·Р°РїСЂРѕСЃ Telegram РЅРµ РїСЂРµРґРЅР°Р·РЅР°С‡РµРЅ РґР»СЏ Р·Р°РІРµСЂС€РµРЅРёСЏ РІС…РѕРґР°.",
       });
     }
     if (row.status !== TELEGRAM_AUTH_STATUS_COMPLETED) {
@@ -3088,8 +3271,8 @@ app.post("/api/home/auth/telegram/complete", async (req, res) => {
         success: false,
         message:
           row.status === TELEGRAM_AUTH_STATUS_EXPIRED
-            ? "Код Telegram авторизации истек. Запросите новый."
-            : "Telegram авторизация еще не завершена.",
+            ? "РљРѕРґ Telegram Р°РІС‚РѕСЂРёР·Р°С†РёРё РёСЃС‚РµРє. Р—Р°РїСЂРѕСЃРёС‚Рµ РЅРѕРІС‹Р№."
+            : "Telegram Р°РІС‚РѕСЂРёР·Р°С†РёСЏ РµС‰Рµ РЅРµ Р·Р°РІРµСЂС€РµРЅР°.",
       });
     }
     const safeTelegramId = normalizeText(row.telegramId);
@@ -3110,7 +3293,7 @@ app.post("/api/home/auth/telegram/complete", async (req, res) => {
       return res.status(409).json({
         success: false,
         message:
-          "Телефон не подтвержден. Нажмите вход через Telegram снова и отправьте контакт.",
+          "РўРµР»РµС„РѕРЅ РЅРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅ. РќР°Р¶РјРёС‚Рµ РІС…РѕРґ С‡РµСЂРµР· Telegram СЃРЅРѕРІР° Рё РѕС‚РїСЂР°РІСЊС‚Рµ РєРѕРЅС‚Р°РєС‚.",
       });
     }
     const phoneMatches = await prisma.users.findMany({
@@ -3134,7 +3317,7 @@ app.post("/api/home/auth/telegram/complete", async (req, res) => {
     if (conflict) {
       return res.status(409).json({
         success: false,
-        message: "Этот номер уже используется другим аккаунтом.",
+        message: "Р­С‚РѕС‚ РЅРѕРјРµСЂ СѓР¶Рµ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РґСЂСѓРіРёРј Р°РєРєР°СѓРЅС‚РѕРј.",
       });
     }
     const { hashHex, saltHex } = hashHomePassword(password);
@@ -3177,7 +3360,7 @@ app.post("/api/home/auth/telegram/complete", async (req, res) => {
       if (!nextDisplayName) {
         return res.status(400).json({
           success: false,
-          message: "Введите ФИО для нового аккаунта.",
+          message: "Р’РІРµРґРёС‚Рµ Р¤РРћ РґР»СЏ РЅРѕРІРѕРіРѕ Р°РєРєР°СѓРЅС‚Р°.",
         });
       }
       persisted = await prisma.users.create({
@@ -3234,7 +3417,7 @@ app.post("/api/home/auth/telegram/complete", async (req, res) => {
     console.error("Home telegram auth complete error:", error);
     return res.status(500).json({
       success: false,
-      message: "Не удалось завершить вход через Telegram.",
+      message: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РІРµСЂС€РёС‚СЊ РІС…РѕРґ С‡РµСЂРµР· Telegram.",
     });
   }
 });
@@ -3273,7 +3456,7 @@ app.get("/api/home/profile", authenticateHomeToken, async (req, res) => {
     console.error("Home profile read error:", error);
     return res.status(500).json({
       success: false,
-      message: "Не удалось загрузить профиль.",
+      message: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РїСЂРѕС„РёР»СЊ.",
     });
   }
 });
@@ -3301,7 +3484,7 @@ app.put("/api/home/profile", authenticateHomeToken, async (req, res) => {
     if (!safePhone) {
       return res.status(400).json({
         success: false,
-        message: "Введите корректный номер телефона.",
+        message: "Р’РІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅС‹Р№ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР°.",
       });
     }
 
@@ -3328,7 +3511,7 @@ app.put("/api/home/profile", authenticateHomeToken, async (req, res) => {
       if (conflict) {
         return res.status(409).json({
           success: false,
-          message: "Этот номер уже используется другим аккаунтом.",
+          message: "Р­С‚РѕС‚ РЅРѕРјРµСЂ СѓР¶Рµ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РґСЂСѓРіРёРј Р°РєРєР°СѓРЅС‚РѕРј.",
         });
       }
     }
@@ -3343,13 +3526,13 @@ app.put("/api/home/profile", authenticateHomeToken, async (req, res) => {
     if (nameChanged && limits?.name?.isLocked) {
       return res.status(429).json({
         success: false,
-        message: buildLimitBlockedMessage("ФИО", limits.name),
+        message: buildLimitBlockedMessage("Р¤РРћ", limits.name),
       });
     }
     if (phoneChanged && limits?.phone?.isLocked) {
       return res.status(429).json({
         success: false,
-        message: buildLimitBlockedMessage("Телефон", limits.phone),
+        message: buildLimitBlockedMessage("РўРµР»РµС„РѕРЅ", limits.phone),
       });
     }
 
@@ -3402,7 +3585,7 @@ app.put("/api/home/profile", authenticateHomeToken, async (req, res) => {
     console.error("Home profile update error:", error);
     return res.status(500).json({
       success: false,
-      message: "Не удалось сохранить изменения профиля.",
+      message: "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РёР·РјРµРЅРµРЅРёСЏ РїСЂРѕС„РёР»СЏ.",
     });
   }
 });
@@ -3425,14 +3608,7 @@ app.post("/api/home/profile/telegram/start", authenticateHomeToken, async (req, 
     if (normalizeText(current.TelegramID)) {
       return res.status(409).json({
         success: false,
-        message: "Telegram уже привязан к этому аккаунту.",
-      });
-    }
-    const limits = toPublicHomeProfile(current)?.limits || {};
-    if (limits?.telegram?.isLocked) {
-      return res.status(429).json({
-        success: false,
-        message: buildLimitBlockedMessage("Telegram", limits.telegram),
+        message: "Telegram СѓР¶Рµ РїСЂРёРІСЏР·Р°РЅ Рє СЌС‚РѕРјСѓ Р°РєРєР°СѓРЅС‚Сѓ.",
       });
     }
     markExpiredTelegramAuthRequests();
@@ -3458,7 +3634,7 @@ app.post("/api/home/profile/telegram/start", authenticateHomeToken, async (req, 
     console.error("Home profile telegram start error:", error);
     return res.status(500).json({
       success: false,
-      message: "Не удалось запустить привязку Telegram.",
+      message: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ РїСЂРёРІСЏР·РєСѓ Telegram.",
     });
   }
 });
@@ -3468,7 +3644,7 @@ app.get("/api/home/profile/telegram/status", authenticateHomeToken, async (req, 
     return res.status(400).json({
       success: false,
       done: true,
-      message: "Укажите requestId.",
+      message: "РЈРєР°Р¶РёС‚Рµ requestId.",
     });
   }
   try {
@@ -3480,7 +3656,7 @@ app.get("/api/home/profile/telegram/status", authenticateHomeToken, async (req, 
       return res.status(404).json({
         success: false,
         done: true,
-        message: "Сессия привязки Telegram не найдена.",
+        message: "РЎРµСЃСЃРёСЏ РїСЂРёРІСЏР·РєРё Telegram РЅРµ РЅР°Р№РґРµРЅР°.",
       });
     }
     if (
@@ -3490,14 +3666,14 @@ app.get("/api/home/profile/telegram/status", authenticateHomeToken, async (req, 
       return res.status(409).json({
         success: false,
         done: true,
-        message: "Этот запрос Telegram относится к другому сценарию.",
+        message: "Р­С‚РѕС‚ Р·Р°РїСЂРѕСЃ Telegram РѕС‚РЅРѕСЃРёС‚СЃСЏ Рє РґСЂСѓРіРѕРјСѓ СЃС†РµРЅР°СЂРёСЋ.",
       });
     }
     if (normalizeText(row.targetUserId) !== userId) {
       return res.status(403).json({
         success: false,
         done: true,
-        message: "Этот запрос привязки создан для другого пользователя.",
+        message: "Р­С‚РѕС‚ Р·Р°РїСЂРѕСЃ РїСЂРёРІСЏР·РєРё СЃРѕР·РґР°РЅ РґР»СЏ РґСЂСѓРіРѕРіРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.",
       });
     }
     if (row.status === TELEGRAM_AUTH_STATUS_COMPLETED) {
@@ -3505,24 +3681,24 @@ app.get("/api/home/profile/telegram/status", authenticateHomeToken, async (req, 
       if (!safeTelegramId) {
         updateTelegramAuthRequestById(requestId, {
           status: TELEGRAM_AUTH_STATUS_FAILED,
-          errorMessage: "Telegram ID не получен. Запустите привязку заново.",
+          errorMessage: "Telegram ID РЅРµ РїРѕР»СѓС‡РµРЅ. Р—Р°РїСѓСЃС‚РёС‚Рµ РїСЂРёРІСЏР·РєСѓ Р·Р°РЅРѕРІРѕ.",
         });
         return res.status(409).json({
           success: false,
           done: true,
-          message: "Telegram ID не получен. Запустите привязку заново.",
+          message: "Telegram ID РЅРµ РїРѕР»СѓС‡РµРЅ. Р—Р°РїСѓСЃС‚РёС‚Рµ РїСЂРёРІСЏР·РєСѓ Р·Р°РЅРѕРІРѕ.",
         });
       }
       const telegramIdAsNumber = toTelegramIdNumber(safeTelegramId);
       if (telegramIdAsNumber === null) {
         updateTelegramAuthRequestById(requestId, {
           status: TELEGRAM_AUTH_STATUS_FAILED,
-          errorMessage: "Некорректный Telegram ID.",
+          errorMessage: "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ Telegram ID.",
         });
         return res.status(409).json({
           success: false,
           done: true,
-          message: "Некорректный Telegram ID. Запустите привязку заново.",
+          message: "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ Telegram ID. Р—Р°РїСѓСЃС‚РёС‚Рµ РїСЂРёРІСЏР·РєСѓ Р·Р°РЅРѕРІРѕ.",
         });
       }
       const current = await prisma.users.findUnique({
@@ -3537,28 +3713,16 @@ app.get("/api/home/profile/telegram/status", authenticateHomeToken, async (req, 
       ) {
         return res.sendStatus(401);
       }
-      const limits = toPublicHomeProfile(current)?.limits || {};
-      if (limits?.telegram?.isLocked) {
-        updateTelegramAuthRequestById(requestId, {
-          status: TELEGRAM_AUTH_STATUS_FAILED,
-          errorMessage: buildLimitBlockedMessage("Telegram", limits.telegram),
-        });
-        return res.status(429).json({
-          success: false,
-          done: true,
-          message: buildLimitBlockedMessage("Telegram", limits.telegram),
-        });
-      }
       const linkedUser = await findHomeUserByTelegramId(safeTelegramId);
       if (linkedUser && linkedUser.id !== userId) {
         updateTelegramAuthRequestById(requestId, {
           status: TELEGRAM_AUTH_STATUS_FAILED,
-          errorMessage: "Этот Telegram уже привязан к другому аккаунту.",
+          errorMessage: "Р­С‚РѕС‚ Telegram СѓР¶Рµ РїСЂРёРІСЏР·Р°РЅ Рє РґСЂСѓРіРѕРјСѓ Р°РєРєР°СѓРЅС‚Сѓ.",
         });
         return res.json({
           success: false,
           done: true,
-          message: "Этот Telegram уже привязан к другому аккаунту.",
+          message: "Р­С‚РѕС‚ Telegram СѓР¶Рµ РїСЂРёРІСЏР·Р°РЅ Рє РґСЂСѓРіРѕРјСѓ Р°РєРєР°СѓРЅС‚Сѓ.",
         });
       }
       const updated = await prisma.users.update({
@@ -3595,8 +3759,8 @@ app.get("/api/home/profile/telegram/status", authenticateHomeToken, async (req, 
         message:
           normalizeText(row.errorMessage) ||
           (row.status === TELEGRAM_AUTH_STATUS_EXPIRED
-            ? "Код привязки Telegram истек. Запросите новый."
-            : "Привязка Telegram завершилась с ошибкой."),
+            ? "РљРѕРґ РїСЂРёРІСЏР·РєРё Telegram РёСЃС‚РµРє. Р—Р°РїСЂРѕСЃРёС‚Рµ РЅРѕРІС‹Р№."
+            : "РџСЂРёРІСЏР·РєР° Telegram Р·Р°РІРµСЂС€РёР»Р°СЃСЊ СЃ РѕС€РёР±РєРѕР№."),
       });
     }
     return res.json({
@@ -3611,7 +3775,7 @@ app.get("/api/home/profile/telegram/status", authenticateHomeToken, async (req, 
     return res.status(500).json({
       success: false,
       done: true,
-      message: "Не удалось проверить привязку Telegram.",
+      message: "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕРІРµСЂРёС‚СЊ РїСЂРёРІСЏР·РєСѓ Telegram.",
     });
   }
 });
@@ -3631,19 +3795,12 @@ app.post("/api/home/profile/telegram/unlink", authenticateHomeToken, async (req,
     ) {
       return res.sendStatus(401);
     }
-    const limits = toPublicHomeProfile(current)?.limits || {};
-    if (limits?.telegram?.isLocked) {
-      return res.status(429).json({
-        success: false,
-        message: buildLimitBlockedMessage("Telegram", limits.telegram),
-      });
-    }
     const updated = await prisma.users.update({
       where: { id: userId },
       data: {
         TelegramID: null,
         homeUpdatedAt: new Date().toISOString(),
-        homeTelegramChangedAt: new Date().toISOString(),
+        homeTelegramChangedAt: null,
       },
       select: HOME_PROFILE_SELECT,
     });
@@ -3655,7 +3812,7 @@ app.post("/api/home/profile/telegram/unlink", authenticateHomeToken, async (req,
     console.error("Home profile telegram unlink error:", error);
     return res.status(500).json({
       success: false,
-      message: "Не удалось отвязать Telegram.",
+      message: "РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РІСЏР·Р°С‚СЊ Telegram.",
     });
   }
 });
@@ -3699,7 +3856,7 @@ app.get("/api/home/barbers", authenticateHomeToken, async (req, res) => {
         normalizeText(barber.cardTitle) ||
         normalizeText(barber.nickname) ||
         normalizeText(barber.name) ||
-        "Барбер";
+        "Р‘Р°СЂР±РµСЂ";
       const cardImage = resolveHomeAssetPath(barber.cardImageUrl);
       const avatarImage = resolveHomeAssetPath(barber.avatarUrl);
       return {
@@ -3719,7 +3876,7 @@ app.get("/api/home/barbers", authenticateHomeToken, async (req, res) => {
     return res.json({ barbers: payload });
   } catch (error) {
     console.error("Home barbers load error:", error);
-    return res.status(500).json({ error: "Не удалось загрузить список барберов." });
+    return res.status(500).json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ СЃРїРёСЃРѕРє Р±Р°СЂР±РµСЂРѕРІ." });
   }
 });
 app.get("/api/home/booking/services", authenticateHomeToken, async (req, res) => {
@@ -3728,7 +3885,7 @@ app.get("/api/home/booking/services", authenticateHomeToken, async (req, res) =>
     if (!homeUser) return res.sendStatus(401);
     const barberId = normalizeText(req.query?.barberId);
     if (!barberId) {
-      return res.status(400).json({ error: "Укажите barberId выбранного барбера." });
+      return res.status(400).json({ error: "РЈРєР°Р¶РёС‚Рµ barberId РІС‹Р±СЂР°РЅРЅРѕРіРѕ Р±Р°СЂР±РµСЂР°." });
     }
 
     const [settings, activeAppointments, barbers, servicesCatalog] = await Promise.all([
@@ -3739,13 +3896,13 @@ app.get("/api/home/booking/services", authenticateHomeToken, async (req, res) =>
     ]);
     const barber = barbers.find((item) => normalizeText(item.id) === barberId);
     if (!barber) {
-      return res.status(404).json({ error: "Барбер не найден." });
+      return res.status(404).json({ error: "Р‘Р°СЂР±РµСЂ РЅРµ РЅР°Р№РґРµРЅ." });
     }
     const services = resolveBookableServicesForBarber(servicesCatalog, barber.id);
     const canBook = activeAppointments < settings.bookingLimit;
     const message = canBook
       ? ""
-      : `У вас уже есть ${settings.bookingLimit} активных записей.`;
+      : `РЈ РІР°СЃ СѓР¶Рµ РµСЃС‚СЊ ${settings.bookingLimit} Р°РєС‚РёРІРЅС‹С… Р·Р°РїРёСЃРµР№.`;
 
     return res.json({
       canBook,
@@ -3761,7 +3918,7 @@ app.get("/api/home/booking/services", authenticateHomeToken, async (req, res) =>
     });
   } catch (error) {
     console.error("Home booking services error:", error);
-    return res.status(500).json({ error: "Не удалось загрузить услуги для записи." });
+    return res.status(500).json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ СѓСЃР»СѓРіРё РґР»СЏ Р·Р°РїРёСЃРё." });
   }
 });
 app.get("/api/home/booking/dates", authenticateHomeToken, async (req, res) => {
@@ -3771,7 +3928,7 @@ app.get("/api/home/booking/dates", authenticateHomeToken, async (req, res) => {
     const barberId = normalizeText(req.query?.barberId);
     const serviceIds = parseServiceIdsInput(req.query?.serviceIds);
     if (!barberId || !serviceIds.length) {
-      return res.status(400).json({ error: "Выберите барбера и услугу." });
+      return res.status(400).json({ error: "Р’С‹Р±РµСЂРёС‚Рµ Р±Р°СЂР±РµСЂР° Рё СѓСЃР»СѓРіСѓ." });
     }
 
     const [settings, activeAppointments, barbers, servicesCatalog] = await Promise.all([
@@ -3782,12 +3939,12 @@ app.get("/api/home/booking/dates", authenticateHomeToken, async (req, res) => {
     ]);
     if (activeAppointments >= settings.bookingLimit) {
       return res.status(409).json({
-        error: `У вас уже есть ${settings.bookingLimit} активных записей.`,
+        error: `РЈ РІР°СЃ СѓР¶Рµ РµСЃС‚СЊ ${settings.bookingLimit} Р°РєС‚РёРІРЅС‹С… Р·Р°РїРёСЃРµР№.`,
       });
     }
     const barber = barbers.find((item) => normalizeText(item.id) === barberId);
     if (!barber) {
-      return res.status(404).json({ error: "Барбер не найден." });
+      return res.status(404).json({ error: "Р‘Р°СЂР±РµСЂ РЅРµ РЅР°Р№РґРµРЅ." });
     }
 
     const bookableServices = resolveBookableServicesForBarber(servicesCatalog, barber.id);
@@ -3795,7 +3952,7 @@ app.get("/api/home/booking/dates", authenticateHomeToken, async (req, res) => {
       .map((id) => bookableServices.find((service) => service.id === id))
       .filter(Boolean);
     if (!selectedServices.length) {
-      return res.status(400).json({ error: "У выбранного барбера нет такой услуги." });
+      return res.status(400).json({ error: "РЈ РІС‹Р±СЂР°РЅРЅРѕРіРѕ Р±Р°СЂР±РµСЂР° РЅРµС‚ С‚Р°РєРѕР№ СѓСЃР»СѓРіРё." });
     }
 
     const totalDuration = Math.max(
@@ -3828,7 +3985,7 @@ app.get("/api/home/booking/dates", authenticateHomeToken, async (req, res) => {
     });
   } catch (error) {
     console.error("Home booking dates error:", error);
-    return res.status(500).json({ error: "Не удалось получить доступные даты." });
+    return res.status(500).json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ РґРѕСЃС‚СѓРїРЅС‹Рµ РґР°С‚С‹." });
   }
 });
 app.get("/api/home/booking/times", authenticateHomeToken, async (req, res) => {
@@ -3839,10 +3996,10 @@ app.get("/api/home/booking/times", authenticateHomeToken, async (req, res) => {
     const serviceIds = parseServiceIdsInput(req.query?.serviceIds);
     const dateKey = normalizeText(req.query?.date);
     if (!barberId || !serviceIds.length || !dateKey) {
-      return res.status(400).json({ error: "Выберите услугу и дату." });
+      return res.status(400).json({ error: "Р’С‹Р±РµСЂРёС‚Рµ СѓСЃР»СѓРіСѓ Рё РґР°С‚Сѓ." });
     }
     if (!isIsoDateKey(dateKey)) {
-      return res.status(400).json({ error: "Некорректная дата." });
+      return res.status(400).json({ error: "РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РґР°С‚Р°." });
     }
 
     const [settings, activeAppointments, barbers, servicesCatalog] = await Promise.all([
@@ -3853,19 +4010,19 @@ app.get("/api/home/booking/times", authenticateHomeToken, async (req, res) => {
     ]);
     if (activeAppointments >= settings.bookingLimit) {
       return res.status(409).json({
-        error: `У вас уже есть ${settings.bookingLimit} активных записей.`,
+        error: `РЈ РІР°СЃ СѓР¶Рµ РµСЃС‚СЊ ${settings.bookingLimit} Р°РєС‚РёРІРЅС‹С… Р·Р°РїРёСЃРµР№.`,
       });
     }
     const barber = barbers.find((item) => normalizeText(item.id) === barberId);
     if (!barber) {
-      return res.status(404).json({ error: "Барбер не найден." });
+      return res.status(404).json({ error: "Р‘Р°СЂР±РµСЂ РЅРµ РЅР°Р№РґРµРЅ." });
     }
     const bookableServices = resolveBookableServicesForBarber(servicesCatalog, barber.id);
     const selectedServices = serviceIds
       .map((id) => bookableServices.find((service) => service.id === id))
       .filter(Boolean);
     if (!selectedServices.length) {
-      return res.status(400).json({ error: "У выбранного барбера нет такой услуги." });
+      return res.status(400).json({ error: "РЈ РІС‹Р±СЂР°РЅРЅРѕРіРѕ Р±Р°СЂР±РµСЂР° РЅРµС‚ С‚Р°РєРѕР№ СѓСЃР»СѓРіРё." });
     }
 
     const totalDuration = Math.max(
@@ -3893,7 +4050,7 @@ app.get("/api/home/booking/times", authenticateHomeToken, async (req, res) => {
     });
   } catch (error) {
     console.error("Home booking times error:", error);
-    return res.status(500).json({ error: "Не удалось получить доступное время." });
+    return res.status(500).json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ РґРѕСЃС‚СѓРїРЅРѕРµ РІСЂРµРјСЏ." });
   }
 });
 app.post("/api/home/booking/appointments", authenticateHomeToken, async (req, res) => {
@@ -3906,14 +4063,14 @@ app.post("/api/home/booking/appointments", authenticateHomeToken, async (req, re
     const dateKey = normalizeText(req.body?.date);
     const startTime = normalizeText(req.body?.startTime);
     if (!barberId || !serviceIds.length || !dateKey || !startTime) {
-      return res.status(400).json({ error: "Заполните барбера, услугу, дату и время." });
+      return res.status(400).json({ error: "Р—Р°РїРѕР»РЅРёС‚Рµ Р±Р°СЂР±РµСЂР°, СѓСЃР»СѓРіСѓ, РґР°С‚Сѓ Рё РІСЂРµРјСЏ." });
     }
     if (!isIsoDateKey(dateKey)) {
-      return res.status(400).json({ error: "Некорректная дата." });
+      return res.status(400).json({ error: "РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РґР°С‚Р°." });
     }
     const startMinute = parseTimeLabelToMinutes(startTime);
     if (startMinute == null) {
-      return res.status(400).json({ error: "Некорректное время." });
+      return res.status(400).json({ error: "РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РІСЂРµРјСЏ." });
     }
 
     const [settings, barbers, servicesCatalog] = await Promise.all([
@@ -3923,14 +4080,14 @@ app.post("/api/home/booking/appointments", authenticateHomeToken, async (req, re
     ]);
     const barber = barbers.find((item) => normalizeText(item.id) === barberId);
     if (!barber) {
-      return res.status(404).json({ error: "Барбер не найден." });
+      return res.status(404).json({ error: "Р‘Р°СЂР±РµСЂ РЅРµ РЅР°Р№РґРµРЅ." });
     }
     const bookableServices = resolveBookableServicesForBarber(servicesCatalog, barber.id);
     const selectedServices = serviceIds
       .map((id) => bookableServices.find((service) => service.id === id))
       .filter(Boolean);
     if (!selectedServices.length) {
-      return res.status(400).json({ error: "У выбранного барбера нет такой услуги." });
+      return res.status(400).json({ error: "РЈ РІС‹Р±СЂР°РЅРЅРѕРіРѕ Р±Р°СЂР±РµСЂР° РЅРµС‚ С‚Р°РєРѕР№ СѓСЃР»СѓРіРё." });
     }
     const totalDuration = Math.max(
       selectedServices.reduce((sum, service) => sum + Math.max(0, Number(service.duration) || 0), 0),
@@ -3978,12 +4135,12 @@ app.post("/api/home/booking/appointments", authenticateHomeToken, async (req, re
           data: {
             id: randomUUID(),
             UserID: homeUser.id,
-            CustomerName: homeUser.displayName || homeUser.phone || "Клиент",
+            CustomerName: homeUser.displayName || homeUser.phone || "РљР»РёРµРЅС‚",
             Phone: homeUser.phone || null,
             Barber: barber.name,
             Date: dateKey,
             Time: `${startLabel} - ${endLabel}`,
-            Status: "Активная",
+            Status: "РђРєС‚РёРІРЅР°СЏ",
             Services: selectedServices.map((service) => service.name).join(", "),
             Reminder2hClientSent: false,
             Reminder2hBarberSent: false,
@@ -3994,19 +4151,19 @@ app.post("/api/home/booking/appointments", authenticateHomeToken, async (req, re
       if (error?.message === "LIMIT_REACHED") {
         return res
           .status(409)
-          .json({ error: `У вас уже есть ${settings.bookingLimit} активных записей.` });
+          .json({ error: `РЈ РІР°СЃ СѓР¶Рµ РµСЃС‚СЊ ${settings.bookingLimit} Р°РєС‚РёРІРЅС‹С… Р·Р°РїРёСЃРµР№.` });
       }
       if (error?.message === "NO_SCHEDULE") {
-        return res.status(409).json({ error: "На выбранную дату у барбера нет расписания." });
+        return res.status(409).json({ error: "РќР° РІС‹Р±СЂР°РЅРЅСѓСЋ РґР°С‚Сѓ Сѓ Р±Р°СЂР±РµСЂР° РЅРµС‚ СЂР°СЃРїРёСЃР°РЅРёСЏ." });
       }
       if (error?.message === "OUTSIDE_WORKING_HOURS") {
-        return res.status(409).json({ error: "Время выходит за рабочий диапазон барбера." });
+        return res.status(409).json({ error: "Р’СЂРµРјСЏ РІС‹С…РѕРґРёС‚ Р·Р° СЂР°Р±РѕС‡РёР№ РґРёР°РїР°Р·РѕРЅ Р±Р°СЂР±РµСЂР°." });
       }
       if (error?.message === "LEAD_TIME") {
-        return res.status(409).json({ error: "Это время недоступно из-за ограничения minLeadHours." });
+        return res.status(409).json({ error: "Р­С‚Рѕ РІСЂРµРјСЏ РЅРµРґРѕСЃС‚СѓРїРЅРѕ РёР·-Р·Р° РѕРіСЂР°РЅРёС‡РµРЅРёСЏ minLeadHours." });
       }
       if (error?.message === "SLOT_TAKEN") {
-        return res.status(409).json({ error: "Слот уже занят. Выберите другое время." });
+        return res.status(409).json({ error: "РЎР»РѕС‚ СѓР¶Рµ Р·Р°РЅСЏС‚. Р’С‹Р±РµСЂРёС‚Рµ РґСЂСѓРіРѕРµ РІСЂРµРјСЏ." });
       }
       throw error;
     }
@@ -4022,7 +4179,7 @@ app.post("/api/home/booking/appointments", authenticateHomeToken, async (req, re
     });
   } catch (error) {
     console.error("Home booking create error:", error);
-    return res.status(500).json({ error: "Не удалось создать запись." });
+    return res.status(500).json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ Р·Р°РїРёСЃСЊ." });
   }
 });
 app.use("/api", (req, res, next) => {
@@ -4048,14 +4205,14 @@ app.get("/api/license/status", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для доступа к лицензии." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РґРѕСЃС‚СѓРїР° Рє Р»РёС†РµРЅР·РёРё." });
   }
   try {
     const status = await ensureLicenseValid();
     res.json(status);
   } catch (error) {
     res.status(403).json({
-      error: "Лицензия недействительна. Проверьте ключ и повторите попытку.",
+      error: "Р›РёС†РµРЅР·РёСЏ РЅРµРґРµР№СЃС‚РІРёС‚РµР»СЊРЅР°. РџСЂРѕРІРµСЂСЊС‚Рµ РєР»СЋС‡ Рё РїРѕРІС‚РѕСЂРёС‚Рµ РїРѕРїС‹С‚РєСѓ.",
       details: error.message,
       status: getLicenseStatus(),
     });
@@ -4065,7 +4222,7 @@ app.get("/api/bot/status", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для управления ботом." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ СѓРїСЂР°РІР»РµРЅРёСЏ Р±РѕС‚РѕРј." });
   }
   const settings = await getBotSettings();
   const token = await readBotToken();
@@ -4075,7 +4232,7 @@ app.post("/api/bot/status", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для управления ботом." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ СѓРїСЂР°РІР»РµРЅРёСЏ Р±РѕС‚РѕРј." });
   }
   const { action, isBotEnabled } = req.body || {};
   try {
@@ -4105,7 +4262,7 @@ app.post("/api/bot/status", authenticateToken, async (req, res) => {
     res.json({ status: serializeBotRuntime(), settings });
   } catch (error) {
     console.error("Bot status update failed:", error);
-    res.status(500).json({ error: "Не удалось изменить статус бота." });
+    res.status(500).json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РёР·РјРµРЅРёС‚СЊ СЃС‚Р°С‚СѓСЃ Р±РѕС‚Р°." });
   }
 });
 
@@ -4113,11 +4270,11 @@ app.put("/api/bot/token", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для изменения токена." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РёР·РјРµРЅРµРЅРёСЏ С‚РѕРєРµРЅР°." });
   }
   const candidate = normalizeText(req.body?.token);
   if (!candidate) {
-    return res.status(400).json({ error: "Укажите токен бота." });
+    return res.status(400).json({ error: "РЈРєР°Р¶РёС‚Рµ С‚РѕРєРµРЅ Р±РѕС‚Р°." });
   }
   try {
     const token = await writeBotToken(candidate);
@@ -4130,7 +4287,7 @@ app.put("/api/bot/token", authenticateToken, async (req, res) => {
     console.error("Bot token update failed:", error);
     res
       .status(500)
-      .json({ error: "Не удалось обновить токен бота." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ С‚РѕРєРµРЅ Р±РѕС‚Р°." });
   }
 });
 
@@ -4138,7 +4295,7 @@ app.get("/api/system/update", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для проверки обновлений." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РїСЂРѕРІРµСЂРєРё РѕР±РЅРѕРІР»РµРЅРёР№." });
   }
   try {
     const force = req.query.force === "1" || req.query.force === "true";
@@ -4147,7 +4304,7 @@ app.get("/api/system/update", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Update check error:", error);
     res.status(500).json({
-      error: "Не удалось проверить обновления.",
+      error: "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕРІРµСЂРёС‚СЊ РѕР±РЅРѕРІР»РµРЅРёСЏ.",
       details: error.message,
     });
   }
@@ -4156,12 +4313,12 @@ app.post("/api/system/update", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для установки обновлений." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ СѓСЃС‚Р°РЅРѕРІРєРё РѕР±РЅРѕРІР»РµРЅРёР№." });
   }
   if (updateInProgress) {
     return res
       .status(429)
-      .json({ error: "Обновление уже выполняется." });
+      .json({ error: "РћР±РЅРѕРІР»РµРЅРёРµ СѓР¶Рµ РІС‹РїРѕР»РЅСЏРµС‚СЃСЏ." });
   }
   try {
     console.log("[update] /api/system/update: user", req.identity?.username || "unknown");
@@ -4171,8 +4328,12 @@ app.post("/api/system/update", authenticateToken, async (req, res) => {
     scheduleSelfRestart();
   } catch (error) {
     console.error("Update apply error:", error);
+    await appendUpdateAlert("System update failed", {
+      user: req.identity?.username || "unknown",
+      error: error?.message || String(error),
+    });
     res.status(500).json({
-      error: "Не удалось применить обновление.",
+      error: "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРёРјРµРЅРёС‚СЊ РѕР±РЅРѕРІР»РµРЅРёРµ.",
       details: error.message,
     });
   }
@@ -4181,12 +4342,12 @@ app.post("/api/system/restart", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для перезапуска системы." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РїРµСЂРµР·Р°РїСѓСЃРєР° СЃРёСЃС‚РµРјС‹." });
   }
   if (updateInProgress || restartScheduled) {
     return res
       .status(429)
-      .json({ error: "Перезапуск или обновление уже выполняется." });
+      .json({ error: "РџРµСЂРµР·Р°РїСѓСЃРє РёР»Рё РѕР±РЅРѕРІР»РµРЅРёРµ СѓР¶Рµ РІС‹РїРѕР»РЅСЏРµС‚СЃСЏ." });
   }
   try {
     console.log(
@@ -4198,7 +4359,7 @@ app.post("/api/system/restart", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("[restart] Failed to schedule restart:", error);
     res.status(500).json({
-      error: "Не удалось запланировать перезапуск.",
+      error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїР»Р°РЅРёСЂРѕРІР°С‚СЊ РїРµСЂРµР·Р°РїСѓСЃРє.",
       details: error.message,
     });
   }
@@ -4211,7 +4372,7 @@ app.get("/api/dashboard/overview", authenticateToken, async (req, res) => {
     console.error("Dashboard snapshot error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось загрузить обзор дашборда." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РѕР±Р·РѕСЂ РґР°С€Р±РѕСЂРґР°." });
   }
 });
 app.get("/api/services/full", authenticateToken, async (req, res) => {
@@ -4226,7 +4387,7 @@ app.get("/api/services/full", authenticateToken, async (req, res) => {
     console.error("Services fetch error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось получить список услуг." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ СЃРїРёСЃРѕРє СѓСЃР»СѓРі." });
   }
 });
 app.get("/api/assets/avatars", authenticateToken, async (req, res) => {
@@ -4237,7 +4398,7 @@ app.get("/api/assets/avatars", authenticateToken, async (req, res) => {
     console.error("Avatar assets error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось получить список изображений." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ СЃРїРёСЃРѕРє РёР·РѕР±СЂР°Р¶РµРЅРёР№." });
   }
 });
 
@@ -4247,22 +4408,22 @@ app.post("/api/assets/avatars/upload", authenticateToken, async (req, res) => {
     if (!data) {
       return res
         .status(400)
-        .json({ error: "Не переданы данные изображения." });
+        .json({ error: "РќРµ РїРµСЂРµРґР°РЅС‹ РґР°РЅРЅС‹Рµ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ." });
     }
     const sanitizedName = buildSafeImageFilename(name || `avatar-${Date.now()}.png`);
     if (!sanitizedName) {
-      return res.status(400).json({ error: "Некорректное имя файла." });
+      return res.status(400).json({ error: "РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ С„Р°Р№Р»Р°." });
     }
     await fs.ensureDir(IMAGE_DIR);
     const buffer = decodeBase64Image(data);
     if (!buffer.length) {
-      return res.status(400).json({ error: "Файл пуст." });
+      return res.status(400).json({ error: "Р¤Р°Р№Р» РїСѓСЃС‚." });
     }
     if (buffer.length > MAX_AVATAR_FILE_SIZE) {
       return res
         .status(400)
         .json({
-          error: `Файл слишком большой (до ${Math.floor(MAX_AVATAR_FILE_SIZE / (1024 * 1024))} МБ).`,
+          error: `Р¤Р°Р№Р» СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РѕР№ (РґРѕ ${Math.floor(MAX_AVATAR_FILE_SIZE / (1024 * 1024))} РњР‘).`,
         });
     }
     const filename = await ensureUniqueImageName(sanitizedName);
@@ -4272,7 +4433,7 @@ app.post("/api/assets/avatars/upload", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Avatar upload error:", error);
     res.status(500).json({
-      error: "Не удалось загрузить изображение.",
+      error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ.",
       details: error.message,
     });
   }
@@ -4284,7 +4445,7 @@ app.post("/api/assets/cards/upload", authenticateToken, async (req, res) => {
   try {
     const { barberId, name, data } = req.body || {};
     if (!barberId || !data) {
-      return res.status(400).json({ error: "Не хватает id барбера или файла карточки." });
+      return res.status(400).json({ error: "РќРµ С…РІР°С‚Р°РµС‚ id Р±Р°СЂР±РµСЂР° РёР»Рё С„Р°Р№Р»Р° РєР°СЂС‚РѕС‡РєРё." });
     }
     const safeExtName = buildSafeImageFilename(name || `card-${barberId}.png`) || null;
     const baseSafeId = normalizeText(String(barberId)).replace(/[^a-z0-9_-]/gi, "") || "card";
@@ -4293,7 +4454,7 @@ app.post("/api/assets/cards/upload", authenticateToken, async (req, res) => {
     await fs.ensureDir(CARD_IMAGE_DIR);
     const buffer = decodeBase64Image(data);
     if (!buffer.length) {
-      return res.status(400).json({ error: "Файл пуст." });
+      return res.status(400).json({ error: "Р¤Р°Р№Р» РїСѓСЃС‚." });
     }
     const targetPath = path.join(CARD_IMAGE_DIR, filename);
     await fs.writeFile(targetPath, buffer);
@@ -4301,7 +4462,7 @@ app.post("/api/assets/cards/upload", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Card upload error:", error);
     res.status(500).json({
-      error: "Не удалось сохранить карточку барбера.",
+      error: "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РєР°СЂС‚РѕС‡РєСѓ Р±Р°СЂР±РµСЂР°.",
       details: error.message,
     });
   }
@@ -4311,15 +4472,15 @@ app.delete("/api/assets/avatars", authenticateToken, async (req, res) => {
   try {
     const { filename } = req.body || {};
     if (!filename) {
-      return res.status(400).json({ error: "Не указано имя файла." });
+      return res.status(400).json({ error: "РќРµ СѓРєР°Р·Р°РЅРѕ РёРјСЏ С„Р°Р№Р»Р°." });
     }
     const sanitizedName = getExistingImageFilename(filename);
     if (!sanitizedName) {
-      return res.status(400).json({ error: "Файл не найден." });
+      return res.status(400).json({ error: "Р¤Р°Р№Р» РЅРµ РЅР°Р№РґРµРЅ." });
     }
     const targetPath = path.join(IMAGE_DIR, sanitizedName);
     if (!(await fs.pathExists(targetPath))) {
-      return res.status(404).json({ error: "Файл отсутствует на сервере." });
+      return res.status(404).json({ error: "Р¤Р°Р№Р» РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚ РЅР° СЃРµСЂРІРµСЂРµ." });
     }
     await fs.remove(targetPath);
     const images = await listAvatarImages();
@@ -4327,7 +4488,7 @@ app.delete("/api/assets/avatars", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Avatar delete error:", error);
     res.status(500).json({
-      error: "Не удалось удалить изображение.",
+      error: "РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ.",
       details: error.message,
     });
   }
@@ -4337,14 +4498,14 @@ app.get("/api/bot/menu/images", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для изменения меню бота." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РёР·РјРµРЅРµРЅРёСЏ РјРµРЅСЋ Р±РѕС‚Р°." });
   }
   try {
     const images = await listMenuImages();
     res.json({ images });
   } catch (error) {
     console.error("Bot menu images fetch error:", error);
-    res.status(500).json({ error: "Не удалось загрузить галерею меню." });
+    res.status(500).json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РіР°Р»РµСЂРµСЋ РјРµРЅСЋ." });
   }
 });
 
@@ -4352,27 +4513,27 @@ app.post("/api/bot/menu/images", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для изменения меню бота." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РёР·РјРµРЅРµРЅРёСЏ РјРµРЅСЋ Р±РѕС‚Р°." });
   }
   try {
     const { name, data } = req.body || {};
     if (!data) {
       return res
         .status(400)
-        .json({ error: "Не переданы данные изображения." });
+        .json({ error: "РќРµ РїРµСЂРµРґР°РЅС‹ РґР°РЅРЅС‹Рµ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ." });
     }
     const sanitizedName = buildSafeImageFilename(name || `menu-${Date.now()}.png`);
     if (!sanitizedName) {
-      return res.status(400).json({ error: "Некорректное имя файла." });
+      return res.status(400).json({ error: "РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ С„Р°Р№Р»Р°." });
     }
     await fs.ensureDir(MENU_IMAGE_DIR);
     const buffer = decodeBase64Image(data);
     if (!buffer.length) {
-      return res.status(400).json({ error: "Файл пуст." });
+      return res.status(400).json({ error: "Р¤Р°Р№Р» РїСѓСЃС‚." });
     }
     if (buffer.length > MAX_AVATAR_FILE_SIZE) {
       return res.status(400).json({
-        error: `Файл слишком большой (до ${Math.floor(MAX_AVATAR_FILE_SIZE / (1024 * 1024))} МБ).`,
+        error: `Р¤Р°Р№Р» СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РѕР№ (РґРѕ ${Math.floor(MAX_AVATAR_FILE_SIZE / (1024 * 1024))} РњР‘).`,
       });
     }
     const filename = await ensureUniqueImageName(sanitizedName, MENU_IMAGE_DIR);
@@ -4382,7 +4543,7 @@ app.post("/api/bot/menu/images", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Bot menu image upload error:", error);
     res.status(500).json({
-      error: "Не удалось сохранить изображение меню.",
+      error: "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ РјРµРЅСЋ.",
       details: error.message,
     });
   }
@@ -4392,14 +4553,14 @@ app.get("/api/bot/menu", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для изменения меню бота." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РёР·РјРµРЅРµРЅРёСЏ РјРµРЅСЋ Р±РѕС‚Р°." });
   }
   try {
     const menu = await loadBotMenu();
     res.json(menu);
   } catch (error) {
     console.error("Bot menu fetch error:", error);
-    res.status(500).json({ error: "Не удалось загрузить меню бота." });
+    res.status(500).json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РјРµРЅСЋ Р±РѕС‚Р°." });
   }
 });
 
@@ -4407,7 +4568,7 @@ app.put("/api/bot/menu", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для изменения меню бота." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РёР·РјРµРЅРµРЅРёСЏ РјРµРЅСЋ Р±РѕС‚Р°." });
   }
   const payload = req.body || {};
   try {
@@ -4415,7 +4576,7 @@ app.put("/api/bot/menu", authenticateToken, async (req, res) => {
     res.json(normalized);
   } catch (error) {
     console.error("Bot menu save error:", error);
-    res.status(500).json({ error: "Не удалось сохранить меню бота." });
+    res.status(500).json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РјРµРЅСЋ Р±РѕС‚Р°." });
   }
 });
 
@@ -4423,7 +4584,7 @@ app.get("/api/bot/messages", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для изменения сообщений бота." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РёР·РјРµРЅРµРЅРёСЏ СЃРѕРѕР±С‰РµРЅРёР№ Р±РѕС‚Р°." });
   }
   try {
     const messages = await prisma.botMessages.findMany({
@@ -4434,7 +4595,7 @@ app.get("/api/bot/messages", authenticateToken, async (req, res) => {
     console.error("Bot messages fetch error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось загрузить сообщения бота." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ СЃРѕРѕР±С‰РµРЅРёСЏ Р±РѕС‚Р°." });
   }
 });
 
@@ -4442,7 +4603,7 @@ app.put("/api/bot/messages/:id", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для изменения сообщений бота." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РёР·РјРµРЅРµРЅРёСЏ СЃРѕРѕР±С‰РµРЅРёР№ Р±РѕС‚Р°." });
   }
   const { id } = req.params;
   const payload = req.body || {};
@@ -4455,7 +4616,7 @@ app.put("/api/bot/messages/:id", authenticateToken, async (req, res) => {
     if (!data.text.trim()) {
       return res
         .status(400)
-        .json({ error: "Текст сообщения не может быть пустым." });
+        .json({ error: "РўРµРєСЃС‚ СЃРѕРѕР±С‰РµРЅРёСЏ РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј." });
     }
     const updated = await prisma.botMessages.update({
       where: { id },
@@ -4465,11 +4626,11 @@ app.put("/api/bot/messages/:id", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Bot message update error:", error);
     if (error.code === "P2025") {
-      return res.status(404).json({ error: "Сообщение не найдено." });
+      return res.status(404).json({ error: "РЎРѕРѕР±С‰РµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ." });
     }
     res
       .status(500)
-      .json({ error: "Не удалось обновить сообщение." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ." });
   }
 });
 app.get("/api/events/stream", authenticateStream, (req, res) => {
@@ -4551,7 +4712,7 @@ app.post("/api/services/full", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для создания услуг." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ СЃРѕР·РґР°РЅРёСЏ СѓСЃР»СѓРі." });
   }
   try {
     await upsertServiceWithPrices(null, req.body || {});
@@ -4561,7 +4722,7 @@ app.post("/api/services/full", authenticateToken, async (req, res) => {
     console.error("Create service error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось создать услугу." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ СѓСЃР»СѓРіСѓ." });
   }
 });
 app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
@@ -4576,7 +4737,7 @@ app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
 
       .status(403)
 
-      .json({ error: "Недостаточно прав для изменения услуг." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РёР·РјРµРЅРµРЅРёСЏ СѓСЃР»СѓРі." });
 
   }
 
@@ -4598,7 +4759,7 @@ app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
 
         .status(500)
 
-        .json({ error: "Не удалось обновить услугу." });
+        .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ СѓСЃР»СѓРіСѓ." });
 
     }
 
@@ -4612,7 +4773,7 @@ app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
 
       .status(403)
 
-      .json({ error: "Профиль сотрудника не привязан к барберу." });
+      .json({ error: "РџСЂРѕС„РёР»СЊ СЃРѕС‚СЂСѓРґРЅРёРєР° РЅРµ РїСЂРёРІСЏР·Р°РЅ Рє Р±Р°СЂР±РµСЂСѓ." });
 
   }
 
@@ -4628,7 +4789,7 @@ app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
 
   if (!hasOwnPrice) {
 
-    return res.status(400).json({ error: "Передайте цену для своего профиля." });
+    return res.status(400).json({ error: "РџРµСЂРµРґР°Р№С‚Рµ С†РµРЅСѓ РґР»СЏ СЃРІРѕРµРіРѕ РїСЂРѕС„РёР»СЏ." });
 
   }
 
@@ -4644,7 +4805,7 @@ app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
 
     if (!Number.isFinite(numeric) || numeric < 0) {
 
-      return res.status(400).json({ error: "Некорректное значение цены." });
+      return res.status(400).json({ error: "РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ Р·РЅР°С‡РµРЅРёРµ С†РµРЅС‹." });
 
     }
 
@@ -4728,7 +4889,7 @@ app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
 
     if (error.message === "SERVICE_NOT_FOUND") {
 
-      return res.status(404).json({ error: "Услуга не найдена." });
+      return res.status(404).json({ error: "РЈСЃР»СѓРіР° РЅРµ РЅР°Р№РґРµРЅР°." });
 
     }
 
@@ -4738,7 +4899,7 @@ app.put("/api/services/full/:id", authenticateToken, async (req, res) => {
 
       .status(500)
 
-      .json({ error: "Не удалось обновить услугу." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ СѓСЃР»СѓРіСѓ." });
 
   }
 
@@ -4748,7 +4909,7 @@ app.delete("/api/services/full/:id", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для удаления услуг." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ СѓРґР°Р»РµРЅРёСЏ СѓСЃР»СѓРі." });
   }
   try {
     await prisma.$transaction([
@@ -4761,7 +4922,7 @@ app.delete("/api/services/full/:id", authenticateToken, async (req, res) => {
     console.error("Delete service error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось удалить услугу." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ СѓСЃР»СѓРіСѓ." });
   }
 });
 app.get("/api/barbers/full", authenticateToken, async (req, res) => {
@@ -4797,31 +4958,31 @@ app.get("/api/barbers/full", authenticateToken, async (req, res) => {
     console.error("Barbers list error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось загрузить список барберов." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ СЃРїРёСЃРѕРє Р±Р°СЂР±РµСЂРѕРІ." });
   }
 });
 app.get("/api/:tableName", authenticateToken, async (req, res) => {
   const { tableName } = req.params;
   const modelName = tableToModelMap[tableName];
   if (!modelName || !prisma[modelName])
-    return res.status(404).json({ error: "Запрошенная таблица не найдена." });
+    return res.status(404).json({ error: "Р—Р°РїСЂРѕС€РµРЅРЅР°СЏ С‚Р°Р±Р»РёС†Р° РЅРµ РЅР°Р№РґРµРЅР°." });
   if (isStaffIdentity(req.identity) && !STAFF_READ_TABLES.has(tableName)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для доступа к этому разделу." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РґРѕСЃС‚СѓРїР° Рє СЌС‚РѕРјСѓ СЂР°Р·РґРµР»Сѓ." });
   }
 
   if (tableName === "Schedules") {
     try {
       const barbersList = await getBarbers({ includeInactive: true });
       const daysOfWeek = [
-        "Понедельник",
-        "Вторник",
-        "Среда",
-        "Четверг",
-        "Пятница",
-        "Суббота",
-        "Воскресенье",
+        "РџРѕРЅРµРґРµР»СЊРЅРёРє",
+        "Р’С‚РѕСЂРЅРёРє",
+        "РЎСЂРµРґР°",
+        "Р§РµС‚РІРµСЂРі",
+        "РџСЏС‚РЅРёС†Р°",
+        "РЎСѓР±Р±РѕС‚Р°",
+        "Р’РѕСЃРєСЂРµСЃРµРЅСЊРµ",
       ];
       const windowDays = 14;
       const today = new Date();
@@ -4898,7 +5059,7 @@ app.get("/api/:tableName", authenticateToken, async (req, res) => {
       console.error("Schedules fetch error:", error);
       return res
         .status(500)
-        .json({ error: "Не удалось загрузить расписание." });
+        .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ СЂР°СЃРїРёСЃР°РЅРёРµ." });
     }
   }
   try {
@@ -4916,21 +5077,21 @@ app.get("/api/:tableName", authenticateToken, async (req, res) => {
     console.error("Generic fetch error:", error);
     return res
       .status(500)
-      .json({ error: "Не удалось загрузить данные." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РґР°РЅРЅС‹Рµ." });
   }
 });
 app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
   const { tableName, id } = req.params;
   const modelName = tableToModelMap[tableName];
   if (!modelName || !prisma[modelName])
-    return res.status(404).json({ error: "Запрошенная таблица не найдена." });
+    return res.status(404).json({ error: "Р—Р°РїСЂРѕС€РµРЅРЅР°СЏ С‚Р°Р±Р»РёС†Р° РЅРµ РЅР°Р№РґРµРЅР°." });
   const isStaff = isStaffIdentity(req.identity);
   if (isStaff) {
     const allowedTables = new Set(["Appointments", "Barbers", "Schedules"]);
     if (!allowedTables.has(tableName)) {
       return res
         .status(403)
-        .json({ error: "Недостаточно прав для доступа к этому разделу." });
+        .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РґРѕСЃС‚СѓРїР° Рє СЌС‚РѕРјСѓ СЂР°Р·РґРµР»Сѓ." });
     }
   }
   const data = coercePayload(tableName, { ...req.body });
@@ -4960,7 +5121,7 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
       if (!staffBarberName) {
         return res
           .status(400)
-          .json({ error: "В профиле сотрудника не указано имя барбера." });
+          .json({ error: "Р’ РїСЂРѕС„РёР»Рµ СЃРѕС‚СЂСѓРґРЅРёРєР° РЅРµ СѓРєР°Р·Р°РЅРѕ РёРјСЏ Р±Р°СЂР±РµСЂР°." });
       }
     }
     if (tableName === "Appointments") {
@@ -4968,20 +5129,20 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
       if (!existing || !matchesIdentityBarber(existing.Barber, req.identity)) {
         return res
           .status(403)
-          .json({ error: "Недостаточно прав для изменения этой записи." });
+          .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РёР·РјРµРЅРµРЅРёСЏ СЌС‚РѕР№ Р·Р°РїРёСЃРё." });
       }
       data.Barber = staffBarberName;
     } else if (tableName === "Barbers") {
       if (id !== req.identity.barberId) {
         return res
           .status(403)
-          .json({ error: "Можно редактировать только свой профиль." });
+          .json({ error: "РњРѕР¶РЅРѕ СЂРµРґР°РєС‚РёСЂРѕРІР°С‚СЊ С‚РѕР»СЊРєРѕ СЃРІРѕР№ РїСЂРѕС„РёР»СЊ." });
       }
     } else if (tableName === "Schedules") {
       if (data.Barber && !matchesIdentityBarber(data.Barber, req.identity)) {
         return res
           .status(403)
-          .json({ error: "Можно редактировать только своё расписание." });
+          .json({ error: "РњРѕР¶РЅРѕ СЂРµРґР°РєС‚РёСЂРѕРІР°С‚СЊ С‚РѕР»СЊРєРѕ СЃРІРѕС‘ СЂР°СЃРїРёСЃР°РЅРёРµ." });
       }
       data.Barber = staffBarberName;
     }
@@ -5033,7 +5194,7 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
       console.error("Schedule update error:", error);
       return res
         .status(500)
-        .json({ error: "Не удалось обновить расписание." });
+        .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ СЂР°СЃРїРёСЃР°РЅРёРµ." });
     }
   }
   if (tableName === "Cost") {
@@ -5058,18 +5219,18 @@ app.put("/api/:tableName/:id", authenticateToken, async (req, res) => {
     console.error("Record update error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось обновить запись." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ Р·Р°РїРёСЃСЊ." });
   }
 });
 app.post("/api/:tableName", authenticateToken, async (req, res) => {
   const { tableName } = req.params;
   const modelName = tableToModelMap[tableName];
   if (!modelName || !prisma[modelName])
-    return res.status(404).json({ error: "Запрошенная таблица не найдена." });
+    return res.status(404).json({ error: "Р—Р°РїСЂРѕС€РµРЅРЅР°СЏ С‚Р°Р±Р»РёС†Р° РЅРµ РЅР°Р№РґРµРЅР°." });
   if (isStaffIdentity(req.identity) && !STAFF_WRITE_TABLES.has(tableName)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для создания записей в этом разделе." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ СЃРѕР·РґР°РЅРёСЏ Р·Р°РїРёСЃРµР№ РІ СЌС‚РѕРј СЂР°Р·РґРµР»Рµ." });
   }
   const payload = coercePayload(tableName, { ...req.body });
   if (isStaffIdentity(req.identity) && tableName === "Appointments") {
@@ -5077,7 +5238,7 @@ app.post("/api/:tableName", authenticateToken, async (req, res) => {
     if (!staffBarber) {
       return res
         .status(400)
-        .json({ error: "В профиле сотрудника не указано имя барбера." });
+        .json({ error: "Р’ РїСЂРѕС„РёР»Рµ СЃРѕС‚СЂСѓРґРЅРёРєР° РЅРµ СѓРєР°Р·Р°РЅРѕ РёРјСЏ Р±Р°СЂР±РµСЂР°." });
     }
     payload.Barber = staffBarber;
   }
@@ -5087,7 +5248,7 @@ app.post("/api/:tableName", authenticateToken, async (req, res) => {
   if (tableName === "Appointments" && !normalizeText(payload.Barber)) {
     return res
       .status(400)
-      .json({ error: "Для записи нужно указать барбера." });
+      .json({ error: "Р”Р»СЏ Р·Р°РїРёСЃРё РЅСѓР¶РЅРѕ СѓРєР°Р·Р°С‚СЊ Р±Р°СЂР±РµСЂР°." });
   }
   if (tableName === "Appointments" && payload.UserID !== undefined) {
     if (payload.UserID === null || payload.UserID === "") {
@@ -5117,18 +5278,18 @@ app.post("/api/:tableName", authenticateToken, async (req, res) => {
     console.error("Record create error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось создать запись." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ Р·Р°РїРёСЃСЊ." });
   }
 });
 app.delete("/api/:tableName/:id", authenticateToken, async (req, res) => {
   const { tableName, id } = req.params;
   const modelName = tableToModelMap[tableName];
   if (!modelName || !prisma[modelName])
-    return res.status(404).json({ error: "Запрошенная таблица не найдена." });
+    return res.status(404).json({ error: "Р—Р°РїСЂРѕС€РµРЅРЅР°СЏ С‚Р°Р±Р»РёС†Р° РЅРµ РЅР°Р№РґРµРЅР°." });
   if (isStaffIdentity(req.identity) && !STAFF_DELETE_TABLES.has(tableName)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для удаления этого раздела." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ СѓРґР°Р»РµРЅРёСЏ СЌС‚РѕРіРѕ СЂР°Р·РґРµР»Р°." });
   }
   try {
     if (isStaffIdentity(req.identity) && tableName === "Appointments") {
@@ -5136,7 +5297,7 @@ app.delete("/api/:tableName/:id", authenticateToken, async (req, res) => {
       if (!existing || !matchesIdentityBarber(existing.Barber, req.identity)) {
         return res
           .status(403)
-          .json({ error: "Недостаточно прав для удаления этой записи." });
+          .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ СѓРґР°Р»РµРЅРёСЏ СЌС‚РѕР№ Р·Р°РїРёСЃРё." });
       }
     }
 
@@ -5147,30 +5308,30 @@ app.delete("/api/:tableName/:id", authenticateToken, async (req, res) => {
     console.error("Record delete error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось удалить запись." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ Р·Р°РїРёСЃСЊ." });
   }
 });
 app.post("/api/backups/create", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для создания бэкапов." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ СЃРѕР·РґР°РЅРёСЏ Р±СЌРєР°РїРѕРІ." });
   }
   try {
     await createBackup();
-    res.json({ success: true, message: "Резервная копия создана." });
+    res.json({ success: true, message: "Р РµР·РµСЂРІРЅР°СЏ РєРѕРїРёСЏ СЃРѕР·РґР°РЅР°." });
   } catch (error) {
     console.error("Backup create error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось создать бэкап." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ Р±СЌРєР°Рї." });
   }
 });
 app.get("/api/backups/list", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для просмотра бэкапов." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РїСЂРѕСЃРјРѕС‚СЂР° Р±СЌРєР°РїРѕРІ." });
   }
   try {
     const files = await listBackups();
@@ -5178,64 +5339,64 @@ app.get("/api/backups/list", authenticateToken, async (req, res) => {
   } catch (error) {
     res
       .status(500)
-      .json({ error: "Не удалось получить список бэкапов." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ СЃРїРёСЃРѕРє Р±СЌРєР°РїРѕРІ." });
   }
 });
 app.post("/api/backups/restore", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для восстановления из бэкапа." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ РёР· Р±СЌРєР°РїР°." });
   }
   try {
     const { filename } = req.body || {};
     if (!filename)
-      return res.status(400).json({ error: "Не указано имя файла бэкапа." });
+      return res.status(400).json({ error: "РќРµ СѓРєР°Р·Р°РЅРѕ РёРјСЏ С„Р°Р№Р»Р° Р±СЌРєР°РїР°." });
     const backupPath = path.join(BACKUP_DIR, filename);
     if (!(await fs.pathExists(backupPath))) {
-      return res.status(404).json({ error: "Бэкап не найден." });
+      return res.status(404).json({ error: "Р‘СЌРєР°Рї РЅРµ РЅР°Р№РґРµРЅ." });
     }
     await prisma.$disconnect();
     await fs.copyFile(backupPath, DB_PATH);
     res.json({
       success: true,
-      message: `Бэкап ${filename} восстановлен.`,
+      message: `Р‘СЌРєР°Рї ${filename} РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅ.`,
     });
   } catch (error) {
     console.error("Backup restore error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось восстановить бэкап." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РІРѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ Р±СЌРєР°Рї." });
   }
 });
 app.post("/api/backups/delete", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для удаления бэкапов." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ СѓРґР°Р»РµРЅРёСЏ Р±СЌРєР°РїРѕРІ." });
   }
   try {
     const { filename } = req.body || {};
     if (!filename) {
       return res
         .status(400)
-        .json({ error: "Не указано имя файла бэкапа." });
+        .json({ error: "РќРµ СѓРєР°Р·Р°РЅРѕ РёРјСЏ С„Р°Р№Р»Р° Р±СЌРєР°РїР°." });
     }
     const safeName = path.basename(filename);
     const backupPath = path.join(BACKUP_DIR, safeName);
     if (!(await fs.pathExists(backupPath))) {
-      return res.status(404).json({ error: "Бэкап не найден." });
+      return res.status(404).json({ error: "Р‘СЌРєР°Рї РЅРµ РЅР°Р№РґРµРЅ." });
     }
     await fs.remove(backupPath);
     res.json({
       success: true,
-      message: `Бэкап ${safeName} удален.`,
+      message: `Р‘СЌРєР°Рї ${safeName} СѓРґР°Р»РµРЅ.`,
     });
   } catch (error) {
     console.error("Backup delete error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось удалить бэкап." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ Р±СЌРєР°Рї." });
   }
 });
 app.get("/api/options/appointments", authenticateToken, async (req, res) => {
@@ -5255,7 +5416,7 @@ app.get("/api/options/appointments", authenticateToken, async (req, res) => {
     console.error("Options fetch error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось получить справочные данные." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ СЃРїСЂР°РІРѕС‡РЅС‹Рµ РґР°РЅРЅС‹Рµ." });
   }
 });
 app.get("/api/revenue/summary", authenticateToken, async (req, res) => {
@@ -5270,16 +5431,16 @@ app.get("/api/revenue/summary", authenticateToken, async (req, res) => {
     if (!normalizedIdentityBarberId) {
       return res
         .status(403)
-        .json({ error: "Профиль сотрудника не привязан к барберу." });
+        .json({ error: "РџСЂРѕС„РёР»СЊ СЃРѕС‚СЂСѓРґРЅРёРєР° РЅРµ РїСЂРёРІСЏР·Р°РЅ Рє Р±Р°СЂР±РµСЂСѓ." });
     }
     if (requestedBarberId && requestedBarberId !== normalizedIdentityBarberId) {
-      return res.status(403).json({ error: "Недостаточно прав для просмотра доходов." });
+      return res.status(403).json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РїСЂРѕСЃРјРѕС‚СЂР° РґРѕС…РѕРґРѕРІ." });
     }
     requestedBarberId = normalizedIdentityBarberId;
   } else if (!isOwner) {
     return res
       .status(403)
-      .json({ error: "Недостаточно прав для просмотра доходов." });
+      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РїСЂРѕСЃРјРѕС‚СЂР° РґРѕС…РѕРґРѕРІ." });
   }
   try {
     const defaultRange = getDefaultRevenueRange();
@@ -5306,7 +5467,7 @@ app.get("/api/revenue/summary", authenticateToken, async (req, res) => {
       requestedBarberId &&
       barbersList.find((barber) => normalizeText(barber.id) === requestedBarberId);
     if (isStaff && !targetBarber) {
-      return res.status(404).json({ error: "Барбер не найден." });
+      return res.status(404).json({ error: "Р‘Р°СЂР±РµСЂ РЅРµ РЅР°Р№РґРµРЅ." });
     }
     const barberFilterId = targetBarber ? targetBarber.id : null;
     const barberLookup = buildBarberNameLookup(barbersList);
@@ -5383,7 +5544,7 @@ app.get("/api/revenue/summary", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Revenue summary error:", error);
     res.status(500).json({
-      error: "Не удалось рассчитать доходы.",
+      error: "РќРµ СѓРґР°Р»РѕСЃСЊ СЂР°СЃСЃС‡РёС‚Р°С‚СЊ РґРѕС…РѕРґС‹.",
       details: error.message,
     });
   }
@@ -5393,7 +5554,7 @@ app.get("/api/user-profile/:name", authenticateToken, async (req, res) => {
     const { name } = req.params;
     const user = await prisma.users.findFirst({ where: { Name: name } });
     if (!user)
-      return res.status(404).json({ error: "Пользователь не найден." });
+      return res.status(404).json({ error: "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ." });
     const blockedUsers = await readBlockedUsers();
     const appointmentsRaw = await prisma.appointments.findMany({
       where: { CustomerName: name },
@@ -5415,21 +5576,21 @@ app.get("/api/user-profile/:name", authenticateToken, async (req, res) => {
     console.error("Profile fetch error:", error);
     res
       .status(500)
-      .json({ error: "Не удалось загрузить профиль пользователя." });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РїСЂРѕС„РёР»СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ." });
   }
 });
 app.post("/api/users/:id/block", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "Доступ запрещен: требуется владелец." });
+      .json({ error: "Р”РѕСЃС‚СѓРї Р·Р°РїСЂРµС‰РµРЅ: С‚СЂРµР±СѓРµС‚СЃСЏ РІР»Р°РґРµР»РµС†." });
   }
   const { id } = req.params;
   const shouldBlock = req.body?.blocked !== false;
   try {
     const user = await prisma.users.findUnique({ where: { id } });
     if (!user) {
-      return res.status(404).json({ error: "Пользователь не найден." });
+      return res.status(404).json({ error: "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ." });
     }
     const blockedUsers = await readBlockedUsers();
     if (shouldBlock) {
@@ -5463,10 +5624,10 @@ app.post("/api/users/:id/block", authenticateToken, async (req, res) => {
     console.error("Block toggle error:", error);
     return res
       .status(500)
-      .json({ error: "Не удалось обновить статус блокировки.", details: error.message });
+      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ СЃС‚Р°С‚СѓСЃ Р±Р»РѕРєРёСЂРѕРІРєРё.", details: error.message });
   }
 });
-cron.schedule("0 3 * * *", async () => {
+const runBackupCronTask = async () => {
   try {
     await createBackup();
     const files = await listBackups();
@@ -5484,7 +5645,26 @@ cron.schedule("0 3 * * *", async () => {
   } catch (error) {
     console.error("Backup cron error:", error);
   }
-});
+};
+const backupCronOptions = BACKUP_CRON_TIMEZONE
+  ? { timezone: BACKUP_CRON_TIMEZONE }
+  : undefined;
+try {
+  cron.schedule(BACKUP_CRON_EXPRESSION, runBackupCronTask, backupCronOptions);
+  console.log(
+    `[backup] Cron scheduled: ${BACKUP_CRON_EXPRESSION}${
+      BACKUP_CRON_TIMEZONE ? ` (${BACKUP_CRON_TIMEZONE})` : " (server timezone)"
+    }`,
+  );
+} catch (error) {
+  console.error(
+    `[backup] Invalid cron config "${BACKUP_CRON_EXPRESSION}"${
+      BACKUP_CRON_TIMEZONE ? ` (${BACKUP_CRON_TIMEZONE})` : ""
+    }, using fallback "0 3 * * *".`,
+    error,
+  );
+  cron.schedule("0 3 * * *", runBackupCronTask);
+}
 const gracefulShutdown = async () => {
   try {
     stopRealtimeLoop();
@@ -5534,6 +5714,7 @@ const bootstrap = async () => {
   }
 };
 bootstrap();
+
 
 
 

@@ -1,5 +1,5 @@
 const CACHE_VERSION = "v4";
-const CACHE_PREFIX = "barber-bot-cache";
+const CACHE_PREFIX = "brothershop-cache";
 const CACHE_NAME = `${CACHE_PREFIX}-${CACHE_VERSION}`;
 const OFFLINE_URL = "/panel/";
 const STATIC_ASSETS = [
@@ -106,3 +106,4 @@ const staleWhileRevalidate = async (request) => {
 
   return cachedResponse || networkPromise;
 };
+

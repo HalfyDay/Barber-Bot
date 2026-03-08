@@ -11,6 +11,7 @@
 # Python & virtual envs
 .venv/
 venv/
+.ptbtest/
 __pycache__/
 *.py[cod]
 

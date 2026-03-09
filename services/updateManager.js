@@ -14,8 +14,6 @@ const UPDATE_BRANCH = process.env.UPDATE_BRANCH || 'main';
 const UPDATE_REMOTE = process.env.UPDATE_REMOTE || 'origin';
 const UPDATE_CACHE_SECONDS = Number(process.env.UPDATE_CACHE_SECONDS || 600);
 const UPDATE_GITHUB_TOKEN = process.env.UPDATE_GITHUB_TOKEN || process.env.GITHUB_TOKEN || '';
-const UPDATE_NPM_INSTALL_COMMAND =
-  process.env.UPDATE_NPM_INSTALL_COMMAND || 'npm ci';
 const UPDATE_COMMAND_MAX_BUFFER_BYTES =
   Number(process.env.UPDATE_COMMAND_MAX_BUFFER_BYTES) || 10 * 1024 * 1024;
 const PRISMA_SCHEMA_PATH = path.join(PROJECT_ROOT, 'prisma', 'schema.prisma');
@@ -37,6 +35,22 @@ const isSqliteStorageError = (error) =>
 
 const buildSqliteStorageErrorMessage = () =>
   '\u0053\u0051\u004c\u0069\u0074\u0065 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430 \u0438\u043b\u0438 \u043f\u043e\u0432\u0440\u0435\u0436\u0434\u0435\u043d\u0430. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0434\u0438\u0441\u043a, \u043f\u0440\u0430\u0432\u0430 \u0434\u043e\u0441\u0442\u0443\u043f\u0430 \u0438 \u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u0435 prisma/dev.db \u0438\u0437 \u0440\u0435\u0437\u0435\u0440\u0432\u043d\u043e\u0439 \u043a\u043e\u043f\u0438\u0438.';
+
+const resolveUpdateNpmInstallCommand = () => {
+  const configured = (process.env.UPDATE_NPM_INSTALL_COMMAND || 'npm ci').trim();
+  const normalized = configured.toLowerCase();
+  const looksLikeNpmInstall =
+    normalized === 'npm ci' ||
+    normalized === 'npm install' ||
+    normalized.startsWith('npm ci ') ||
+    normalized.startsWith('npm install ');
+  const hasExplicitDependencyMode =
+    /(^|\s)--include(=|\s)|(^|\s)--omit(=|\s)|(^|\s)--only(=|\s)/i.test(configured);
+  if (looksLikeNpmInstall && !hasExplicitDependencyMode) {
+    return `${configured} --include=dev`;
+  }
+  return configured;
+};
 
 const createPreUpdateBackup = async () => {
   if (!fs.existsSync(DB_PATH)) {
@@ -384,7 +398,7 @@ const applyUpdate = async () => {
   try {
     await runCommand(`git fetch ${UPDATE_REMOTE} --tags`);
     await runCommand(`git pull --ff-only ${UPDATE_REMOTE} ${UPDATE_BRANCH}`);
-    await runCommand(UPDATE_NPM_INSTALL_COMMAND);
+    await runCommand(resolveUpdateNpmInstallCommand());
     await runPrismaMigrations();
     await runCommand('npm run build:web');
     const python = process.env.BOT_PYTHON_PATH || (os.platform() === 'win32' ? 'python' : 'python3');

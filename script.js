@@ -123,7 +123,7 @@ const TABLE_COLUMNS = {
     { key: 'Barber', label: 'Любимый мастер', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-40' },
   ],
 };
-const BOT_SUPPORTED_STATUS_OPTIONS = ['Активная', 'Выполнена', 'Отмена', 'Неявка'];
+const BOT_SUPPORTED_STATUS_OPTIONS = ['\u0410\u043a\u0442\u0438\u0432\u043d\u0430\u044f', '\u0412\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430', '\u041e\u0442\u043c\u0435\u043d\u0430', '\u041d\u0435\u044f\u0432\u043a\u0430'];
 const [STATUS_ACTIVE, STATUS_DONE, STATUS_CANCELLED, STATUS_NO_SHOW] = BOT_SUPPORTED_STATUS_OPTIONS;
 const CLIENT_BLOCK_THRESHOLD = 3;
 const RATING_MIN = 1;
@@ -693,19 +693,46 @@ const getStatusBadgeClasses = (status) => {
     STATUS_BADGE_MAP[normalized] || 'border border-slate-600/60 bg-slate-800/70 text-slate-200'
   );
 };
-const INACTIVE_STATUS_TOKENS = ['выполн', 'заверш', 'отмен', 'не яв', 'неяв', 'проср'];
-const ACTIVE_STATUS_TOKENS = ['актив', 'подтверж', 'ожид', 'ждем', 'ждём', 'нов'];
-const COMPLETED_STATUS_TOKENS = ['выполн', 'заверш', 'готов'];
+const toWindows1251Mojibake = (value = '') => {
+  try {
+    return new TextDecoder('windows-1251').decode(new TextEncoder().encode(value));
+  } catch {
+    return value;
+  }
+};
+const STATUS_ALIAS_MAP = new Map();
+const registerStatusAlias = (alias, canonical) => {
+  [alias, toWindows1251Mojibake(alias)].forEach((candidate) => {
+    const normalized = normalizeText(candidate).trim().toLowerCase();
+    if (normalized) {
+      STATUS_ALIAS_MAP.set(normalized, canonical);
+    }
+  });
+};
+[
+  [
+    STATUS_ACTIVE,
+    ['\u0410\u043a\u0442\u0438\u0432\u043d\u0430\u044f', '\u0410\u043a\u0442\u0438\u0432', 'active', '\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0430', '\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u043e', '\u0412 \u0440\u0430\u0431\u043e\u0442\u0435', '\u0412 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0435', '\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u043f\u0438\u0441\u044c', 'pending', 'wait', 'waiting', 'processing'],
+  ],
+  [
+    STATUS_DONE,
+    ['\u0412\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430', 'done', 'complete', 'completed', 'finished', '\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0430', '\u0413\u043e\u0442\u043e\u0432\u043e'],
+  ],
+  [
+    STATUS_CANCELLED,
+    ['\u041e\u0442\u043c\u0435\u043d\u0430', 'cancel', 'canceled', 'cancelled', '\u041e\u0442\u043c\u0435\u043d\u0435\u043d\u043e', '\u041e\u0442\u043c\u0435\u043d\u0435\u043d\u0430'],
+  ],
+  [
+    STATUS_NO_SHOW,
+    ['\u041d\u0435\u044f\u0432\u043a\u0430', 'no show', 'no-show', 'noshow', 'missed', '\u041d\u0435 \u043f\u0440\u0438\u0448\u0451\u043b', '\u041d\u0435 \u043f\u0440\u0438\u0448\u0435\u043b'],
+  ],
+].forEach(([canonical, aliases]) => {
+  aliases.forEach((alias) => registerStatusAlias(alias, canonical));
+});
 const normalizeStatusValue = (status) => {
-  const normalized = normalizeText(status).trim();
+  const normalized = normalizeText(status).trim().toLowerCase();
   if (!normalized) return STATUS_ACTIVE;
-  const capitalized = normalized.charAt(0).toUpperCase() + normalized.slice(1);
-  if (BOT_SUPPORTED_STATUS_OPTIONS.includes(capitalized)) return capitalized;
-  const lowered = normalized.toLowerCase();
-  if (lowered.includes('выполн') || lowered.includes('заверш')) return STATUS_DONE;
-  if (lowered.includes('отмен')) return STATUS_CANCELLED;
-  if (lowered.includes('неяв') || lowered.includes('не яв') || lowered.includes('не приш')) return STATUS_NO_SHOW;
-  return STATUS_ACTIVE;
+  return STATUS_ALIAS_MAP.get(normalized) || STATUS_ACTIVE;
 };
 const normalizeStatusList = (statuses = []) => {
   const seen = new Set();
@@ -724,11 +751,7 @@ const normalizeStatusList = (statuses = []) => {
   }
   return allowed;
 };
-const isCompletedAppointmentStatus = (status) => {
-  const normalized = normalizeStatusValue(status).toLowerCase();
-  if (!normalized) return false;
-  return COMPLETED_STATUS_TOKENS.some((token) => normalized.includes(token));
-};
+const isCompletedAppointmentStatus = (status) => normalizeStatusValue(status) === STATUS_DONE;
 const sanitizeTimeToken = (value) => {
   const match = normalizeText(value).match(/(\d{1,2}):(\d{2})/);
   if (!match) return '';
@@ -737,13 +760,10 @@ const sanitizeTimeToken = (value) => {
   return `${hours}:${minutes}`;
 };
 const parseTimeRangeValue = (value) => {
-  const safe = normalizeText(value).replace(/[—–]/g, '-');
+  const safe = normalizeText(value).replace(/[\u2014\u2013]/g, '-');
   if (!safe) return { start: '', end: '' };
-  const [rawStart, rawEnd = ''] = safe.split('-').map((part) => part.trim());
-  return {
-    start: sanitizeTimeToken(rawStart),
-    end: sanitizeTimeToken(rawEnd),
-  };
+  const [startRaw, endRaw = ''] = safe.split('-').map((part) => sanitizeTimeToken(part));
+  return { start: startRaw, end: endRaw };
 };
 const parseTimeRangeParts = (value) => parseTimeRangeValue(value);
 const buildTimeRangeValue = (start, end) => {
@@ -821,13 +841,7 @@ const getDateWeekdayIndex = (value) => {
     return 7;
   }
 };
-const isActiveAppointmentStatus = (status) => {
-  const normalized = normalizeStatusValue(status).toLowerCase();
-  if (!normalized) return false;
-  if (INACTIVE_STATUS_TOKENS.some((token) => normalized.includes(token))) return false;
-  if (ACTIVE_STATUS_TOKENS.some((token) => normalized.includes(token))) return true;
-  return true;
-};
+const isActiveAppointmentStatus = (status) => normalizeStatusValue(status) === STATUS_ACTIVE;
 const shouldDisplayAppointment = (appointment, nowTs = Date.now()) => {
   if (!isActiveAppointmentStatus(normalizeStatusValue(appointment.Status))) return false;
   const startDate = resolveAppointmentStartDate(appointment);
@@ -1581,7 +1595,11 @@ const DashboardView = ({
   const [pendingStatusId, setPendingStatusId] = useState(null);
   const nowTs = useNowTick(30000);
   const stats = data.stats || {};
-  const upcomingRaw = data.appointments?.upcoming || [];
+  const hasExplicitUpcoming = Array.isArray(data.appointments?.upcoming);
+  const hasExplicitOverdue = Array.isArray(data.appointments?.overdue);
+  const activeRaw = Array.isArray(data.appointments?.active) ? data.appointments.active : [];
+  const upcomingRaw = hasExplicitUpcoming ? data.appointments.upcoming : activeRaw;
+  const overdueRaw = hasExplicitOverdue ? data.appointments.overdue : activeRaw;
   const isStaffView = currentUser?.role === ROLE_STAFF;
   const restrictUpcomingToStaff = isStaffView;
   const staffNameSet = useMemo(() => {
@@ -1607,13 +1625,21 @@ const DashboardView = ({
     currentBarber?.nickname,
     currentBarber?.login,
   ]);
-  const upcomingSource = useMemo(() => {
-    if (!restrictUpcomingToStaff || !staffNameSet) return upcomingRaw;
-    return upcomingRaw.filter((appt) => {
+  const filterAppointmentsForStaff = useCallback((appointments = []) => {
+    if (!restrictUpcomingToStaff || !staffNameSet) return appointments;
+    return appointments.filter((appt) => {
       const candidate = canonicalizeName(appt.Barber).toLowerCase();
       return candidate && staffNameSet.has(candidate);
     });
-  }, [restrictUpcomingToStaff, staffNameSet, upcomingRaw]);
+  }, [restrictUpcomingToStaff, staffNameSet]);
+  const upcomingSource = useMemo(
+    () => filterAppointmentsForStaff(upcomingRaw),
+    [filterAppointmentsForStaff, upcomingRaw]
+  );
+  const overdueSource = useMemo(
+    () => filterAppointmentsForStaff(overdueRaw),
+    [filterAppointmentsForStaff, overdueRaw]
+  );
   const normalizedUpcoming = useMemo(
     () =>
       upcomingSource.map((appt) => ({
@@ -1623,6 +1649,16 @@ const DashboardView = ({
         endDate: getAppointmentEndDate(appt.Date, appt.Time, appt.startDateTime),
       })),
     [upcomingSource]
+  );
+  const normalizedOverdue = useMemo(
+    () =>
+      overdueSource.map((appt) => ({
+        ...appt,
+        Status: normalizeStatusValue(appt.Status),
+        startDate: getAppointmentStartDate(appt.Date, appt.Time, appt.startDateTime),
+        endDate: getAppointmentEndDate(appt.Date, appt.Time, appt.startDateTime),
+      })),
+    [overdueSource]
   );
   const upcomingList = useMemo(() => {
     return normalizedUpcoming
@@ -1635,7 +1671,12 @@ const DashboardView = ({
       .slice(0, 12);
   }, [normalizedUpcoming, nowTs]);
   const overdueList = useMemo(() => {
-    return normalizedUpcoming
+    if (hasExplicitOverdue && normalizedOverdue.length) {
+      return normalizedOverdue
+        .sort((a, b) => (b.endDate?.getTime() || 0) - (a.endDate?.getTime() || 0))
+        .slice(0, 12);
+    }
+    return normalizedOverdue
       .map((appt) => {
         const startTs = appt.startDate?.getTime() || null;
         const endTs = appt.endDate?.getTime() || startTs;
@@ -1645,7 +1686,7 @@ const DashboardView = ({
       .sort((a, b) => (b.endTs || 0) - (a.endTs || 0))
       .slice(0, 12)
       .map(({ startTs, endTs, ...rest }) => rest);
-  }, [normalizedUpcoming, nowTs]);
+  }, [hasExplicitOverdue, normalizedOverdue, nowTs]);
   const handleStatusShortcut = useCallback(
     async (appointment, status) => {
       if (!appointment || !status) return;
@@ -7243,13 +7284,19 @@ const TablesWorkspace = ({
   }, [restrictStaffBarberFilter, selectedBarber, staffBarberChoice, dropdownOptions.barbers, setSelectedBarber]);
   useEffect(() => {
     setHiddenStatuses((prev) => {
-      const normalized = Array.from(new Set(prev.map((status) => normalizeStatusValue(status)).filter(Boolean)));
+      const allowedStatuses = normalizeStatusList(dropdownOptions.statuses || BOT_SUPPORTED_STATUS_OPTIONS);
+      const normalized = Array.from(
+        new Set(prev.map((status) => normalizeStatusValue(status)).filter((status) => allowedStatuses.includes(status)))
+      );
+      if (allowedStatuses.length && normalized.length >= allowedStatuses.length) {
+        return [];
+      }
       if (normalized.length === prev.length && normalized.every((value, index) => value === prev[index])) {
         return prev;
       }
       return normalized;
     });
-  }, [setHiddenStatuses]);
+  }, [dropdownOptions.statuses, setHiddenStatuses]);
   useEffect(() => {
     setSortConfigs((prev) => {
       const current = prev?.Appointments;
@@ -8516,17 +8563,31 @@ const apiRequest = useCallback(
     })();
     setDashboard((prev) => {
       const nextStats = { ...(prev?.stats || {}), ...(realtimeSnapshot.stats || {}) };
-      let nextUpcoming = realtimeSnapshot.upcoming || prev?.appointments?.upcoming || [];
+      const nextActive = realtimeSnapshot.active || prev?.appointments?.active || [];
+      let nextUpcoming = realtimeSnapshot.upcoming || prev?.appointments?.upcoming || nextActive;
+      let nextOverdue = realtimeSnapshot.overdue || prev?.appointments?.overdue || nextActive;
       if (isStaffMode && staffNameSet && nextUpcoming?.length) {
         nextUpcoming = nextUpcoming.filter((appt) => {
           const candidate = canonicalizeName(appt.Barber).toLowerCase();
           return candidate && staffNameSet.has(candidate);
         });
-        nextStats.activeAppointments = nextUpcoming.length;
+      }
+      if (isStaffMode && staffNameSet && nextOverdue?.length) {
+        nextOverdue = nextOverdue.filter((appt) => {
+          const candidate = canonicalizeName(appt.Barber).toLowerCase();
+          return candidate && staffNameSet.has(candidate);
+        });
+      }
+      if (isStaffMode && staffNameSet) {
+        nextStats.upcomingAppointments = nextUpcoming.length;
+        nextStats.overdueAppointments = nextOverdue.length;
+        nextStats.activeAppointments = nextUpcoming.length + nextOverdue.length;
       }
       const nextAppointments = {
         ...(prev?.appointments || {}),
+        active: nextActive,
         upcoming: nextUpcoming,
+        overdue: nextOverdue,
       };
       if (!prev) {
         return { stats: nextStats, appointments: nextAppointments };
@@ -9149,7 +9210,19 @@ const handleBarberFieldChange = (id, field, value) => {
         if (navigator?.serviceWorker?.getRegistrations) {
           navigator.serviceWorker
             .getRegistrations()
-            .then((registrations) => Promise.all(registrations.map((reg) => reg.update())))
+            .then((registrations) =>
+              Promise.all(
+                registrations.map((reg) =>
+                  Promise.resolve(reg.update()).catch((error) => {
+                    console.warn("[update] SW registration update failed:", error);
+                    return null;
+                  }),
+                ),
+              ),
+            )
+            .catch((error) => {
+              console.warn("[update] Failed to refresh SW registrations:", error);
+            })
             .finally(reloadWithBypass);
           return;
         }

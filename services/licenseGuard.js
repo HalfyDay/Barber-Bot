@@ -10,7 +10,10 @@ const LICENSE_SOURCE =
   process.env.LICENSE_SOURCE ||
   'https://raw.githubusercontent.com/HalfyDay/BrotherShop/main/licenses.json';
 const LICENSE_REFRESH_SECONDS = Number(process.env.LICENSE_REFRESH_SECONDS || 3600);
-const LOCAL_LICENSE_FILE = path.join(__dirname, '..', 'data', 'licenses.json');
+const LOCAL_LICENSE_FILES = [
+  path.join(__dirname, '..', 'licenses.json'),
+  path.join(__dirname, '..', 'data', 'licenses.json'),
+];
 
 let cachedStatus = {
   valid: false,
@@ -23,14 +26,19 @@ let cachedStatus = {
 let inflightCheck = null;
 
 const readLocalLicenses = () => {
-  if (!fs.existsSync(LOCAL_LICENSE_FILE)) return null;
-  try {
-    const payload = JSON.parse(fs.readFileSync(LOCAL_LICENSE_FILE, 'utf-8'));
-    return payload.licenses || payload;
-  } catch (error) {
-    console.warn('Не удалось прочитать локальный файл лицензий:', error.message);
-    return null;
+  for (const licenseFile of LOCAL_LICENSE_FILES) {
+    if (!fs.existsSync(licenseFile)) continue;
+    try {
+      const payload = JSON.parse(fs.readFileSync(licenseFile, 'utf-8'));
+      return payload.licenses || payload;
+    } catch (error) {
+      console.warn(
+        'Не удалось прочитать локальный файл лицензий:',
+        licenseFile + ': ' + error.message,
+      );
+    }
   }
+  return null;
 };
 
 const fetchRemoteLicenses = async () => {

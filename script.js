@@ -1597,9 +1597,10 @@ const DashboardView = ({
   const stats = data.stats || {};
   const hasExplicitUpcoming = Array.isArray(data.appointments?.upcoming);
   const hasExplicitOverdue = Array.isArray(data.appointments?.overdue);
+  const useExplicitOverdue = hasExplicitOverdue && data.appointments.overdue.length > 0;
   const activeRaw = Array.isArray(data.appointments?.active) ? data.appointments.active : [];
   const upcomingRaw = hasExplicitUpcoming ? data.appointments.upcoming : activeRaw;
-  const overdueRaw = hasExplicitOverdue ? data.appointments.overdue : activeRaw;
+  const overdueRaw = useExplicitOverdue ? data.appointments.overdue : activeRaw;
   const isStaffView = currentUser?.role === ROLE_STAFF;
   const restrictUpcomingToStaff = isStaffView;
   const staffNameSet = useMemo(() => {
@@ -1671,7 +1672,7 @@ const DashboardView = ({
       .slice(0, 12);
   }, [normalizedUpcoming, nowTs]);
   const overdueList = useMemo(() => {
-    if (hasExplicitOverdue && normalizedOverdue.length) {
+    if (useExplicitOverdue) {
       return normalizedOverdue
         .sort((a, b) => (b.endDate?.getTime() || 0) - (a.endDate?.getTime() || 0))
         .slice(0, 12);
@@ -1686,7 +1687,7 @@ const DashboardView = ({
       .sort((a, b) => (b.endTs || 0) - (a.endTs || 0))
       .slice(0, 12)
       .map(({ startTs, endTs, ...rest }) => rest);
-  }, [hasExplicitOverdue, normalizedOverdue, nowTs]);
+  }, [useExplicitOverdue, normalizedOverdue, nowTs]);
   const handleStatusShortcut = useCallback(
     async (appointment, status) => {
       if (!appointment || !status) return;

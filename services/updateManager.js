@@ -19,6 +19,8 @@ const UPDATE_NPM_INSTALL_COMMAND =
 const UPDATE_COMMAND_MAX_BUFFER_BYTES =
   Number(process.env.UPDATE_COMMAND_MAX_BUFFER_BYTES) || 10 * 1024 * 1024;
 const PRISMA_SCHEMA_PATH = path.join(PROJECT_ROOT, 'prisma', 'schema.prisma');
+const DB_PATH = path.join(PROJECT_ROOT, 'prisma', 'dev.db');
+const BACKUP_DIR = path.join(PROJECT_ROOT, 'backups');
 const PRISMA_SCHEMA_RELATIVE_PATH = path
   .relative(PROJECT_ROOT, PRISMA_SCHEMA_PATH)
   .split(path.sep)
@@ -26,6 +28,28 @@ const PRISMA_SCHEMA_RELATIVE_PATH = path
 const MIGRATION_REMOVE_HOME_DISPLAY_NAME = '20260227193000_remove_home_display_name';
 
 let cachedUpdate = null;
+
+const SQLITE_STORAGE_ERROR_RE =
+  /database disk image is malformed|sqlite_corrupt|database or disk is full|sqlitedatabasecorrupt|disk i\/o error|sqlite database error/i;
+
+const isSqliteStorageError = (error) =>
+  SQLITE_STORAGE_ERROR_RE.test(String(error?.message || error || ''));
+
+const buildSqliteStorageErrorMessage = () =>
+  '\u0053\u0051\u004c\u0069\u0074\u0065 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430 \u0438\u043b\u0438 \u043f\u043e\u0432\u0440\u0435\u0436\u0434\u0435\u043d\u0430. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0434\u0438\u0441\u043a, \u043f\u0440\u0430\u0432\u0430 \u0434\u043e\u0441\u0442\u0443\u043f\u0430 \u0438 \u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u0435 prisma/dev.db \u0438\u0437 \u0440\u0435\u0437\u0435\u0440\u0432\u043d\u043e\u0439 \u043a\u043e\u043f\u0438\u0438.';
+
+const createPreUpdateBackup = async () => {
+  if (!fs.existsSync(DB_PATH)) {
+    console.warn('[update] SQLite database not found, skipping pre-update backup');
+    return null;
+  }
+  await fs.promises.mkdir(BACKUP_DIR, { recursive: true });
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const target = path.join(BACKUP_DIR, `backup-pre-update-${timestamp}.db`);
+  await fs.promises.copyFile(DB_PATH, target);
+  console.log(`[update] Created pre-update backup: ${path.relative(PROJECT_ROOT, target)}`);
+  return target;
+};
 
 const getWorkingTreeStatus = async () => {
   try {
@@ -178,6 +202,9 @@ const runPrismaMigrations = async () => {
           );
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           continue;
+        }
+        if (isSqliteStorageError(error)) {
+          throw new Error(buildSqliteStorageErrorMessage());
         }
         throw error;
       }
@@ -352,6 +379,7 @@ const checkForUpdates = async (force = false) => {
 
 const applyUpdate = async () => {
   console.log("[update] applying update...");
+  await createPreUpdateBackup();
   const stashRef = await stashWorkingTree();
   try {
     await runCommand(`git fetch ${UPDATE_REMOTE} --tags`);

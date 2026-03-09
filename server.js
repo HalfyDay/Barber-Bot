@@ -329,11 +329,11 @@ const normalizeLogin = (value) => normalizeText(value);
 const toLower = (value) => normalizeText(value).toLowerCase();
 const canonicalizeKey = (value) => normalizeText(value).toLowerCase();
 const isDatabaseCorruptionError = (error) =>
-  /database disk image is malformed|sqlite_corrupt|database or disk is full|sqlitedatabasecorrupt/i.test(
+  /database disk image is malformed|sqlite_corrupt|database or disk is full|sqlitedatabasecorrupt|disk i\/o error|sqlite database error/i.test(
     String(error?.message || error || ""),
   );
 const buildDatabaseCorruptionMessage = () =>
-  "База данных SQLite повреждена. Восстановите prisma/dev.db из резервной копии.";
+  "SQLite недоступна или повреждена. Проверьте диск, права доступа и восстановите prisma/dev.db из резервной копии.";
 const BOT_MENU_BUTTON_TYPES = Object.freeze([
   { id: "screen", label: "Переход на экран", description: "Открывает другой экран меню" },
   { id: "staff", label: "Выбор сотрудника", description: "Показывает список барберов" },

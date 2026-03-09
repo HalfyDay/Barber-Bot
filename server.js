@@ -328,6 +328,12 @@ const resolveHomeAssetPath = (value) => {
 const normalizeLogin = (value) => normalizeText(value);
 const toLower = (value) => normalizeText(value).toLowerCase();
 const canonicalizeKey = (value) => normalizeText(value).toLowerCase();
+const isDatabaseCorruptionError = (error) =>
+  /database disk image is malformed|sqlite_corrupt|database or disk is full|sqlitedatabasecorrupt/i.test(
+    String(error?.message || error || ""),
+  );
+const buildDatabaseCorruptionMessage = () =>
+  "База данных SQLite повреждена. Восстановите prisma/dev.db из резервной копии.";
 const BOT_MENU_BUTTON_TYPES = Object.freeze([
   { id: "screen", label: "Переход на экран", description: "Открывает другой экран меню" },
   { id: "staff", label: "Выбор сотрудника", description: "Показывает список барберов" },
@@ -2651,7 +2657,14 @@ const performSystemUpdate = async () => {
       if (realtimeWasRunning) {
         ensureRealtimeLoop();
       }
-      await ensureBotProcessState();
+      try {
+        await ensureBotProcessState();
+      } catch (cleanupError) {
+        console.error(
+          "Failed to restore bot process state after update error:",
+          cleanupError?.message || cleanupError,
+        );
+      }
     }
     throw error;
   } finally {
@@ -2884,6 +2897,11 @@ const handleLoginOptions = async (req, res) => {
     res.json(options);
   } catch (error) {
     console.error("Login options error:", error);
+    if (isDatabaseCorruptionError(error)) {
+      return res.status(500).json({
+        error: buildDatabaseCorruptionMessage(),
+      });
+    }
     res.status(500).json({ error: "Не удалось получить список барберов" });
   }
 };
@@ -4408,6 +4426,12 @@ app.post("/api/system/update", authenticateToken, async (req, res) => {
       user: req.identity?.username || "unknown",
       error: error?.message || String(error),
     });
+    if (isDatabaseCorruptionError(error)) {
+      return res.status(500).json({
+        error: "Не удалось применить обновление.",
+        details: buildDatabaseCorruptionMessage(),
+      });
+    }
     res.status(500).json({
       error: "Не удалось применить обновление.",
       details: error.message,

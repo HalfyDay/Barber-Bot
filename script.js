@@ -7079,8 +7079,6 @@ const AppointmentModal = ({
     ),
     [appointmentStartTime, selectedServicesDuration]
   );
-  if (!open || !draft) return null;
-  const actionButtonClass = RESPONSIVE_ACTION_BUTTON_CLASS;
   const syncDraftTimeWithServices = useCallback(
     (nextDraft) => {
       if (!nextDraft || !isNew) return nextDraft;
@@ -7095,6 +7093,8 @@ const AppointmentModal = ({
     },
     [getServicesDuration, isNew]
   );
+  if (!open || !draft) return null;
+  const actionButtonClass = RESPONSIVE_ACTION_BUTTON_CLASS;
   const handleChange = (field, value) => {
     setValidationError('');
     setDraft((prev) => {

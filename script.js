@@ -8543,6 +8543,66 @@ const apiRequest = useCallback(
       eventSource.close();
     };
   }, [session?.token, canUseRealtime]);
+  const refreshRealtimeViews = useCallback(async () => {
+    if (!session?.token) return;
+    try {
+      const [overview, appointments] = await Promise.all([
+        apiRequest('/dashboard/overview'),
+        apiRequest('/Appointments'),
+      ]);
+      setDashboard((prev) => {
+        if (!overview) return prev;
+        if (!prev) return overview;
+        return {
+          ...prev,
+          ...overview,
+          stats: overview.stats || prev.stats || {},
+          appointments: overview.appointments || prev.appointments || {},
+        };
+      });
+      setRealtimeSnapshot((prev) => ({
+        rows: Array.isArray(appointments) ? appointments : [],
+        active: Array.isArray(overview?.appointments?.active)
+          ? overview.appointments.active
+          : prev?.active || [],
+        stats: overview?.stats || prev?.stats || {},
+        upcoming: Array.isArray(overview?.appointments?.upcoming)
+          ? overview.appointments.upcoming
+          : prev?.upcoming || [],
+        overdue: Array.isArray(overview?.appointments?.overdue)
+          ? overview.appointments.overdue
+          : prev?.overdue || [],
+        updatedAt: new Date().toISOString(),
+      }));
+      setConnectionStatus('online');
+    } catch (error) {
+      console.warn('Realtime refresh failed:', error?.message || error);
+    }
+  }, [apiRequest, session?.token]);
+  useEffect(() => {
+    if (!session?.token) return undefined;
+    const shouldRefreshViews =
+      activeTab === 'dashboard' ||
+      (activeTab === 'tables' && activeDataTable === 'Appointments');
+    if (!shouldRefreshViews) return undefined;
+    let cancelled = false;
+    let inFlight = false;
+    const runRefresh = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      try {
+        await refreshRealtimeViews();
+      } finally {
+        inFlight = false;
+      }
+    };
+    runRefresh();
+    const interval = setInterval(runRefresh, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeDataTable, activeTab, refreshRealtimeViews, session?.token]);
   const handleCreatePosition = useCallback(
     (payload) => apiRequest('/Positions', { method: 'POST', body: JSON.stringify(payload) }),
     [apiRequest]

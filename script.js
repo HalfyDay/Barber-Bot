@@ -606,8 +606,9 @@ const backupDateFormatter = new Intl.DateTimeFormat('ru-RU', {
   hour: '2-digit',
   minute: '2-digit',
 });
+const isPreUpdateBackup = (filename = '') => /backup-pre-update-/i.test(normalizeText(filename));
 const parseBackupTimestamp = (filename = '') => {
-  const match = normalizeText(filename).match(/backup-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})(?:-(\d{3}))?/i);
+  const match = normalizeText(filename).match(/backup(?:-pre-update)?-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})(?:-(\d{3}))?/i);
   if (!match) return null;
   const [, datePart, hours, minutes, seconds, milliseconds] = match;
   const isoCandidate = `${datePart}T${hours}:${minutes}:${seconds}${milliseconds ? `.${milliseconds}` : ''}Z`;
@@ -618,6 +619,8 @@ const formatBackupLabel = (filename = '') => {
   const parsed = parseBackupTimestamp(filename);
   return parsed ? backupDateFormatter.format(parsed) : filename;
 };
+const formatBackupMeta = (filename = '') =>
+  isPreUpdateBackup(filename) ? 'Автоматическая копия перед обновлением' : 'Ручная или плановая резервная копия';
 const formatDateHeading = (value, options = { weekday: 'long', day: 'numeric', month: 'long' }) => {
   if (!value) return 'Без даты';
   try {
@@ -6762,11 +6765,12 @@ const BackupsPanel = ({ backups = [], onRestore, onCreate, onDelete }) => (
       <div className="space-y-2">
         {backups.map((backup) => {
           const label = formatBackupLabel(backup);
+          const meta = formatBackupMeta(backup);
           return (
             <div key={backup} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-slate-200">
               <div>
                 <p className="font-semibold text-white">{label}</p>
-                <p className="text-xs text-slate-500">{backup}</p>
+                <p className="text-xs text-slate-500">{meta}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button onClick={() => onRestore(backup)} className="rounded-lg border border-slate-600 px-3 py-1 text-xs font-semibold text-indigo-200 hover:border-indigo-400 hover:text-white">

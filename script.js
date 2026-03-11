@@ -1765,11 +1765,6 @@ const DashboardView = ({
     typeof onNavigateTable === 'function' ? () => handleStatNavigate(tableId) : undefined;
   return (
     <div className="space-y-6 overflow-x-hidden">
-      {(liveUpdatedAt || liveStatus !== 'unknown') && (
-        <div className="flex justify-end">
-          <LiveBadge timestamp={liveUpdatedAt} status={liveStatus} />
-        </div>
-      )}
       <SectionCard title="Ключевые показатели">
         <div className="grid gap-4 stat-grid">
           <StatCard label="Всего клиентов" value={stats.totalUsers ?? 0} onClick={resolveStatHandler('Users')} />
@@ -7529,11 +7524,6 @@ const TablesWorkspace = ({
   const isCustomTable = tableSettings?.mode === 'custom';
   return (
     <div className="space-y-4">
-      {activeTable === 'Appointments' && (liveUpdatedAt || liveStatus !== 'unknown') && (
-        <div className="flex justify-end">
-          <LiveBadge timestamp={liveUpdatedAt} status={liveStatus} />
-        </div>
-      )}
       <div className="hidden flex-wrap gap-2 lg:flex">
         {resolvedVisibleTables.map((table) => (
           <button

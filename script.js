@@ -7057,13 +7057,17 @@ const AppointmentModal = ({
       ),
     [serviceCatalog]
   );
-  const selectedServicesDuration = useMemo(
-    () =>
-      servicesSelection.reduce((sum, serviceName) => {
+  const getServicesDuration = useCallback(
+    (servicesValue) =>
+      normalizeMultiValueList(servicesValue).reduce((sum, serviceName) => {
         const key = canonicalizeName(serviceName).toLowerCase();
         return sum + (serviceDurationLookup.get(key) || 0);
       }, 0),
-    [serviceDurationLookup, servicesSelection]
+    [serviceDurationLookup]
+  );
+  const selectedServicesDuration = useMemo(
+    () => getServicesDuration(draft?.Services),
+    [draft?.Services, getServicesDuration]
   );
   const draftTimeParts = useMemo(() => parseTimeRangeParts(draft?.Time || ''), [draft?.Time]);
   const appointmentStartTime = draftTimeParts.start;
@@ -7075,33 +7079,35 @@ const AppointmentModal = ({
     ),
     [appointmentStartTime, selectedServicesDuration]
   );
-  useEffect(() => {
-    if (!open || !isNew) return;
-    const start = draftTimeParts.start;
-    if (!start) return;
-    const nextTime = selectedServicesDuration > 0
-      ? buildTimeRangeValue(start, addMinutesToTimeToken(start, selectedServicesDuration))
-      : buildTimeRangeValue(start, '');
-    if (!nextTime || nextTime === draft?.Time) return;
-    setDraft((prev) => (prev ? { ...prev, Time: nextTime } : prev));
-  }, [draft?.Time, draftTimeParts.start, isNew, open, selectedServicesDuration]);
   if (!open || !draft) return null;
   const actionButtonClass = RESPONSIVE_ACTION_BUTTON_CLASS;
+  const syncDraftTimeWithServices = useCallback(
+    (nextDraft) => {
+      if (!nextDraft || !isNew) return nextDraft;
+      const start = extractTimeStart(nextDraft.Time || '');
+      if (!start) return nextDraft;
+      const duration = getServicesDuration(nextDraft.Services);
+      const nextTime = duration > 0
+        ? buildTimeRangeValue(start, addMinutesToTimeToken(start, duration))
+        : buildTimeRangeValue(start, '');
+      if (nextTime === (nextDraft.Time || '')) return nextDraft;
+      return { ...nextDraft, Time: nextTime };
+    },
+    [getServicesDuration, isNew]
+  );
   const handleChange = (field, value) => {
     setValidationError('');
     setDraft((prev) => {
       if (!prev) return prev;
-      const nextDraft = { ...prev, [field]: value };
+      const nextDraft = field === 'Services' || field === 'Time'
+        ? syncDraftTimeWithServices({ ...prev, [field]: value })
+        : { ...prev, [field]: value };
       updateWarningForDraft(nextDraft);
       return nextDraft;
     });
   };
   const handleStartTimeChange = (nextStart) => {
-    const nextTime = nextStart
-      ? selectedServicesDuration > 0
-        ? buildTimeRangeValue(nextStart, addMinutesToTimeToken(nextStart, selectedServicesDuration))
-        : buildTimeRangeValue(nextStart, '')
-      : '';
+    const nextTime = nextStart ? buildTimeRangeValue(nextStart, '') : '';
     handleChange('Time', nextTime);
   };
   const isReminderSent = (value) => value === true || value === 'true' || value === 1 || value === '1';

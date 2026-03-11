@@ -329,6 +329,27 @@ const getLocalCommitHash = async () => {
     return null;
   }
 };
+const getChangedFilesBetween = async (fromCommit, toCommit) => {
+  const from = normalizeCommitHash(fromCommit);
+  const to = normalizeCommitHash(toCommit);
+  if (!from || !to || from === to) return [];
+  try {
+    const { stdout } = await runCommand(`git diff --name-only ${from} ${to}`);
+    return (stdout || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  } catch (error) {
+    console.warn('[update] Failed to calculate changed files:', error.message);
+    return [];
+  }
+};
+const hasChangedFile = (files = [], matcher) => {
+  if (typeof matcher === 'function') {
+    return files.some((file) => matcher(file));
+  }
+  return files.includes(matcher);
+};
 
 const checkForUpdates = async (force = false) => {
   const isCacheFresh =
@@ -419,15 +440,39 @@ const applyUpdate = async () => {
   await createPreUpdateBackup();
   const stashRef = await stashWorkingTree();
   try {
+    const previousCommit = normalizeCommitHash(await getLocalCommitHash());
     await runCommand(`git fetch ${UPDATE_REMOTE} --tags`);
     await runCommand(`git pull --ff-only ${UPDATE_REMOTE} ${UPDATE_BRANCH}`);
-    await runCommand(resolveUpdateNpmInstallCommand());
-    await runPrismaMigrations();
+    const nextCommit = normalizeCommitHash(await getLocalCommitHash());
+    const changedFiles = await getChangedFilesBetween(previousCommit, nextCommit);
+    const shouldRunNodeInstall =
+      !changedFiles.length ||
+      hasChangedFile(changedFiles, 'package.json') ||
+      hasChangedFile(changedFiles, 'package-lock.json') ||
+      hasChangedFile(changedFiles, 'npm-shrinkwrap.json');
+    const shouldRunPrisma =
+      !changedFiles.length ||
+      hasChangedFile(changedFiles, (file) => file === PRISMA_SCHEMA_RELATIVE_PATH) ||
+      hasChangedFile(changedFiles, (file) => file.startsWith('prisma/migrations/'));
+    const shouldRunPythonInstall =
+      !changedFiles.length || hasChangedFile(changedFiles, 'requirements.txt');
+    if (shouldRunNodeInstall) {
+      await runCommand(resolveUpdateNpmInstallCommand());
+    } else {
+      console.log('[update] package manifests unchanged, skipping npm install');
+    }
+    if (shouldRunPrisma) {
+      await runPrismaMigrations();
+    } else {
+      console.log('[update] prisma schema unchanged, skipping migrations/generate');
+    }
     await runCommand('npm run build:web');
     const python = process.env.BOT_PYTHON_PATH || (os.platform() === 'win32' ? 'python' : 'python3');
     const requirementsPath = path.join(PROJECT_ROOT, 'requirements.txt');
-    if (fs.existsSync(requirementsPath)) {
+    if (fs.existsSync(requirementsPath) && shouldRunPythonInstall) {
       await runCommand(`${python} -m pip install -r "${requirementsPath}"`);
+    } else if (fs.existsSync(requirementsPath)) {
+      console.log('[update] requirements unchanged, skipping pip install');
     }
     console.log("[update] apply complete");
     cachedUpdate = null;

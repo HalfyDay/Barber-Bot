@@ -8511,8 +8511,10 @@ const apiRequest = useCallback(
         const details = payload.payload || {};
         setRealtimeSnapshot({
           rows: Array.isArray(details.rows) ? details.rows : [],
+          active: Array.isArray(details.active) ? details.active : [],
           stats: details.stats || {},
           upcoming: Array.isArray(details.upcoming) ? details.upcoming : [],
+          overdue: Array.isArray(details.overdue) ? details.overdue : [],
           updatedAt: details.updatedAt || new Date().toISOString(),
         });
       } catch (error) {

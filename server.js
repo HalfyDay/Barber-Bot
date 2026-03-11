@@ -2699,7 +2699,9 @@ const runRealtimePush = async (force = false) => {
       type: "appointments:update",
       payload: {
         rows: snapshot.appointmentsRaw,
+        active: snapshot.active,
         upcoming: snapshot.upcoming,
+        overdue: snapshot.overdue,
         stats: snapshot.stats,
         updatedAt: snapshot.updatedAt,
       },
@@ -4473,6 +4475,7 @@ app.post("/api/home/booking/appointments", authenticateHomeToken, async (req, re
       barber,
       homeUser,
     });
+    requestRealtimePush(true);
 
     return res.status(201).json({
       appointment: {

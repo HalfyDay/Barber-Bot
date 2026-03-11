@@ -762,6 +762,14 @@ const sanitizeTimeToken = (value) => {
   const minutes = match[2];
   return `${hours}:${minutes}`;
 };
+const normalizeTimeInputValue = (inputValue) => {
+  if (!inputValue) return '';
+  const sanitized = sanitizeTimeToken(inputValue);
+  if (sanitized) return sanitized;
+  const [hours] = String(inputValue).split(':');
+  if (!hours) return '';
+  return `${hours.padStart(2, '0')}:00`;
+};
 const parseTimeRangeValue = (value) => {
   const safe = normalizeText(value).replace(/[\u2014\u2013]/g, '-');
   if (!safe) return { start: '', end: '' };
@@ -5185,14 +5193,6 @@ const TimeRangePicker = ({
     }
     return Object.keys(style).length ? style : undefined;
   }, [value, placeholder, buttonClassName]);
-  const normalizeTimeValue = (inputValue) => {
-    if (!inputValue) return '';
-    const sanitized = sanitizeTimeToken(inputValue);
-    if (sanitized) return sanitized;
-    const [hours] = String(inputValue).split(':');
-    if (!hours) return '';
-    return `${hours.padStart(2, '0')}:00`;
-  };
   const handleOpen = () => {
     const nextRange = parseTimeRangeValue(value);
     setDraft(nextRange);
@@ -5219,7 +5219,7 @@ const TimeRangePicker = ({
       setPristineState((prev) => ({ ...prev, [field]: true }));
       return;
     }
-    setDraft((prev) => ({ ...prev, [field]: normalizeTimeValue(inputValue) }));
+    setDraft((prev) => ({ ...prev, [field]: normalizeTimeInputValue(inputValue) }));
     setPristineState((prev) => ({ ...prev, [field]: false }));
   };
   const startInputValue = pristineState.start ? '00:00' : start || '00:00';
@@ -5292,6 +5292,48 @@ const TimeRangePicker = ({
         </div>
       </Modal>
     </>
+  );
+};
+const AppointmentTimeField = ({
+  startValue,
+  endValue,
+  onChange,
+}) => {
+  const [startPristine, setStartPristine] = useState(() => !startValue);
+  useEffect(() => {
+    setStartPristine(!startValue);
+  }, [startValue]);
+  const handleStartChange = (event) => {
+    const nextStart = normalizeTimeInputValue(event.target.value);
+    setStartPristine(!nextStart);
+    onChange?.(nextStart);
+  };
+  return (
+    <div className="space-y-1">
+      <label className="text-sm text-slate-300">Время</label>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+        <input
+          name="appointmentStartTime"
+          aria-label="Время начала"
+          type="time"
+          step="60"
+          value={startPristine ? '00:00' : startValue || '00:00'}
+          onChange={handleStartChange}
+          className="h-11 min-w-0 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white"
+        />
+        <span className="text-slate-500">-</span>
+        <input
+          name="appointmentEndTime"
+          aria-label="Время окончания"
+          type="time"
+          step="60"
+          value={endValue || '00:00'}
+          readOnly
+          tabIndex={-1}
+          className="h-11 min-w-0 rounded-lg border border-slate-600 bg-slate-900 px-3 text-center text-white"
+        />
+      </div>
+    </div>
   );
 };
 const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableId }) => {
@@ -6979,27 +7021,26 @@ const AppointmentModal = ({
       }, 0),
     [serviceDurationLookup, servicesSelection]
   );
-  const existingDuration = useMemo(() => {
-    const { start, end } = parseTimeRangeParts(draft?.Time || '');
-    if (!start || !end) return 0;
-    const startMinutes = parseSlotTimeMinutes(start);
-    const endMinutes = parseSlotTimeMinutes(end);
-    const diff = endMinutes - startMinutes;
-    return diff > 0 ? diff : diff < 0 ? diff + 24 * 60 : 0;
-  }, [draft?.Time]);
-  const autoDurationMinutes = isNew
-    ? selectedServicesDuration > 0
-      ? selectedServicesDuration
-      : Math.max(existingDuration, 30)
-    : null;
+  const draftTimeParts = useMemo(() => parseTimeRangeParts(draft?.Time || ''), [draft?.Time]);
+  const appointmentStartTime = draftTimeParts.start;
+  const appointmentEndTime = useMemo(
+    () => (
+      appointmentStartTime && selectedServicesDuration > 0
+        ? addMinutesToTimeToken(appointmentStartTime, selectedServicesDuration)
+        : ''
+    ),
+    [appointmentStartTime, selectedServicesDuration]
+  );
   useEffect(() => {
     if (!open || !isNew) return;
-    const start = extractTimeStart(draft?.Time || '');
-    if (!start || !(autoDurationMinutes > 0)) return;
-    const nextTime = buildTimeRangeValue(start, addMinutesToTimeToken(start, autoDurationMinutes));
+    const start = draftTimeParts.start;
+    if (!start) return;
+    const nextTime = selectedServicesDuration > 0
+      ? buildTimeRangeValue(start, addMinutesToTimeToken(start, selectedServicesDuration))
+      : buildTimeRangeValue(start, '');
     if (!nextTime || nextTime === draft?.Time) return;
     setDraft((prev) => (prev ? { ...prev, Time: nextTime } : prev));
-  }, [autoDurationMinutes, draft?.Time, isNew, open]);
+  }, [draft?.Time, draftTimeParts.start, isNew, open, selectedServicesDuration]);
   if (!open || !draft) return null;
   const actionButtonClass = RESPONSIVE_ACTION_BUTTON_CLASS;
   const handleChange = (field, value) => {
@@ -7010,6 +7051,14 @@ const AppointmentModal = ({
       updateWarningForDraft(nextDraft);
       return nextDraft;
     });
+  };
+  const handleStartTimeChange = (nextStart) => {
+    const nextTime = nextStart
+      ? selectedServicesDuration > 0
+        ? buildTimeRangeValue(nextStart, addMinutesToTimeToken(nextStart, selectedServicesDuration))
+        : buildTimeRangeValue(nextStart, '')
+      : '';
+    handleChange('Time', nextTime);
   };
   const isReminderSent = (value) => value === true || value === 'true' || value === 1 || value === '1';
   const getReminderLabel = (value) => (isReminderSent(value) ? 'Напомнено' : 'Не напомнено');
@@ -7172,12 +7221,19 @@ const AppointmentModal = ({
           onChange={(event) => handleChange('Date', event.target.value)}
           className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white"
         />
-        <TimeRangePicker
-          value={draft.Time || ''}
-          onChange={(nextValue) => handleChange('Time', nextValue)}
-          placeholder="Выбрать время"
-          autoDurationMinutes={autoDurationMinutes}
-        />
+        {isNew ? (
+          <AppointmentTimeField
+            startValue={appointmentStartTime}
+            endValue={appointmentEndTime}
+            onChange={handleStartTimeChange}
+          />
+        ) : (
+          <TimeRangePicker
+            value={draft.Time || ''}
+            onChange={(nextValue) => handleChange('Time', nextValue)}
+            placeholder="Выбрать время"
+          />
+        )}
         <select value={draft.Status || ''} onChange={(event) => handleChange('Status', event.target.value)} className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white">
           <option value="">Статус</option>
           {(options.statuses || []).map((status) => (

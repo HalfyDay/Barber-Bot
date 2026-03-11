@@ -1590,6 +1590,8 @@ const DashboardView = ({
   availableTables = [],
   currentUser = null,
   currentBarber = null,
+  liveUpdatedAt = null,
+  liveStatus = 'unknown',
 }) => {
   if (!data) return <LoadingState />;
   const [pendingStatusId, setPendingStatusId] = useState(null);
@@ -1763,6 +1765,11 @@ const DashboardView = ({
     typeof onNavigateTable === 'function' ? () => handleStatNavigate(tableId) : undefined;
   return (
     <div className="space-y-6 overflow-x-hidden">
+      {(liveUpdatedAt || liveStatus !== 'unknown') && (
+        <div className="flex justify-end">
+          <LiveBadge timestamp={liveUpdatedAt} status={liveStatus} />
+        </div>
+      )}
       <SectionCard title="Ключевые показатели">
         <div className="grid gap-4 stat-grid">
           <StatCard label="Всего клиентов" value={stats.totalUsers ?? 0} onClick={resolveStatHandler('Users')} />
@@ -7166,6 +7173,7 @@ const TablesWorkspace = ({
   currentUser = null,
   liveAppointments = null,
   liveUpdatedAt = null,
+  liveStatus = 'unknown',
   barbers = [],
   services = [],
   onBarberFieldChange,
@@ -7521,6 +7529,11 @@ const TablesWorkspace = ({
   const isCustomTable = tableSettings?.mode === 'custom';
   return (
     <div className="space-y-4">
+      {activeTable === 'Appointments' && (liveUpdatedAt || liveStatus !== 'unknown') && (
+        <div className="flex justify-end">
+          <LiveBadge timestamp={liveUpdatedAt} status={liveStatus} />
+        </div>
+      )}
       <div className="hidden flex-wrap gap-2 lg:flex">
         {resolvedVisibleTables.map((table) => (
           <button
@@ -9334,6 +9347,8 @@ const handleBarberFieldChange = (id, field, value) => {
             availableTables={visibleTableOrder}
             currentUser={session || null}
             currentBarber={currentBarber}
+            liveUpdatedAt={liveUpdatedAt}
+            liveStatus={effectiveLiveStatus}
           />
         );
       case 'tables':
@@ -9348,6 +9363,7 @@ const handleBarberFieldChange = (id, field, value) => {
             currentUser={session || null}
             liveAppointments={realtimeSnapshot?.rows || null}
             liveUpdatedAt={realtimeSnapshot?.updatedAt || null}
+            liveStatus={effectiveLiveStatus}
             barbers={barbers}
             services={services}
             onBarberFieldChange={handleBarberFieldChange}
@@ -9443,6 +9459,8 @@ const handleBarberFieldChange = (id, field, value) => {
             availableTables={visibleTableOrder}
             currentUser={session || null}
             currentBarber={currentBarber}
+            liveUpdatedAt={liveUpdatedAt}
+            liveStatus={effectiveLiveStatus}
           />
         );
     }

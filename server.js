@@ -1152,6 +1152,22 @@ const withTelegramAuthDb = (runner) => {
     }
   }
 };
+const withBookingDb = (runner) => {
+  let db = null;
+  try {
+    db = new SqliteDatabase(DB_PATH);
+    db.pragma("busy_timeout = 5000");
+    return runner(db);
+  } finally {
+    if (db) {
+      try {
+        db.close();
+      } catch {
+        // ignore
+      }
+    }
+  }
+};
 const ensureTelegramAuthRequestsTable = () => {
   try {
     withTelegramAuthDb((db) => {
@@ -2157,6 +2173,101 @@ const getBusyIntervalsForBarberDate = async (db, barberName, dateKey) => {
     return acc;
   }, []);
 };
+const getBusyIntervalsFromRows = (rows = []) =>
+  rows.reduce((acc, row) => {
+    if (!isSlotBlockingStatus(row?.Status)) return acc;
+    const parsed = parseWorkingRange(row?.Time);
+    if (parsed) acc.push(parsed);
+    return acc;
+  }, []);
+const createHomeAppointmentWithLock = ({
+  homeUser,
+  barber,
+  dateKey,
+  startMinute,
+  totalDuration,
+  selectedServices,
+  settings,
+}) =>
+  withBookingDb((db) => {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const activeRows = db
+        .prepare('SELECT "Status" FROM "Appointments" WHERE "UserID" = ?')
+        .all(homeUser.id);
+      const activeCount = activeRows.reduce(
+        (acc, row) => (isActiveStatus(row?.Status) ? acc + 1 : acc),
+        0,
+      );
+      if (activeCount >= settings.bookingLimit) {
+        throw new Error("LIMIT_REACHED");
+      }
+
+      const schedule = db
+        .prepare(
+          'SELECT "Week" FROM "Schedules" WHERE "Barber" = ? AND "Date" = ? LIMIT 1',
+        )
+        .get(barber.name, dateKey);
+      const workingHours = parseWorkingRange(schedule?.Week);
+      if (!workingHours) {
+        throw new Error("NO_SCHEDULE");
+      }
+
+      const [startDay, endDay] = workingHours;
+      if (startMinute < startDay || startMinute + totalDuration > endDay) {
+        throw new Error("OUTSIDE_WORKING_HOURS");
+      }
+
+      const startLabel = formatMinutesAsClock(startMinute);
+      const endLabel = formatMinutesAsClock(startMinute + totalDuration);
+      const startDate = new Date(`${dateKey}T${startLabel}:00`);
+      const minAllowedDate = new Date(Date.now() + settings.minLeadHours * 60 * 60 * 1000);
+      if (Number.isNaN(startDate.getTime()) || startDate < minAllowedDate) {
+        throw new Error("LEAD_TIME");
+      }
+
+      const busyRows = db
+        .prepare(
+          'SELECT "Time", "Status" FROM "Appointments" WHERE "Barber" = ? AND "Date" = ?',
+        )
+        .all(barber.name, dateKey);
+      const busyIntervals = getBusyIntervalsFromRows(busyRows);
+      if (!canFitTimeRange(startMinute, totalDuration, busyIntervals)) {
+        throw new Error("SLOT_TAKEN");
+      }
+
+      const appointment = {
+        id: randomUUID(),
+        UserID: homeUser.id,
+        CustomerName: homeUser.displayName || homeUser.phone || "Клиент",
+        Phone: homeUser.phone || null,
+        Barber: barber.name,
+        Date: dateKey,
+        Time: `${startLabel} - ${endLabel}`,
+        Status: STATUS_ACTIVE,
+        Services: selectedServices.map((service) => service.name).join(", "),
+        Reminder2hClientSent: 0,
+        Reminder2hBarberSent: 0,
+      };
+
+      db.prepare(
+        `INSERT INTO "Appointments"
+          ("id", "UserID", "CustomerName", "Phone", "Barber", "Date", "Time", "Status", "Services", "Reminder2hClientSent", "Reminder2hBarberSent")
+         VALUES
+          (@id, @UserID, @CustomerName, @Phone, @Barber, @Date, @Time, @Status, @Services, @Reminder2hClientSent, @Reminder2hBarberSent)`,
+      ).run(appointment);
+
+      db.exec("COMMIT");
+      return appointment;
+    } catch (error) {
+      try {
+        db.exec("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
+  });
 const buildTimeSlotsForDate = ({
   dateKey,
   workingHours,
@@ -2922,6 +3033,64 @@ const readBotToken = async () => {
     process.env.TELEGRAM_BOT_TOKEN || process.env.TOKEN || "",
   );
   return envToken || null;
+};
+const escapeTelegramHtml = (value) =>
+  normalizeText(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+const sendTelegramMessage = async (chatId, text) => {
+  const safeChatId = normalizeText(chatId);
+  const safeText = normalizeText(text);
+  if (!safeChatId || !safeText) {
+    throw new Error("Telegram chat id or text is missing");
+  }
+  const token = await readBotToken();
+  if (!token) {
+    throw new Error("Telegram bot token is not configured");
+  }
+  const response = await runtimeFetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      chat_id: safeChatId,
+      text: safeText,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.ok === false) {
+    throw new Error(
+      normalizeText(payload?.description) || `HTTP ${response.status || "unknown"}`,
+    );
+  }
+  return payload;
+};
+const notifyBarberAboutNewAppointment = async ({ appointment, barber, homeUser }) => {
+  const barberName = normalizeText(barber?.name || appointment?.Barber);
+  const barberChatId = normalizeText(barber?.telegramId);
+  if (!barberName || !barberChatId) return false;
+  const message = [
+    `Новая запись: ${escapeTelegramHtml(appointment?.Date)} ${escapeTelegramHtml(
+      appointment?.Time,
+    )}.`,
+    `Клиент: <b>${escapeTelegramHtml(
+      appointment?.CustomerName || homeUser?.displayName || "Клиент",
+    )}</b>`,
+    `Телефон: ${escapeTelegramHtml(appointment?.Phone || homeUser?.phone || "Не указан")}`,
+    `Услуги: ${escapeTelegramHtml(appointment?.Services || "Не указаны")}`,
+  ].join("\n");
+  try {
+    await sendTelegramMessage(barberChatId, message);
+    return true;
+  } catch (error) {
+    console.error(`Barber notification failed for ${barberName}:`, error?.message || error);
+    return false;
+  }
 };
 const writeBotToken = async (nextToken) => {
   const sanitized = normalizeText(nextToken || "");
@@ -4268,59 +4437,16 @@ app.post("/api/home/booking/appointments", authenticateHomeToken, async (req, re
       selectedServices.reduce((sum, service) => sum + Math.max(0, Number(service.duration) || 0), 0),
       15,
     );
-    const minAllowedDate = new Date(Date.now() + settings.minLeadHours * 60 * 60 * 1000);
-
     let createdAppointment = null;
     try {
-      createdAppointment = await prisma.$transaction(async (tx) => {
-        const activeRows = await tx.appointments.findMany({
-          where: { UserID: homeUser.id },
-          select: { Status: true },
-        });
-        const activeCount = activeRows.reduce(
-          (acc, row) => (isActiveStatus(row?.Status) ? acc + 1 : acc),
-          0,
-        );
-        if (activeCount >= settings.bookingLimit) {
-          throw new Error("LIMIT_REACHED");
-        }
-
-        const workingHours = await getWorkingHoursForBarberDate(tx, barber.name, dateKey);
-        if (!workingHours) {
-          throw new Error("NO_SCHEDULE");
-        }
-        const [startDay, endDay] = workingHours;
-        if (startMinute < startDay || startMinute + totalDuration > endDay) {
-          throw new Error("OUTSIDE_WORKING_HOURS");
-        }
-
-        const startLabel = formatMinutesAsClock(startMinute);
-        const endLabel = formatMinutesAsClock(startMinute + totalDuration);
-        const startDate = new Date(`${dateKey}T${startLabel}:00`);
-        if (Number.isNaN(startDate.getTime()) || startDate < minAllowedDate) {
-          throw new Error("LEAD_TIME");
-        }
-
-        const busyIntervals = await getBusyIntervalsForBarberDate(tx, barber.name, dateKey);
-        if (!canFitTimeRange(startMinute, totalDuration, busyIntervals)) {
-          throw new Error("SLOT_TAKEN");
-        }
-
-        return tx.appointments.create({
-          data: {
-            id: randomUUID(),
-            UserID: homeUser.id,
-            CustomerName: homeUser.displayName || homeUser.phone || "Клиент",
-            Phone: homeUser.phone || null,
-            Barber: barber.name,
-            Date: dateKey,
-            Time: `${startLabel} - ${endLabel}`,
-            Status: STATUS_ACTIVE,
-            Services: selectedServices.map((service) => service.name).join(", "),
-            Reminder2hClientSent: false,
-            Reminder2hBarberSent: false,
-          },
-        });
+      createdAppointment = createHomeAppointmentWithLock({
+        homeUser,
+        barber,
+        dateKey,
+        startMinute,
+        totalDuration,
+        selectedServices,
+        settings,
       });
     } catch (error) {
       if (error?.message === "LIMIT_REACHED") {
@@ -4342,6 +4468,11 @@ app.post("/api/home/booking/appointments", authenticateHomeToken, async (req, re
       }
       throw error;
     }
+    await notifyBarberAboutNewAppointment({
+      appointment: createdAppointment,
+      barber,
+      homeUser,
+    });
 
     return res.status(201).json({
       appointment: {

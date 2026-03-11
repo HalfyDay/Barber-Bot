@@ -740,10 +740,14 @@ async def reminder_checker_job(context: ContextTypes.DEFAULT_TYPE):
             telegram_id = user_row["TelegramID"]
             if not telegram_id:
                 continue
+            user_keys = resolve_user_lookup_keys(telegram_id, monthly_cursor)
+            if not user_keys:
+                continue
             last_cursor = conn.cursor()
+            placeholders = ", ".join("?" for _ in user_keys)
             last_cursor.execute(
-                "SELECT MAX(Date) FROM Appointments WHERE UserID = ? AND Status = 'Выполнена'",
-                (str(telegram_id),),
+                f"SELECT MAX(Date) FROM Appointments WHERE UserID IN ({placeholders}) AND Status = 'Выполнена'",
+                tuple(user_keys),
             )
             last_row = last_cursor.fetchone()
             last_haircut_raw = last_row[0] if last_row and last_row[0] else None
@@ -808,14 +812,15 @@ async def reminder_checker_job(context: ContextTypes.DEFAULT_TYPE):
                 # Напоминание клиенту
                 if not appt.get("Reminder2hClientSent"):
                     user_id = appt.get("UserID")
-                    if user_id:
+                    client_chat_id = resolve_telegram_chat_id_for_user(user_id, cursor)
+                    if client_chat_id:
                         try:
                             msg = (
                                 f"⏰ Напоминание: \nУ вас сегодня в {start_time_str} запись к барберу "
                                 f"<b>{appt.get('Barber')}</b>."
                             )
                             await context.bot.send_message(
-                                user_id, msg, parse_mode="HTML"
+                                client_chat_id, msg, parse_mode="HTML"
                             )
                             # спользуем новый курсор для этого обновления, чтобы не мешать основному циклу
                             update_cursor = conn.cursor()
@@ -883,8 +888,13 @@ def is_barber(user_id: int) -> bool:
 def count_active_appts(user_id: str) -> int:
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        user_keys = resolve_user_lookup_keys(user_id, cursor)
+        if not user_keys:
+            return 0
+        placeholders = ", ".join("?" for _ in user_keys)
         cursor.execute(
-            "SELECT Status FROM Appointments WHERE UserID = ?", (str(user_id),)
+            f"SELECT Status FROM Appointments WHERE UserID IN ({placeholders})",
+            tuple(user_keys),
         )
         rows = cursor.fetchall()
         return sum(1 for row in rows if status_is_active(row["Status"]))
@@ -893,9 +903,13 @@ def count_active_appts(user_id: str) -> int:
 def get_last_haircut_date(user_id: str) -> str | None:
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        user_keys = resolve_user_lookup_keys(user_id, cursor)
+        if not user_keys:
+            return None
+        placeholders = ", ".join("?" for _ in user_keys)
         cursor.execute(
-            "SELECT MAX(Date) FROM Appointments WHERE UserID = ? AND Status = 'Выполнена'",
-            (str(user_id),),
+            f"SELECT MAX(Date) FROM Appointments WHERE UserID IN ({placeholders}) AND Status = 'Выполнена'",
+            tuple(user_keys),
         )
         result = cursor.fetchone()
         return result[0] if result and result[0] else None
@@ -905,9 +919,13 @@ def count_no_shows(user_id: str) -> int:
     with get_db_connection() as conn:
         threshold = (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
         cursor = conn.cursor()
+        user_keys = resolve_user_lookup_keys(user_id, cursor)
+        if not user_keys:
+            return 0
+        placeholders = ", ".join("?" for _ in user_keys)
         cursor.execute(
-            "SELECT COUNT(*) FROM Appointments WHERE UserID = ? AND Status = 'Неявка' AND Date >= ?",
-            (str(user_id), threshold),
+            f"SELECT COUNT(*) FROM Appointments WHERE UserID IN ({placeholders}) AND Status = 'Неявка' AND Date >= ?",
+            (*user_keys, threshold),
         )
         return cursor.fetchone()[0]
     return 0
@@ -1089,6 +1107,70 @@ def find_user_by_telegram(cursor: sqlite3.Cursor, telegram_id: int | str):
         if telegram_ids_equal(row["TelegramID"], identifier):
             return row
     return None
+
+def find_user_by_id(cursor: sqlite3.Cursor, user_id: str | None):
+    identifier = str(user_id or "").strip()
+    if not identifier:
+        return None
+    cursor.execute(
+        "SELECT id, Name, Phone, HomePasswordHash, HomePasswordSalt, HomeCreatedAt, TelegramID "
+        "FROM Users WHERE id = ? LIMIT 1",
+        (identifier,),
+    )
+    return cursor.fetchone()
+
+def resolve_user_lookup_keys(
+    user_ref: int | str | None, cursor: sqlite3.Cursor | None = None
+) -> list[str]:
+    def _resolve(active_cursor: sqlite3.Cursor) -> list[str]:
+        raw_identifier = str(user_ref or "").strip()
+        telegram_identifier = normalize_telegram_id(user_ref)
+        lookup_identifier = raw_identifier or telegram_identifier
+        if not lookup_identifier:
+            return []
+        keys: list[str] = []
+        row = find_user_by_id(active_cursor, lookup_identifier) or find_user_by_telegram(
+            active_cursor, telegram_identifier or lookup_identifier
+        )
+        if row and row["id"]:
+            keys.append(str(row["id"]))
+            linked_telegram_id = normalize_telegram_id(row["TelegramID"])
+            if linked_telegram_id and linked_telegram_id not in keys:
+                keys.append(linked_telegram_id)
+        if telegram_identifier and telegram_identifier not in keys:
+            keys.append(telegram_identifier)
+        if raw_identifier and raw_identifier not in keys:
+            keys.append(raw_identifier)
+        return keys
+
+    if cursor is not None:
+        return _resolve(cursor)
+    with get_db_connection() as conn:
+        if not conn:
+            return []
+        return _resolve(conn.cursor())
+
+def resolve_telegram_chat_id_for_user(
+    user_ref: int | str | None, cursor: sqlite3.Cursor | None = None
+) -> str | None:
+    def _resolve(active_cursor: sqlite3.Cursor) -> str | None:
+        raw_identifier = str(user_ref or "").strip()
+        telegram_identifier = normalize_telegram_id(user_ref)
+        row = find_user_by_id(active_cursor, raw_identifier) or find_user_by_telegram(
+            active_cursor, telegram_identifier or raw_identifier
+        )
+        if row:
+            linked_telegram_id = normalize_telegram_id(row["TelegramID"])
+            if linked_telegram_id:
+                return linked_telegram_id
+        return telegram_identifier or None
+
+    if cursor is not None:
+        return _resolve(cursor)
+    with get_db_connection() as conn:
+        if not conn:
+            return None
+        return _resolve(conn.cursor())
 
 def update_telegram_auth_request(
     cursor: sqlite3.Cursor,
@@ -1497,14 +1579,23 @@ async def reg_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return REG_PHONE
     user_id = update.effective_user.id
     name = ctx.user_data.get("name")
+    normalized_phone = normalize_phone(phone)
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM Users WHERE TelegramID = ?", (user_id,))
-        existing = cursor.fetchone()
+        existing = find_user_by_telegram(cursor, user_id)
+        phone_owner = find_user_by_phone(cursor, normalized_phone)
         if existing:
             cursor.execute(
                 "UPDATE Users SET Name = ?, Phone = ? WHERE id = ?",
                 (name, phone, existing["id"]),
+            )
+        elif phone_owner and (
+            not phone_owner["TelegramID"]
+            or telegram_ids_equal(phone_owner["TelegramID"], user_id)
+        ):
+            cursor.execute(
+                "UPDATE Users SET TelegramID = ?, Name = ?, Phone = ? WHERE id = ?",
+                (user_id, name, phone, phone_owner["id"]),
             )
         else:
             cursor.execute(
@@ -1739,11 +1830,16 @@ async def show_records(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return SHOW_RECORDS
         # Сценарий для КЛЕНТА (существующая логика)
         else:
-            cursor.execute(
-                "SELECT * FROM Appointments WHERE UserID = ? AND Status = 'Активная' ORDER BY Date, Time",
-                (str(user_id),),
-            )
-            recs = cursor.fetchall()
+            user_keys = resolve_user_lookup_keys(user_id, cursor)
+            if not user_keys:
+                recs = []
+            else:
+                placeholders = ", ".join("?" for _ in user_keys)
+                cursor.execute(
+                    f"SELECT * FROM Appointments WHERE UserID IN ({placeholders}) AND Status = 'Активная' ORDER BY Date, Time",
+                    tuple(user_keys),
+                )
+                recs = cursor.fetchall()
             if not recs:
                 await safe_upsert_menu(
                     ctx,
@@ -2419,9 +2515,10 @@ async def book_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                     if redirect_target:
                         conn.rollback()
                     else:
+                        user_storage_id = get_user_record_id_by_telegram(user_id) or str(user_id)
                         record_tuple = (
                             new_id,
-                            str(user_id),
+                            user_storage_id,
                             ctx.user_data.get("name"),
                             ctx.user_data.get("phone"),
                             barber_name,

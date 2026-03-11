@@ -778,6 +778,16 @@ const buildTimeRangeValue = (start, end) => {
   }
   return safeStart || '';
 };
+const addMinutesToTimeToken = (timeValue, minutesToAdd) => {
+  const safeTime = sanitizeTimeToken(timeValue);
+  if (!safeTime) return '';
+  const baseMinutes = parseSlotTimeMinutes(safeTime);
+  const extraMinutes = Math.max(0, Number(minutesToAdd) || 0);
+  const totalMinutes = (baseMinutes + extraMinutes) % (24 * 60);
+  const hours = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+  const minutes = String(totalMinutes % 60).padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
 const extractTimeStart = (value) => parseTimeRangeValue(value).start;
 const getAppointmentStartDate = (dateValue, timeValue, fallbackIso) => {
   if (fallbackIso) {
@@ -5151,12 +5161,15 @@ const TimeRangePicker = ({
   title = 'Выбор времени',
   placeholder = 'Выберите интервал',
   buttonClassName = 'w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-left text-sm text-white whitespace-nowrap',
+  autoDurationMinutes = null,
 }) => {
   const [open, setOpen] = useState(false);
   const [{ start, end }, setDraft] = useState(() => ({ start: '', end: '' }));
   const [pristineState, setPristineState] = useState({ start: true, end: true });
   const startInputId = useMemo(() => `start-time-${Math.random().toString(36).slice(2, 8)}`, []);
   const endInputId = useMemo(() => `end-time-${Math.random().toString(36).slice(2, 8)}`, []);
+  const autoEndEnabled = Number.isFinite(autoDurationMinutes) && autoDurationMinutes > 0;
+  const resolvedEnd = autoEndEnabled ? addMinutesToTimeToken(start, autoDurationMinutes) : end;
   const buttonStyle = useMemo(() => {
     const label = value || placeholder || '';
     const length = label.length;
@@ -5185,12 +5198,12 @@ const TimeRangePicker = ({
     setDraft(nextRange);
     setPristineState({
       start: !nextRange.start,
-      end: !nextRange.end,
+      end: autoEndEnabled ? !nextRange.start : !nextRange.end,
     });
     setOpen(true);
   };
   const handleSave = () => {
-    onChange?.(buildTimeRangeValue(start, end));
+    onChange?.(buildTimeRangeValue(start, resolvedEnd));
     setOpen(false);
   };
   const handleClear = () => {
@@ -5210,7 +5223,13 @@ const TimeRangePicker = ({
     setPristineState((prev) => ({ ...prev, [field]: false }));
   };
   const startInputValue = pristineState.start ? '00:00' : start || '00:00';
-  const endInputValue = pristineState.end ? '00:00' : end || '00:00';
+  const endInputValue = autoEndEnabled
+    ? pristineState.start
+      ? '00:00'
+      : resolvedEnd || '00:00'
+    : pristineState.end
+      ? '00:00'
+      : end || '00:00';
   return (
     <>
       <button type="button" onClick={handleOpen} className={buttonClassName} style={buttonStyle}>
@@ -5263,7 +5282,9 @@ const TimeRangePicker = ({
                 type="time"
                 step="60"
                 value={endInputValue}
-                onChange={handleTimeInputChange('end')}
+                onChange={autoEndEnabled ? undefined : handleTimeInputChange('end')}
+                readOnly={autoEndEnabled}
+                disabled={autoEndEnabled}
                 className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-900 px-2 py-2 text-center text-lg text-white"
               />
             </div>
@@ -6805,6 +6826,7 @@ const AppointmentModal = ({
   canDelete = false,
   isNew = false,
   clients = [],
+  serviceCatalog = [],
 }) => {
   const buildDraft = useCallback(
     (record) => (record ? { ...record, UserID: record.UserID || record.userId || '', Status: normalizeStatusValue(record.Status) } : null),
@@ -6938,8 +6960,47 @@ const AppointmentModal = ({
     },
     [appointments, schedules, currentAppointmentId]
   );
+  const servicesSelection = parseMultiValue(draft?.Services);
+  const serviceDurationLookup = useMemo(
+    () =>
+      new Map(
+        (serviceCatalog || []).map((service) => [
+          canonicalizeName(service?.name || '').toLowerCase(),
+          Math.max(0, Number(service?.duration) || 0),
+        ]),
+      ),
+    [serviceCatalog]
+  );
+  const selectedServicesDuration = useMemo(
+    () =>
+      servicesSelection.reduce((sum, serviceName) => {
+        const key = canonicalizeName(serviceName).toLowerCase();
+        return sum + (serviceDurationLookup.get(key) || 0);
+      }, 0),
+    [serviceDurationLookup, servicesSelection]
+  );
+  const existingDuration = useMemo(() => {
+    const { start, end } = parseTimeRangeParts(draft?.Time || '');
+    if (!start || !end) return 0;
+    const startMinutes = parseSlotTimeMinutes(start);
+    const endMinutes = parseSlotTimeMinutes(end);
+    const diff = endMinutes - startMinutes;
+    return diff > 0 ? diff : diff < 0 ? diff + 24 * 60 : 0;
+  }, [draft?.Time]);
+  const autoDurationMinutes = isNew
+    ? selectedServicesDuration > 0
+      ? selectedServicesDuration
+      : Math.max(existingDuration, 30)
+    : null;
+  useEffect(() => {
+    if (!open || !isNew) return;
+    const start = extractTimeStart(draft?.Time || '');
+    if (!start || !(autoDurationMinutes > 0)) return;
+    const nextTime = buildTimeRangeValue(start, addMinutesToTimeToken(start, autoDurationMinutes));
+    if (!nextTime || nextTime === draft?.Time) return;
+    setDraft((prev) => (prev ? { ...prev, Time: nextTime } : prev));
+  }, [autoDurationMinutes, draft?.Time, isNew, open]);
   if (!open || !draft) return null;
-  const servicesSelection = parseMultiValue(draft.Services);
   const actionButtonClass = RESPONSIVE_ACTION_BUTTON_CLASS;
   const handleChange = (field, value) => {
     setValidationError('');
@@ -7111,7 +7172,12 @@ const AppointmentModal = ({
           onChange={(event) => handleChange('Date', event.target.value)}
           className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white"
         />
-        <TimeRangePicker value={draft.Time || ''} onChange={(nextValue) => handleChange('Time', nextValue)} placeholder="Выбрать время" />
+        <TimeRangePicker
+          value={draft.Time || ''}
+          onChange={(nextValue) => handleChange('Time', nextValue)}
+          placeholder="Выбрать время"
+          autoDurationMinutes={autoDurationMinutes}
+        />
         <select value={draft.Status || ''} onChange={(event) => handleChange('Status', event.target.value)} className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white">
           <option value="">Статус</option>
           {(options.statuses || []).map((status) => (
@@ -9593,6 +9659,7 @@ const handleBarberFieldChange = (id, field, value) => {
         onSave={handleSaveAppointment}
         isNew={appointmentModal.isNew}
         clients={dashboard?.clients || []}
+        serviceCatalog={services}
         canDelete={appointmentModal.allowDelete}
         onDelete={appointmentModal.allowDelete ? handleDeleteAppointment : null}
       />

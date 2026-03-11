@@ -79,15 +79,38 @@ const stashWorkingTree = async () => {
   const status = await getWorkingTreeStatus();
   if (!status) return null;
   console.log('[update] Working tree is dirty, creating stash before pull...');
-  try {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const message = `auto-update-${stamp}`;
-    const { stdout } = await runCommand(`git stash push -u -m "${message}"`);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const message = `auto-update-${stamp}`;
+  const parseStashRef = (stdout = '') => {
     const match = stdout.match(/(stash@\{[^}]+\})/);
-    const ref = match ? match[1] : null;
-    console.log(`[update] Stashed changes${ref ? ` as ${ref}` : ''}`);
+    return match ? match[1] : null;
+  };
+  const logStashResult = (stdout = '', mode = 'default') => {
+    const ref = parseStashRef(stdout);
+    const suffix = mode === 'tracked-only' ? ' (tracked files only)' : '';
+    console.log(`[update] Stashed changes${ref ? ` as ${ref}` : ''}${suffix}`);
     return ref;
+  };
+  try {
+    const { stdout } = await runCommand(`git stash push -u -m "${message}"`);
+    return logStashResult(stdout);
   } catch (error) {
+    const details = String(error?.message || error || '');
+    const canRetryTrackedOnly =
+      /cannot save the untracked files/i.test(details) ||
+      (/permission denied/i.test(details) && /unable to process path/i.test(details));
+    if (canRetryTrackedOnly) {
+      console.warn(
+        '[update] Stash with untracked files failed, retrying with tracked files only:',
+        error.message,
+      );
+      try {
+        const { stdout } = await runCommand(`git stash push -m "${message}"`);
+        return logStashResult(stdout, 'tracked-only');
+      } catch (fallbackError) {
+        console.error('[update] Tracked-only stash also failed:', fallbackError.message);
+      }
+    }
     console.error('[update] Failed to stash changes:', error.message);
     throw new Error('Не удалось подготовить репозиторий к обновлению (stash).');
   }

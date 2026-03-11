@@ -26,6 +26,8 @@ __pycache__/
 # Databases
 /prisma/dev.db
 /prisma/dev.db-*
+/prisma/*.corrupt-*
+/prisma/*.repair.db
 /prisma/*.db
 /prisma/*.db-shm
 /prisma/*.db-wal

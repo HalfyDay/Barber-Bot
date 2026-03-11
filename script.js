@@ -880,10 +880,53 @@ const isAppointmentOngoing = (appointment, nowTs = Date.now()) => {
   return startTs <= nowTs && endTs > nowTs;
 };
 const parseMultiValue = (value) =>
-  normalizeText(value)
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
+  Array.from(
+    normalizeText(value)
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .reduce((acc, item) => {
+        const normalizedKey = canonicalizeName(item).toLowerCase() || normalizeText(item).trim().toLowerCase();
+        if (!normalizedKey || acc.seen.has(normalizedKey)) return acc;
+        acc.seen.add(normalizedKey);
+        acc.items.push(item);
+        return acc;
+      }, { seen: new Set(), items: [] }).items
+  );
+const normalizeMultiValueList = (value) => {
+  const list = Array.isArray(value) ? value : parseMultiValue(value);
+  return list.reduce((acc, item) => {
+    const normalizedItem = normalizeText(item).trim();
+    const normalizedKey = canonicalizeName(normalizedItem).toLowerCase() || normalizedItem.toLowerCase();
+    if (!normalizedKey || acc.seen.has(normalizedKey)) return acc;
+    acc.seen.add(normalizedKey);
+    acc.items.push(normalizedItem);
+    return acc;
+  }, { seen: new Set(), items: [] }).items;
+};
+const hasMultiValueItem = (items, option) => {
+  const optionKey = canonicalizeName(option).toLowerCase() || normalizeText(option).trim().toLowerCase();
+  if (!optionKey) return false;
+  return normalizeMultiValueList(items).some(
+    (item) => (canonicalizeName(item).toLowerCase() || normalizeText(item).trim().toLowerCase()) === optionKey
+  );
+};
+const toggleMultiValueItem = (items, option) => {
+  const normalizedItems = normalizeMultiValueList(items);
+  const optionKey = canonicalizeName(option).toLowerCase() || normalizeText(option).trim().toLowerCase();
+  if (!optionKey) return normalizedItems;
+  const exists = normalizedItems.some(
+    (item) => (canonicalizeName(item).toLowerCase() || normalizeText(item).trim().toLowerCase()) === optionKey
+  );
+  if (exists) {
+    return normalizedItems.filter(
+      (item) => (canonicalizeName(item).toLowerCase() || normalizeText(item).trim().toLowerCase()) !== optionKey
+    );
+  }
+  return [...normalizedItems, normalizeText(option).trim()];
+};
+const dedupeOptionList = (options = []) =>
+  normalizeMultiValueList(Array.isArray(options) ? options : []);
 const LoadingState = ({ label = 'Загружаю данные...' } = {}) => (
   <div className="flex items-center justify-center py-12 text-slate-300">
     <span className="animate-pulse">{label}</span>
@@ -5041,12 +5084,13 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
 };
 const MultiSelectCell = ({ value, options = [], onCommit }) => {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(parseMultiValue(value));
+  const [draft, setDraft] = useState(normalizeMultiValueList(value));
   const anchorRef = useRef(null);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   useEffect(() => {
-    setDraft(parseMultiValue(value));
+    setDraft(normalizeMultiValueList(value));
   }, [value]);
+  const normalizedOptions = useMemo(() => dedupeOptionList(options), [options]);
   const updatePosition = useCallback(() => {
     if (!anchorRef.current) return;
     const rect = anchorRef.current.getBoundingClientRect();
@@ -5071,7 +5115,7 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
     };
   }, [open, updatePosition]);
   const toggleOption = (option) => {
-    setDraft((prev) => (prev.includes(option) ? prev.filter((item) => item !== option) : [...prev, option]));
+    setDraft((prev) => toggleMultiValueItem(prev, option));
   };
   const handleSave = () => {
     onCommit(draft.join(', '));
@@ -5101,7 +5145,7 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
                   type="button"
                   className="rounded-full p-1 text-slate-400 hover:text-white"
                   onClick={() => {
-                    setDraft(parseMultiValue(value));
+                    setDraft(normalizeMultiValueList(value));
                     setOpen(false);
                   }}
                 >
@@ -5124,9 +5168,9 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
                 </div>
               )}
               <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
-                {options.length === 0 && <p className="text-slate-400">Нет доступных услуг</p>}
-                {options.map((option) => {
-                  const isActive = draft.includes(option);
+                {normalizedOptions.length === 0 && <p className="text-slate-400">Нет доступных услуг</p>}
+                {normalizedOptions.map((option) => {
+                  const isActive = hasMultiValueItem(draft, option);
                   return (
                     <label
                       key={option}
@@ -5463,16 +5507,16 @@ const ColumnMenu = ({ columns, hiddenColumns = [], onToggle }) => {
 };
 const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, placeholder = 'Нет данных' }) => {
   const [query, setQuery] = useState('');
-  const selected = useMemo(() => (Array.isArray(value) ? value : parseMultiValue(value)), [value]);
+  const selected = useMemo(() => normalizeMultiValueList(value), [value]);
+  const normalizedOptions = useMemo(() => dedupeOptionList(options), [options]);
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = useMemo(() => {
-    if (!normalizedQuery) return options;
-    return options.filter((option) => option.toLowerCase().includes(normalizedQuery));
-  }, [options, normalizedQuery]);
+    if (!normalizedQuery) return normalizedOptions;
+    return normalizedOptions.filter((option) => option.toLowerCase().includes(normalizedQuery));
+  }, [normalizedOptions, normalizedQuery]);
   const toggle = (option) => {
     if (!onChange) return;
-    const exists = selected.includes(option);
-    const next = exists ? selected.filter((item) => item !== option) : [...selected, option];
+    const next = toggleMultiValueItem(selected, option);
     onChange(next);
   };
   return (
@@ -5529,7 +5573,7 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
           ) : (
             <div className="grid gap-1 sm:grid-cols-2">
               {filtered.map((option) => {
-                const isActive = selected.includes(option);
+                const isActive = hasMultiValueItem(selected, option);
                 return (
                   <button
                     type="button"
@@ -7234,14 +7278,17 @@ const AppointmentModal = ({
             placeholder="Выбрать время"
           />
         )}
-        <select value={draft.Status || ''} onChange={(event) => handleChange('Status', event.target.value)} className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white">
-          <option value="">Статус</option>
-          {(options.statuses || []).map((status) => (
-            <option key={status} value={status}>
-              {status}
-            </option>
-          ))}
+        <div className="space-y-1">
+          <label className="text-sm text-slate-300">Статус</label>
+          <select value={draft.Status || ''} onChange={(event) => handleChange('Status', event.target.value)} className="h-11 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 text-white">
+            <option value="">Статус</option>
+            {(options.statuses || []).map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
 	        </select>
+        </div>
 	        <div className="col-span-full w-full min-w-0">
 	          <MultiSelectCheckboxes
 	            label="Услуги"

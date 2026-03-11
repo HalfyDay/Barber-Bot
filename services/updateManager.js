@@ -19,6 +19,11 @@ const UPDATE_COMMAND_MAX_BUFFER_BYTES =
 const PRISMA_SCHEMA_PATH = path.join(PROJECT_ROOT, 'prisma', 'schema.prisma');
 const DB_PATH = path.join(PROJECT_ROOT, 'prisma', 'dev.db');
 const BACKUP_DIR = path.join(PROJECT_ROOT, 'backups');
+const WEB_BUILD_OUTPUTS = [
+  path.join(PROJECT_ROOT, 'bot-constructor.bundle.js'),
+  path.join(PROJECT_ROOT, 'script.bundle.js'),
+  path.join(PROJECT_ROOT, 'styles.css'),
+];
 const PRISMA_SCHEMA_RELATIVE_PATH = path
   .relative(PROJECT_ROOT, PRISMA_SCHEMA_PATH)
   .split(path.sep)
@@ -350,6 +355,19 @@ const hasChangedFile = (files = [], matcher) => {
   }
   return files.includes(matcher);
 };
+const removeWebBuildOutputs = async () => {
+  for (const target of WEB_BUILD_OUTPUTS) {
+    try {
+      await fs.promises.unlink(target);
+      console.log(`[update] Removed stale build artifact: ${path.relative(PROJECT_ROOT, target)}`);
+    } catch (error) {
+      if (error?.code === 'ENOENT') continue;
+      console.warn(
+        `[update] Failed to remove build artifact ${path.relative(PROJECT_ROOT, target)}: ${error.message}`,
+      );
+    }
+  }
+};
 
 const checkForUpdates = async (force = false) => {
   const isCacheFresh =
@@ -456,6 +474,20 @@ const applyUpdate = async () => {
       hasChangedFile(changedFiles, (file) => file.startsWith('prisma/migrations/'));
     const shouldRunPythonInstall =
       !changedFiles.length || hasChangedFile(changedFiles, 'requirements.txt');
+    const shouldRunWebBuild =
+      !changedFiles.length ||
+      shouldRunNodeInstall ||
+      hasChangedFile(changedFiles, (file) =>
+        [
+          'script.js',
+          'bot-constructor.js',
+          'styles.tailwind.css',
+          'tailwind.config.js',
+          'index.html',
+          'manifest.webmanifest',
+          'service-worker.js',
+        ].includes(file),
+      );
     if (shouldRunNodeInstall) {
       await runCommand(resolveUpdateNpmInstallCommand());
     } else {
@@ -466,7 +498,12 @@ const applyUpdate = async () => {
     } else {
       console.log('[update] prisma schema unchanged, skipping migrations/generate');
     }
-    await runCommand('npm run build:web');
+    if (shouldRunWebBuild) {
+      await removeWebBuildOutputs();
+      await runCommand('npm run build:web');
+    } else {
+      console.log('[update] web assets unchanged, skipping build:web');
+    }
     const python = process.env.BOT_PYTHON_PATH || (os.platform() === 'win32' ? 'python' : 'python3');
     const requirementsPath = path.join(PROJECT_ROOT, 'requirements.txt');
     if (fs.existsSync(requirementsPath) && shouldRunPythonInstall) {

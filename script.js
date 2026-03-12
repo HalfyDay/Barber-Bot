@@ -380,14 +380,14 @@ const parseInputDate = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 const APPOINTMENT_CALENDAR_VIEW_OPTIONS = [
-  { id: 'day', label: 'День' },
-  { id: 'week', label: 'Неделя' },
-  { id: 'month', label: 'Месяц' },
+  { id: 'day', label: 'День', iconId: 'day' },
+  { id: 'week', label: 'Неделя', iconId: 'week' },
+  { id: 'month', label: 'Месяц', iconId: 'month' },
 ];
 const APPOINTMENT_CALENDAR_SCALE_OPTIONS = [
-  { id: 'compact', label: 'Мелко' },
-  { id: 'normal', label: 'Обычно' },
-  { id: 'large', label: 'Крупно' },
+  { id: 'compact', label: 'Мелко', iconId: 'compact' },
+  { id: 'normal', label: 'Обычно', iconId: 'normal' },
+  { id: 'large', label: 'Крупно', iconId: 'large' },
 ];
 const APPOINTMENT_CALENDAR_SCALE_CONFIG = {
   compact: {
@@ -1270,6 +1270,70 @@ const IconProfile = ({ className = 'h-5 w-5' }) => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 14c-3.866 0-7 1.791-7 4v1h14v-1c0-2.209-3.134-4-7-4Zm0-2a4 4 0 1 0-0.001-8.001A4 4 0 0 0 12 12Z" />
   </svg>
 );
+const IconCalendarDay = ({ className = 'h-4 w-4' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 011 1v12a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 14h6" />
+  </svg>
+);
+const IconCalendarWeek = ({ className = 'h-4 w-4' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 011 1v12a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 13.5h9M7.5 16.5h9M8 11h.01M12 11h.01M16 11h.01" />
+  </svg>
+);
+const IconCalendarMonth = ({ className = 'h-4 w-4' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 011 1v12a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 13h8M8 16h8" />
+  </svg>
+);
+const IconScaleCompact = ({ className = 'h-4 w-4' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <rect x="4" y="6" width="4" height="4" rx="1" />
+    <rect x="10" y="6" width="4" height="4" rx="1" />
+    <rect x="16" y="6" width="4" height="4" rx="1" />
+    <rect x="4" y="14" width="4" height="4" rx="1" />
+    <rect x="10" y="14" width="4" height="4" rx="1" />
+    <rect x="16" y="14" width="4" height="4" rx="1" />
+  </svg>
+);
+const IconScaleNormal = ({ className = 'h-4 w-4' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <rect x="4" y="7" width="6" height="10" rx="1.5" />
+    <rect x="14" y="7" width="6" height="10" rx="1.5" />
+  </svg>
+);
+const IconScaleLarge = ({ className = 'h-4 w-4' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <rect x="4" y="6" width="16" height="12" rx="2" />
+  </svg>
+);
+const IconChevronLeft = ({ className = 'h-4 w-4' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="m15 18-6-6 6-6" />
+  </svg>
+);
+const IconChevronRight = ({ className = 'h-4 w-4' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="m9 18 6-6-6-6" />
+  </svg>
+);
+const IconFilter = ({ className = 'h-4 w-4' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M7 12h10M10 18h4" />
+  </svg>
+);
+const APPOINTMENT_CALENDAR_VIEW_ICONS = {
+  day: IconCalendarDay,
+  week: IconCalendarWeek,
+  month: IconCalendarMonth,
+};
+const APPOINTMENT_CALENDAR_SCALE_ICONS = {
+  compact: IconScaleCompact,
+  normal: IconScaleNormal,
+  large: IconScaleLarge,
+};
 const IconDots = ({ className = 'h-5 w-5' }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
     <circle cx="5" cy="12" r="1.5" />
@@ -5817,29 +5881,68 @@ const TableToolbar = ({
   appointmentCalendarScale = 'normal',
   setAppointmentCalendarScale,
 }) => {
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const chipClass = (active) =>
     classNames(
       'inline-flex h-11 items-center justify-center rounded-xl border px-4 text-xs font-semibold uppercase tracking-wide transition whitespace-nowrap text-center',
       active ? 'border-indigo-400 bg-indigo-500/10 text-indigo-100' : 'border-slate-700 text-slate-300 hover:border-slate-500'
     );
+  const cycleOptionValue = (items, currentValue) => {
+    const currentIndex = items.findIndex((item) => item.id === currentValue);
+    const resolvedIndex = currentIndex >= 0 ? currentIndex : 0;
+    return items[(resolvedIndex + 1) % items.length]?.id || items[0]?.id;
+  };
+  const renderCycleGroupButton = (items, value, onChange, iconsMap, label) => {
+    const currentItem = items.find((item) => item.id === value) || items[0];
+    const IconComponent = currentItem ? iconsMap[currentItem.iconId] : null;
+    return (
+      <button
+        type="button"
+        onClick={() => onChange?.(cycleOptionValue(items, value))}
+        className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-700 bg-slate-900 px-3 text-left text-white transition hover:border-indigo-500/60 hover:bg-slate-900/90 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+        title={`${label}: ${currentItem?.label || ''}`}
+        aria-label={`${label}: ${currentItem?.label || ''}`}
+      >
+        <div className="flex flex-col">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">{label}</span>
+          <span className="text-xs font-semibold text-slate-200">{currentItem?.label || '-'}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {IconComponent ? <IconComponent className="h-5 w-5 text-white" /> : null}
+          <div className="flex items-center gap-1">
+            {items.map((item) => (
+              <span
+                key={item.id}
+                className={classNames(
+                  'h-1.5 w-1.5 rounded-full transition',
+                  item.id === currentItem?.id ? 'bg-indigo-300' : 'bg-slate-700'
+                )}
+              />
+            ))}
+          </div>
+        </div>
+      </button>
+    );
+  };
   const allowManualRefresh = typeof onRefresh === 'function' && !['Appointments', 'Users'].includes(tableId);
   const inlineCreateForMobile = canCreate && typeof onOpenCreate === 'function' && ['Appointments', 'Users'].includes(tableId);
   const showColumnMenu = columns.length > 0 && !['Users', 'Appointments'].includes(tableId);
-  const statusControl =
+  const renderStatusControl = () =>
     supportsStatusFilter ? (
       <StatusMenu statuses={statuses} hiddenStatuses={hiddenStatuses} onToggle={toggleStatus} onReset={resetStatuses} />
     ) : null;
+  const statusControl = renderStatusControl();
   const columnControl = showColumnMenu ? <ColumnMenu columns={columns} hiddenColumns={hiddenColumns} onToggle={toggleColumn} /> : null;
   const pastControl =
     tableId === 'Appointments' && typeof setShowPastAppointments === 'function'
       ? (
-          <button
-            type="button"
-            onClick={() => setShowPastAppointments(!showPastAppointments)}
-            className={classNames(chipClass(showPastAppointments), 'w-full sm:w-auto')}
-          >
-            Прошедшие
-          </button>
+        <button
+          type="button"
+          onClick={() => setShowPastAppointments(!showPastAppointments)}
+          className={classNames(chipClass(showPastAppointments), 'w-full sm:w-auto md:justify-self-start')}
+        >
+          Прошедшие
+        </button>
         )
       : null;
   const groupingControl =
@@ -5852,36 +5955,22 @@ const TableToolbar = ({
       : null;
   const calendarViewControl =
     tableId === 'Appointments' && typeof setAppointmentCalendarView === 'function'
-      ? (
-          <div className="col-span-full grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
-            {APPOINTMENT_CALENDAR_VIEW_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setAppointmentCalendarView(option.id)}
-                className={classNames(chipClass(appointmentCalendarView === option.id), 'w-full sm:w-auto')}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+      ? renderCycleGroupButton(
+          APPOINTMENT_CALENDAR_VIEW_OPTIONS,
+          appointmentCalendarView,
+          setAppointmentCalendarView,
+          APPOINTMENT_CALENDAR_VIEW_ICONS,
+          'Вид'
         )
       : null;
   const calendarScaleControl =
     tableId === 'Appointments' && typeof setAppointmentCalendarScale === 'function'
-      ? (
-          <div className="col-span-full grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
-            {APPOINTMENT_CALENDAR_SCALE_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setAppointmentCalendarScale(option.id)}
-                className={classNames(chipClass(appointmentCalendarScale === option.id), 'w-full sm:w-auto')}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+      ? renderCycleGroupButton(
+          APPOINTMENT_CALENDAR_SCALE_OPTIONS,
+          appointmentCalendarScale,
+          setAppointmentCalendarScale,
+          APPOINTMENT_CALENDAR_SCALE_ICONS,
+          'Масштаб'
         )
       : null;
   const getBarberSelect = (extraClassName = '') => (
@@ -5902,28 +5991,80 @@ const TableToolbar = ({
       ))}
     </select>
   );
+  if (tableId === 'Appointments') {
+    return (
+      <div className="space-y-3 rounded-2xl bg-slate-950/30 p-3 sm:space-y-3 sm:rounded-3xl sm:p-4">
+        <div className="flex items-stretch gap-2 md:flex-row md:items-stretch">
+          <label className="relative min-w-0 flex-1">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fillRule="evenodd"
+                  d="M9 3.5a5.5 5.5 0 013.995 9.315l3.095 3.095a.75.75 0 11-1.06 1.06l-3.095-3.094A5.5 5.5 0 119 3.5zm0 1.5a4 4 0 100 8 4 4 0 000-8z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </span>
+            <input
+              name="optionsSearch"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Поиск..."
+              aria-label="Поиск по таблице"
+              className="h-11 w-full rounded-xl border border-slate-700 bg-slate-900 pl-9 pr-3 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+            />
+          </label>
+          {supportsBarberFilter && (
+            <div className="hidden md:block">
+              {getBarberSelect('md:w-auto md:min-w-[180px]')}
+            </div>
+          )}
+          <div className="hidden md:block">
+            {renderStatusControl()}
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobileFiltersOpen((prev) => !prev)}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-white transition hover:border-indigo-500/60 hover:bg-slate-900/90 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 md:hidden"
+            aria-label={mobileFiltersOpen ? 'Скрыть фильтры' : 'Показать фильтры'}
+            title={mobileFiltersOpen ? 'Скрыть фильтры' : 'Показать фильтры'}
+          >
+            <IconFilter className="h-5 w-5" />
+          </button>
+          {canCreate && (
+            <button
+              onClick={onOpenCreate}
+              className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 hover:bg-emerald-500 sm:px-5"
+              aria-label="Добавить запись"
+            >
+              <span className="hidden sm:inline">+ Добавить</span>
+              <span className="sm:hidden">+</span>
+            </button>
+          )}
+        </div>
+        <div className={classNames('grid gap-2 sm:grid-cols-2 md:grid-cols-[auto_minmax(0,360px)] xl:items-center', !mobileFiltersOpen && 'hidden md:grid')}>
+          {supportsBarberFilter ? <div className="md:hidden">{getBarberSelect()}</div> : null}
+          <div className="md:hidden">{renderStatusControl()}</div>
+          {pastControl}
+          <div className="grid grid-cols-2 gap-2 sm:col-span-2 md:col-span-1 xl:w-full">
+            {calendarViewControl}
+            {calendarScaleControl}
+          </div>
+        </div>
+      </div>
+    );
+  }
   const controlOrder =
-    tableId === 'Appointments'
-      ? [
-          {
-            key: 'barber',
-            node: supportsBarberFilter ? <div className="lg:hidden">{getBarberSelect()}</div> : null,
-          },
-          { key: 'status', node: statusControl },
-          { key: 'past', node: pastControl },
-          { key: 'calendar', node: calendarViewControl },
-          { key: 'scale', node: calendarScaleControl },
-        ]
-      : [
-          { key: 'status', node: statusControl },
-          { key: 'past', node: pastControl },
-          { key: 'group', node: groupingControl },
-          { key: 'columns', node: columnControl },
-        ];
+    [
+      { key: 'status', node: statusControl },
+      { key: 'past', node: pastControl },
+      { key: 'group', node: groupingControl },
+      { key: 'columns', node: columnControl },
+    ];
   return (
-    <div className="space-y-3 rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex-1 space-y-3">
+    <div className="space-y-2 rounded-2xl bg-slate-950/30 p-3 sm:space-y-3 sm:rounded-3xl sm:p-4">
+      <div className="flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex-1 space-y-2.5 sm:space-y-3">
           <div className={classNames('flex flex-col gap-2 sm:flex-row sm:items-center', tableId === 'Appointments' ? 'lg:flex-row lg:items-center lg:gap-3' : '')}>
             <div
               className={classNames(
@@ -5975,7 +6116,7 @@ const TableToolbar = ({
               </div>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <div className="flex flex-wrap items-center gap-2">
             {controlOrder.map((control) =>
               control.node ? <Fragment key={control.key}>{control.node}</Fragment> : null
             )}
@@ -6315,9 +6456,6 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
     >
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800/70 pb-3">
         <div className="space-y-1">
-          {showDateBadge && (
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{formatDateBadgeLabel(record.Date)}</p>
-          )}
           <div className="flex items-baseline gap-2">
             <p className="text-2xl font-semibold text-white sm:text-3xl">{start || record.Time || '-'}</p>
             {end && <p className="text-xs text-slate-400 sm:text-sm">до {end}</p>}
@@ -6387,6 +6525,7 @@ const AppointmentsCalendarView = ({
   const todayScrollPendingRef = useRef(false);
   const todayMarkerRef = useRef(null);
   const dayViewRef = useRef(null);
+  const datePickerInputRef = useRef(null);
   const weekGridStyle = useMemo(
     () => ({
       gridTemplateColumns: `repeat(7, minmax(${scaleConfig.weekColumnWidth}px, ${scaleConfig.weekColumnWidth}px))`,
@@ -6448,6 +6587,16 @@ const AppointmentsCalendarView = ({
     }
     setCalendarDate?.(todayKey);
   };
+  const openDatePicker = () => {
+    const input = datePickerInputRef.current;
+    if (!input) return;
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+      return;
+    }
+    input.focus();
+    input.click();
+  };
   const weekStart = useMemo(() => getWeekStartDate(anchorDate), [anchorDate]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
   const monthStart = useMemo(() => getMonthStartDate(anchorDate), [anchorDate]);
@@ -6486,24 +6635,57 @@ const AppointmentsCalendarView = ({
   }, [calendarDate, safeViewMode, safeScaleMode, scrollCalendarToToday]);
   return (
     <div className="space-y-4">
-      <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.35em] text-slate-500">Календарь</p>
-            <p className="text-xl font-semibold text-white">{headerTitle}</p>
-            <p className="text-sm text-slate-400">{headerMeta}</p>
+      <div className="rounded-2xl bg-slate-950/30 p-3 sm:rounded-3xl sm:p-4">
+        <div className="flex flex-col gap-2.5 sm:gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative">
+            <button type="button" onClick={openDatePicker} className="text-left">
+              <p className="text-lg font-semibold text-white sm:text-xl">{headerTitle}</p>
+              <p className="text-xs text-slate-400 sm:text-sm">{headerMeta}</p>
+            </button>
+            <input
+              ref={datePickerInputRef}
+              name="appointmentCalendarDate"
+              aria-label="Выбрать дату календаря"
+              type="date"
+              value={getLocalISODateString(anchorDate)}
+              onChange={(event) => setCalendarDate?.(event.target.value || todayKey)}
+              className="pointer-events-none absolute left-0 top-0 h-0 w-0 opacity-0"
+              tabIndex={-1}
+            />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => shiftCalendar('prev')} className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-white hover:border-indigo-500/60 hover:bg-slate-900">Назад</button>
-            <button type="button" onClick={jumpToToday} className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-white hover:border-indigo-500/60 hover:bg-slate-900">Сегодня</button>
-            <button type="button" onClick={() => shiftCalendar('next')} className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-white hover:border-indigo-500/60 hover:bg-slate-900">Вперед</button>
+          <div className="inline-flex items-center gap-1 rounded-2xl bg-slate-900/85 p-1">
+            <button
+              type="button"
+              onClick={() => shiftCalendar('prev')}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              aria-label="Назад"
+              title="Назад"
+            >
+              <IconChevronLeft className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={jumpToToday}
+              className="inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 sm:px-5"
+            >
+              Сегодня
+            </button>
+            <button
+              type="button"
+              onClick={() => shiftCalendar('next')}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              aria-label="Вперед"
+              title="Вперед"
+            >
+              <IconChevronRight className="h-5 w-5" />
+            </button>
           </div>
         </div>
       </div>
       {safeViewMode === 'day' && (
         <div ref={dayViewRef} className={classNames('grid gap-3', scaleConfig.dayGrid)}>
           {(rowsByDate.get(getLocalISODateString(anchorDate)) || []).map((record) => (
-            <AppointmentCalendarCard key={record.id || `${record.CustomerName}-${record.Time}`} record={record} onOpen={onOpen} onOpenProfile={onOpenProfile} showDateBadge />
+            <AppointmentCalendarCard key={record.id || `${record.CustomerName}-${record.Time}`} record={record} onOpen={onOpen} onOpenProfile={onOpenProfile} />
           ))}
           {!(rowsByDate.get(getLocalISODateString(anchorDate)) || []).length && (
             <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/30 p-6 text-sm text-slate-400">На этот день записей нет.</div>
@@ -6521,7 +6703,7 @@ const AppointmentsCalendarView = ({
               <section
                 key={dayKey}
                 ref={isToday ? todayMarkerRef : null}
-                className={classNames(scaleConfig.weekSectionMinHeight, scaleConfig.weekSectionPadding, 'space-y-3 rounded-2xl border', isToday ? 'border-indigo-500/70 bg-indigo-500/10' : 'border-slate-800 bg-slate-950/30')}
+                className={classNames(scaleConfig.weekSectionMinHeight, scaleConfig.weekSectionPadding, 'space-y-3 rounded-2xl border border-slate-800 bg-slate-950/30', isToday && 'ring-1 ring-indigo-500/50')}
               >
                 <button
                   type="button"
@@ -6564,7 +6746,7 @@ const AppointmentsCalendarView = ({
               <section
                 key={dayKey}
                 ref={isToday ? todayMarkerRef : null}
-                className={classNames(scaleConfig.monthSectionMinHeight, scaleConfig.monthSectionPadding, 'space-y-2 rounded-2xl border', isToday ? 'border-indigo-500/70 bg-indigo-500/10' : isCurrentMonth ? 'border-slate-800 bg-slate-950/30' : 'border-slate-900 bg-slate-950/10 opacity-70')}
+                className={classNames(scaleConfig.monthSectionMinHeight, scaleConfig.monthSectionPadding, 'space-y-2 rounded-2xl border border-slate-800 bg-slate-950/30', isToday && 'ring-1 ring-indigo-500/50')}
               >
                 <div className="flex items-center justify-between gap-2">
                   <button
@@ -6575,7 +6757,7 @@ const AppointmentsCalendarView = ({
                     }}
                     className="text-left"
                   >
-                    <p className="text-sm font-semibold text-white">{day.getDate()}</p>
+                    <p className={classNames('text-sm font-semibold', isCurrentMonth ? 'text-white' : 'text-slate-500')}>{day.getDate()}</p>
                   </button>
                   {!!items.length && <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300">{items.length}</span>}
                 </div>
@@ -8305,6 +8487,7 @@ const TablesWorkspace = ({
                 onSave={({ payload }) => handleCreateRecord(payload)}
                 isNew
                 clients={clients}
+                serviceCatalog={services}
               />
             ) : (
               <CreateRecordModal

@@ -379,6 +379,80 @@ const parseInputDate = (value) => {
   const parsed = new Date(`${normalized}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
+const APPOINTMENT_CALENDAR_VIEW_OPTIONS = [
+  { id: 'day', label: 'День' },
+  { id: 'week', label: 'Неделя' },
+  { id: 'month', label: 'Месяц' },
+];
+const APPOINTMENT_CALENDAR_SCALE_OPTIONS = [
+  { id: 'compact', label: 'Мелко' },
+  { id: 'normal', label: 'Обычно' },
+  { id: 'large', label: 'Крупно' },
+];
+const APPOINTMENT_CALENDAR_SCALE_CONFIG = {
+  compact: {
+    dayGrid: 'lg:grid-cols-3 2xl:grid-cols-4',
+    weekColumnWidth: 220,
+    weekGap: 'gap-2',
+    weekSectionMinHeight: 'min-h-[220px]',
+    weekSectionPadding: 'p-2.5',
+    monthColumnWidth: 190,
+    monthGap: 'gap-2',
+    monthSectionMinHeight: 'min-h-[150px]',
+    monthSectionPadding: 'p-2.5',
+  },
+  normal: {
+    dayGrid: 'lg:grid-cols-2',
+    weekColumnWidth: 300,
+    weekGap: 'gap-3',
+    weekSectionMinHeight: 'min-h-[240px]',
+    weekSectionPadding: 'p-3',
+    monthColumnWidth: 260,
+    monthGap: 'gap-3',
+    monthSectionMinHeight: 'min-h-[180px]',
+    monthSectionPadding: 'p-3',
+  },
+  large: {
+    dayGrid: 'lg:grid-cols-1',
+    weekColumnWidth: 380,
+    weekGap: 'gap-4',
+    weekSectionMinHeight: 'min-h-[290px]',
+    weekSectionPadding: 'p-4',
+    monthColumnWidth: 340,
+    monthGap: 'gap-4',
+    monthSectionMinHeight: 'min-h-[220px]',
+    monthSectionPadding: 'p-4',
+  },
+};
+const startOfLocalDay = (value = new Date()) => {
+  const base = value instanceof Date ? new Date(value) : parseInputDate(value) || new Date();
+  base.setHours(0, 0, 0, 0);
+  return base;
+};
+const addDays = (value, amount) => {
+  const base = startOfLocalDay(value);
+  base.setDate(base.getDate() + Number(amount || 0));
+  return base;
+};
+const getWeekStartDate = (value) => {
+  const base = startOfLocalDay(value);
+  const offset = (base.getDay() + 6) % 7;
+  return addDays(base, -offset);
+};
+const getMonthStartDate = (value) => {
+  const base = startOfLocalDay(value);
+  return new Date(base.getFullYear(), base.getMonth(), 1);
+};
+const getMonthEndDate = (value) => {
+  const base = startOfLocalDay(value);
+  return new Date(base.getFullYear(), base.getMonth() + 1, 0);
+};
+const isSameLocalDay = (left, right) => getLocalISODateString(left) === getLocalISODateString(right);
+const isSameLocalMonth = (left, right) => {
+  const safeLeft = startOfLocalDay(left);
+  const safeRight = startOfLocalDay(right);
+  return safeLeft.getFullYear() === safeRight.getFullYear() && safeLeft.getMonth() === safeRight.getMonth();
+};
 const getCurrentMonthRange = () => {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -5738,6 +5812,10 @@ const TableToolbar = ({
   groupByDate = false,
   setGroupByDate,
   allowAllBarbersOption = true,
+  appointmentCalendarView = 'week',
+  setAppointmentCalendarView,
+  appointmentCalendarScale = 'normal',
+  setAppointmentCalendarScale,
 }) => {
   const chipClass = (active) =>
     classNames(
@@ -5772,6 +5850,40 @@ const TableToolbar = ({
           </button>
         )
       : null;
+  const calendarViewControl =
+    tableId === 'Appointments' && typeof setAppointmentCalendarView === 'function'
+      ? (
+          <div className="col-span-full grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
+            {APPOINTMENT_CALENDAR_VIEW_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setAppointmentCalendarView(option.id)}
+                className={classNames(chipClass(appointmentCalendarView === option.id), 'w-full sm:w-auto')}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )
+      : null;
+  const calendarScaleControl =
+    tableId === 'Appointments' && typeof setAppointmentCalendarScale === 'function'
+      ? (
+          <div className="col-span-full grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
+            {APPOINTMENT_CALENDAR_SCALE_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setAppointmentCalendarScale(option.id)}
+                className={classNames(chipClass(appointmentCalendarScale === option.id), 'w-full sm:w-auto')}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )
+      : null;
   const getBarberSelect = (extraClassName = '') => (
     <select
       value={selectedBarber}
@@ -5799,7 +5911,8 @@ const TableToolbar = ({
           },
           { key: 'status', node: statusControl },
           { key: 'past', node: pastControl },
-          { key: 'group', node: groupingControl },
+          { key: 'calendar', node: calendarViewControl },
+          { key: 'scale', node: calendarScaleControl },
         ]
       : [
           { key: 'status', node: statusControl },
@@ -6187,6 +6300,318 @@ const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [
     </div>
   );
 };
+const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = false, showDateBadge = false }) => {
+  const statusLabel = normalizeStatusValue(record.Status) || '-';
+  const { start, end } = parseTimeRangeParts(record.Time);
+  const servicesList = parseMultiValue(record.Services);
+  const cardClassName = 'flex h-full cursor-pointer flex-col rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-left transition hover:border-indigo-500/70 hover:bg-slate-900/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 sm:p-4';
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen?.(record, { allowDelete: true })}
+      onKeyDown={(event) => event.key === 'Enter' && onOpen?.(record, { allowDelete: true })}
+      className={cardClassName}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800/70 pb-3">
+        <div className="space-y-1">
+          {showDateBadge && (
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{formatDateBadgeLabel(record.Date)}</p>
+          )}
+          <div className="flex items-baseline gap-2">
+            <p className="text-2xl font-semibold text-white sm:text-3xl">{start || record.Time || '-'}</p>
+            {end && <p className="text-xs text-slate-400 sm:text-sm">до {end}</p>}
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-2 text-right">
+          <span className={classNames('inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide', getStatusBadgeClasses(statusLabel))}>
+            {statusLabel || 'Без статуса'}
+          </span>
+          {record.Barber && (
+            <p className="text-xs text-slate-400 sm:text-sm">
+              Барбер: <span className="font-semibold text-white">{record.Barber}</span>
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="mt-3 flex flex-col gap-3 text-[13px] text-slate-300 sm:text-sm">
+        {record.CustomerName ? (
+          typeof onOpenProfile === 'function' ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenProfile(record.CustomerName);
+              }}
+              className="text-left font-semibold text-white hover:text-indigo-300"
+            >
+              {record.CustomerName}
+            </button>
+          ) : (
+            <p className="text-base font-semibold text-white sm:text-lg">{record.CustomerName}</p>
+          )
+        ) : (
+          <p className="text-base font-semibold text-white sm:text-lg">Без имени</p>
+        )}
+        {servicesList.length ? (
+          <div className="flex flex-wrap gap-2">
+            {servicesList.slice(0, 3).map((service, index) => (
+              <span key={`${service}-${index}`} className="rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-0.5 text-[11px] text-slate-200 sm:text-xs">
+                {service}
+              </span>
+            ))}
+            {servicesList.length > 3 && <span className="text-[11px] text-slate-500">+{servicesList.length - 3}</span>}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500">Услуги не указаны</p>
+        )}
+      </div>
+    </div>
+  );
+};
+const AppointmentsCalendarView = ({
+  rows = [],
+  onOpen,
+  onOpenProfile,
+  viewMode = 'week',
+  scaleMode = 'normal',
+  calendarDate = '',
+  setCalendarDate,
+  setViewMode,
+}) => {
+  const safeViewMode = APPOINTMENT_CALENDAR_VIEW_OPTIONS.some((option) => option.id === viewMode) ? viewMode : 'week';
+  const safeScaleMode = APPOINTMENT_CALENDAR_SCALE_OPTIONS.some((option) => option.id === scaleMode) ? scaleMode : 'normal';
+  const scaleConfig = APPOINTMENT_CALENDAR_SCALE_CONFIG[safeScaleMode] || APPOINTMENT_CALENDAR_SCALE_CONFIG.normal;
+  const anchorDate = useMemo(() => parseInputDate(calendarDate) || startOfLocalDay(), [calendarDate]);
+  const todayKey = getLocalISODateString();
+  const todayScrollPendingRef = useRef(false);
+  const todayMarkerRef = useRef(null);
+  const dayViewRef = useRef(null);
+  const weekGridStyle = useMemo(
+    () => ({
+      gridTemplateColumns: `repeat(7, minmax(${scaleConfig.weekColumnWidth}px, ${scaleConfig.weekColumnWidth}px))`,
+      width: 'max-content',
+    }),
+    [scaleConfig.weekColumnWidth]
+  );
+  const monthGridStyle = useMemo(
+    () => ({
+      gridTemplateColumns: `repeat(7, minmax(${scaleConfig.monthColumnWidth}px, ${scaleConfig.monthColumnWidth}px))`,
+      width: 'max-content',
+    }),
+    [scaleConfig.monthColumnWidth]
+  );
+  const datedRows = useMemo(
+    () =>
+      rows
+        .map((record) => ({
+          ...record,
+          _startDate: getAppointmentStartDate(record.Date, record.Time, record.startDateTime) || parseInputDate(record.Date),
+        }))
+        .filter((record) => record._startDate)
+        .sort((a, b) => a._startDate.getTime() - b._startDate.getTime()),
+    [rows]
+  );
+  const rowsByDate = useMemo(() => {
+    const buckets = new Map();
+    datedRows.forEach((record) => {
+      const key = getLocalISODateString(record._startDate);
+      const next = buckets.get(key) || [];
+      next.push(record);
+      buckets.set(key, next);
+    });
+    return buckets;
+  }, [datedRows]);
+  const scrollCalendarToToday = useCallback(() => {
+    const target = safeViewMode === 'day' ? dayViewRef.current : todayMarkerRef.current;
+    if (target && typeof target.scrollIntoView === 'function') {
+      target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [safeViewMode]);
+  const shiftCalendar = (direction) => {
+    const multiplier = direction === 'next' ? 1 : -1;
+    const nextDate = safeViewMode === 'day'
+      ? addDays(anchorDate, multiplier)
+      : safeViewMode === 'week'
+        ? addDays(anchorDate, multiplier * 7)
+        : new Date(anchorDate.getFullYear(), anchorDate.getMonth() + multiplier, 1);
+    setCalendarDate?.(getLocalISODateString(nextDate));
+  };
+  const jumpToToday = () => {
+    todayScrollPendingRef.current = true;
+    if (getLocalISODateString(anchorDate) === todayKey) {
+      requestAnimationFrame(() => {
+        scrollCalendarToToday();
+        todayScrollPendingRef.current = false;
+      });
+      return;
+    }
+    setCalendarDate?.(todayKey);
+  };
+  const weekStart = useMemo(() => getWeekStartDate(anchorDate), [anchorDate]);
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
+  const monthStart = useMemo(() => getMonthStartDate(anchorDate), [anchorDate]);
+  const monthGridDays = useMemo(() => {
+    const gridStart = getWeekStartDate(monthStart);
+    return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
+  }, [monthStart]);
+  const headerTitle = useMemo(() => {
+    if (safeViewMode === 'day') {
+      return new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).format(anchorDate);
+    }
+    if (safeViewMode === 'week') {
+      const weekEnd = addDays(weekStart, 6);
+      const left = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(weekStart).replace('.', '');
+      const right = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(weekEnd).replace('.', '');
+      return `${left} - ${right}`;
+    }
+    return new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(anchorDate);
+  }, [anchorDate, safeViewMode, weekStart]);
+  const headerMeta = useMemo(() => {
+    if (safeViewMode === 'day') {
+      return `${rowsByDate.get(getLocalISODateString(anchorDate))?.length || 0} записей`;
+    }
+    if (safeViewMode === 'week') {
+      return `${weekDays.reduce((sum, day) => sum + (rowsByDate.get(getLocalISODateString(day))?.length || 0), 0)} записей`;
+    }
+      return `${datedRows.filter((record) => isSameLocalMonth(record._startDate, anchorDate)).length} записей`;
+  }, [anchorDate, datedRows, rowsByDate, safeViewMode, weekDays]);
+  useEffect(() => {
+    if (!todayScrollPendingRef.current) return;
+    const frameId = requestAnimationFrame(() => {
+      scrollCalendarToToday();
+      todayScrollPendingRef.current = false;
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [calendarDate, safeViewMode, safeScaleMode, scrollCalendarToToday]);
+  return (
+    <div className="space-y-4">
+      <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.35em] text-slate-500">Календарь</p>
+            <p className="text-xl font-semibold text-white">{headerTitle}</p>
+            <p className="text-sm text-slate-400">{headerMeta}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => shiftCalendar('prev')} className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-white hover:border-indigo-500/60 hover:bg-slate-900">Назад</button>
+            <button type="button" onClick={jumpToToday} className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-white hover:border-indigo-500/60 hover:bg-slate-900">Сегодня</button>
+            <button type="button" onClick={() => shiftCalendar('next')} className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-white hover:border-indigo-500/60 hover:bg-slate-900">Вперед</button>
+          </div>
+        </div>
+      </div>
+      {safeViewMode === 'day' && (
+        <div ref={dayViewRef} className={classNames('grid gap-3', scaleConfig.dayGrid)}>
+          {(rowsByDate.get(getLocalISODateString(anchorDate)) || []).map((record) => (
+            <AppointmentCalendarCard key={record.id || `${record.CustomerName}-${record.Time}`} record={record} onOpen={onOpen} onOpenProfile={onOpenProfile} showDateBadge />
+          ))}
+          {!(rowsByDate.get(getLocalISODateString(anchorDate)) || []).length && (
+            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/30 p-6 text-sm text-slate-400">На этот день записей нет.</div>
+          )}
+        </div>
+      )}
+      {safeViewMode === 'week' && (
+        <div className="overflow-x-auto pb-2">
+          <div className={classNames('grid', scaleConfig.weekGap)} style={weekGridStyle}>
+          {weekDays.map((day) => {
+            const dayKey = getLocalISODateString(day);
+            const items = rowsByDate.get(dayKey) || [];
+            const isToday = isSameLocalDay(day, new Date());
+            return (
+              <section
+                key={dayKey}
+                ref={isToday ? todayMarkerRef : null}
+                className={classNames(scaleConfig.weekSectionMinHeight, scaleConfig.weekSectionPadding, 'space-y-3 rounded-2xl border', isToday ? 'border-indigo-500/70 bg-indigo-500/10' : 'border-slate-800 bg-slate-950/30')}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCalendarDate?.(dayKey);
+                    setViewMode?.('day');
+                  }}
+                  className="w-full text-left"
+                >
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{new Intl.DateTimeFormat('ru-RU', { weekday: 'short' }).format(day).replace('.', '')}</p>
+                  <p className="text-lg font-semibold text-white">{new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(day).replace('.', '')}</p>
+                </button>
+                <div className="space-y-2">
+                  {items.map((record) => (
+                    <AppointmentCalendarCard
+                      key={record.id || `${record.CustomerName}-${record.Time}`}
+                      record={record}
+                      onOpen={onOpen}
+                      onOpenProfile={onOpenProfile}
+                      compact={false}
+                    />
+                  ))}
+                  {!items.length && <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-center text-xs text-slate-500">Пусто</div>}
+                </div>
+              </section>
+            );
+          })}
+          </div>
+        </div>
+      )}
+      {safeViewMode === 'month' && (
+        <div className="overflow-x-auto pb-2">
+          <div className={classNames('grid', scaleConfig.monthGap)} style={monthGridStyle}>
+          {monthGridDays.map((day) => {
+            const dayKey = getLocalISODateString(day);
+            const items = rowsByDate.get(dayKey) || [];
+            const isToday = isSameLocalDay(day, new Date());
+            const isCurrentMonth = isSameLocalMonth(day, anchorDate);
+            return (
+              <section
+                key={dayKey}
+                ref={isToday ? todayMarkerRef : null}
+                className={classNames(scaleConfig.monthSectionMinHeight, scaleConfig.monthSectionPadding, 'space-y-2 rounded-2xl border', isToday ? 'border-indigo-500/70 bg-indigo-500/10' : isCurrentMonth ? 'border-slate-800 bg-slate-950/30' : 'border-slate-900 bg-slate-950/10 opacity-70')}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCalendarDate?.(dayKey);
+                      setViewMode?.('day');
+                    }}
+                    className="text-left"
+                  >
+                    <p className="text-sm font-semibold text-white">{day.getDate()}</p>
+                  </button>
+                  {!!items.length && <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300">{items.length}</span>}
+                </div>
+                <div className="space-y-2">
+                  {items.slice(0, 3).map((record) => (
+                    <AppointmentCalendarCard
+                      key={record.id || `${record.CustomerName}-${record.Time}`}
+                      record={record}
+                      onOpen={onOpen}
+                      onOpenProfile={onOpenProfile}
+                      compact={false}
+                    />
+                  ))}
+                  {items.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCalendarDate?.(dayKey);
+                        setViewMode?.('day');
+                      }}
+                      className="text-xs text-indigo-300 hover:text-indigo-100"
+                    >
+                      + еще {items.length - 3}
+                    </button>
+                  )}
+                  {!items.length && <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-center text-xs text-slate-600">-</div>}
+                </div>
+              </section>
+            );
+          })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 const DataTable = ({
   tableId,
   rows,
@@ -6200,6 +6625,11 @@ const DataTable = ({
   onOpenProfile,
   onOpenAppointment,
   groupByDate = true,
+  appointmentCalendarView = 'week',
+  appointmentCalendarScale = 'normal',
+  appointmentCalendarDate = '',
+  setAppointmentCalendarDate,
+  setAppointmentCalendarView,
 }) => {
   if (!rows.length) {
     return <p className="text-slate-400">Нет записей.</p>;
@@ -6213,7 +6643,18 @@ const DataTable = ({
       : [{ key: 'default', label: null, rows }]
     : [{ key: 'default', label: null, rows }];
   if (isAppointmentsTable) {
-    return <AppointmentsList groups={groupedRows} onOpen={onOpenAppointment} onOpenProfile={onOpenProfile} />;
+    return (
+      <AppointmentsCalendarView
+        rows={rows}
+        onOpen={onOpenAppointment}
+        onOpenProfile={onOpenProfile}
+        viewMode={appointmentCalendarView}
+        scaleMode={appointmentCalendarScale}
+        calendarDate={appointmentCalendarDate}
+        setCalendarDate={setAppointmentCalendarDate}
+        setViewMode={setAppointmentCalendarView}
+      />
+    );
   }
   if (tableId === 'Schedules') {
     return <SchedulesBoard rows={rows} columns={visibleColumns} onUpdate={onUpdate} options={options} />;
@@ -7073,11 +7514,11 @@ const AppointmentModal = ({
   const appointmentStartTime = draftTimeParts.start;
   const appointmentEndTime = useMemo(
     () => (
-      appointmentStartTime && selectedServicesDuration > 0
+      (appointmentStartTime && selectedServicesDuration > 0
         ? addMinutesToTimeToken(appointmentStartTime, selectedServicesDuration)
-        : ''
+        : '') || draftTimeParts.end || ''
     ),
-    [appointmentStartTime, selectedServicesDuration]
+    [appointmentStartTime, selectedServicesDuration, draftTimeParts.end]
   );
   const syncDraftTimeWithServices = useCallback(
     (nextDraft) => {
@@ -7093,6 +7534,13 @@ const AppointmentModal = ({
     },
     [getServicesDuration, isNew]
   );
+  useEffect(() => {
+    if (!open || !isNew) return;
+    setDraft((prev) => {
+      if (!prev) return prev;
+      return syncDraftTimeWithServices(prev);
+    });
+  }, [open, isNew, selectedServicesDuration, syncDraftTimeWithServices]);
   if (!open || !draft) return null;
   const actionButtonClass = RESPONSIVE_ACTION_BUTTON_CLASS;
   const handleChange = (field, value) => {
@@ -7407,6 +7855,9 @@ const TablesWorkspace = ({
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [showPastAppointments, setShowPastAppointments] = useLocalStorage('tables.showPastAppointments', true);
   const [groupAppointmentsByDate, setGroupAppointmentsByDate] = useLocalStorage('tables.groupAppointmentsByDate', true);
+  const [appointmentCalendarView, setAppointmentCalendarView] = useLocalStorage('tables.appointmentsCalendarView', 'week');
+  const [appointmentCalendarScale, setAppointmentCalendarScale] = useLocalStorage('tables.appointmentsCalendarScale', 'normal');
+  const [appointmentCalendarDate, setAppointmentCalendarDate] = useLocalStorage('tables.appointmentsCalendarDate', getLocalISODateString());
   const restrictStaffBarberFilter = role === ROLE_STAFF && activeTable === 'Appointments';
   const staffBarberId = currentUser?.barberId || null;
   const appointmentTemplate = useMemo(
@@ -7800,6 +8251,10 @@ const TablesWorkspace = ({
             groupByDate={groupAppointmentsByDate}
             setGroupByDate={setGroupAppointmentsByDate}
             allowAllBarbersOption={!restrictStaffBarberFilter}
+            appointmentCalendarView={activeTable === 'Appointments' ? appointmentCalendarView : 'week'}
+            setAppointmentCalendarView={activeTable === 'Appointments' ? setAppointmentCalendarView : null}
+            appointmentCalendarScale={activeTable === 'Appointments' ? appointmentCalendarScale : 'normal'}
+            setAppointmentCalendarScale={activeTable === 'Appointments' ? setAppointmentCalendarScale : null}
           />
           {isFetching ? (
             <LoadingState label="Обновляю таблицы..." />
@@ -7829,6 +8284,11 @@ const TablesWorkspace = ({
                   onOpenProfile={onOpenProfile}
                   onOpenAppointment={activeTable === 'Appointments' ? onOpenAppointmentRecord : null}
                   groupByDate={activeTable === 'Appointments' ? groupAppointmentsByDate : false}
+                  appointmentCalendarView={activeTable === 'Appointments' ? appointmentCalendarView : 'week'}
+                  appointmentCalendarScale={activeTable === 'Appointments' ? appointmentCalendarScale : 'normal'}
+                  appointmentCalendarDate={activeTable === 'Appointments' ? appointmentCalendarDate : ''}
+                  setAppointmentCalendarDate={activeTable === 'Appointments' ? setAppointmentCalendarDate : null}
+                  setAppointmentCalendarView={activeTable === 'Appointments' ? setAppointmentCalendarView : null}
                 />
               )}
             </div>

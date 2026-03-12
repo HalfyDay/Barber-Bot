@@ -8,6 +8,7 @@ import uuid
 import time
 import sys
 import base64
+import os
 from pathlib import Path
 from collections import defaultdict
 from urllib.parse import urlparse
@@ -524,6 +525,16 @@ try:
 except Exception:
     # Запасной вариант, если автоматическое определение не сработает
     ZONE = ZoneInfo("Europe/Chisinau")
+DEFAULT_TIMEZONE = (
+    os.getenv("APP_TIMEZONE")
+    or os.getenv("BACKUP_CRON_TIMEZONE")
+    or os.getenv("TZ")
+    or "Europe/Moscow"
+).strip() or "Europe/Moscow"
+try:
+    ZONE = ZoneInfo(DEFAULT_TIMEZONE)
+except Exception:
+    pass
 PHONE_PATTERN = re.compile(r"^\+?\d{10,15}$")
 SITE_LOGIN_CODE_PATTERN = re.compile(r"^\d{6}$")
 TELEGRAM_AUTH_REQUESTS_TABLE = "TelegramAuthRequests"
@@ -533,6 +544,12 @@ TELEGRAM_AUTH_STATUS_FAILED = "failed"
 TELEGRAM_AUTH_STATUS_EXPIRED = "expired"
 TELEGRAM_AUTH_FLOW_LOGIN = "login"
 TELEGRAM_AUTH_FLOW_PROFILE_LINK = "profile_link"
+
+def zoned_now() -> datetime.datetime:
+    return datetime.datetime.now(tz=ZONE)
+
+def zoned_today() -> datetime.date:
+    return zoned_now().date()
 
 def normalize_token(value: str | None) -> str:
     return (value or "").strip().lower()
@@ -1022,8 +1039,8 @@ def can_fit(start_min: int, duration: int, intervals: list[tuple[int, int]]) -> 
 def has_future_slots(barber_name: str, duration_min: int) -> bool:
     """Проверяет, есть ли у барбера свободные окна в ближайшие дни."""
     duration = max(int(duration_min or 0), 15)
-    today = datetime.date.today()
-    now = datetime.datetime.now(tz=ZONE)
+    now = zoned_now()
+    today = now.date()
     min_allowed = now + datetime.timedelta(hours=get_min_lead_hours())
     max_days = get_max_days_ahead()
     for offset in range(max_days):
@@ -2235,8 +2252,8 @@ async def show_available_dates(query, ctx) -> int:
     if not barber:
         await query.answer("Сначала выберите барбера.", show_alert=True)
         return MENU
-    today = datetime.date.today()
-    now = datetime.datetime.now(tz=ZONE)
+    now = zoned_now()
+    today = now.date()
     min_allowed = now + datetime.timedelta(hours=get_min_lead_hours())
     max_days = get_max_days_ahead()
     available_dates: list[str] = []
@@ -2315,7 +2332,7 @@ async def show_available_times(query, ctx) -> int:
     start_day, end_day = working_hours
     busy = get_busy_intervals(barber["name"], date)
     buttons: list[InlineKeyboardButton] = []
-    now = datetime.datetime.now(tz=ZONE)
+    now = zoned_now()
     min_allowed = now + datetime.timedelta(hours=get_min_lead_hours())
     for minute in range(start_day, end_day - total + 1, 60):
         slot_dt_naive = datetime.datetime.fromisoformat(

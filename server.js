@@ -2220,9 +2220,9 @@ const createHomeAppointmentWithLock = ({
 
       const startLabel = formatMinutesAsClock(startMinute);
       const endLabel = formatMinutesAsClock(startMinute + totalDuration);
-      const startDate = new Date(`${dateKey}T${startLabel}:00`);
+      const startDate = parseZonedDateTime(dateKey, startLabel);
       const minAllowedDate = new Date(Date.now() + settings.minLeadHours * 60 * 60 * 1000);
-      if (Number.isNaN(startDate.getTime()) || startDate < minAllowedDate) {
+      if (!startDate || Number.isNaN(startDate.getTime()) || startDate < minAllowedDate) {
         throw new Error("LEAD_TIME");
       }
 
@@ -2282,8 +2282,8 @@ const buildTimeSlotsForDate = ({
   for (let minute = startDay; minute <= endDay - totalDuration; minute += 60) {
     const startLabel = formatMinutesAsClock(minute);
     const endLabel = formatMinutesAsClock(minute + totalDuration);
-    const slotDate = new Date(`${dateKey}T${startLabel}:00`);
-    if (Number.isNaN(slotDate.getTime())) continue;
+    const slotDate = parseZonedDateTime(dateKey, startLabel);
+    if (!slotDate || Number.isNaN(slotDate.getTime())) continue;
     if (slotDate < minAllowedDate) continue;
     if (!canFitTimeRange(minute, totalDuration, busyIntervals)) continue;
     slots.push({
@@ -2318,16 +2318,26 @@ const resolveHomeBookingUser = async (req) => {
   };
 };
 const buildDateWindow = (maxDaysAhead) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const now = new Date();
+  const zonedParts = getTimeZoneParts(now, APP_TIMEZONE);
+  const startAnchor =
+    zonedParts?.year && zonedParts?.month && zonedParts?.day
+      ? new Date(
+          Date.UTC(
+            Number(zonedParts.year),
+            Number(zonedParts.month) - 1,
+            Number(zonedParts.day),
+            12,
+            0,
+            0,
+          ),
+        )
+      : new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return Array.from({ length: maxDaysAhead }).map((_, offset) => {
-    const current = new Date(today);
-    current.setDate(today.getDate() + offset);
-    const key = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(
-      current.getDate(),
-    ).padStart(2, "0")}`;
+    const current = new Date(startAnchor.getTime() + offset * 24 * 60 * 60 * 1000);
+    const key = formatDateOnly(current);
     return { date: current, key };
-  });
+  }).filter((entry) => entry.key);
 };
 const buildClientRows = (users, appointments, manualBlockedSet = new Set()) => {
   const now = new Date();
@@ -5389,7 +5399,11 @@ app.get("/api/:tableName", authenticateToken, async (req, res) => {
       tableName === "Appointments"
         ? filterAppointmentsForIdentity(records, req.identity)
         : records;
-    return res.json(filteredRecords);
+    return res.json(
+      tableName === "Appointments"
+        ? filteredRecords.map(mapAppointment)
+        : filteredRecords,
+    );
   } catch (error) {
     console.error("Generic fetch error:", error);
     return res

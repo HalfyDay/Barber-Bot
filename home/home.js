@@ -106,6 +106,8 @@
     calendarMonthIndex: 0,
     requestNonce: 0,
   };
+  const TIMES_REFRESH_INTERVAL_MS = 15000;
+  let bookingTimesRefreshTimer = null;
 
   const getStorageArea = (type) => {
     try {
@@ -273,6 +275,69 @@
     bookingFlowState.loading = false;
     setFlowBackDisabled(false);
     return true;
+  };
+  const clearBookingTimesRefresh = () => {
+    if (bookingTimesRefreshTimer) {
+      window.clearTimeout(bookingTimesRefreshTimer);
+      bookingTimesRefreshTimer = null;
+    }
+  };
+  const getSelectedServiceIds = () =>
+    bookingFlowState.selectedServices
+      .map((service) => normalizeText(service?.id))
+      .filter(Boolean);
+  const buildTimesSignature = (times = []) =>
+    JSON.stringify(
+      (Array.isArray(times) ? times : []).map(
+        (time) => `${normalizeText(time?.start)}-${normalizeText(time?.end)}`,
+      ),
+    );
+  const scheduleBookingTimesRefresh = () => {
+    clearBookingTimesRefresh();
+    if (!bookingFlowState.active) return;
+    if (bookingFlowState.loading) return;
+    if (bookingFlowState.step !== "times" && bookingFlowState.step !== "confirm") return;
+    if (!bookingFlowState.barber?.id || !normalizeText(bookingFlowState.selectedDate)) return;
+    if (!getSelectedServiceIds().length) return;
+    bookingTimesRefreshTimer = window.setTimeout(async () => {
+      if (!bookingFlowState.active) return;
+      if (bookingFlowState.loading) {
+        scheduleBookingTimesRefresh();
+        return;
+      }
+      if (bookingFlowState.step !== "times" && bookingFlowState.step !== "confirm") return;
+      const selectedStart = normalizeText(bookingFlowState.selectedTime?.start);
+      const previousSignature = buildTimesSignature(bookingFlowState.availableTimes);
+      try {
+        const payload = await fetchAvailableTimes(
+          bookingFlowState.barber.id,
+          getSelectedServiceIds(),
+          bookingFlowState.selectedDate,
+        );
+        const nextTimes = Array.isArray(payload?.times) ? payload.times : [];
+        const nextSignature = buildTimesSignature(nextTimes);
+        bookingFlowState.availableTimes = nextTimes;
+        if (selectedStart) {
+          bookingFlowState.selectedTime =
+            nextTimes.find((time) => normalizeText(time?.start) === selectedStart) || null;
+        }
+        if (selectedStart && !bookingFlowState.selectedTime) {
+          renderTimeStep();
+          setFlowStatus(
+            "\u0412\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u0435 \u0432\u0440\u0435\u043c\u044f \u0443\u0436\u0435 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e. \u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0440\u0443\u0433\u043e\u0439 \u0441\u043b\u043e\u0442.",
+            "error",
+          );
+          return;
+        }
+        if (bookingFlowState.step === "times" && previousSignature !== nextSignature) {
+          renderTimeStep();
+        }
+      } catch {
+        // keep the current list if the background refresh fails
+      } finally {
+        scheduleBookingTimesRefresh();
+      }
+    }, TIMES_REFRESH_INTERVAL_MS);
   };
 
   const parseIsoDate = (isoDate) => {
@@ -462,6 +527,7 @@
   };
 
   const closeBookingFlow = () => {
+    clearBookingTimesRefresh();
     bookingFlowState.active = false;
     bookingFlowState.loading = false;
     bookingFlowState.step = "idle";
@@ -709,6 +775,7 @@
   };
 
   const renderServicesStep = () => {
+    clearBookingTimesRefresh();
     bookingFlowState.step = "services";
     resetFlowConfirmButton();
     const barberName =
@@ -800,6 +867,7 @@
   };
 
   const renderDateStep = () => {
+    clearBookingTimesRefresh();
     bookingFlowState.step = "dates";
     resetFlowConfirmButton();
     const selectedNames = getFlowServiceNames().join(", ");
@@ -917,6 +985,7 @@
   };
 
   const renderTimeStep = () => {
+    clearBookingTimesRefresh();
     bookingFlowState.step = "times";
     resetFlowConfirmButton();
     setFlowHeader(
@@ -953,9 +1022,11 @@
     });
 
     bookingFlowContent.appendChild(list);
+    scheduleBookingTimesRefresh();
   };
 
   const renderSuccessStep = (appointment) => {
+    clearBookingTimesRefresh();
     bookingFlowState.step = "success";
     resetFlowConfirmButton();
     setFlowHeader("Готово", "Вы записаны", formatDateLabel(appointment?.date || bookingFlowState.selectedDate));
@@ -993,6 +1064,7 @@
   };
 
   const renderConfirmStep = () => {
+    clearBookingTimesRefresh();
     bookingFlowState.step = "confirm";
     setFlowHeader("Шаг 4", "Подтвердите запись");
     bookingFlowContent.className = "booking-flow-content";
@@ -1031,11 +1103,34 @@
       bookingFlowConfirmButton.disabled = true;
       setFlowStatus("Сохраняем запись...");
       try {
+        const selectedServiceIds = getSelectedServiceIds();
+        const selectedStartTime = normalizeText(bookingFlowState.selectedTime?.start);
+        const latestTimesPayload = await fetchAvailableTimes(
+          bookingFlowState.barber?.id,
+          selectedServiceIds,
+          bookingFlowState.selectedDate,
+        );
+        const latestTimes = Array.isArray(latestTimesPayload?.times) ? latestTimesPayload.times : [];
+        const selectedSlotStillAvailable = latestTimes.some(
+          (time) => normalizeText(time?.start) === selectedStartTime,
+        );
+        if (!selectedSlotStillAvailable) {
+          if (!finishFlowRequest(nonce)) return;
+          bookingFlowState.availableTimes = latestTimes;
+          bookingFlowState.selectedTime = null;
+          renderTimeStep();
+          setFlowStatus(
+            "\u0412\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u0435 \u0432\u0440\u0435\u043c\u044f \u0443\u0436\u0435 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e. \u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0440\u0443\u0433\u043e\u0439 \u0441\u043b\u043e\u0442.",
+            "error",
+          );
+          return;
+        }
+        bookingFlowState.availableTimes = latestTimes;
         const payload = await createAppointment({
           barberId: bookingFlowState.barber?.id,
-          serviceIds: bookingFlowState.selectedServices.map((service) => service.id),
+          serviceIds: selectedServiceIds,
           date: bookingFlowState.selectedDate,
-          startTime: bookingFlowState.selectedTime?.start,
+          startTime: selectedStartTime,
         });
         if (!finishFlowRequest(nonce)) return;
         renderSuccessStep(payload?.appointment || {});
@@ -1049,6 +1144,7 @@
         );
       }
     };
+    scheduleBookingTimesRefresh();
   };
 
   const loadServicesStep = async () => {

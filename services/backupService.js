@@ -7,6 +7,12 @@ const SQLITE_BACKUP_RE = /\.db$/i;
 
 const isBackupFileName = (fileName = "") => SQL_BACKUP_RE.test(fileName) || SQLITE_BACKUP_RE.test(fileName);
 
+const stripPostgresSchemaQuery = (databaseUrl = "") => {
+  const raw = String(databaseUrl || "").trim();
+  if (!raw) return raw;
+  return raw.replace(/\?schema=public$/i, "");
+};
+
 const quoteShellValue = (value) => {
   const safe = String(value || "");
   return `"${safe.replace(/"/g, '\\"')}"`;
@@ -99,6 +105,7 @@ const createBackupService = ({
     if (!databaseUrl) {
       throw new Error("POSTGRES_DATABASE_URL is required for PostgreSQL backups.");
     }
+    const cliDatabaseUrl = stripPostgresSchemaQuery(databaseUrl);
     const pgDumpPath = resolvePostgresExecutablePath("pg_dump");
     if (!pgDumpPath) {
       throw new Error("pg_dump not found for PostgreSQL backup.");
@@ -111,7 +118,7 @@ const createBackupService = ({
       "--no-privileges",
       "--file",
       target,
-      databaseUrl,
+      cliDatabaseUrl,
     ]);
     return target;
   };
@@ -146,6 +153,7 @@ const createBackupService = ({
     if (!databaseUrl) {
       throw new Error("POSTGRES_DATABASE_URL is required for PostgreSQL restore.");
     }
+    const cliDatabaseUrl = stripPostgresSchemaQuery(databaseUrl);
     const psqlPath = resolvePostgresExecutablePath("psql");
     if (!psqlPath) {
       throw new Error("psql not found for PostgreSQL restore.");
@@ -155,14 +163,14 @@ const createBackupService = ({
       "-v",
       "ON_ERROR_STOP=1",
       "-d",
-      databaseUrl,
+      cliDatabaseUrl,
       "-f",
       backupPath,
     ]);
     return {
       restored: true,
       format: "postgres",
-      command: `${quoteShellValue(psqlPath)} -v ON_ERROR_STOP=1 -d ${quoteShellValue(databaseUrl)} -f ${quoteShellValue(backupPath)}`,
+      command: `${quoteShellValue(psqlPath)} -v ON_ERROR_STOP=1 -d ${quoteShellValue(cliDatabaseUrl)} -f ${quoteShellValue(backupPath)}`,
     };
   };
 

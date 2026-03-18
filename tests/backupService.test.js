@@ -107,6 +107,7 @@ test("backup service creates postgres sql dump through pg_dump", async () => {
     "--file",
     backupPath,
   ]);
+  assert.equal(calls[0].args[6], "postgresql://postgres@127.0.0.1:54329/barber_bot");
 });
 
 test("backup service restores postgres sql dump through psql", async () => {
@@ -161,10 +162,11 @@ test("backup service restores postgres sql dump through psql", async () => {
         "-v",
         "ON_ERROR_STOP=1",
         "-d",
-        "postgresql://postgres@127.0.0.1:54329/barber_bot?schema=public",
+        "postgresql://postgres@127.0.0.1:54329/barber_bot",
         "-f",
         path.join("D:\\backups", "backup.sql"),
       ],
     },
   ]);
+  assert.match(result.command, /postgresql:\/\/postgres@127\.0\.0\.1:54329\/barber_bot/);
 });

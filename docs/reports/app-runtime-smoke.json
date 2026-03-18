@@ -1,0 +1,74 @@
+{
+  "generatedAt": "2026-03-17T13:46:43.849Z",
+  "baseUrl": "http://127.0.0.1:3000",
+  "ok": true,
+  "checks": [
+    {
+      "name": "health",
+      "ok": true,
+      "status": 200,
+      "durationMs": 40,
+      "details": {
+        "ok": true,
+        "status": "ok",
+        "service": "brothershop",
+        "timestamp": "2026-03-17T13:46:43.806Z",
+        "uptimeSec": 3,
+        "pid": 24856,
+        "database": "ok"
+      }
+    },
+    {
+      "name": "login-options",
+      "ok": true,
+      "status": 200,
+      "durationMs": 5,
+      "details": {
+        "optionsCount": 3
+      }
+    },
+    {
+      "name": "owner-login",
+      "ok": true,
+      "status": 200,
+      "durationMs": 21,
+      "details": {
+        "role": "owner",
+        "username": "+79646599296"
+      }
+    },
+    {
+      "name": "owner-auth-me",
+      "ok": true,
+      "status": 200,
+      "durationMs": 3,
+      "details": {
+        "authenticated": true,
+        "username": "+79646599296",
+        "displayName": "Тимур🐼",
+        "barberId": "barber-timur",
+        "role": "owner",
+        "barberName": "Тимур🐼"
+      }
+    },
+    {
+      "name": "owner-barbers",
+      "ok": true,
+      "status": 200,
+      "durationMs": 7,
+      "details": {
+        "count": 2
+      }
+    },
+    {
+      "name": "home-login",
+      "ok": true,
+      "status": null,
+      "durationMs": 0,
+      "details": {
+        "skipped": true,
+        "reason": "home credentials not provided"
+      }
+    }
+  ]
+}

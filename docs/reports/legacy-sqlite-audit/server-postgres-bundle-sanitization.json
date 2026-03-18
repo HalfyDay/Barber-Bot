@@ -1,0 +1,326 @@
+{
+  "generatedAt": "2026-03-17T10:13:52.730Z",
+  "source": {
+    "label": "server",
+    "databaseUrl": "file:D:/Download/1BS/prisma/dev.db",
+    "sqlitePath": "D:/Download/1BS/prisma/dev.db",
+    "relativeSqlitePath": "..\\..\\Download\\1BS\\prisma\\dev.db"
+  },
+  "summary": {
+    "removedExactDuplicateRows": 52,
+    "conflictingDuplicateGroups": 0,
+    "safeToImport": true
+  },
+  "tables": {
+    "Positions": {
+      "tableName": "Positions",
+      "sourceRowCount": 9,
+      "sanitizedRowCount": 9,
+      "removedExactDuplicateRows": 0,
+      "duplicateIdGroups": 0,
+      "conflictingDuplicateGroups": 0,
+      "duplicateIds": [],
+      "conflictingDuplicateIds": []
+    },
+    "Barbers": {
+      "tableName": "Barbers",
+      "sourceRowCount": 2,
+      "sanitizedRowCount": 2,
+      "removedExactDuplicateRows": 0,
+      "duplicateIdGroups": 0,
+      "conflictingDuplicateGroups": 0,
+      "duplicateIds": [],
+      "conflictingDuplicateIds": []
+    },
+    "Services": {
+      "tableName": "Services",
+      "sourceRowCount": 6,
+      "sanitizedRowCount": 6,
+      "removedExactDuplicateRows": 0,
+      "duplicateIdGroups": 0,
+      "conflictingDuplicateGroups": 0,
+      "duplicateIds": [],
+      "conflictingDuplicateIds": []
+    },
+    "ServicePrices": {
+      "tableName": "ServicePrices",
+      "sourceRowCount": 9,
+      "sanitizedRowCount": 9,
+      "removedExactDuplicateRows": 0,
+      "duplicateIdGroups": 0,
+      "conflictingDuplicateGroups": 0,
+      "duplicateIds": [],
+      "conflictingDuplicateIds": []
+    },
+    "Users": {
+      "tableName": "Users",
+      "sourceRowCount": 245,
+      "sanitizedRowCount": 194,
+      "removedExactDuplicateRows": 51,
+      "duplicateIdGroups": 51,
+      "conflictingDuplicateGroups": 0,
+      "duplicateIds": [
+        {
+          "id": "c3658e57-03aa-4e32-baca-d72762c2634d",
+          "count": 2
+        },
+        {
+          "id": "c416fdda-b83f-41b9-80cf-4d703819f7f9",
+          "count": 2
+        },
+        {
+          "id": "c6689a98-ba87-4e05-9cba-3391dee371a0",
+          "count": 2
+        },
+        {
+          "id": "c69267a4-1af1-4d17-bc7b-f98d6ffcb401",
+          "count": 2
+        },
+        {
+          "id": "c7e9a042-5ce9-489d-ab06-6205654a5d9b",
+          "count": 2
+        },
+        {
+          "id": "c9e60d2b-f230-461a-83f4-69552843fdce",
+          "count": 2
+        },
+        {
+          "id": "cca37a83-5b99-428a-aeb0-bd95e1a80a39",
+          "count": 2
+        },
+        {
+          "id": "cd5266b9-c636-4fcd-b7e6-b4c502adb1ea",
+          "count": 2
+        },
+        {
+          "id": "ce2894db-43bf-420c-bc14-d47d75daf4c8",
+          "count": 2
+        },
+        {
+          "id": "cf1062fb-c476-4905-ade8-68bac0b88697",
+          "count": 2
+        },
+        {
+          "id": "d193e68b-95c2-41e4-8b5e-6c13a493edd6",
+          "count": 2
+        },
+        {
+          "id": "d3c4c27d-9d86-4abf-9afc-b404f9d05bbc",
+          "count": 2
+        },
+        {
+          "id": "d6272001-10b8-4d4d-84d4-aa38fd1ffddd",
+          "count": 2
+        },
+        {
+          "id": "d62e7fb1-3568-42d0-95f4-394b9fe625b1",
+          "count": 2
+        },
+        {
+          "id": "d67d14a2-bbf1-4b01-a636-a941b41847dd",
+          "count": 2
+        },
+        {
+          "id": "d71b2d18-72dd-400a-a9cb-09fb1faf7cfa",
+          "count": 2
+        },
+        {
+          "id": "db01b51d-eec3-4377-b65d-d79555c7622a",
+          "count": 2
+        },
+        {
+          "id": "dd2a4eb4-0342-406b-b042-c960efdf6e12",
+          "count": 2
+        },
+        {
+          "id": "deb560d9-b1ae-4c5a-93a3-358f0c7f001c",
+          "count": 2
+        },
+        {
+          "id": "e03db49a-3e42-4b4e-8120-8ed6bf457c78",
+          "count": 2
+        },
+        {
+          "id": "e0868e54-28ec-4d8e-bccf-68cb69b83413",
+          "count": 2
+        },
+        {
+          "id": "e19b8d6b-015b-4204-a0fc-29d26717e059",
+          "count": 2
+        },
+        {
+          "id": "e2ca4b0c-1787-4332-8163-5a781391e519",
+          "count": 2
+        },
+        {
+          "id": "e77e2823-f51b-49fa-aca2-ef3caed9cd27",
+          "count": 2
+        },
+        {
+          "id": "ed9b0c54-a9f5-48ae-bff7-7b079366e921",
+          "count": 2
+        },
+        {
+          "id": "ef793c2d-0fa2-4f2f-9d90-917e37b7e9f7",
+          "count": 2
+        },
+        {
+          "id": "f0daf899-75f3-4e2a-8c09-56c5c5ef8fd3",
+          "count": 2
+        },
+        {
+          "id": "f18c319b-8599-4bb6-942d-ca0e6132275d",
+          "count": 2
+        },
+        {
+          "id": "f2377233-7db3-4e57-ab54-49a2d2985185",
+          "count": 2
+        },
+        {
+          "id": "f5fb881a-22e4-4925-bd83-49a22b2b8188",
+          "count": 2
+        },
+        {
+          "id": "f6c846e9-f64d-4bee-9fb6-52b082285207",
+          "count": 2
+        },
+        {
+          "id": "f70f6b61-9136-42d0-a06b-fe8cd911eb20",
+          "count": 2
+        },
+        {
+          "id": "fa36e9fe-39fa-46ec-a489-47bab9ebe005",
+          "count": 2
+        },
+        {
+          "id": "rec26OCCbsasrpDfH",
+          "count": 2
+        },
+        {
+          "id": "rec3QeFW7mL1aV1uo",
+          "count": 2
+        },
+        {
+          "id": "rec4M8X0CGmMWazWl",
+          "count": 2
+        },
+        {
+          "id": "rec4V0ansNDGvqMfS",
+          "count": 2
+        },
+        {
+          "id": "rec5ele0vyWoAyVfM",
+          "count": 2
+        },
+        {
+          "id": "rec7YohhSkA0QyizK",
+          "count": 2
+        },
+        {
+          "id": "rec9yONfdjlp1VHFF",
+          "count": 2
+        },
+        {
+          "id": "recD1ehCKxXDP0aaA",
+          "count": 2
+        },
+        {
+          "id": "recF8KZkxwd0I5u8k",
+          "count": 2
+        },
+        {
+          "id": "recJgBjpP9fZhh1u1",
+          "count": 2
+        },
+        {
+          "id": "recLhk2mH2CNnfswA",
+          "count": 2
+        },
+        {
+          "id": "recPt8L1rdN6WnHQp",
+          "count": 2
+        },
+        {
+          "id": "recSqLvwzIrOx5xPw",
+          "count": 2
+        },
+        {
+          "id": "recUvCQK628oiFzF2",
+          "count": 2
+        },
+        {
+          "id": "recWZQBrlbKVK7blO",
+          "count": 2
+        },
+        {
+          "id": "recZAilXXbHc0lOyS",
+          "count": 2
+        },
+        {
+          "id": "recb4ocDnt2Ed5mg1",
+          "count": 2
+        },
+        {
+          "id": "recb855BCHiPN5PS9",
+          "count": 2
+        }
+      ],
+      "conflictingDuplicateIds": []
+    },
+    "Schedules": {
+      "tableName": "Schedules",
+      "sourceRowCount": 72,
+      "sanitizedRowCount": 72,
+      "removedExactDuplicateRows": 0,
+      "duplicateIdGroups": 0,
+      "conflictingDuplicateGroups": 0,
+      "duplicateIds": [],
+      "conflictingDuplicateIds": []
+    },
+    "Appointments": {
+      "tableName": "Appointments",
+      "sourceRowCount": 286,
+      "sanitizedRowCount": 285,
+      "removedExactDuplicateRows": 1,
+      "duplicateIdGroups": 1,
+      "conflictingDuplicateGroups": 0,
+      "duplicateIds": [
+        {
+          "id": "579f4da4-d25b-4182-bff1-bffbd7ebce78",
+          "count": 2
+        }
+      ],
+      "conflictingDuplicateIds": []
+    },
+    "BotSettings": {
+      "tableName": "BotSettings",
+      "sourceRowCount": 1,
+      "sanitizedRowCount": 1,
+      "removedExactDuplicateRows": 0,
+      "duplicateIdGroups": 0,
+      "conflictingDuplicateGroups": 0,
+      "duplicateIds": [],
+      "conflictingDuplicateIds": []
+    },
+    "BotMessages": {
+      "tableName": "BotMessages",
+      "sourceRowCount": 2,
+      "sanitizedRowCount": 2,
+      "removedExactDuplicateRows": 0,
+      "duplicateIdGroups": 0,
+      "conflictingDuplicateGroups": 0,
+      "duplicateIds": [],
+      "conflictingDuplicateIds": []
+    },
+    "TelegramAuthRequests": {
+      "tableName": "TelegramAuthRequests",
+      "sourceRowCount": 18,
+      "sanitizedRowCount": 18,
+      "removedExactDuplicateRows": 0,
+      "duplicateIdGroups": 0,
+      "conflictingDuplicateGroups": 0,
+      "duplicateIds": [],
+      "conflictingDuplicateIds": []
+    }
+  }
+}

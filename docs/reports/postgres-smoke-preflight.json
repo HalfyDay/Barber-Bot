@@ -1,0 +1,28 @@
+{
+  "generatedAt": "2026-03-17T13:46:39.182Z",
+  "databaseUrl": "postgresql://postgres@127.0.0.1:54329/barber_bot_rehearsal3?schema=public",
+  "files": {
+    "initSql": {
+      "path": "D:\\Works\\Barber Bot\\docs\\reports\\postgres-target-init.sql",
+      "exists": true,
+      "sizeBytes": 6571
+    },
+    "importSql": {
+      "path": "D:\\Works\\Barber Bot\\docs\\reports\\server-postgres-import-sanitized.sql",
+      "exists": true,
+      "sizeBytes": 236559
+    },
+    "bundle": {
+      "path": "D:\\Works\\Barber Bot\\docs\\reports\\server-postgres-export-bundle-sanitized.json",
+      "exists": true,
+      "sizeBytes": 322468
+    }
+  },
+  "database": {
+    "ok": true,
+    "version": "PostgreSQL 17.9 on x86_64-windows, compiled by msvc-19.44.35223, 64-bit",
+    "database": "barber_bot_rehearsal3",
+    "schema": "public"
+  },
+  "ready": true
+}

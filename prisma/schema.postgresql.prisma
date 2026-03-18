@@ -1,0 +1,186 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma-postgresql-client"
+}
+
+model Users {
+  id                   String  @id
+  TelegramID           Float?  @map("TelegramID")
+  Name                 String? @map("Name")
+  Phone                String? @map("Phone")
+  LastNameChanged      String? @map("LastNameChanged")
+  Barber               String? @map("Barber")
+  homePasswordHash     String? @map("HomePasswordHash")
+  homePasswordSalt     String? @map("HomePasswordSalt")
+  homeIsActive         Boolean @default(true) @map("HomeIsActive")
+  homeCreatedAt        String? @map("HomeCreatedAt")
+  homeUpdatedAt        String? @map("HomeUpdatedAt")
+  homeLastLoginAt      String? @map("HomeLastLoginAt")
+  homePhoneChangedAt   String? @map("HomePhoneChangedAt")
+  homeTelegramChangedAt String? @map("HomeTelegramChangedAt")
+  LastHaircutReminderSent String? @map("LastHaircutReminderSent")
+
+  @@index([Phone])
+  @@index([TelegramID])
+  @@map("Users")
+}
+
+model Appointments {
+  id                   String   @id
+  CustomerName         String?  @map("CustomerName")
+  Phone                String?  @map("Phone")
+  Barber               String?  @map("Barber")
+  Date                 String?  @map("Date")
+  Time                 String?  @map("Time")
+  Status               String?  @map("Status")
+  Services             String?  @map("Services")
+  Reminder2hClientSent Boolean? @map("Reminder2hClientSent")
+  Reminder2hBarberSent Boolean? @map("Reminder2hBarberSent")
+  UserID               String?  @map("UserID")
+
+  @@map("Appointments")
+}
+
+model Schedules {
+  id        String   @id
+  Barber    String?  @map("Barber")
+  DayOfWeek String?  @map("DayOfWeek")
+  Today     Boolean? @map("Today")
+  Date      String?  @map("Date")
+  Week      String?  @map("Week")
+  Time      String?  @map("Time")
+
+  @@map("Schedules")
+}
+
+model Cost {
+  id         String  @id
+  Uslugi     String? @map("РЈСЃР»СѓРіРё")
+  Timur      Float?  @map("РўРёРјСѓСЂ")
+  Vladimir   Float?  @map("Р’Р»Р°РґРёРјРёСЂ")
+  Alina      Float?  @map("РђР»РёРЅР°")
+  Aleksey    Float?  @map("РђР»РµРєСЃРµР№")
+  Dlitelnost String? @map("Р”Р»РёС‚РµР»СЊРЅРѕСЃС‚СЊ")
+
+  @@map("Cost")
+}
+
+enum BarberRole {
+  owner
+  staff
+}
+
+model Barbers {
+  id                 String        @id
+  name               String
+  nickname           String?
+  description        String?
+  rating             String?
+  avatarUrl          String?
+  color              String?
+  phone              String?
+  telegramId         String?
+  login              String?
+  password           String?
+  cardTitle          String        @default("")
+  cardDescription    String        @default("")
+  cardPhrase         String        @default("")
+  cardMode           String        @default("generated")
+  cardImageUrl       String        @default("")
+  cardPhotoGrayscale Boolean       @default(true)
+  cardPhotoOutline   Boolean       @default(true)
+  isActive           Boolean       @default(true)
+  orderIndex         Int           @default(0)
+  role               BarberRole    @default(owner)
+  positionId         String?
+  position           Positions?    @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  services ServicePrices[]
+}
+
+model Positions {
+  id             String   @id
+  name           String   @unique
+  commissionRate Float?   @default(0)
+  orderIndex     Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  barbers Barbers[]
+}
+
+model Services {
+  id          String   @id
+  name        String
+  description String?
+  category    String?
+  duration    Int      @default(0)
+  isActive    Boolean  @default(true)
+  orderIndex  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  prices ServicePrices[]
+}
+
+model ServicePrices {
+  id        String   @id
+  serviceId String
+  barberId  String
+  price     Float    @default(0)
+  createdAt DateTime @default(now())
+
+  service Services @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  barber  Barbers  @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, barberId])
+}
+
+model BotSettings {
+  id             String   @id
+  botDescription String   @default("")
+  aboutText      String   @default("")
+  isBotEnabled   Boolean  @default(true)
+  bookingLimit   Int      @default(2)
+  minLeadHours   Int      @default(2)
+  maxDaysAhead   Int      @default(14)
+  lastSyncSource String   @default("site")
+  botToken       String   @default("")
+  updatedAt      DateTime @updatedAt
+}
+
+model BotMessages {
+  id        String   @id
+  code      String   @unique
+  title     String?
+  text      String
+  updatedAt DateTime @updatedAt
+}
+
+model TelegramAuthRequests {
+  id           String  @id
+  code         String  @unique
+  status       String
+  flow         String  @default("login")
+  targetUserId String?
+  telegramId   String?
+  phone        String?
+  displayName  String?
+  userId       String?
+  errorMessage String?
+  createdAt    String
+  expiresAt    String
+  updatedAt    String
+
+  @@index([status, expiresAt])
+  @@index([flow, targetUserId])
+  @@index([code])
+  @@map("TelegramAuthRequests")
+}

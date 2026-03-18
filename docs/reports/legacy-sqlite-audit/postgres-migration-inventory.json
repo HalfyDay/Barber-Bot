@@ -1,0 +1,42 @@
+{
+  "generatedAt": "2026-03-18T06:39:14.188Z",
+  "source": {
+    "label": "local",
+    "databaseUrl": "file:.legacy/sqlite-snapshots/prisma-dev.db",
+    "sqlitePath": "D:\\Works\\Barber Bot\\.legacy\\sqlite-snapshots\\prisma-dev.db"
+  },
+  "counts": {
+    "Users": 212,
+    "Appointments": 274,
+    "Schedules": 72,
+    "Cost": 5,
+    "Barbers": 2,
+    "Positions": 9,
+    "Services": 6,
+    "ServicePrices": 9,
+    "BotSettings": 1,
+    "BotMessages": 2,
+    "TelegramAuthRequests": 8
+  },
+  "issues": {
+    "usersWithoutPhone": 0,
+    "usersWithoutTelegramId": 13,
+    "duplicatePhones": 2,
+    "duplicateTelegramIds": 1,
+    "appointmentsMissingBarber": 0,
+    "appointmentsMissingDate": 0,
+    "appointmentsMissingTime": 0,
+    "appointmentsMissingUserReference": 75,
+    "duplicateActiveSlots": 0,
+    "schedulesMissingBarber": 16,
+    "schedulesMissingDate": 16,
+    "barbersMissingName": 0,
+    "servicesMissingName": 0,
+    "servicePricesMissingBarber": 0,
+    "servicePricesMissingService": 0
+  },
+  "warnings": [
+    "Users contain duplicate normalized phone numbers.",
+    "Users contain duplicate TelegramID values."
+  ]
+}

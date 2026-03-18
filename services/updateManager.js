@@ -1,7 +1,10 @@
-const { exec } = require('child_process');
+﻿const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { spawn } = require('child_process');
+const { getPrismaRuntimeConfig } = require('./prismaRuntime');
+const { resolvePortableConfig } = require('../scripts/lib/postgresPortableRuntime');
 const PROJECT_ROOT = path.join(__dirname, '..');
 const PACKAGE_PATH = path.join(PROJECT_ROOT, 'package.json');
 
@@ -16,8 +19,8 @@ const UPDATE_CACHE_SECONDS = Number(process.env.UPDATE_CACHE_SECONDS || 600);
 const UPDATE_GITHUB_TOKEN = process.env.UPDATE_GITHUB_TOKEN || process.env.GITHUB_TOKEN || '';
 const UPDATE_COMMAND_MAX_BUFFER_BYTES =
   Number(process.env.UPDATE_COMMAND_MAX_BUFFER_BYTES) || 10 * 1024 * 1024;
-const PRISMA_SCHEMA_PATH = path.join(PROJECT_ROOT, 'prisma', 'schema.prisma');
-const DB_PATH = path.join(PROJECT_ROOT, 'prisma', 'dev.db');
+const PRISMA_RUNTIME_CONFIG = getPrismaRuntimeConfig(process.env);
+const { schemaPath: PRISMA_SCHEMA_PATH } = PRISMA_RUNTIME_CONFIG;
 const BACKUP_DIR = path.join(PROJECT_ROOT, 'backups');
 const WEB_BUILD_OUTPUTS = [
   path.join(PROJECT_ROOT, 'bot-constructor.bundle.js'),
@@ -32,14 +35,62 @@ const MIGRATION_REMOVE_HOME_DISPLAY_NAME = '20260227193000_remove_home_display_n
 
 let cachedUpdate = null;
 
-const SQLITE_STORAGE_ERROR_RE =
-  /database disk image is malformed|sqlite_corrupt|database or disk is full|sqlitedatabasecorrupt|disk i\/o error|sqlite database error/i;
+const POSTGRES_STORAGE_ERROR_RE =
+  /connection terminated unexpectedly|the database system is starting up|too many clients already|could not connect to server|remaining connection slots are reserved|terminating connection due to administrator command|connection refused|econnrefused/i;
 
-const isSqliteStorageError = (error) =>
-  SQLITE_STORAGE_ERROR_RE.test(String(error?.message || error || ''));
+const isPostgresStorageError = (error) =>
+  POSTGRES_STORAGE_ERROR_RE.test(String(error?.message || error || ''));
 
-const buildSqliteStorageErrorMessage = () =>
-  '\u0053\u0051\u004c\u0069\u0074\u0065 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430 \u0438\u043b\u0438 \u043f\u043e\u0432\u0440\u0435\u0436\u0434\u0435\u043d\u0430. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0434\u0438\u0441\u043a, \u043f\u0440\u0430\u0432\u0430 \u0434\u043e\u0441\u0442\u0443\u043f\u0430 \u0438 \u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u0435 prisma/dev.db \u0438\u0437 \u0440\u0435\u0437\u0435\u0440\u0432\u043d\u043e\u0439 \u043a\u043e\u043f\u0438\u0438.';
+const buildPostgresStorageErrorMessage = () =>
+  'PostgreSQL РЅРµРґРѕСЃС‚СѓРїРЅР° РёР»Рё РїРѕРІСЂРµР¶РґРµРЅР°. РџСЂРѕРІРµСЂСЊС‚Рµ РїРѕРґРєР»СЋС‡РµРЅРёРµ Рє Р±Р°Р·Рµ Рё РІРѕСЃСЃС‚Р°РЅРѕРІРёС‚Рµ РµС‘ РёР· СЂРµР·РµСЂРІРЅРѕР№ РєРѕРїРёРё РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё.';
+
+const describeUpdateError = (error) => {
+  const baseMessage = String(error?.message || error || 'Unknown error').trim();
+  const causeCode = error?.cause?.code ? ` (${error.cause.code})` : '';
+  const causeHost = error?.cause?.host ? ` [${error.cause.host}]` : '';
+  return `${baseMessage}${causeCode}${causeHost}`;
+};
+
+const quoteShellValue = (value) => {
+  const safe = String(value || '');
+  return `"${safe.replace(/"/g, '\\"')}"`;
+};
+
+const resolvePostgresDumpPath = (env = process.env) => {
+  const configured = (env.POSTGRES_PG_DUMP_PATH || '').toString().trim();
+  if (configured) return configured;
+  const portableConfig = resolvePortableConfig({ env });
+  if (!portableConfig?.binDir) return null;
+  const executable = process.platform === 'win32' ? 'pg_dump.exe' : 'pg_dump';
+  const candidate = path.join(portableConfig.binDir, executable);
+  return fs.existsSync(candidate) ? candidate : null;
+};
+
+const runSpawnedCommand = (command, args, { env = process.env, cwd = PROJECT_ROOT } = {}) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+      reject(new Error(`${command} ${args.join(' ')} >> ${stderr || stdout || `exit ${code}`}`));
+    });
+  });
 
 const resolveUpdateNpmInstallCommand = () => {
   const configured = (process.env.UPDATE_NPM_INSTALL_COMMAND || 'npm ci').trim();
@@ -58,16 +109,38 @@ const resolveUpdateNpmInstallCommand = () => {
 };
 
 const createPreUpdateBackup = async () => {
-  if (!fs.existsSync(DB_PATH)) {
-    console.warn('[update] SQLite database not found, skipping pre-update backup');
-    return null;
-  }
   await fs.promises.mkdir(BACKUP_DIR, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const target = path.join(BACKUP_DIR, `backup-pre-update-${timestamp}.db`);
-  await fs.promises.copyFile(DB_PATH, target);
-  console.log(`[update] Created pre-update backup: ${path.relative(PROJECT_ROOT, target)}`);
-  return target;
+
+  if (PRISMA_RUNTIME_CONFIG.runtime === 'postgres') {
+    const databaseUrl = process.env.POSTGRES_DATABASE_URL;
+    if (!databaseUrl) {
+      console.warn('[update] POSTGRES_DATABASE_URL is not set, skipping pre-update backup');
+      return null;
+    }
+    const pgDumpPath = resolvePostgresDumpPath(process.env);
+    if (!pgDumpPath) {
+      console.warn('[update] pg_dump not found for PostgreSQL runtime, skipping pre-update backup');
+      return null;
+    }
+    const target = path.join(BACKUP_DIR, `backup-pre-update-${timestamp}.sql`);
+    const shellCommand = `${quoteShellValue(pgDumpPath)} --clean --if-exists --no-owner --no-privileges --file ${quoteShellValue(target)} ${quoteShellValue(databaseUrl)}`;
+    await runSpawnedCommand(pgDumpPath, [
+      '--clean',
+      '--if-exists',
+      '--no-owner',
+      '--no-privileges',
+      '--file',
+      target,
+      databaseUrl,
+    ]);
+    console.log(`[update] Created pre-update PostgreSQL backup: ${path.relative(PROJECT_ROOT, target)}`);
+    console.log(`[update] pg_dump command: ${shellCommand}`);
+    return target;
+  }
+
+  console.warn('[update] non-PostgreSQL runtime backup is no longer supported for the application');
+  return null;
 };
 
 const getWorkingTreeStatus = async () => {
@@ -199,13 +272,12 @@ const runPrismaMigrations = async () => {
   const schemaArg = `--schema "${PRISMA_SCHEMA_PATH}"`;
   const migrate = `npx prisma migrate deploy ${schemaArg}`;
   const generate = `npx prisma generate ${schemaArg}`;
-  const commands = [migrate, generate];
+  const commands = [generate];
   let homeDisplayNameMigrationResolved = false;
   for (const command of commands) {
     let attempt = 0;
     const isGenerate = command.includes('prisma generate');
-    // Retry on SQLite lock errors to allow lingering connections to drain.
-    // Keeping the loop small avoids long UI hangs.
+    // Keeping the retry loop small avoids long UI hangs during update checks.
     while (true) {
       attempt += 1;
       try {
@@ -245,8 +317,8 @@ const runPrismaMigrations = async () => {
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           continue;
         }
-        if (isSqliteStorageError(error)) {
-          throw new Error(buildSqliteStorageErrorMessage());
+        if (isPostgresStorageError(error)) {
+          throw new Error(buildPostgresStorageErrorMessage());
         }
         throw error;
       }
@@ -386,28 +458,22 @@ const checkForUpdates = async (force = false) => {
       note = '\u0420\u0435\u043b\u0438\u0437\u044b \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u044b, \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u043c \u0432\u0435\u0442\u043a\u0443.';
     }
   } catch (releaseError) {
-    note =
-      '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u0440\u0435\u043b\u0438\u0437: ' +
-      releaseError.message;
+    note = 'РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ СЂРµР»РёР·: ' + describeUpdateError(releaseError);
     console.warn('[updates] ' + note);
   }
 
   try {
     branchInfo = await fetchBranchHead();
   } catch (branchError) {
-    console.warn('[updates] GitHub branch API failed, trying git remote:', branchError);
+    const branchErrorMessage = describeUpdateError(branchError);
     try {
       branchInfo = await fetchBranchHeadFromRemote();
-      note =
-        note ||
-        'GitHub API недоступен, использован git remote: ' +
-          (branchError?.message || 'GitHub API error');
+      note = note || 'GitHub API недоступен, использован git remote: ' + branchErrorMessage;
+      console.warn('[updates] GitHub branch API failed, used git remote fallback:', branchErrorMessage);
     } catch (remoteError) {
-      console.warn('[updates] Git remote branch lookup failed:', remoteError);
-      note =
-        note ||
-        '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u0432\u0435\u0442\u043a\u0443: ' +
-          (branchError?.message || 'GitHub API error');
+      const remoteErrorMessage = describeUpdateError(remoteError);
+      console.warn('[updates] Git remote branch lookup failed:', remoteErrorMessage);
+      note = note || 'Не удалось получить ветку: ' + branchErrorMessage;
       branchInfo = null;
     }
   }
@@ -527,5 +593,8 @@ const applyUpdate = async () => {
 module.exports = {
   checkForUpdates,
   applyUpdate,
+  describeUpdateError,
+  createPreUpdateBackup,
+  resolvePostgresDumpPath,
 };
 

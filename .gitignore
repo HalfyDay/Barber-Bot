@@ -16,6 +16,7 @@ __pycache__/
 *.py[cod]
 
 # Local data & persistence
+/.local/
 /bot_persistence.pickle
 /bot_persistence/
 /data/*
@@ -43,6 +44,7 @@ __pycache__/
 /dist/
 /build/
 /tmp
+/generated/prisma-postgresql-client/
 
 # Logs
 *.log

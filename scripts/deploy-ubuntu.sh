@@ -39,11 +39,20 @@ if [[ -f requirements.txt ]]; then
   .venv/bin/python -m pip install -r requirements.txt
 fi
 
-echo "[deploy] prisma migrate deploy"
-npx prisma migrate deploy
+RUNTIME_MODE="${PRISMA_RUNTIME:-postgres}"
+echo "[deploy] prisma runtime: ${RUNTIME_MODE}"
 
-echo "[deploy] prisma generate"
-npx prisma generate
+if [[ "${RUNTIME_MODE}" != "postgres" ]]; then
+  echo "[deploy] sqlite runtime is no longer supported for the application."
+  echo "[deploy] use PostgreSQL for deploy/runtime and keep SQLite only for legacy migration scripts."
+  exit 1
+fi
+
+echo "[deploy] skip prisma migrate deploy for postgres runtime"
+echo "[deploy] expected: target schema/import already prepared before app deploy"
+
+echo "[deploy] prisma generate for runtime"
+npm run prisma:generate:runtime
 
 echo "[deploy] build web"
 npm run build:web

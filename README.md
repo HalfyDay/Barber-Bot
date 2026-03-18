@@ -1,7 +1,7 @@
 # BrotherShop
 
 Web CRM + site for a barbershop.
-Stack: Node.js, Express, Prisma, SQLite, Python Telegram bot.
+Stack: Node.js, Express, Prisma, PostgreSQL, Python Telegram bot.
 
 ## Project structure
 - `server.js` - main API and runtime orchestration
@@ -19,18 +19,43 @@ Stack: Node.js, Express, Prisma, SQLite, Python Telegram bot.
    - Windows: `.venv\Scripts\python -m pip install -r requirements.txt`
    - Linux/macOS: `.venv/bin/python -m pip install -r requirements.txt`
 2. Create `.env` from `.env.example`.
-3. Apply DB migrations and generate Prisma client:
-   - `npx prisma migrate deploy`
-   - `npx prisma generate`
-4. Build web bundle:
+3. Generate Prisma client for the selected runtime:
+   - PostgreSQL runtime: `npm run prisma:generate:runtime`
+4. For PostgreSQL, prepare schema/import separately using the migration runbook before app start.
+5. Legacy SQLite repair helpers, if you need to clean an old snapshot manually:
+   - `node scripts/legacy/fixUsersSqlite.js --sqlite-path path/to/snapshot.db`
+6. Build web bundle:
    - `npm run build:web`
-5. Start:
+7. Start:
    - `npm start`
+
+## Local portable PostgreSQL
+If you use a portable PostgreSQL on Windows, keep it inside the project and out of git:
+- default project-local path: `.local/postgresql-portable`
+- adopt an existing portable install:
+  - `powershell -File scripts/adopt-postgres-portable.ps1 -SourcePath "D:\Download\1BS\postgresql-portable"`
+- check/start/stop:
+  - `npm run postgres:portable:status`
+  - `npm run postgres:portable:start`
+  - `npm run postgres:portable:stop`
+- one-shot app start with project-local PostgreSQL:
+  - `npm run app:local-postgres`
+
+Config vars:
+- `POSTGRES_PORTABLE_HOME`
+- `POSTGRES_PORTABLE_DATA_DIR`
+- `POSTGRES_PORTABLE_PORT`
+- `HOME_USERS_DB_PATH`  
+  legacy-only path for one-time import of the old `home-users.db` snapshot
+- `LEGACY_SQLITE_SNAPSHOT_PATH`  
+  legacy-only path to an explicit SQLite snapshot for old audit/repair scripts
+
+`postgres:portable:status` returns a stable English `message` field (`accepting connections` / `no response`) and keeps the original `pg_isready` output in `rawMessage`.
 
 ## Ubuntu deploy
 1. Install base packages:
    - `sudo apt update`
-   - `sudo apt install -y git curl build-essential python3 python3-venv sqlite3`
+   - `sudo apt install -y git curl build-essential python3 python3-venv postgresql-client`
 2. Install Node.js 20+.
 3. Clone repo and configure `.env`.
 4. Run deploy script:
@@ -40,6 +65,7 @@ Stack: Node.js, Express, Prisma, SQLite, Python Telegram bot.
 `scripts/deploy-ubuntu.sh` always removes `node_modules` and runs `npm ci`.
 This avoids Windows/Linux native binary mismatch issues.
 The script also creates `.venv` and installs Python deps there.
+For default PostgreSQL runtime the deploy script skips `prisma migrate deploy` and only generates the runtime client.
 
 ## systemd service
 Service template:
@@ -70,6 +96,7 @@ Install steps (adjust user/path if needed):
 
 ## Important env vars for production
 - `APP_RESTART_MODE=auto` (`auto|spawn|exit`)
+- `PRISMA_RUNTIME=postgres`
 - `BACKUP_CRON_EXPRESSION` (default `0 3 * * *`)
 - `BACKUP_CRON_TIMEZONE` (example `Asia/Irkutsk`)
 - `UPDATE_NPM_INSTALL_COMMAND` (default `npm ci`)

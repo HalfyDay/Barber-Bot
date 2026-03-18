@@ -4,8 +4,31 @@
   "description": "BrotherShop CRM and booking platform",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test tests/*.test.js",
     "start": "node server.js",
+    "prisma:generate:postgres": "node scripts/prismaGeneratePostgresClient.js",
+    "prisma:generate:runtime": "node scripts/prismaGenerateRuntimeClient.js",
+    "postgres:portable:status": "node scripts/postgresPortableControl.js status",
+    "postgres:portable:start": "node scripts/postgresPortableControl.js start",
+    "postgres:portable:stop": "node scripts/postgresPortableControl.js stop",
+    "app:local-postgres": "powershell -File scripts/run-local-postgres-app.ps1",
+    "app:smoke": "node scripts/appRuntimeSmoke.js",
+    "db:inventory": "node scripts/postgresMigrationInventory.js",
+    "db:migration:dry-run": "node scripts/postgresMigrationDryRun.js",
+    "db:duplicates": "node scripts/postgresDuplicateUsersReport.js",
+    "db:cleanup-report": "node scripts/postgresCleanupCandidatesReport.js",
+    "db:report-diff": "node scripts/postgresReportDiff.js",
+    "db:export-bundle": "node scripts/postgresExportBundle.js",
+    "db:sanitize-bundle": "node scripts/postgresSanitizeBundle.js",
+    "db:cleanup-backlog": "node scripts/postgresCleanupBacklog.js",
+    "db:bundle-to-sql": "node scripts/postgresBundleToSql.js",
+    "db:schema-gap": "node scripts/postgresSchemaGapReport.js",
+    "db:init-sql": "node scripts/postgresGenerateInitSql.js",
+    "db:apply-sql": "node scripts/postgresApplySql.js",
+    "db:verify-import": "node scripts/postgresVerifyImport.js",
+    "db:smoke-run": "node scripts/postgresRunSmokeMigration.js",
+    "db:smoke-preflight": "node scripts/postgresSmokePreflight.js",
+    "db:cutover-packet": "node scripts/postgresCutoverPacket.js",
     "build:css": "tailwindcss -i styles.tailwind.css -o styles.css --minify",
     "build:web": "npm run build:css && babel bot-constructor.js --out-file bot-constructor.bundle.js --source-maps inline && babel script.js --out-file script.bundle.js --source-maps inline"
   },
@@ -24,9 +47,9 @@
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^4.2.1",
     "node-fetch": "^2.7.0",
+    "pg": "^8.20.0",
     "playwright": "^1.56.1",
     "socket.io": "^4.8.1",
-    "sqlite3": "^5.1.7",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
@@ -38,4 +61,3 @@
     "tailwindcss": "^3.4.14"
   }
 }
-

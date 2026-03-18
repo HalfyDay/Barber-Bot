@@ -1,0 +1,88 @@
+{
+  "generatedAt": "2026-03-17T13:46:40.035Z",
+  "source": {
+    "label": "server",
+    "databaseUrl": "file:D:/Download/1BS/prisma/dev.db",
+    "sqlitePath": "D:/Download/1BS/prisma/dev.db",
+    "relativeSqlitePath": "..\\..\\Download\\1BS\\prisma\\dev.db"
+  },
+  "counts": {
+    "Positions": {
+      "expected": 9,
+      "actual": 9,
+      "matches": true
+    },
+    "Barbers": {
+      "expected": 2,
+      "actual": 2,
+      "matches": true
+    },
+    "Services": {
+      "expected": 6,
+      "actual": 6,
+      "matches": true
+    },
+    "ServicePrices": {
+      "expected": 9,
+      "actual": 9,
+      "matches": true
+    },
+    "Users": {
+      "expected": 194,
+      "actual": 194,
+      "matches": true
+    },
+    "Schedules": {
+      "expected": 72,
+      "actual": 72,
+      "matches": true
+    },
+    "Appointments": {
+      "expected": 285,
+      "actual": 285,
+      "matches": true
+    },
+    "BotSettings": {
+      "expected": 1,
+      "actual": 1,
+      "matches": true
+    },
+    "BotMessages": {
+      "expected": 2,
+      "actual": 2,
+      "matches": true
+    },
+    "TelegramAuthRequests": {
+      "expected": 18,
+      "actual": 18,
+      "matches": true
+    }
+  },
+  "issues": {
+    "duplicatePhones": {
+      "expected": 4,
+      "actual": 4,
+      "matches": true
+    },
+    "duplicateTelegramIds": {
+      "expected": 2,
+      "actual": 2,
+      "matches": true
+    },
+    "appointmentsMissingUserReference": {
+      "expected": 74,
+      "actual": 74,
+      "matches": true
+    },
+    "incompleteSchedules": {
+      "expected": 16,
+      "actual": 16,
+      "matches": true
+    }
+  },
+  "readiness": {
+    "matchesBundle": true,
+    "countMismatches": [],
+    "issueMismatches": []
+  }
+}

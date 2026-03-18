@@ -1,0 +1,173 @@
+{
+  "generatedAt": "2026-03-17T09:18:31.899Z",
+  "left": {
+    "path": "D:\\Works\\Barber Bot\\docs\\reports\\postgres-migration-inventory.json",
+    "label": null,
+    "sqlitePath": "D:\\Works\\Barber Bot\\prisma\\dev.db"
+  },
+  "right": {
+    "path": "D:\\Works\\Barber Bot\\docs\\reports\\postgres-migration-inventory.json",
+    "label": null,
+    "sqlitePath": "D:\\Works\\Barber Bot\\prisma\\dev.db"
+  },
+  "counts": [
+    {
+      "key": "Appointments",
+      "left": 273,
+      "right": 273,
+      "delta": 0
+    },
+    {
+      "key": "Barbers",
+      "left": 2,
+      "right": 2,
+      "delta": 0
+    },
+    {
+      "key": "BotMessages",
+      "left": 2,
+      "right": 2,
+      "delta": 0
+    },
+    {
+      "key": "BotSettings",
+      "left": 1,
+      "right": 1,
+      "delta": 0
+    },
+    {
+      "key": "Cost",
+      "left": 5,
+      "right": 5,
+      "delta": 0
+    },
+    {
+      "key": "Positions",
+      "left": 9,
+      "right": 9,
+      "delta": 0
+    },
+    {
+      "key": "Schedules",
+      "left": 72,
+      "right": 72,
+      "delta": 0
+    },
+    {
+      "key": "ServicePrices",
+      "left": 9,
+      "right": 9,
+      "delta": 0
+    },
+    {
+      "key": "Services",
+      "left": 6,
+      "right": 6,
+      "delta": 0
+    },
+    {
+      "key": "TelegramAuthRequests",
+      "left": 26,
+      "right": 26,
+      "delta": 0
+    },
+    {
+      "key": "Users",
+      "left": 212,
+      "right": 212,
+      "delta": 0
+    }
+  ],
+  "issues": [
+    {
+      "key": "appointmentsMissingBarber",
+      "left": 0,
+      "right": 0,
+      "delta": 0
+    },
+    {
+      "key": "appointmentsMissingDate",
+      "left": 0,
+      "right": 0,
+      "delta": 0
+    },
+    {
+      "key": "appointmentsMissingTime",
+      "left": 0,
+      "right": 0,
+      "delta": 0
+    },
+    {
+      "key": "appointmentsMissingUserReference",
+      "left": 75,
+      "right": 75,
+      "delta": 0
+    },
+    {
+      "key": "barbersMissingName",
+      "left": 0,
+      "right": 0,
+      "delta": 0
+    },
+    {
+      "key": "duplicateActiveSlots",
+      "left": 0,
+      "right": 0,
+      "delta": 0
+    },
+    {
+      "key": "duplicatePhones",
+      "left": 2,
+      "right": 2,
+      "delta": 0
+    },
+    {
+      "key": "duplicateTelegramIds",
+      "left": 1,
+      "right": 1,
+      "delta": 0
+    },
+    {
+      "key": "schedulesMissingBarber",
+      "left": 16,
+      "right": 16,
+      "delta": 0
+    },
+    {
+      "key": "schedulesMissingDate",
+      "left": 16,
+      "right": 16,
+      "delta": 0
+    },
+    {
+      "key": "servicePricesMissingBarber",
+      "left": 0,
+      "right": 0,
+      "delta": 0
+    },
+    {
+      "key": "servicePricesMissingService",
+      "left": 0,
+      "right": 0,
+      "delta": 0
+    },
+    {
+      "key": "servicesMissingName",
+      "left": 0,
+      "right": 0,
+      "delta": 0
+    },
+    {
+      "key": "usersWithoutPhone",
+      "left": 0,
+      "right": 0,
+      "delta": 0
+    },
+    {
+      "key": "usersWithoutTelegramId",
+      "left": 13,
+      "right": 13,
+      "delta": 0
+    }
+  ]
+}

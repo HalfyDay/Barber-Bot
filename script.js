@@ -8130,12 +8130,30 @@ const TablesWorkspace = ({
     setTableError('');
     try {
       const responses = await Promise.all([
-        ...resolvedDataTables.map((table) => apiRequest(`/${table}`)),
+        ...resolvedDataTables.map((table) =>
+          apiRequest(
+            table === 'Appointments'
+              ? '/appointments'
+              : table === 'Barbers'
+                ? '/barbers'
+              : table === 'Services'
+                ? '/services/full'
+              : table === 'Schedules'
+                ? '/schedules'
+                : `/${table}`
+          )
+        ),
         apiRequest('/options/appointments'),
       ]);
       const nextTables = {};
       resolvedDataTables.forEach((table, index) => {
-        const records = responses[index] || [];
+        const responsePayload = responses[index] || [];
+        const records =
+          table === 'Services'
+            ? Array.isArray(responsePayload?.services)
+              ? responsePayload.services
+              : []
+            : responsePayload;
         nextTables[table] = table === 'Appointments' ? records.map((row) => ({ ...row, Status: normalizeStatusValue(row.Status) })) : records;
       });
       const rawOptions = responses[resolvedDataTables.length] || { barbers: [], services: [], statuses: [] };
@@ -8255,7 +8273,17 @@ const TablesWorkspace = ({
         tableId === 'Schedules'
           ? { ...(original.find((row) => getRecordId(row) === recordId) || {}), ...normalizedData }
           : normalizedData;
-      await apiRequest(`/${tableId}/${encodeURIComponent(recordId)}`, { method: 'PUT', body: JSON.stringify(payload) });
+      const endpoint =
+        tableId === 'Appointments'
+          ? `/appointments/${encodeURIComponent(recordId)}`
+          : tableId === 'Barbers'
+            ? `/barbers/${encodeURIComponent(recordId)}`
+          : tableId === 'Services'
+            ? `/services/full/${encodeURIComponent(recordId)}`
+          : tableId === 'Schedules'
+            ? `/schedules/${encodeURIComponent(recordId)}`
+            : `/${tableId}/${encodeURIComponent(recordId)}`;
+      await apiRequest(endpoint, { method: 'PUT', body: JSON.stringify(payload) });
     } catch (error) {
       console.error('Update failed', error);
       setTableError(error.message || 'Не удалось обновить запись');
@@ -8291,7 +8319,11 @@ const TablesWorkspace = ({
       return { ...prev, [tableId]: list.filter((row) => getRecordId(row) !== getRecordId(record)) };
     });
     try {
-      await apiRequest(`/${tableId}/${encodeURIComponent(record.id)}`, { method: 'DELETE' });
+      const endpoint =
+        tableId === 'Appointments'
+          ? `/appointments/${encodeURIComponent(record.id)}`
+          : `/${tableId}/${encodeURIComponent(record.id)}`;
+      await apiRequest(endpoint, { method: 'DELETE' });
     } catch (error) {
       console.error('Delete failed', error);
       setTableError(error.message || 'Не удалось удалить запись');
@@ -8306,7 +8338,8 @@ const TablesWorkspace = ({
         tableId === 'Appointments' && payload?.Status !== undefined
           ? { ...payload, Status: normalizeStatusValue(payload.Status) }
           : payload;
-      await apiRequest(`/${tableId}`, {
+      const endpoint = tableId === 'Appointments' ? '/appointments' : `/${tableId}`;
+      await apiRequest(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(normalizedPayload),
@@ -9360,7 +9393,7 @@ const apiRequest = useCallback(
     try {
       const [overview, appointments] = await Promise.all([
         apiRequest('/dashboard/overview'),
-        apiRequest('/Appointments'),
+        apiRequest('/appointments'),
       ]);
       setDashboard((prev) => {
         if (!overview) return prev;
@@ -9607,7 +9640,7 @@ const handleBarberFieldChange = (id, field, value) => {
   const handleSaveBarber = async (barber) => {
     if (!barber?.id) return null;
     try {
-      const response = await apiRequest(`/Barbers/${encodeURIComponent(barber.id)}`, { method: 'PUT', body: JSON.stringify(buildBarberPayload(barber)) });
+      const response = await apiRequest(`/barbers/${encodeURIComponent(barber.id)}`, { method: 'PUT', body: JSON.stringify(buildBarberPayload(barber)) });
       const updatedBarber = { ...barber, ...(response || {}) }; // сохраняем локально выбранный avatarUrl, если сервер его не вернул
       setBarbers((prev) => prev.map((item) => (item.id === updatedBarber.id ? { ...item, ...updatedBarber } : item)));
       return updatedBarber;
@@ -9626,7 +9659,7 @@ const handleBarberFieldChange = (id, field, value) => {
     });
     if (!confirmed) return;
     try {
-      await apiRequest(`/Barbers/${encodeURIComponent(barber.id)}`, { method: 'DELETE' });
+      await apiRequest(`/barbers/${encodeURIComponent(barber.id)}`, { method: 'DELETE' });
       fetchAll();
     } catch (error) {
       setGlobalError(error.message || 'Не удалось удалить барбера');
@@ -9640,7 +9673,7 @@ const handleBarberFieldChange = (id, field, value) => {
     try {
       const newBarberPayload = buildBarberPayload({ ...payload, id: undefined }, barbers.length);
       const { id, ...body } = newBarberPayload;
-      const created = await apiRequest('/Barbers', { method: 'POST', body: JSON.stringify(body) });
+      const created = await apiRequest('/barbers', { method: 'POST', body: JSON.stringify(body) });
       fetchAll();
       return created || null;
     } catch (error) {
@@ -9988,7 +10021,10 @@ const handleBarberFieldChange = (id, field, value) => {
     return normalized;
   }, [apiRequest, optionsCache]);
   const fetchAppointmentContext = useCallback(async () => {
-    const [appointmentsList, schedulesList] = await Promise.all([apiRequest('/Appointments'), apiRequest('/Schedules')]);
+    const [appointmentsList, schedulesList] = await Promise.all([
+      apiRequest('/appointments'),
+      apiRequest('/schedules'),
+    ]);
     return {
       appointments: Array.isArray(appointmentsList) ? appointmentsList : [],
       schedules: Array.isArray(schedulesList) ? schedulesList : [],
@@ -10043,9 +10079,9 @@ const handleBarberFieldChange = (id, field, value) => {
 	  const handleSaveAppointment = async ({ id, payload, isNew }) => {
 	    try {
 	      if (isNew) {
-	        await apiRequest('/Appointments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+	        await apiRequest('/appointments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
 	      } else if (id) {
-	        await apiRequest(`/Appointments/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+	        await apiRequest(`/appointments/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
 	      }
 	      setAppointmentModal(buildAppointmentModalState());
 	      fetchAll({ silent: true });
@@ -10058,7 +10094,7 @@ const handleBarberFieldChange = (id, field, value) => {
 	      const id = getRecordId(appointment);
 	      if (!id || !nextStatus) return;
 	      try {
-	        await apiRequest(`/Appointments/${encodeURIComponent(id)}`, {
+	        await apiRequest(`/appointments/${encodeURIComponent(id)}`, {
 	          method: 'PUT',
 	          body: JSON.stringify({ Status: normalizeStatusValue(nextStatus) }),
 	        });
@@ -10080,7 +10116,7 @@ const handleBarberFieldChange = (id, field, value) => {
     });
     if (!confirmed) return;
 	    try {
-	      await apiRequest(`/Appointments/${encodeURIComponent(appointment.id)}`, { method: 'DELETE' });
+	      await apiRequest(`/appointments/${encodeURIComponent(appointment.id)}`, { method: 'DELETE' });
 	      setAppointmentModal(buildAppointmentModalState());
 	      fetchAll({ silent: true });
 	    } catch (error) {

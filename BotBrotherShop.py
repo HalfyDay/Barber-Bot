@@ -3,7 +3,6 @@ import json
 import datetime
 import io
 import re
-import sqlite3
 import uuid
 import time
 import sys
@@ -11,8 +10,9 @@ import base64
 import os
 from pathlib import Path
 from collections import defaultdict
-from urllib.parse import urlparse
-from urllib.request import urlopen
+from urllib.parse import urlparse, urlencode
+from urllib.request import urlopen, Request
+from urllib.error import HTTPError, URLError
 
 from telegram import (
     Update,
@@ -42,8 +42,18 @@ from zoneinfo import ZoneInfo
 TOKEN = config.TOKEN
 
 BASE_DIR = Path(__file__).parent
-DB_PATH = BASE_DIR / "prisma" / "dev.db"  # CRM SQLite database
 TGBOT_IMAGE_DIR = BASE_DIR / "Image" / "tgbot"
+BOT_INTERNAL_API_BASE_URL = (
+    os.getenv("BOT_INTERNAL_API_BASE_URL")
+    or f"http://127.0.0.1:{os.getenv('PORT', '3000')}/api/bot-internal"
+).rstrip("/")
+BOT_INTERNAL_API_TOKEN = os.getenv("BOT_INTERNAL_API_TOKEN") or (
+    f"{os.getenv('JWT_SECRET', 'change-me-secret')}:bot-internal"
+)
+BOT_INTERNAL_API_TIMEOUT_SECONDS = max(
+    1.0, float(os.getenv("BOT_INTERNAL_API_TIMEOUT_SECONDS", "5"))
+)
+USER_SUMMARY_CACHE: dict[str, dict] = {}
 
 # Медиа-ресурсы и кэш
 IMAGE_FILE = BASE_DIR / "Image" / "bot.jpg"
@@ -79,95 +89,6 @@ with open(IMAGE_FILE, "rb") as f:
     SITE_AUTH_PHONE,
 ) = range(13)
 
-# ---
-# --- Помощник для работы с БД ---
-
-def get_db_connection():
-    """Устанавливает соединение с базой данных SQLite."""
-    try:
-        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-        conn.row_factory = sqlite3.Row  # Доступ к колонкам по имени
-        global _SCHEMA_INITIALIZED
-        if not _SCHEMA_INITIALIZED:
-            try:
-                ensure_schema(conn)
-            except sqlite3.Error as e:
-                logger.error(f"Ошибка обновления схемы базы данных: {e}")
-            else:
-                _SCHEMA_INITIALIZED = True
-        return conn
-    except sqlite3.Error as e:
-        logger.error(f"Ошибка подключения к базе данных: {e}")
-        return None
-
-def ensure_schema(conn: sqlite3.Connection) -> None:
-    """Гарантирует наличие служебных колонок, необходимых боту."""
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(Users)")
-    columns = {row["name"] for row in cursor.fetchall()}
-    if "LastHaircutReminderSent" not in columns:
-        cursor.execute("ALTER TABLE Users ADD COLUMN LastHaircutReminderSent TEXT")
-    home_columns = {
-        "HomePasswordHash": "ALTER TABLE Users ADD COLUMN HomePasswordHash TEXT",
-        "HomePasswordSalt": "ALTER TABLE Users ADD COLUMN HomePasswordSalt TEXT",
-        "HomeIsActive": "ALTER TABLE Users ADD COLUMN HomeIsActive BOOLEAN NOT NULL DEFAULT 1",
-        "HomeCreatedAt": "ALTER TABLE Users ADD COLUMN HomeCreatedAt TEXT",
-        "HomeUpdatedAt": "ALTER TABLE Users ADD COLUMN HomeUpdatedAt TEXT",
-        "HomeLastLoginAt": "ALTER TABLE Users ADD COLUMN HomeLastLoginAt TEXT",
-    }
-    for column_name, ddl in home_columns.items():
-        if column_name not in columns:
-            cursor.execute(ddl)
-    cursor.execute(
-        f"""
-        CREATE TABLE IF NOT EXISTS "{TELEGRAM_AUTH_REQUESTS_TABLE}" (
-            id TEXT PRIMARY KEY,
-            code TEXT NOT NULL UNIQUE,
-            status TEXT NOT NULL,
-            flow TEXT NOT NULL DEFAULT '{TELEGRAM_AUTH_FLOW_LOGIN}',
-            targetUserId TEXT,
-            telegramId TEXT,
-            phone TEXT,
-            displayName TEXT,
-            userId TEXT,
-            errorMessage TEXT,
-            createdAt TEXT NOT NULL,
-            expiresAt TEXT NOT NULL,
-            updatedAt TEXT NOT NULL
-        )
-        """
-    )
-    cursor.execute(
-        f"""
-        CREATE INDEX IF NOT EXISTS "idx_{TELEGRAM_AUTH_REQUESTS_TABLE}_status_expires"
-        ON "{TELEGRAM_AUTH_REQUESTS_TABLE}" (status, expiresAt)
-        """
-    )
-    cursor.execute(
-        f"""
-        CREATE INDEX IF NOT EXISTS "idx_{TELEGRAM_AUTH_REQUESTS_TABLE}_code"
-        ON "{TELEGRAM_AUTH_REQUESTS_TABLE}" (code)
-        """
-    )
-    cursor.execute(f'PRAGMA table_info("{TELEGRAM_AUTH_REQUESTS_TABLE}")')
-    auth_columns = {row["name"] for row in cursor.fetchall()}
-    if "flow" not in auth_columns:
-        cursor.execute(
-            f'ALTER TABLE "{TELEGRAM_AUTH_REQUESTS_TABLE}" '
-            f"ADD COLUMN flow TEXT NOT NULL DEFAULT '{TELEGRAM_AUTH_FLOW_LOGIN}'"
-        )
-    if "targetUserId" not in auth_columns:
-        cursor.execute(
-            f'ALTER TABLE "{TELEGRAM_AUTH_REQUESTS_TABLE}" ADD COLUMN targetUserId TEXT'
-        )
-    cursor.execute(
-        f"""
-        CREATE INDEX IF NOT EXISTS "idx_{TELEGRAM_AUTH_REQUESTS_TABLE}_flow_target"
-        ON "{TELEGRAM_AUTH_REQUESTS_TABLE}" (flow, targetUserId)
-        """
-    )
-    conn.commit()
-
 def load_blocked_user_ids() -> set[str]:
     """Читает список вручную заблокированных клиентов из веб-панели."""
     try:
@@ -186,15 +107,12 @@ def load_blocked_user_ids() -> set[str]:
 def get_user_record_id_by_telegram(telegram_id: int | str) -> str | None:
     """Возвращает id записи Users по TelegramID, если она есть."""
     try:
-        with get_db_connection() as conn:
-            if not conn:
-                return None
-            cursor = conn.cursor()
-            row = find_user_by_telegram(cursor, telegram_id)
-            return str(row["id"]) if row and row.get("id") else None
-    except Exception as exc:
-        logger.warning("Не удалось получить id пользователя по TelegramID: %s", exc)
-        return None
+        summary = get_bot_user_summary(telegram_id)
+        if summary and summary.get("userRecordId"):
+            return str(summary["userRecordId"])
+    except BotApiError as exc:
+        logger.warning("User summary API error in get_user_record_id_by_telegram: %s", exc)
+    return None
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -223,8 +141,6 @@ def _patch_telegram_updater_for_py313() -> None:
 
 
 _patch_telegram_updater_for_py313()
-
-_SCHEMA_INITIALIZED = False
 
 CACHE_EPSILON = 1e-9
 
@@ -260,183 +176,63 @@ def load_bot_settings(force: bool = False) -> dict:
         "maxDaysAhead": 14,
         "isBotEnabled": True,
     }
-    with get_db_connection() as conn:
-        if conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM BotSettings LIMIT 1")
-            row = cursor.fetchone()
-            if row:
-                base_settings.update(dict(row))
+    try:
+        payload = bot_api_request("GET", "/settings")
+        if payload:
+            base_settings.update(payload)
+            SETTINGS_CACHE["data"] = base_settings
+            SETTINGS_CACHE["ts"] = now_ts
+            return base_settings
+    except BotApiError as exc:
+        logger.warning("Bot settings API error: %s", exc)
+        if SETTINGS_CACHE["data"] is not None:
+            return SETTINGS_CACHE["data"]
     SETTINGS_CACHE["data"] = base_settings
     SETTINGS_CACHE["ts"] = now_ts
     return base_settings
 
 def load_barbers(include_inactive: bool = False, force: bool = False) -> list[dict]:
-    """Возвращает список барберов из таблицы Barbers (без фильтров)."""
+    """Возвращает запись пользователя из backend API с кешированием."""
     now_ts = time.time()
     cache_entry = BARBER_CACHE[include_inactive]
-    conn = get_db_connection()
-    if not conn:
+    if not force and cache_entry["data"] and _cached(now_ts, cache_entry):
         return cache_entry["data"]
-    barbers: list[dict] = []
-    version_token: str | None = None
     try:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                "SELECT MAX(updatedAt) as version, COUNT(*) as total FROM Barbers"
-            )
-            version_meta = dict(cursor.fetchone() or {})
-            version_token = (
-                f"{version_meta.get('version') or 'none'}|"
-                f"{version_meta.get('total') or 0}"
-            )
-        except sqlite3.Error as meta_error:
-            logger.warning(f"Не удалось получить версию списка барберов: {meta_error}")
-        if (
-            not force
-            and version_token
-            and cache_entry["data"]
-            and cache_entry.get("version") == version_token
-        ):
-            cache_entry["ts"] = now_ts
-            return cache_entry["data"]
-        if (
-            not force
-            and not version_token
-            and cache_entry["data"]
-            and _cached(now_ts, cache_entry)
-        ):
-            return cache_entry["data"]
-        query = (
-            "SELECT id, name, nickname, description, rating, avatarUrl, color, "
-            "isActive, telegramId FROM Barbers "
+        payload = bot_api_request(
+            "GET",
+            "/barbers",
+            query={"includeInactive": "1" if include_inactive else "0"},
         )
-        if not include_inactive:
-            query += "WHERE isActive = 1 "
-        query += "ORDER BY orderIndex, name"
-        cursor.execute(query)
-        barbers = [dict(row) for row in cursor.fetchall()]
-    finally:
-        conn.close()
-    cache_entry["data"] = barbers
-    cache_entry["ts"] = now_ts
-    cache_entry["version"] = version_token
-    return barbers
+        barbers_payload = payload.get("barbers") or []
+        if isinstance(barbers_payload, list):
+            cache_entry["data"] = barbers_payload
+            cache_entry["ts"] = now_ts
+            cache_entry["version"] = f"api|{len(barbers_payload)}"
+            return barbers_payload
+    except BotApiError as exc:
+        logger.warning("Barbers API error: %s", exc)
+    return cache_entry["data"] or []
 
 def load_services(force: bool = False) -> tuple[list[dict], str | None]:
     """Load service list with price map for the Telegram bot."""
     now_ts = time.time()
-    services: list[dict] = []
     version_token = SERVICE_CACHE.get("version")
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT MAX(updatedAt) as version, COUNT(*) as total FROM Services"
-            )
-            services_meta_row = cursor.fetchone()
-            services_meta = dict(services_meta_row or {})
-            cursor.execute("SELECT MAX(createdAt) as version FROM ServicePrices")
-            price_meta_row = cursor.fetchone()
-            price_meta = dict(price_meta_row or {})
-            version_token = (
-                f"{services_meta.get('version') or 'none'}|"
-                f"{services_meta.get('total') or 0}|"
-                f"{price_meta.get('version') or 'none'}"
-            )
-            if (
-                not force
-                and SERVICE_CACHE["data"]
-                and SERVICE_CACHE.get("version") == version_token
-            ):
-                SERVICE_CACHE["ts"] = now_ts
-                return SERVICE_CACHE["data"], SERVICE_CACHE["version"]
-            cursor.execute(
-                "SELECT id, name, description, duration, isActive, orderIndex "
-                "FROM Services ORDER BY orderIndex, name"
-            )
-            rows = cursor.fetchall()
-            has_records = bool(rows)
-            if rows:
-                prices_map: dict[str, dict[str, float]] = defaultdict(dict)
-                cursor.execute(
-                    "SELECT sp.serviceId, sp.price, b.name as BarberName "
-                    "FROM ServicePrices sp LEFT JOIN Barbers b ON b.id = sp.barberId"
-                )
-                for price_row in cursor.fetchall():
-                    barber_name = price_row["BarberName"]
-                    if not barber_name:
-                        continue
-                    prices_map[price_row["serviceId"]][barber_name] = price_row["price"]
-                for row in rows:
-                    if not row["isActive"]:
-                        continue
-                    services.append(
-                        {
-                            "id": row["id"],
-                            "name": row["name"],
-                            "duration": int(row["duration"] or 0),
-                            "isActive": True,
-                            "prices": prices_map.get(row["id"], {}),
-                        }
-                    )
-            if not services and not has_records:
-                cursor.execute(
-                    """
-                    SELECT
-                        "Услуги" as Uslugi,
-                        "Длительность" as Dlitelnost,
-                        "Тимур" as Timur,
-                        "Владимир" as Vladimir,
-                        "Алина" as Alina,
-                        "Алексей" as Aleksey
-                    FROM Cost
-                """
-                )
-                cost_rows = cursor.fetchall()
-                barbers_lookup = {}
-                for barber in load_barbers(include_inactive=True):
-                    for key in (
-                        barber.get("name"),
-                        barber.get("nickname"),
-                        barber.get("login"),
-                    ):
-                        norm = normalize_token(key)
-                        if norm and barber.get("name"):
-                            barbers_lookup[norm] = barber["name"]
-                excluded_fields = {"Uslugi", "Dlitelnost", "id", "Id", "ID"}
-                for row in cost_rows:
-                    duration_match = re.search(r"(\\d+)", str(row["Dlitelnost"] or "0"))
-                    duration = int(duration_match.group(1)) if duration_match else 0
-                    prices = {}
-                    for field, value in dict(row).items():
-                        if field in excluded_fields or value is None:
-                            continue
-                        barber_name = barbers_lookup.get(normalize_token(field))
-                        if not barber_name:
-                            continue
-                        try:
-                            prices[barber_name] = int(value)
-                        except (TypeError, ValueError):
-                            continue
-                    services.append(
-                        {
-                            "id": str(uuid.uuid4()),
-                            "name": row["Uslugi"],
-                            "duration": duration,
-                            "isActive": True,
-                            "prices": prices,
-                        }
-                    )
-        finally:
-            conn.close()
-    SERVICE_CACHE["data"] = services
-    SERVICE_CACHE["ts"] = now_ts
-    SERVICE_CACHE["version"] = version_token
-    return services, version_token
-
+    if not force and SERVICE_CACHE["data"] and _cached(now_ts, SERVICE_CACHE):
+        return SERVICE_CACHE["data"], version_token
+    try:
+        payload = bot_api_request("GET", "/services")
+        services_payload = payload.get("services") or []
+        if isinstance(services_payload, list):
+            version_token = f"api|{len(services_payload)}"
+            SERVICE_CACHE["data"] = services_payload
+            SERVICE_CACHE["ts"] = now_ts
+            SERVICE_CACHE["version"] = version_token
+            return services_payload, version_token
+    except BotApiError as exc:
+        logger.warning("Services API error: %s", exc)
+        if SERVICE_CACHE["data"]:
+            return SERVICE_CACHE["data"], SERVICE_CACHE.get("version")
+    return [], version_token
 
 def get_menu_photo_bytes() -> bytes:
     source = MENU_IMAGE_PATH if MENU_IMAGE_PATH.exists() else IMAGE_FILE
@@ -537,7 +333,6 @@ except Exception:
     pass
 PHONE_PATTERN = re.compile(r"^\+?\d{10,15}$")
 SITE_LOGIN_CODE_PATTERN = re.compile(r"^\d{6}$")
-TELEGRAM_AUTH_REQUESTS_TABLE = "TelegramAuthRequests"
 TELEGRAM_AUTH_STATUS_PENDING = "pending"
 TELEGRAM_AUTH_STATUS_COMPLETED = "completed"
 TELEGRAM_AUTH_STATUS_FAILED = "failed"
@@ -616,6 +411,215 @@ def now_iso() -> str:
         .replace("+00:00", "Z")
     )
 
+class BotApiError(Exception):
+    def __init__(self, message: str, status: int | None = None, payload: dict | None = None):
+        super().__init__(message)
+        self.status = status
+        self.payload = payload or {}
+        self.code = str((self.payload or {}).get("code") or "").strip()
+
+def bot_internal_api_available() -> bool:
+    return bool(BOT_INTERNAL_API_BASE_URL and BOT_INTERNAL_API_TOKEN)
+
+def bot_api_request(method: str, path: str, *, payload: dict | None = None, query: dict | None = None) -> dict:
+    if not bot_internal_api_available():
+        raise BotApiError("Bot internal API is not configured.")
+    url = f"{BOT_INTERNAL_API_BASE_URL}/{path.lstrip('/')}"
+    if query:
+        query_string = urlencode(
+            {
+                key: value
+                for key, value in query.items()
+                if value is not None and value != ""
+            }
+        )
+        if query_string:
+            url = f"{url}?{query_string}"
+    body = None
+    headers = {"x-bot-internal-token": BOT_INTERNAL_API_TOKEN}
+    if payload is not None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = Request(url, data=body, method=method.upper(), headers=headers)
+    try:
+        with urlopen(request, timeout=BOT_INTERNAL_API_TIMEOUT_SECONDS) as response:
+            raw = response.read().decode("utf-8") if response else ""
+            return json.loads(raw) if raw else {}
+    except HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="ignore") if exc.fp else ""
+        payload_data = {}
+        if raw:
+            try:
+                payload_data = json.loads(raw)
+            except json.JSONDecodeError:
+                payload_data = {"error": raw}
+        message = payload_data.get("error") or payload_data.get("message") or f"HTTP {exc.code}"
+        raise BotApiError(str(message), status=exc.code, payload=payload_data) from exc
+    except URLError as exc:
+        raise BotApiError(f"Bot API unavailable: {exc.reason}") from exc
+
+def get_bot_user_summary(telegram_id: int | str, force: bool = False) -> dict | None:
+    safe_id = normalize_telegram_id(telegram_id)
+    if not safe_id:
+        return None
+    cache_entry = USER_SUMMARY_CACHE.get(safe_id)
+    now_ts = time.time()
+    if not force and cache_entry and now_ts - cache_entry.get("ts", 0) < 15:
+        return cache_entry.get("data")
+    payload = bot_api_request("GET", f"/users/by-telegram/{safe_id}/summary")
+    USER_SUMMARY_CACHE[safe_id] = {"ts": now_ts, "data": payload}
+    return payload
+
+def register_bot_user(telegram_id: int | str, name: str, phone: str) -> dict:
+    safe_id = normalize_telegram_id(telegram_id)
+    payload = bot_api_request(
+        "POST",
+        "/users/register",
+        payload={
+            "telegramId": safe_id,
+            "name": (name or "").strip(),
+            "phone": (phone or "").strip(),
+        },
+    )
+    if safe_id:
+        USER_SUMMARY_CACHE[safe_id] = {"ts": time.time(), "data": payload}
+    return payload
+
+def update_bot_user_name(telegram_id: int | str, name: str) -> dict:
+    safe_id = normalize_telegram_id(telegram_id)
+    payload = bot_api_request(
+        "POST",
+        f"/users/by-telegram/{safe_id}/name",
+        payload={"name": (name or "").strip()},
+    )
+    if safe_id:
+        USER_SUMMARY_CACHE[safe_id] = {"ts": time.time(), "data": payload}
+    return payload
+
+def update_bot_user_phone(telegram_id: int | str, phone: str) -> dict:
+    safe_id = normalize_telegram_id(telegram_id)
+    payload = bot_api_request(
+        "POST",
+        f"/users/by-telegram/{safe_id}/phone",
+        payload={"phone": (phone or "").strip()},
+    )
+    if safe_id:
+        USER_SUMMARY_CACHE[safe_id] = {"ts": time.time(), "data": payload}
+    return payload
+
+def begin_bot_site_login(code: str, telegram_id: int | str) -> dict:
+    return bot_api_request(
+        "POST",
+        "/telegram-auth/begin",
+        payload={
+            "code": str(code or "").strip(),
+            "telegramId": normalize_telegram_id(telegram_id),
+        },
+    )
+
+def complete_bot_site_login_phone(request_id: str, telegram_id: int | str, phone: str) -> dict:
+    return bot_api_request(
+        "POST",
+        "/telegram-auth/phone",
+        payload={
+            "requestId": str(request_id or "").strip(),
+            "telegramId": normalize_telegram_id(telegram_id),
+            "phone": str(phone or "").strip(),
+        },
+    )
+
+def get_bot_barber_by_telegram(telegram_id: int | str) -> dict | None:
+    safe_id = normalize_telegram_id(telegram_id)
+    if not safe_id:
+        return None
+    payload = bot_api_request("GET", f"/barbers/by-telegram/{safe_id}")
+    barber = payload.get("barber")
+    return barber if isinstance(barber, dict) else None
+
+def list_bot_appointments(telegram_id: int | str, *, mode: str = "client", active_only: bool = True) -> list[dict]:
+    safe_id = normalize_telegram_id(telegram_id)
+    if not safe_id:
+        return []
+    payload = bot_api_request(
+        "GET",
+        "/appointments",
+        query={
+            "telegramId": safe_id,
+            "mode": mode,
+            "activeOnly": "1" if active_only else "0",
+        },
+    )
+    appointments = payload.get("appointments") or []
+    return appointments if isinstance(appointments, list) else []
+
+def get_bot_appointment(appointment_id: str) -> dict | None:
+    safe_id = str(appointment_id or "").strip()
+    if not safe_id:
+        return None
+    payload = bot_api_request("GET", f"/appointments/{safe_id}")
+    appointment = payload.get("appointment")
+    return appointment if isinstance(appointment, dict) else None
+
+def create_bot_appointment(payload: dict) -> dict:
+    return bot_api_request("POST", "/appointments", payload=payload)
+
+def cancel_bot_appointment(appointment_id: str) -> dict:
+    safe_id = str(appointment_id or "").strip()
+    if not safe_id:
+        raise BotApiError("Appointment id is required.")
+    return bot_api_request("POST", f"/appointments/{safe_id}/cancel")
+
+def get_bot_available_dates(barber_name: str, duration_min: int) -> list[str]:
+    safe_barber_name = str(barber_name or "").strip()
+    safe_duration = max(int(duration_min or 0), 15)
+    if not safe_barber_name:
+        return []
+    payload = bot_api_request(
+        "GET",
+        "/availability/dates",
+        query={
+            "barberName": safe_barber_name,
+            "duration": str(safe_duration),
+        },
+    )
+    dates = payload.get("dates") or []
+    return dates if isinstance(dates, list) else []
+
+def get_bot_available_times(barber_name: str, date_key: str, duration_min: int) -> list[dict]:
+    safe_barber_name = str(barber_name or "").strip()
+    safe_date_key = str(date_key or "").strip()
+    safe_duration = max(int(duration_min or 0), 15)
+    if not safe_barber_name or not safe_date_key:
+        return []
+    payload = bot_api_request(
+        "GET",
+        "/availability/times",
+        query={
+            "barberName": safe_barber_name,
+            "date": safe_date_key,
+            "duration": str(safe_duration),
+        },
+    )
+    times = payload.get("times") or []
+    return times if isinstance(times, list) else []
+
+def get_service_price_for_barber(service: dict, barber: dict | None) -> float:
+    prices = service.get("prices") or {}
+    if not isinstance(prices, dict):
+        return 0
+    barber_info = barber or {}
+    for key in (
+        barber_info.get("id"),
+        barber_info.get("name"),
+        barber_info.get("nickname"),
+    ):
+        if key in prices and prices.get(key) not in (None, 0):
+            try:
+                return float(prices.get(key) or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
 def parse_site_login_code(raw_value: str | None) -> str:
     code = (raw_value or "").strip()
     if not code:
@@ -654,30 +658,23 @@ def get_barber_by_telegram_id(telegram_id: int | str) -> dict | None:
     identifier = str(telegram_id or "").strip()
     if not identifier:
         return None
-    with get_db_connection() as conn:
-        if conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, name, telegramId FROM Barbers WHERE telegramId = ?",
-                (identifier,),
-            )
-            row = cursor.fetchone()
-            if row:
-                return dict(row)
+    try:
+        barber = get_bot_barber_by_telegram(identifier)
+        if barber:
+            return barber
+    except BotApiError as exc:
+        logger.warning("Barber lookup API error: %s", exc)
+    for barber in load_barbers(include_inactive=True):
+        if str(barber.get("telegramId") or "").strip() == identifier:
+            return barber
     return None
 
 def get_barber_chat_id_by_name(barber_name: str) -> int | None:
     if not barber_name:
         return None
-    with get_db_connection() as conn:
-        if conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT telegramId FROM Barbers WHERE name = ?", (barber_name,)
-            )
-            row = cursor.fetchone()
-            if row:
-                return parse_chat_id(row["telegramId"])
+    for barber in load_barbers(include_inactive=True):
+        if str(barber.get("name") or "").strip() == str(barber_name).strip():
+            return parse_chat_id(barber.get("telegramId"))
     return None
 
 def parse_appointment_start(
@@ -734,333 +731,38 @@ async def safe_upsert_menu(
     return target
 
 
-# --- Логика напоминаний ---
-
-async def reminder_checker_job(context: ContextTypes.DEFAULT_TYPE):
-    """Проверяет предстоящие записи и отправляет напоминания."""
-    conn = get_db_connection()
-    if not conn:
-        return
-    try:
-        now = datetime.datetime.now(tz=ZONE)
-        today_str = now.strftime("%Y-%m-%d")
-        logger.info(
-            f"Проверка напоминаний на {today_str}, текущее время: {now.isoformat()}"
-        )
-        # Проверяем, не пора ли напомнить клиентам о новой стрижке
-        monthly_cursor = conn.cursor()
-        monthly_cursor.execute(
-            "SELECT TelegramID, LastHaircutReminderSent FROM Users WHERE TelegramID IS NOT NULL"
-        )
-        monthly_users = monthly_cursor.fetchall()
-        for user_row in monthly_users:
-            telegram_id = user_row["TelegramID"]
-            if not telegram_id:
-                continue
-            user_keys = resolve_user_lookup_keys(telegram_id, monthly_cursor)
-            if not user_keys:
-                continue
-            last_cursor = conn.cursor()
-            placeholders = ", ".join("?" for _ in user_keys)
-            last_cursor.execute(
-                f"SELECT MAX(Date) FROM Appointments WHERE UserID IN ({placeholders}) AND Status = 'Выполнена'",
-                tuple(user_keys),
-            )
-            last_row = last_cursor.fetchone()
-            last_haircut_raw = last_row[0] if last_row and last_row[0] else None
-            if not last_haircut_raw:
-                continue
-            try:
-                last_haircut_date = datetime.date.fromisoformat(last_haircut_raw)
-            except ValueError:
-                continue
-            last_sent_raw = user_row["LastHaircutReminderSent"]
-            last_sent_date = None
-            if last_sent_raw:
-                try:
-                    last_sent_date = datetime.date.fromisoformat(last_sent_raw)
-                except ValueError:
-                    last_sent_date = None
-            if last_sent_date and last_sent_date >= last_haircut_date:
-                continue
-            if now.date() >= last_haircut_date + datetime.timedelta(days=30):
-                try:
-                    await context.bot.send_message(
-                        telegram_id,
-                        "Вы достаточно сильно обросли, предлагаем вам записаться на стрижку.",
-                    )
-                    update_cursor = conn.cursor()
-                    update_cursor.execute(
-                        "UPDATE Users SET LastHaircutReminderSent = ? WHERE TelegramID = ?",
-                        (last_haircut_raw, telegram_id),
-                    )
-                    conn.commit()
-                    logger.info(
-                        f"Отправлено ежемесячное напоминание пользователю {telegram_id}"
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Не удалось отправить ежемесячное напоминание пользователю {telegram_id}: {e}"
-                    )
-        cursor = conn.cursor()
-        # звлекаем только релевантные записи: активные и на СЕГОДНЯ
-        cursor.execute(
-            "SELECT * FROM Appointments WHERE Status = 'Активная' AND Date = ?",
-            (today_str,),
-        )
-        appts = [dict(row) for row in cursor.fetchall()]
-        for appt in appts:
-            rec_id = appt.get("id")
-            date_s = appt.get("Date")
-            time_s = appt.get("Time", "")
-            if not time_s or "-" not in time_s:
-                continue
-            start_time_str = time_s.split("-")[0].strip()
-            try:
-                dt_str = f"{date_s}T{start_time_str}"
-                appt_dt_naive = datetime.datetime.fromisoformat(dt_str)
-                appt_dt = appt_dt_naive.replace(tzinfo=ZONE)
-                delta = appt_dt - now
-            except (ValueError, TypeError) as e:
-                logger.error(f"Ошибка парсинга даты для записи {rec_id}: {e}")
-                continue
-            # Отправка напоминаний, если до записи 2 часа или меньше (и она еще не прошла)
-            if datetime.timedelta(0) <= delta <= datetime.timedelta(hours=2):
-                # Напоминание клиенту
-                if not appt.get("Reminder2hClientSent"):
-                    user_id = appt.get("UserID")
-                    client_chat_id = resolve_telegram_chat_id_for_user(user_id, cursor)
-                    if client_chat_id:
-                        try:
-                            msg = (
-                                f"⏰ Напоминание: \nУ вас сегодня в {start_time_str} запись к барберу "
-                                f"<b>{appt.get('Barber')}</b>."
-                            )
-                            await context.bot.send_message(
-                                client_chat_id, msg, parse_mode="HTML"
-                            )
-                            # спользуем новый курсор для этого обновления, чтобы не мешать основному циклу
-                            update_cursor = conn.cursor()
-                            update_cursor.execute(
-                                "UPDATE Appointments SET Reminder2hClientSent = 1 WHERE id = ?",
-                                (rec_id,),
-                            )
-                            conn.commit()
-                            logger.info(
-                                f"Отправлено напоминание клиенту для записи {rec_id}"
-                            )
-                        except Exception as e:
-                            logger.error(
-                                f"Не удалось отправить напоминание клиенту {user_id}: {e}"
-                            )
-                # Напоминание барберу
-                if not appt.get("Reminder2hBarberSent"):
-                    barber_name = appt.get("Barber")
-                    barber_cursor = conn.cursor()
-                    barber_cursor.execute(
-                        "SELECT telegramId FROM Barbers WHERE name = ?", (barber_name,)
-                    )
-                    barber_user = barber_cursor.fetchone()
-                    barber_chat_id = (
-                        parse_chat_id(barber_user["telegramId"])
-                        if barber_user
-                        else None
-                    )
-                    if barber_chat_id:
-                        try:
-                            msg = (
-                                f"⏰ Напоминание: \nУ вас сегодня в {start_time_str} запись.\n"
-                                f"Клиент: <b>{appt.get('CustomerName')}</b>\n"
-                                f"Телефон: {appt.get('Phone')}"
-                            )
-                            await context.bot.send_message(
-                                barber_chat_id, msg, parse_mode="HTML"
-                            )
-                            # спользуем новый курсор для этого обновления
-                            update_cursor = conn.cursor()
-                            update_cursor.execute(
-                                "UPDATE Appointments SET Reminder2hBarberSent = 1 WHERE id = ?",
-                                (rec_id,),
-                            )
-                            conn.commit()
-                            logger.info(
-                                f"Отправлено напоминание барберу {barber_name} для записи {rec_id}"
-                            )
-                        except Exception as e:
-                            logger.error(
-                                f"Не удалось отправить напоминание барберу {barber_name}: {e}"
-                            )
-    except sqlite3.Error as e:
-        logger.error(f"Ошибка БД в reminder_checker_job: {e}")
-    finally:
-        if conn:
-            conn.close()
-
-# ---------- Вспомогательные функции (переписано для SQLite) ----------
+# ---------- Вспомогательные функции ----------
 
 def is_barber(user_id: int) -> bool:
     """Проверяет, является ли пользователь барбером."""
     return get_barber_by_telegram_id(user_id) is not None
 
 def count_active_appts(user_id: str) -> int:
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        user_keys = resolve_user_lookup_keys(user_id, cursor)
-        if not user_keys:
-            return 0
-        placeholders = ", ".join("?" for _ in user_keys)
-        cursor.execute(
-            f"SELECT Status FROM Appointments WHERE UserID IN ({placeholders})",
-            tuple(user_keys),
-        )
-        rows = cursor.fetchall()
-        return sum(1 for row in rows if status_is_active(row["Status"]))
+    try:
+        summary = get_bot_user_summary(user_id)
+        if summary is not None:
+            return int(summary.get("activeAppointments") or 0)
+    except BotApiError as exc:
+        logger.warning("Active appointments API error: %s", exc)
     return 0
 
 def get_last_haircut_date(user_id: str) -> str | None:
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        user_keys = resolve_user_lookup_keys(user_id, cursor)
-        if not user_keys:
-            return None
-        placeholders = ", ".join("?" for _ in user_keys)
-        cursor.execute(
-            f"SELECT MAX(Date) FROM Appointments WHERE UserID IN ({placeholders}) AND Status = 'Выполнена'",
-            tuple(user_keys),
-        )
-        result = cursor.fetchone()
-        return result[0] if result and result[0] else None
+    try:
+        summary = get_bot_user_summary(user_id)
+        if summary is not None:
+            return summary.get("lastHaircutDate") or None
+    except BotApiError as exc:
+        logger.warning("Last haircut API error: %s", exc)
     return None
 
 def count_no_shows(user_id: str) -> int:
-    with get_db_connection() as conn:
-        threshold = (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
-        cursor = conn.cursor()
-        user_keys = resolve_user_lookup_keys(user_id, cursor)
-        if not user_keys:
-            return 0
-        placeholders = ", ".join("?" for _ in user_keys)
-        cursor.execute(
-            f"SELECT COUNT(*) FROM Appointments WHERE UserID IN ({placeholders}) AND Status = 'Неявка' AND Date >= ?",
-            (*user_keys, threshold),
-        )
-        return cursor.fetchone()[0]
-    return 0
-
-def purge_old_appts():
-    with get_db_connection() as conn:
-        threshold = (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM Appointments WHERE Date < ?", (threshold,))
-        conn.commit()
-        logger.info("purge_old_appts: Старые записи удалены.")
-
-def get_working_hours(barber: str, date_str: str) -> tuple[int, int] | None:
-    """Получает рабочие часы барбера на КОНКРЕТНУЮ дату."""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        # Поиск строго по точной дате. Запасной вариант по дню недели убран.
-        cursor.execute(
-            "SELECT Week FROM Schedules WHERE Barber = ? AND Date = ?",
-            (barber, date_str),
-        )
-        row = cursor.fetchone()
-        if row and row["Week"] and row["Week"] != "0":
-            return _parse_working_hours(row["Week"])
-    # Если на конкретную дату ничего не найдено, значит барбер не работает.
-    return None
-
-def get_busy_intervals(barber: str, date_str: str) -> list[tuple[int, int]]:
-    intervals = []
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT Time, Status FROM Appointments WHERE Barber = ? AND Date = ?",
-            (barber, date_str),
-        )
-        rows = cursor.fetchall()
-        for row in rows:
-            status = row["Status"]
-            if not status_is_blocking(status):
-                continue
-            tf = (row["Time"] or "").strip()
-            if "-" in tf:
-                parsed = _parse_working_hours(tf)
-                if parsed:
-                    intervals.append(parsed)
-    return intervals
-
-def _get_working_hours_from_cursor(cursor: sqlite3.Cursor, barber: str, date_str: str) -> tuple[int, int] | None:
-    cursor.execute(
-        "SELECT Week FROM Schedules WHERE Barber = ? AND Date = ?",
-        (barber, date_str),
-    )
-    row = cursor.fetchone()
-    if row and row["Week"] and row["Week"] != "0":
-        return _parse_working_hours(row["Week"])
-    return None
-
-def _get_busy_intervals_from_cursor(cursor: sqlite3.Cursor, barber: str, date_str: str) -> list[tuple[int, int]]:
-    intervals: list[tuple[int, int]] = []
-    cursor.execute(
-        "SELECT Time, Status FROM Appointments WHERE Barber = ? AND Date = ?",
-        (barber, date_str),
-    )
-    rows = cursor.fetchall()
-    for row in rows:
-        status = row["Status"]
-        if not status_is_blocking(status):
-            continue
-        tf = (row["Time"] or "").strip()
-        if "-" in tf:
-            parsed = _parse_working_hours(tf)
-            if parsed:
-                intervals.append(parsed)
-    return intervals
-
-def _parse_working_hours(wh: str) -> tuple[int, int] | None:
-    if not wh or "-" not in wh:
-        return None
     try:
-        s, e = [p.strip() for p in wh.split("-", 1)]
-        h1, m1 = map(int, s.split(":"))
-        h2, m2 = map(int, e.split(":"))
-        return (h1 * 60 + m1, h2 * 60 + m2)
-    except Exception:
-        return None
-
-def can_fit(start_min: int, duration: int, intervals: list[tuple[int, int]]) -> bool:
-    end_min = start_min + duration
-    for b_s, b_e in intervals:
-        if start_min < b_e and end_min > b_s:
-            return False
-    return end_min <= 24 * 60
-
-def has_future_slots(barber_name: str, duration_min: int) -> bool:
-    """Проверяет, есть ли у барбера свободные окна в ближайшие дни."""
-    duration = max(int(duration_min or 0), 15)
-    now = zoned_now()
-    today = now.date()
-    min_allowed = now + datetime.timedelta(hours=get_min_lead_hours())
-    max_days = get_max_days_ahead()
-    for offset in range(max_days):
-        date_obj = today + datetime.timedelta(days=offset)
-        date_str = date_obj.isoformat()
-        working_hours = get_working_hours(barber_name, date_str)
-        if not working_hours:
-            continue
-        start_day, end_day = working_hours
-        if end_day - start_day < duration:
-            continue
-        busy = get_busy_intervals(barber_name, date_str)
-        for minute in range(start_day, end_day - duration + 1, 60):
-            slot_dt_naive = datetime.datetime.fromisoformat(
-                f"{date_str}T{minute//60:02d}:{minute%60:02d}"
-            )
-            slot_dt = slot_dt_naive.replace(tzinfo=ZONE)
-            if slot_dt >= min_allowed and can_fit(minute, duration, busy):
-                return True
-    return False
+        summary = get_bot_user_summary(user_id)
+        if summary is not None:
+            return int(summary.get("noShows") or 0)
+    except BotApiError as exc:
+        logger.warning("No-shows API error: %s", exc)
+    return 0
 
 def main_menu_kb(user_id: int):
     """Генерирует клавиатуру главного меню в зависимости от состояния пользователя."""
@@ -1100,130 +802,6 @@ def contact_kb():
         one_time_keyboard=True,
     )
 
-def find_user_by_phone(cursor: sqlite3.Cursor, phone: str):
-    cursor.execute(
-        "SELECT id, Name, Phone, HomePasswordHash, HomePasswordSalt, HomeCreatedAt, TelegramID "
-        "FROM Users WHERE Phone IS NOT NULL"
-    )
-    rows = cursor.fetchall()
-    for row in rows:
-        if normalize_phone(row["Phone"]) == phone:
-            return row
-    return None
-
-def find_user_by_telegram(cursor: sqlite3.Cursor, telegram_id: int | str):
-    identifier = normalize_telegram_id(telegram_id)
-    if not identifier:
-        return None
-    cursor.execute(
-        "SELECT id, Name, Phone, HomePasswordHash, HomePasswordSalt, HomeCreatedAt, TelegramID "
-        "FROM Users WHERE TelegramID IS NOT NULL"
-    )
-    rows = cursor.fetchall()
-    for row in rows:
-        if telegram_ids_equal(row["TelegramID"], identifier):
-            return row
-    return None
-
-def find_user_by_id(cursor: sqlite3.Cursor, user_id: str | None):
-    identifier = str(user_id or "").strip()
-    if not identifier:
-        return None
-    cursor.execute(
-        "SELECT id, Name, Phone, HomePasswordHash, HomePasswordSalt, HomeCreatedAt, TelegramID "
-        "FROM Users WHERE id = ? LIMIT 1",
-        (identifier,),
-    )
-    return cursor.fetchone()
-
-def resolve_user_lookup_keys(
-    user_ref: int | str | None, cursor: sqlite3.Cursor | None = None
-) -> list[str]:
-    def _resolve(active_cursor: sqlite3.Cursor) -> list[str]:
-        raw_identifier = str(user_ref or "").strip()
-        telegram_identifier = normalize_telegram_id(user_ref)
-        lookup_identifier = raw_identifier or telegram_identifier
-        if not lookup_identifier:
-            return []
-        keys: list[str] = []
-        row = find_user_by_id(active_cursor, lookup_identifier) or find_user_by_telegram(
-            active_cursor, telegram_identifier or lookup_identifier
-        )
-        if row and row["id"]:
-            keys.append(str(row["id"]))
-            linked_telegram_id = normalize_telegram_id(row["TelegramID"])
-            if linked_telegram_id and linked_telegram_id not in keys:
-                keys.append(linked_telegram_id)
-        if telegram_identifier and telegram_identifier not in keys:
-            keys.append(telegram_identifier)
-        if raw_identifier and raw_identifier not in keys:
-            keys.append(raw_identifier)
-        return keys
-
-    if cursor is not None:
-        return _resolve(cursor)
-    with get_db_connection() as conn:
-        if not conn:
-            return []
-        return _resolve(conn.cursor())
-
-def resolve_telegram_chat_id_for_user(
-    user_ref: int | str | None, cursor: sqlite3.Cursor | None = None
-) -> str | None:
-    def _resolve(active_cursor: sqlite3.Cursor) -> str | None:
-        raw_identifier = str(user_ref or "").strip()
-        telegram_identifier = normalize_telegram_id(user_ref)
-        row = find_user_by_id(active_cursor, raw_identifier) or find_user_by_telegram(
-            active_cursor, telegram_identifier or raw_identifier
-        )
-        if row:
-            linked_telegram_id = normalize_telegram_id(row["TelegramID"])
-            if linked_telegram_id:
-                return linked_telegram_id
-        return telegram_identifier or None
-
-    if cursor is not None:
-        return _resolve(cursor)
-    with get_db_connection() as conn:
-        if not conn:
-            return None
-        return _resolve(conn.cursor())
-
-def update_telegram_auth_request(
-    cursor: sqlite3.Cursor,
-    request_id: str,
-    status: str,
-    *,
-    telegram_id: str | None = None,
-    phone: str | None = None,
-    display_name: str | None = None,
-    user_id: str | None = None,
-    error_message: str | None = None,
-) -> None:
-    cursor.execute(
-        f"""
-        UPDATE "{TELEGRAM_AUTH_REQUESTS_TABLE}"
-        SET status = ?,
-            telegramId = COALESCE(?, telegramId),
-            phone = COALESCE(?, phone),
-            displayName = COALESCE(?, displayName),
-            userId = COALESCE(?, userId),
-            errorMessage = ?,
-            updatedAt = ?
-        WHERE id = ?
-        """,
-        (
-            status,
-            telegram_id,
-            phone,
-            display_name,
-            user_id,
-            error_message,
-            now_iso(),
-            request_id,
-        ),
-    )
-
 def clear_site_auth_state(ctx: ContextTypes.DEFAULT_TYPE) -> None:
     ctx.user_data.pop("site_auth", None)
 
@@ -1240,172 +818,52 @@ async def begin_site_login_flow(
         return MENU
     user_id = update.effective_user.id
     try:
-        with get_db_connection() as conn:
-            if not conn:
-                await update.message.reply_text("База данных недоступна. Попробуйте позже.")
-                return MENU
-            cursor = conn.cursor()
-            current_time = now_iso()
-            cursor.execute(
-                f"""
-                UPDATE "{TELEGRAM_AUTH_REQUESTS_TABLE}"
-                SET status = ?, updatedAt = ?
-                WHERE status = ? AND expiresAt <= ?
-                """,
-                (
-                    TELEGRAM_AUTH_STATUS_EXPIRED,
-                    current_time,
-                    TELEGRAM_AUTH_STATUS_PENDING,
-                    current_time,
-                ),
+        response = begin_bot_site_login(code, user_id)
+        status = str(response.get("status") or "").strip()
+        flow = str(response.get("flow") or TELEGRAM_AUTH_FLOW_LOGIN).strip() or TELEGRAM_AUTH_FLOW_LOGIN
+        request_id = str(response.get("requestId") or "").strip()
+        if status == "completed_profile_link":
+            clear_site_auth_state(ctx)
+            await update.message.reply_text(
+                "Привязка Telegram подтверждена. Возвращайтесь на сайт."
             )
-            cursor.execute(
-                f"""
-                SELECT id, code, status, flow, targetUserId, telegramId, userId, expiresAt
-                FROM "{TELEGRAM_AUTH_REQUESTS_TABLE}"
-                WHERE code = ?
-                LIMIT 1
-                """,
-                (code,),
+            return MENU
+        if status == "completed_login":
+            clear_site_auth_state(ctx)
+            await update.message.reply_text(
+                "Авторизация подтверждена. Возвращайтесь на сайт."
             )
-            row = cursor.fetchone()
-            if not row:
-                conn.commit()
-                await update.message.reply_text(
-                    "Код не найден или уже использован. Запросите новый код на сайте."
-                )
-                return MENU
-            request_id = str(row["id"])
-            status = str(row["status"] or "")
-            flow = str(row["flow"] or TELEGRAM_AUTH_FLOW_LOGIN).strip() or TELEGRAM_AUTH_FLOW_LOGIN
-            target_user_id = str(row["targetUserId"] or "").strip()
-            if status in (
-                TELEGRAM_AUTH_STATUS_COMPLETED,
-                TELEGRAM_AUTH_STATUS_FAILED,
-                TELEGRAM_AUTH_STATUS_EXPIRED,
-            ):
-                conn.commit()
-                await update.message.reply_text(
-                    "Этот код уже завершен. Запросите новый код на сайте."
-                )
-                return MENU
-            expires_at = str(row["expiresAt"] or "")
-            if expires_at and expires_at <= current_time:
-                update_telegram_auth_request(
-                    cursor,
-                    request_id,
-                    TELEGRAM_AUTH_STATUS_EXPIRED,
-                    error_message="Код авторизации истек.",
-                )
-                conn.commit()
-                await update.message.reply_text(
-                    "Код истек. Нажмите Telegram-вход на сайте еще раз."
-                )
-                return MENU
-            request_telegram_id = str(row["telegramId"] or "").strip()
-            if request_telegram_id and request_telegram_id != str(user_id):
-                conn.commit()
-                await update.message.reply_text(
-                    "Этот код уже привязан к другому Telegram аккаунту."
-                )
-                return MENU
-            update_telegram_auth_request(
-                cursor,
-                request_id,
-                TELEGRAM_AUTH_STATUS_PENDING,
-                telegram_id=str(user_id),
-                error_message=None,
+            return MENU
+        if status == "need_contact" and request_id:
+            ctx.user_data["site_auth"] = {
+                "request_id": request_id,
+                "code": code,
+                "flow": flow,
+            }
+            await update.message.reply_text(
+                "Поделитесь контактом через кнопку ниже для подтверждения номера.",
+                reply_markup=contact_kb(),
             )
-            if flow == TELEGRAM_AUTH_FLOW_PROFILE_LINK:
-                if not target_user_id:
-                    update_telegram_auth_request(
-                        cursor,
-                        request_id,
-                        TELEGRAM_AUTH_STATUS_FAILED,
-                        telegram_id=str(user_id),
-                        error_message="Запрос привязки Telegram не содержит targetUserId.",
-                    )
-                    conn.commit()
-                    clear_site_auth_state(ctx)
-                    await update.message.reply_text(
-                        "Запрос привязки поврежден. Начните привязку снова на сайте."
-                    )
-                    return MENU
-                linked = find_user_by_telegram(cursor, user_id)
-                linked_id = str(linked["id"]) if linked else ""
-                if linked and linked_id != target_user_id:
-                    update_telegram_auth_request(
-                        cursor,
-                        request_id,
-                        TELEGRAM_AUTH_STATUS_FAILED,
-                        telegram_id=str(user_id),
-                        user_id=linked_id,
-                        error_message="Этот Telegram уже привязан к другому аккаунту.",
-                    )
-                    conn.commit()
-                    clear_site_auth_state(ctx)
-                    await update.message.reply_text(
-                        "Этот Telegram уже привязан к другому аккаунту."
-                    )
-                    return MENU
-                display_name = ((linked["Name"] if linked else "") or "").strip() or None
-                update_telegram_auth_request(
-                    cursor,
-                    request_id,
-                    TELEGRAM_AUTH_STATUS_COMPLETED,
-                    telegram_id=str(user_id),
-                    display_name=display_name,
-                    user_id=target_user_id,
-                    error_message=None,
-                )
-                conn.commit()
-                clear_site_auth_state(ctx)
-                await update.message.reply_text(
-                    "Привязка Telegram подтверждена. Возвращайтесь на сайт."
-                )
-                return MENU
-            linked = find_user_by_telegram(cursor, user_id)
-            linked_phone = normalize_phone(linked["Phone"]) if linked else ""
-            if linked and linked_phone:
-                display_name = (linked["Name"] or "").strip() or linked_phone
-                update_telegram_auth_request(
-                    cursor,
-                    request_id,
-                    TELEGRAM_AUTH_STATUS_COMPLETED,
-                    telegram_id=str(user_id),
-                    phone=linked_phone,
-                    display_name=display_name,
-                    user_id=str(linked["id"]),
-                    error_message=None,
-                )
-                conn.commit()
-                clear_site_auth_state(ctx)
-                await update.message.reply_text("Авторизация подтверждена. Возвращайтесь на сайт.")
-                return MENU
-            if linked:
-                update_telegram_auth_request(
-                    cursor,
-                    request_id,
-                    TELEGRAM_AUTH_STATUS_PENDING,
-                    telegram_id=str(user_id),
-                    user_id=str(linked["id"]),
-                    display_name=(linked["Name"] or "").strip() or None,
-                    error_message=None,
-                )
-            conn.commit()
-        ctx.user_data["site_auth"] = {
-            "request_id": request_id,
-            "code": code,
-            "flow": flow,
+            return SITE_AUTH_PHONE
+        logger.warning("Unexpected bot site login response: %s", response)
+    except BotApiError as exc:
+        handled_codes = {
+            "INVALID_CODE": "Неверный код. Запросите вход на сайте и отправьте /site_login <код>.",
+            "REQUEST_NOT_FOUND": "Код не найден или уже использован. Запросите новый код на сайте.",
+            "REQUEST_NOT_ACTIVE": "Этот код уже завершён. Запросите новый код на сайте.",
+            "REQUEST_EXPIRED": "Код истек. Нажмите Telegram-вход на сайте ещё раз.",
+            "TELEGRAM_MISMATCH": "Этот код уже привязан к другому Telegram аккаунту.",
+            "REQUEST_CORRUPT": "Запрос привязки поврежден. Начните привязку снова на сайте.",
+            "TELEGRAM_ALREADY_LINKED": "Этот Telegram уже привязан к другому аккаунту.",
         }
-        await update.message.reply_text(
-            "Поделитесь контактом через кнопку ниже для подтверждения номера.",
-            reply_markup=contact_kb(),
-        )
-        return SITE_AUTH_PHONE
-    except Exception as exc:
-        logger.exception("Ошибка запуска site login: %s", exc)
-        await update.message.reply_text("Не удалось запустить вход. Попробуйте позже.")
+        message = handled_codes.get(exc.code)
+        if message:
+            clear_site_auth_state(ctx)
+            await update.message.reply_text(message)
+            return MENU
+        logger.warning("Site login API error: %s", exc)
+        clear_site_auth_state(ctx)
+        await update.message.reply_text("Сервис временно недоступен. Попробуйте позже.")
         return MENU
 
 async def site_login_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -1427,7 +885,7 @@ async def site_auth_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return MENU
     if not update.message.contact:
-        await update.message.reply_text("Используйте кнопку «Поделиться контактом».")
+        await update.message.reply_text('Используйте кнопку "Поделиться контактом".')
         return SITE_AUTH_PHONE
     contact = update.message.contact
     contact_user_id = contact.user_id
@@ -1442,98 +900,30 @@ async def site_auth_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
     try:
-        with get_db_connection() as conn:
-            if not conn:
-                await update.message.reply_text("База данных недоступна. Попробуйте позже.")
-                return SITE_AUTH_PHONE
-            cursor = conn.cursor()
-            current_time = now_iso()
-            cursor.execute(
-                f"""
-                SELECT id, status, flow, targetUserId, telegramId, expiresAt
-                FROM "{TELEGRAM_AUTH_REQUESTS_TABLE}"
-                WHERE id = ?
-                LIMIT 1
-                """,
-                (request_id,),
-            )
-            request_row = cursor.fetchone()
-            if not request_row:
+        complete_bot_site_login_phone(request_id, user_id, safe_phone)
+        clear_site_auth_state(ctx)
+        await update.message.reply_text(
+            "Контакт подтвержден. Вернитесь на сайт, чтобы завершить вход.",
+            reply_markup=main_menu_kb(user_id),
+        )
+        return MENU
+    except BotApiError as exc:
+        handled_codes = {
+            "REQUEST_NOT_FOUND": ("Сессия входа не найдена. Запросите новый код.", MENU),
+            "REQUEST_FLOW_MISMATCH": ("Этот код не требует отправки контакта. Вернитесь на сайт.", MENU),
+            "TELEGRAM_MISMATCH": ("Этот код уже использует другой Telegram аккаунт.", MENU),
+            "REQUEST_NOT_ACTIVE": ("Код уже неактивен. Запросите новый на сайте.", MENU),
+            "REQUEST_EXPIRED": ("Код истек. Запросите новый в форме входа.", MENU),
+            "INVALID_PHONE": ("Неверный номер. Пример: +79991234567.", SITE_AUTH_PHONE),
+        }
+        handled = handled_codes.get(exc.code)
+        if handled:
+            if handled[1] == MENU:
                 clear_site_auth_state(ctx)
-                await update.message.reply_text("Сессия входа не найдена. Запросите новый код.")
-                return MENU
-            request_status = str(request_row["status"] or "")
-            request_flow = str(request_row["flow"] or TELEGRAM_AUTH_FLOW_LOGIN).strip() or TELEGRAM_AUTH_FLOW_LOGIN
-            expires_at = str(request_row["expiresAt"] or "")
-            request_telegram_id = str(request_row["telegramId"] or "").strip()
-            if request_flow != TELEGRAM_AUTH_FLOW_LOGIN:
-                clear_site_auth_state(ctx)
-                await update.message.reply_text(
-                    "Этот код не требует отправки контакта. Вернитесь на сайт."
-                )
-                return MENU
-            if request_telegram_id and request_telegram_id != str(user_id):
-                clear_site_auth_state(ctx)
-                await update.message.reply_text("Этот код уже использует другой Telegram аккаунт.")
-                return MENU
-            if request_status in (
-                TELEGRAM_AUTH_STATUS_COMPLETED,
-                TELEGRAM_AUTH_STATUS_FAILED,
-                TELEGRAM_AUTH_STATUS_EXPIRED,
-            ):
-                clear_site_auth_state(ctx)
-                await update.message.reply_text("Код уже неактивен. Запросите новый на сайте.")
-                return MENU
-            if expires_at and expires_at <= current_time:
-                update_telegram_auth_request(
-                    cursor,
-                    request_id,
-                    TELEGRAM_AUTH_STATUS_EXPIRED,
-                    error_message="Код авторизации истек.",
-                )
-                conn.commit()
-                clear_site_auth_state(ctx)
-                await update.message.reply_text("Код истек. Запросите новый в форме входа.")
-                return MENU
-
-            linked = find_user_by_telegram(cursor, user_id)
-            existing = linked or find_user_by_phone(cursor, safe_phone)
-            existing_id = str(existing["id"]) if existing else ""
-            display_name = ((existing["Name"] if existing else "") or "").strip() or safe_phone
-            if existing:
-                cursor.execute(
-                    "UPDATE Users SET TelegramID = NULL WHERE TelegramID = ? AND id <> ?",
-                    (str(user_id), existing_id),
-                )
-                cursor.execute(
-                    """
-                    UPDATE Users
-                    SET TelegramID = ?,
-                        Phone = ?
-                    WHERE id = ?
-                    """,
-                    (str(user_id), safe_phone, existing_id),
-                )
-            update_telegram_auth_request(
-                cursor,
-                request_id,
-                TELEGRAM_AUTH_STATUS_COMPLETED,
-                telegram_id=str(user_id),
-                phone=safe_phone,
-                display_name=display_name if existing else None,
-                user_id=existing_id or None,
-                error_message=None,
-            )
-            conn.commit()
-            clear_site_auth_state(ctx)
-            await update.message.reply_text(
-                "Контакт подтвержден. Вернитесь на сайт, чтобы завершить вход.",
-                reply_markup=main_menu_kb(user_id),
-            )
-            return MENU
-    except Exception as exc:
-        logger.exception("Ошибка обработки телефона для site login: %s", exc)
-        await update.message.reply_text("Не удалось обработать номер. Попробуйте позже.")
+            await update.message.reply_text(handled[0])
+            return handled[1]
+        logger.warning("Site auth phone API error: %s", exc)
+        await update.message.reply_text("Сервис временно недоступен. Попробуйте позже.")
         return SITE_AUTH_PHONE
 
 # ---------- Обработчики ----------
@@ -1547,11 +937,13 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     registered = False
     settings = load_bot_settings()
     description = settings.get("botDescription") or "Добро пожаловать в BrotherShop!"
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM Users WHERE TelegramID = ?", (user_id,))
-        if cursor.fetchone():
-            registered = True
+    try:
+        summary = get_bot_user_summary(user_id)
+        registered = bool(summary and summary.get("user"))
+    except BotApiError as exc:
+        logger.exception("User summary API error in start: %s", exc)
+        await update.message.reply_text("Сервис временно недоступен. Попробуйте позже.")
+        return MENU
     caption = (
         description if registered else f"{description}\n\nСначала отправьте свои Фамилию и Имя."
     )
@@ -1597,29 +989,12 @@ async def reg_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     name = ctx.user_data.get("name")
     normalized_phone = normalize_phone(phone)
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        existing = find_user_by_telegram(cursor, user_id)
-        phone_owner = find_user_by_phone(cursor, normalized_phone)
-        if existing:
-            cursor.execute(
-                "UPDATE Users SET Name = ?, Phone = ? WHERE id = ?",
-                (name, phone, existing["id"]),
-            )
-        elif phone_owner and (
-            not phone_owner["TelegramID"]
-            or telegram_ids_equal(phone_owner["TelegramID"], user_id)
-        ):
-            cursor.execute(
-                "UPDATE Users SET TelegramID = ?, Name = ?, Phone = ? WHERE id = ?",
-                (user_id, name, phone, phone_owner["id"]),
-            )
-        else:
-            cursor.execute(
-                "INSERT INTO Users (id, TelegramID, Name, Phone) VALUES (?, ?, ?, ?)",
-                (str(uuid.uuid4()), user_id, name, phone),
-            )
-        conn.commit()
+    try:
+        register_bot_user(user_id, name or "", phone)
+    except BotApiError as exc:
+        logger.exception("User register API error in reg_phone: %s", exc)
+        await update.message.reply_text("Не удалось сохранить контакт. Попробуйте позже.")
+        return REG_PHONE
     chat_id, msg_id = ctx.user_data["bot_msg"]
     await safe_upsert_menu(
         ctx,
@@ -1640,13 +1015,22 @@ async def reg_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def show_profile(
     ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, msg_id: int, user_id: int
 ):
+    summary = None
     user_data = None
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT Name, Phone FROM Users WHERE TelegramID = ?", (user_id,))
-        rec = cursor.fetchone()
-        if rec:
-            user_data = dict(rec)
+    try:
+        summary = get_bot_user_summary(user_id, force=True)
+        user_data = (summary or {}).get("user")
+    except BotApiError as exc:
+        logger.exception("User summary API error in show_profile: %s", exc)
+        await safe_upsert_menu(
+            ctx,
+            chat_id,
+            msg_id,
+            IMAGE_BYTES,
+            "Сервис временно недоступен. Попробуйте позже.",
+            main_menu_kb(user_id),
+        )
+        return
     if not user_data:
         await safe_upsert_menu(
             ctx,
@@ -1657,9 +1041,20 @@ async def show_profile(
             main_menu_kb(user_id),
         )
         return
-    last = get_last_haircut_date(str(user_id)) or "—"
-    active = count_active_appts(str(user_id))
-    warns = count_no_shows(str(user_id))
+    last = (
+        ((summary or {}).get("lastHaircutDate") if summary else None)
+        or "—"
+    )
+    active = (
+        int((summary or {}).get("activeAppointments") or 0)
+        if summary
+        else 0
+    )
+    warns = (
+        int((summary or {}).get("noShows") or 0)
+        if summary
+        else 0
+    )
     text = (
         f"<b>👤 Профиль</b>\n\n"
         f"<b>Имя:</b> {user_data.get('Name','—')}\n"
@@ -1804,98 +1199,83 @@ async def show_records(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     chat_id, msg_id = query.message.chat_id, query.message.message_id
     barber_record = get_barber_by_telegram_id(user_id)
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        # Сценарий для БАРБЕРА
+    try:
+        recs = list_bot_appointments(
+            user_id,
+            mode="barber" if barber_record else "client",
+            active_only=True,
+        )
+    except BotApiError as exc:
+        logger.warning("Appointments API error in show_records: %s", exc)
+        await safe_upsert_menu(
+            ctx,
+            chat_id,
+            msg_id,
+            IMAGE_BYTES,
+            "Сервис записей временно недоступен. Попробуйте позже.",
+            main_menu_kb(user_id),
+        )
+        return MENU
+    if not recs:
+        await safe_upsert_menu(
+            ctx,
+            chat_id,
+            msg_id,
+            IMAGE_BYTES,
+            "У вас нет предстоящих записей." if barber_record else "У вас нет активных записей.",
+            main_menu_kb(user_id),
+        )
+        return MENU
+    text = (
+        f"<b>Записи для барбера {barber_record.get('name')}:</b>\n"
+        if barber_record
+        else "<b>Ваши активные записи:</b>\n"
+    )
+    kb = []
+    for i, rec in enumerate(recs, 1):
         if barber_record:
-            barber_name = barber_record.get("name")
-            cursor.execute(
-                "SELECT * FROM Appointments WHERE Barber = ? AND Status = 'Активная' ORDER BY Date, Time",
-                (barber_name,),
+            text += (
+                f"\n{i}. <b>{rec['Date']} {rec['Time']}</b>\n"
+                f"   Клиент: {rec.get('CustomerName', 'не указан')}\n"
+                f"   Телефон: {rec.get('Phone', 'не указан')}\n"
+                f"   Услуги: {rec.get('Services', 'не указаны')}\n"
             )
-            recs = cursor.fetchall()
-            if not recs:
-                await safe_upsert_menu(
-                    ctx,
-                    chat_id,
-                    msg_id,
-                    IMAGE_BYTES,
-                    "У вас нет предстоящих записей.",
-                    main_menu_kb(user_id),
-                )
-                return MENU
-            text = f"<b>Записи для барбера {barber_name}:</b>\n"
-            kb = []
-            for i, r in enumerate(recs, 1):
-                f = dict(r)
-                text += (
-                    f"\n{i}. <b>{f['Date']} {f['Time']}</b>\n"
-                    f"   Клиент: {f.get('CustomerName', 'не указан')}\n"
-                    f"   Телефон: {f.get('Phone', 'не указан')}\n"
-                    f"   Услуги: {f.get('Services', 'не указаны')}\n"
-                )
-                kb.append([
-                    InlineKeyboardButton(
-                        f"❌ Отменить запись №{i}",
-                        callback_data=f"cancel|{f['id']}",
-                    )
-                ])
-            kb.append([InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")])
-            await safe_upsert_menu(
-                ctx, chat_id, msg_id, IMAGE_BYTES, text, InlineKeyboardMarkup(kb)
-            )
-            return SHOW_RECORDS
-        # Сценарий для КЛЕНТА (существующая логика)
         else:
-            user_keys = resolve_user_lookup_keys(user_id, cursor)
-            if not user_keys:
-                recs = []
-            else:
-                placeholders = ", ".join("?" for _ in user_keys)
-                cursor.execute(
-                    f"SELECT * FROM Appointments WHERE UserID IN ({placeholders}) AND Status = 'Активная' ORDER BY Date, Time",
-                    tuple(user_keys),
-                )
-                recs = cursor.fetchall()
-            if not recs:
-                await safe_upsert_menu(
-                    ctx,
-                    chat_id,
-                    msg_id,
-                    IMAGE_BYTES,
-                    "У вас нет активных записей.",
-                    main_menu_kb(user_id),
-                )
-                return MENU
-            text = "<b>Ваши активные записи:</b>\n"
-            kb = []
-            for i, r in enumerate(recs, 1):
-                f = dict(r)
-                text += f"\n{i}. {f['Date']} {f['Time']} к <b>{f['Barber']}</b>\n  Услуги: {f.get('Services', 'не указаны')}"
-                kb.append(
-                    [
-                        InlineKeyboardButton(
-                            f"❌ Отменить запись №{i}",
-                            callback_data=f"cancel|{f['id']}",
-                        )
-                    ]
-                )
-            kb.append(
-                [InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")]
+            text += (
+                f"\n{i}. {rec['Date']} {rec['Time']} к <b>{rec['Barber']}</b>\n"
+                f"   Услуги: {rec.get('Services', 'не указаны')}"
             )
-            await safe_upsert_menu(
-                ctx, chat_id, msg_id, IMAGE_BYTES, text, InlineKeyboardMarkup(kb)
-            )
-            return SHOW_RECORDS
+        kb.append(
+            [
+                InlineKeyboardButton(
+                    f"❌ Отменить запись №{i}",
+                    callback_data=f"cancel|{rec['id']}",
+                )
+            ]
+        )
+    kb.append([InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")])
+    await safe_upsert_menu(
+        ctx, chat_id, msg_id, IMAGE_BYTES, text, InlineKeyboardMarkup(kb)
+    )
+    return SHOW_RECORDS
 
 async def cancel_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     rec_id = query.data.split("|", 1)[1]
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Appointments WHERE id = ?", (rec_id,))
-        rec = cursor.fetchone()
+    try:
+        rec = get_bot_appointment(rec_id)
+    except BotApiError as exc:
+        logger.warning("Appointment read API error in cancel_cb: %s", exc)
+        await safe_upsert_menu(
+            ctx,
+            query.message.chat_id,
+            query.message.message_id,
+            IMAGE_BYTES,
+            "Сервис записей временно недоступен. Попробуйте позже.",
+            main_menu_kb(query.from_user.id),
+        )
+        return MENU
     if not rec:
         await query.answer("Запись не найдена.", show_alert=True)
         return SHOW_RECORDS
@@ -1936,36 +1316,34 @@ async def cancel_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     _, rec_id, choice = query.data.split("|")
     chat_id, msg_id = query.message.chat_id, query.message.message_id
     if choice == "yes":
-        deny_text = "Запись нельзя отменить менее чем за 2 часа до времени приема."
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM Appointments WHERE id = ?", (rec_id,))
-            rec = cursor.fetchone()
-            if not rec:
-                res_text = "Запись не найдена."
-            else:
-                appt_start = parse_appointment_start(rec["Date"], rec["Time"])
-                now = datetime.datetime.now(tz=ZONE)
-                if appt_start and appt_start - now < datetime.timedelta(hours=2):
-                    await query.answer(deny_text, show_alert=True)
-                    await safe_upsert_menu(
-                        ctx,
-                        chat_id,
-                        msg_id,
-                        IMAGE_BYTES,
-                        deny_text,
-                        main_menu_kb(query.from_user.id),
-                    )
-                    return MENU
-                cursor.execute(
-                    "UPDATE Appointments SET Status = 'Отмена' WHERE id = ?",
-                    (rec_id,),
+        try:
+            cancel_bot_appointment(rec_id)
+        except BotApiError as exc:
+            if exc.code == "TOO_LATE_TO_CANCEL":
+                deny_text = "Запись нельзя отменить менее чем за 2 часа до времени приема."
+                await query.answer(deny_text, show_alert=True)
+                await safe_upsert_menu(
+                    ctx,
+                    chat_id,
+                    msg_id,
+                    IMAGE_BYTES,
+                    deny_text,
+                    main_menu_kb(query.from_user.id),
                 )
-                if cursor.rowcount:
-                    conn.commit()
-                    res_text = "Готово: запись отменена."
-                else:
-                    res_text = "Запись уже отменена или не найдена."
+                return MENU
+            if exc.status == 404:
+                res_text = "Запись не найдена."
+                await safe_upsert_menu(
+                    ctx, chat_id, msg_id, IMAGE_BYTES, res_text, main_menu_kb(query.from_user.id)
+                )
+                return MENU
+            logger.warning("Appointment cancel API error in cancel_confirm_cb: %s", exc)
+            res_text = "Сервис записей временно недоступен. Попробуйте позже."
+            await safe_upsert_menu(
+                ctx, chat_id, msg_id, IMAGE_BYTES, res_text, main_menu_kb(query.from_user.id)
+            )
+            return MENU
+        res_text = "Готово: запись отменена."
     else:
         res_text = "Отмена отменена."
     await safe_upsert_menu(
@@ -2001,13 +1379,12 @@ async def change_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if len(new_name.split()) < 2:
         await update.message.reply_text("Введите полное ФО (имя и фамилия).")
         return CHANGE_NAME
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE Users SET Name = ?, LastNameChanged = ? WHERE TelegramID = ?",
-            (new_name, datetime.date.today().isoformat(), update.effective_user.id),
-        )
-        conn.commit()
+    try:
+        update_bot_user_name(update.effective_user.id, new_name)
+    except BotApiError as exc:
+        logger.exception("User name API error in change_name: %s", exc)
+        await update.message.reply_text("Не удалось обновить имя. Попробуйте позже.")
+        return CHANGE_NAME
     chat_id, msg_id = ctx.user_data["bot_msg"]
     await update.message.delete()
     await show_profile(ctx, chat_id, msg_id, update.effective_user.id)
@@ -2055,13 +1432,12 @@ async def change_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not PHONE_PATTERN.match(phone):
         await update.message.reply_text("Неверный формат, например +71234567890.")
         return CHANGE_PHONE
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE Users SET Phone = ? WHERE TelegramID = ?",
-            (phone, update.effective_user.id),
-        )
-        conn.commit()
+    try:
+        update_bot_user_phone(update.effective_user.id, phone)
+    except BotApiError as exc:
+        logger.exception("User phone API error in change_phone: %s", exc)
+        await update.message.reply_text("Не удалось обновить номер. Попробуйте позже.")
+        return CHANGE_PHONE
     chat_id = update.effective_chat.id
     await update.message.delete()
     if "last_prompt" in ctx.user_data:
@@ -2100,7 +1476,7 @@ def build_services_view(ctx) -> tuple[str, InlineKeyboardMarkup]:
     buttons: list[list[InlineKeyboardButton]] = []
     total_min = 0
     for svc in services:
-        price = svc["prices"].get(barber_name, 0)
+        price = get_service_price_for_barber(svc, barber)
         if price in (None, 0):
             continue
         name = svc["name"]
@@ -2161,7 +1537,7 @@ async def book_barber_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data.pop("date", None)
     ctx.user_data.pop("time_range", None)
     available_services = [
-        svc for svc in services if (svc["prices"].get(selected["name"]) or 0) > 0
+        svc for svc in services if get_service_price_for_barber(svc, selected) > 0
     ]
     if not available_services:
         chat_id, msg_id = ctx.user_data.get(
@@ -2184,11 +1560,16 @@ async def book_barber_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if int(svc.get("duration") or 0) > 0
     ]
     min_duration = min(durations, default=0) or 30
-    if not has_future_slots(selected["name"], min_duration):
-        await query.answer(
-            f"⚠️ У барбера {selected['name']} нет свободных слотов в ближайшие дни.",
-            show_alert=True,
-        )
+    try:
+        if not get_bot_available_dates(selected["name"], min_duration):
+            await query.answer(
+                f"⚠️ У барбера {selected['name']} нет свободных слотов в ближайшие дни.",
+                show_alert=True,
+            )
+            return BOOK_BARBER
+    except BotApiError as exc:
+        logger.exception("Availability API error in book_barber_cb: %s", exc)
+        await query.answer("Не удалось проверить доступность. Попробуйте позже.", show_alert=True)
         return BOOK_BARBER
     ctx.user_data["barber"] = selected
     caption, markup = build_services_view(ctx)
@@ -2256,26 +1637,12 @@ async def show_available_dates(query, ctx) -> int:
     today = now.date()
     min_allowed = now + datetime.timedelta(hours=get_min_lead_hours())
     max_days = get_max_days_ahead()
-    available_dates: list[str] = []
-    for offset in range(max_days):
-        date_obj = today + datetime.timedelta(days=offset)
-        date_str = date_obj.isoformat()
-        working_hours = get_working_hours(barber["name"], date_str)
-        if not working_hours:
-            continue
-        start_day, end_day = working_hours
-        busy = get_busy_intervals(barber["name"], date_str)
-        has_slot = False
-        for minute in range(start_day, end_day - total_min + 1, 60):
-            slot_dt_naive = datetime.datetime.fromisoformat(
-                f"{date_str}T{minute//60:02d}:{minute%60:02d}"
-            )
-            slot_dt = slot_dt_naive.replace(tzinfo=ZONE)
-            if slot_dt >= min_allowed and can_fit(minute, total_min, busy):
-                has_slot = True
-                break
-        if has_slot:
-            available_dates.append(date_str)
+    try:
+        available_dates = get_bot_available_dates(barber["name"], total_min)
+    except BotApiError as exc:
+        logger.exception("Availability dates API error in show_available_dates: %s", exc)
+        await query.answer("Не удалось загрузить доступные даты. Попробуйте позже.", show_alert=True)
+        return SELECT_SERVICES
     if not available_dates:
         await query.answer()
         chat_id, msg_id = ctx.user_data.get(
@@ -2325,23 +1692,21 @@ async def show_available_times(query, ctx) -> int:
     if not total or not date or not barber:
         await query.answer("Сначала выберите дату и услуги.", show_alert=True)
         return BOOK_DATE
-    working_hours = get_working_hours(barber["name"], date)
-    if not working_hours:
-        await query.answer("На эту дату нет расписания.", show_alert=True)
-        return BOOK_DATE
-    start_day, end_day = working_hours
-    busy = get_busy_intervals(barber["name"], date)
     buttons: list[InlineKeyboardButton] = []
-    now = zoned_now()
-    min_allowed = now + datetime.timedelta(hours=get_min_lead_hours())
-    for minute in range(start_day, end_day - total + 1, 60):
-        slot_dt_naive = datetime.datetime.fromisoformat(
-            f"{date}T{minute//60:02d}:{minute%60:02d}"
-        )
-        slot_dt = slot_dt_naive.replace(tzinfo=ZONE)
-        if slot_dt >= min_allowed and can_fit(minute, total, busy):
-            t = f"{minute//60:02d}:{minute%60:02d}"
-            buttons.append(InlineKeyboardButton(t, callback_data=f"book_time|{t}"))
+    try:
+        time_slots = get_bot_available_times(barber["name"], date, total)
+        for slot in time_slots:
+            start_value = str(slot.get("start") or "").strip()
+            if start_value:
+                buttons.append(
+                    InlineKeyboardButton(
+                        start_value, callback_data=f"book_time|{start_value}"
+                    )
+                )
+    except BotApiError as exc:
+        logger.exception("Availability times API error in show_available_times: %s", exc)
+        await query.answer("Не удалось загрузить доступное время. Попробуйте позже.", show_alert=True)
+        return BOOK_DATE
     if not buttons:
         await query.answer("Нет свободных окон на выбранный день.", show_alert=True)
         return BOOK_DATE
@@ -2467,105 +1832,48 @@ async def book_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         redirect_target: str | None = None  # "times" | "dates"
         redirect_alert: str | None = None
         fatal_caption: str | None = None
-        with get_db_connection() as conn:
-            conn.execute("PRAGMA busy_timeout = 5000")
-            cursor = conn.cursor()
+        try:
             if "name" not in ctx.user_data or "phone" not in ctx.user_data:
-                cursor.execute(
-                    "SELECT Name, Phone FROM Users WHERE TelegramID = ?", (user_id,)
-                )
-                user_rec = cursor.fetchone()
-                if user_rec:
-                    ctx.user_data["name"] = user_rec["Name"]
-                    ctx.user_data["phone"] = user_rec["Phone"]
-                else:
-                    fatal_caption = "Ошибка: ваш профиль не найден. Пожалуйста, пройдите регистрацию командой /start."
-
-            if not fatal_caption:
-                try:
-                    conn.execute("BEGIN IMMEDIATE")
-                    parsed_range = _parse_working_hours(time_range)
-                    if not parsed_range:
-                        redirect_target = "times"
-                        redirect_alert = "Не удалось распознать выбранное время. Пожалуйста, выберите слот заново."
-                    else:
-                        start_min, end_min = parsed_range
-                        if end_min <= start_min:
-                            redirect_target = "times"
-                            redirect_alert = "Некорректный интервал времени. Пожалуйста, выберите слот заново."
-                        else:
-                            start_label = (
-                                time_range.split(" - ")[0].strip()
-                                if " - " in time_range
-                                else time_range.split("-")[0].strip()
-                            )
-                            try:
-                                dt_start_naive = datetime.datetime.fromisoformat(
-                                    f"{appointment_date}T{start_label}"
-                                )
-                                dt_start = dt_start_naive.replace(tzinfo=ZONE)
-                            except Exception:
-                                dt_start = None
-                            min_allowed = datetime.datetime.now(tz=ZONE) + datetime.timedelta(
-                                hours=get_min_lead_hours()
-                            )
-                            if not dt_start or dt_start < min_allowed:
-                                redirect_target = "times"
-                                redirect_alert = "Это время уже недоступно (слишком близко или прошло). Выберите другое."
-                            else:
-                                working_hours = _get_working_hours_from_cursor(cursor, barber_name, appointment_date)
-                                if not working_hours:
-                                    redirect_target = "dates"
-                                    redirect_alert = "Барбер не работает в выбранную дату. Выберите другую дату."
-                                else:
-                                    day_start, day_end = working_hours
-                                    if start_min < day_start or end_min > day_end:
-                                        redirect_target = "times"
-                                        redirect_alert = "Выбранное время больше не входит в рабочие часы. Выберите другое время."
-                                    else:
-                                        busy = _get_busy_intervals_from_cursor(cursor, barber_name, appointment_date)
-                                        duration = end_min - start_min
-                                        if not can_fit(start_min, duration, busy):
-                                            redirect_target = "times"
-                                            redirect_alert = "К сожалению, это время уже занято. Выберите другое время."
-
-                    if redirect_target:
-                        conn.rollback()
-                    else:
-                        user_storage_id = get_user_record_id_by_telegram(user_id) or str(user_id)
-                        record_tuple = (
-                            new_id,
-                            user_storage_id,
-                            ctx.user_data.get("name"),
-                            ctx.user_data.get("phone"),
-                            barber_name,
-                            appointment_date,
-                            time_range,
-                            "Активная",
-                            services_str,
-                            False,
-                            False,
-                        )
-                        cursor.execute(
-                            "INSERT INTO Appointments (id, UserID, CustomerName, Phone, Barber, Date, Time, Status, Services, Reminder2hClientSent, Reminder2hBarberSent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            record_tuple,
-                        )
-                        conn.commit()
-                        if not barber_chat_id:
-                            barber_cursor = conn.cursor()
-                            barber_cursor.execute(
-                                "SELECT telegramId FROM Barbers WHERE name = ?", (barber_name,)
-                            )
-                            barber_record = barber_cursor.fetchone()
-                            if barber_record:
-                                barber_chat_id = parse_chat_id(barber_record["telegramId"])
-                except sqlite3.Error as exc:
-                    logger.warning("Booking confirm failed: %s", exc)
-                    try:
-                        conn.rollback()
-                    except sqlite3.Error:
-                        pass
-                    fatal_caption = "Не удалось оформить запись. Попробуйте еще раз."
+                summary = get_bot_user_summary(user_id, force=True) or {}
+                user_row = summary.get("user") or {}
+                if user_row:
+                    ctx.user_data["name"] = user_row.get("Name") or ctx.user_data.get("name")
+                    ctx.user_data["phone"] = user_row.get("Phone") or ctx.user_data.get("phone")
+            api_payload = {
+                "telegramId": str(user_id),
+                "barberName": barber_name,
+                "date": appointment_date,
+                "timeRange": time_range,
+                "services": services_str,
+                "customerName": ctx.user_data.get("name"),
+                "phone": ctx.user_data.get("phone"),
+            }
+            api_result = create_bot_appointment(api_payload)
+            created_appointment = api_result.get("appointment") or {}
+            barber_payload = api_result.get("barber") or {}
+            if barber_payload.get("telegramId"):
+                barber_chat_id = parse_chat_id(barber_payload.get("telegramId"))
+            if not barber_chat_id:
+                barber_chat_id = get_barber_chat_id_by_name(barber_name)
+            new_id = str(created_appointment.get("id") or new_id)
+            await query.answer()
+            res = "✅ Запись успешно оформлена!\nМы напомним за 2 часа до начала."
+            await safe_upsert_menu(
+                ctx, chat_id, msg_id, IMAGE_BYTES, res, main_menu_kb(query.from_user.id)
+            )
+            return MENU
+        except BotApiError as exc:
+            if exc.code == "NO_SCHEDULE":
+                redirect_target = "dates"
+                redirect_alert = "Выберите другую дату."
+            elif exc.code in {"LEAD_TIME", "OUTSIDE_WORKING_HOURS", "SLOT_TAKEN", "INVALID_TIME_RANGE"}:
+                redirect_target = "times"
+                redirect_alert = exc.payload.get("error") or "Выбранное время недоступно. Выберите другое."
+            elif exc.code == "LIMIT_REACHED":
+                fatal_caption = exc.payload.get("error") or "Достигнут лимит активных записей."
+            else:
+                logger.exception("Booking create API error: %s", exc)
+                fatal_caption = "Не удалось оформить запись. Попробуйте позже."
 
         if fatal_caption:
             await query.answer(fatal_caption, show_alert=True)
@@ -2597,14 +1905,6 @@ async def book_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 barber_notified = True
             except Exception as e:
                 logger.error(f"Не удалось уведомить барбера {barber_name}: {e}")
-        if barber_notified:
-            with get_db_connection() as conn:
-                update_cursor = conn.cursor()
-                update_cursor.execute(
-                    "UPDATE Appointments SET Reminder2hBarberSent = 1 WHERE id = ?",
-                    (new_id,),
-                )
-                conn.commit()
         res = "✅ Запись успешно оформлена!\nМы напомним за 2 часа до начала."
         await safe_upsert_menu(
             ctx, chat_id, msg_id, IMAGE_BYTES, res, main_menu_kb(query.from_user.id)
@@ -2627,18 +1927,7 @@ def main():
     persistence = PicklePersistence(filepath=BASE_DIR / "bot_persistence.pickle")
     # Передаем его в ApplicationBuilder
     app = ApplicationBuilder().token(TOKEN).persistence(persistence).build()
-    try:
-        # При запуске удаляем старые записи, которым больше 90 дней
-        purge_old_appts()
-    except Exception as e:
-        logger.exception(f"Ошибка при первичной очистке старых записей: {e}")
-    # Планируем задачу для отправки напоминаний
-    if app.job_queue:
-        # Запускаем задачу каждые 10 минут (600 секунд)
-        app.job_queue.run_repeating(
-            reminder_checker_job, interval=600, first=10, name="reminder_checker"
-        )
-        logger.info("Задача для проверки напоминаний запланирована (каждые 10 минут).")
+    logger.info("Reminder processing is delegated to server internal API.")
     conv = ConversationHandler(
         entry_points=[
             CommandHandler("start", start),

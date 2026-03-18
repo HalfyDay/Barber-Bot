@@ -1,0 +1,969 @@
+{
+  "generatedAt": "2026-03-18T06:39:29.945Z",
+  "source": {
+    "label": "local",
+    "databaseUrl": "file:.legacy/sqlite-snapshots/prisma-dev.db",
+    "sqlitePath": "D:\\Works\\Barber Bot\\.legacy\\sqlite-snapshots\\prisma-dev.db"
+  },
+  "summary": {
+    "appointmentsMissingUserReference": 75,
+    "incompleteSchedules": 16
+  },
+  "appointmentsMissingUserReference": [
+    {
+      "id": "a8b34e5a-c506-4c6d-b6b1-e956f4b0c70f",
+      "customerName": "Макар",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-19",
+      "time": "17:00 - 20:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "8d04b18d-5eb2-4dad-99f3-8539014d5247",
+      "customerName": "Савелий ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-18",
+      "time": "20:00 - 21:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "bc6097b6-fa8c-4972-9028-0deec37b9007",
+      "customerName": "Алексей ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-19",
+      "time": "21:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "e1cd15f0-fe30-47de-b973-1fd62098ee0f",
+      "customerName": "Свободно ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-22",
+      "time": "16:00 - 17:00",
+      "status": "Неявка",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "bb70c162-92e8-4733-b963-a7a639a5acdf",
+      "customerName": "Рома (",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-26",
+      "time": "20:00 - 21:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "039db845-bfca-478b-a254-dbd9646324dc",
+      "customerName": "Константин ",
+      "phone": "+79994437455",
+      "normalizedPhone": "+79994437455",
+      "barber": "Тимур🐼",
+      "date": "2025-12-27",
+      "time": "21:00 - 22:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "56bb85e8-2ccb-47d0-b6cd-ee54f8dfb379",
+      "customerName": "Лев ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-26",
+      "time": "19:00 - 20:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "7ec6a436-6fc3-41b1-a9e9-3d1d05a29cf9",
+      "customerName": "Сергей Викторович ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-27",
+      "time": "22:15 - 23:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "3003356d-3a74-4365-846e-1dd1d6e51707",
+      "customerName": "Алексей ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-29",
+      "time": "19:00 - 20:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "3f7f50d7-01ea-4ce5-9569-47e8761e2a55",
+      "customerName": "Михаил ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-27",
+      "time": "23:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "79b1f014-dfb3-49dd-a20d-cfb02ee6c9be",
+      "customerName": "Тарасов Василий ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-30",
+      "time": "18:00 - 19:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "46f8429f-2009-43b6-9c59-82f0f0276fcc",
+      "customerName": "Дмитрий ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-29",
+      "time": "14:30",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "1216e32f-8a69-46fe-a3df-a95624fee0b9",
+      "customerName": "Даниил ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-30",
+      "time": "19:00 - 20:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "bf43a580-172c-4de4-be01-07950fdbdaa7",
+      "customerName": "Гриша ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-30",
+      "time": "12:30 - 13:30",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "0bdfb92c-a636-4ae2-8bb6-44fd5e772133",
+      "customerName": "Олег Николаевич ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-30",
+      "time": "13:30 - 14:30",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "493a2350-1849-4f98-8bff-250dd56f6e79",
+      "customerName": "Занято ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-30",
+      "time": "14:30 - 17:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "39b13d60-d8aa-4100-8dca-7f45ead6952e",
+      "customerName": "Занято ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2025-12-31",
+      "time": "10:00 - 11:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "e1f22599-9c14-42ab-a395-5d0238388e8a",
+      "customerName": "Александр ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-01-05",
+      "time": "19:00 - 20:00",
+      "status": "Неявка",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "53e25680-1ee0-40b7-8706-41c48290f90b",
+      "customerName": "Папа",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-01-05",
+      "time": "13:00 - 14:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "218214f4-5857-4af4-8f4a-7bd35a8dd510",
+      "customerName": "Андрей нечаев ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-01-08",
+      "time": "12:00 - 13:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "4afdd3f1-6da5-48a9-a932-11260b8b1580",
+      "customerName": "Обучение Алины ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-01-07",
+      "time": "18:00 - 20:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "f4c90a40-aa67-4b88-8b08-7851d2994125",
+      "customerName": "Обучение Алины (рома) ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-01-08",
+      "time": "18:00 - 22:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "e0e61d8d-6f5e-4b83-af49-ffd468834fad",
+      "customerName": "Мальчик ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-01-12",
+      "time": "13:00 - 14:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "ac00465c-38fd-4793-a5bb-49d9f70fdf11",
+      "customerName": "Иван ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-01-18",
+      "time": "20:00 - 21:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "c8fa9b19-8b72-4bda-86db-6cb13e5450b7",
+      "customerName": "Дмитрий",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-01-26",
+      "time": "12:00 - 13:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "f2b12ce3-a595-4374-811d-e17ba2160e23",
+      "customerName": "Вадим Мичурин",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-02",
+      "time": "20:00 - 21:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "913c5028-556f-4d91-b9ba-acf2efa490eb",
+      "customerName": "Евгений",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-01-30",
+      "time": "13:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "54ac6661-0129-4f9c-8ef1-4aa490f53ec0",
+      "customerName": "Александр Ознобихин ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-05",
+      "time": "18:00 - 19:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "f6af1a0f-5b79-4f4d-9b7c-723b33459503",
+      "customerName": "Обучение гамлет ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-06",
+      "time": "20:00 - 21:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "62f5b2b1-1b67-4151-830f-d42734942f63",
+      "customerName": "Клиент ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-06",
+      "time": "12:00 - 13:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "90e6c6ba-bf88-45a9-8fcb-a760695bb482",
+      "customerName": "Рома ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-06",
+      "time": "21:00 - 22:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "76ee5580-659f-4446-ac58-8536f600a0ec",
+      "customerName": "Галямин Серёжа ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Алина💖",
+      "date": "2026-02-07",
+      "time": "17:00 - 18:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "42501e05-76a5-4e7b-a6b8-83b1e15aca14",
+      "customerName": "Степа ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-10",
+      "time": "16:00 - 17:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "00702968-0158-47ca-92ad-1c03dd645629",
+      "customerName": "Сергей чурилов ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-09",
+      "time": "17:30 - 18:30",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "c49e092e-6d67-4c27-b8c7-a22106341f3a",
+      "customerName": "Вадим ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-11",
+      "time": "16:00 - 17:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "9928acaa-9096-49e9-90f9-1e7afbd66f98",
+      "customerName": "Андрей ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-11",
+      "time": "19:00 - 20:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "73498fba-4557-48b7-861a-b19ca7259ba2",
+      "customerName": "Игорь",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Алина💖",
+      "date": "2026-02-14",
+      "time": "15:00 - 16:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "eddf47b6-1657-419a-bd45-912eaf130293",
+      "customerName": "Евгений ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-12",
+      "time": "15:00 - 16:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "99379df4-4a15-4d23-a0c1-ed7d183d3713",
+      "customerName": "Никита и друг, ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-14",
+      "time": "17:00 - 20:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "76664904-f74a-40d1-91bf-20436d0f1f8a",
+      "customerName": "Виталя Шадрин ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-14",
+      "time": "20:00 - 21:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "dbccf32d-2212-4bba-aeb7-668a8b3890b0",
+      "customerName": "Валерий ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Алина💖",
+      "date": "2026-02-14",
+      "time": "13:00 - 14:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "a557ad21-6c2f-4ef4-b1fe-ccc188d2bba4",
+      "customerName": "Максим ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-14",
+      "time": "20:00 - 21:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "4fbc79a3-f522-4cc9-a8a6-ce1c21b96a87",
+      "customerName": "Цирен ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Алина💖",
+      "date": "2026-02-14",
+      "time": "12:00 - 13:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "c7e2c5f5-5e92-477d-8a14-540f9b3c76ff",
+      "customerName": "Влад и друг ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-16",
+      "time": "16:00 - 18:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "c28f4f9c-12f1-4029-b2f7-8e8780a0d466",
+      "customerName": "Матвей ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-16",
+      "time": "18:00 - 19:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "396f2de9-fe19-452b-9966-680a710beb06",
+      "customerName": "Вячеслав и его брат ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Алина💖",
+      "date": "2026-02-17",
+      "time": "18:00 - 20:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "3895fbb9-f447-44d0-a473-1d77617cdff7",
+      "customerName": "Рома Куранов ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-16",
+      "time": "20:00 - 21:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "2785a50e-4319-4023-b97d-6fe68b67b341",
+      "customerName": "Клиент ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-16",
+      "time": "14:00 - 15:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "7ad887db-d442-4522-a406-bd7c2467deec",
+      "customerName": "Никита Компаниец",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-18",
+      "time": "15:00 - 16:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "b170766e-365b-4c6b-ad20-f387343ac83a",
+      "customerName": "Клиент ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-19",
+      "time": "17:00 - 18:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "ef815ed5-bdfd-4022-923d-b6c2129f649f",
+      "customerName": "Алексей ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-18",
+      "time": "16:00 - 17:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "e58067e4-c5c5-4e00-a2a9-33f367e17a46",
+      "customerName": "Артём ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-19",
+      "time": "16:00 - 17:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "579f4da4-d25b-4182-bff1-bffbd7ebce78",
+      "customerName": "Костя ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-19",
+      "time": "15:00 - 16:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "2642bb49-8786-4896-95d8-bb237671f584",
+      "customerName": "Рома ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-23",
+      "time": "19:00 - 20:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "9699807e-b647-463c-bda7-420b81412040",
+      "customerName": "Андрей Викторович Андриевский ",
+      "phone": "+79500577708",
+      "normalizedPhone": "+79500577708",
+      "barber": "Алина💖",
+      "date": "2026-02-20",
+      "time": "18:00 - 19:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "a493d575-1334-42af-9b3d-135a8b5a322c",
+      "customerName": "Яна чубатова ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-20",
+      "time": "14:00 - 15:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "840a6a6f-eb43-4a47-b180-c1771b7fc8fa",
+      "customerName": "Никита ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-23",
+      "time": "20:00 - 21:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "ccb2913a-4d11-4ea3-bd44-98523423e8b6",
+      "customerName": "Макар ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-26",
+      "time": "17:00 - 18:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "79e16e05-dbf0-499a-b871-58972b89d939",
+      "customerName": "Сивков Егор ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-27",
+      "time": "11:00 - 12:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "4e25050c-10b8-4844-beed-b8bb5ee27b3e",
+      "customerName": "Тренировка ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-02-27",
+      "time": "19:00 - 22:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "5cb1a0ed-b772-4cd6-a880-b3c2b5cda2a9",
+      "customerName": "Павел ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-05",
+      "time": "20:00 - 21:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "2341fd3b-8672-432d-bc7f-687416d7f0d0",
+      "customerName": "Миша ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-02",
+      "time": "18:00 - 19:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "300c3af9-d2bf-4fc7-aba5-0e8a67f8b163",
+      "customerName": "Влад ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-02",
+      "time": "17:00 - 18:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "05329835-a3e1-47b8-8091-237d30b04053",
+      "customerName": "Роман ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-02",
+      "time": "16:00 - 17:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "70a90718-ee15-4008-ac42-8ea7185cb8c6",
+      "customerName": "Влад полднев ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-03",
+      "time": "15:00 - 16:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "86e4a132-54d9-4556-bb0b-f143d960b545",
+      "customerName": "Клиент ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-03",
+      "time": "14:00 - 15:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "5c079fba-1cfb-4c3a-9045-667cb676dace",
+      "customerName": "Алексей",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-05",
+      "time": "19:00 - 20:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "130d6583-91d1-4342-858c-b98e9e220edd",
+      "customerName": "Алексей зверев",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-05",
+      "time": "14:00 - 15:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "0b89b471-eab7-4150-b2aa-ef604b00211a",
+      "customerName": "Никита козырев",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-05",
+      "time": "13:00 - 14:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "2e6a0223-159a-436f-ae29-ff266d8c5ca5",
+      "customerName": "Олег ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-06",
+      "time": "18:00 - 19:00",
+      "status": "Выполнена",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "17d112a0-3b59-4d39-b6ce-f2fd175f8f5b",
+      "customerName": "Симонов Александр",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-12",
+      "time": "16:00 - 17:00",
+      "status": "Активная",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "d6e92710-2899-4232-9205-746157a41d31",
+      "customerName": "Подготовка к поминкам ",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-13",
+      "time": "10:00 - 14:00",
+      "status": "Активная",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "42245685-0592-45d3-ae84-96a60b0e0488",
+      "customerName": "занято",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-12",
+      "time": "14:00 - 17:00",
+      "status": "Активная",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "5eb2b94b-2191-4c1b-b9d5-17437261ca71",
+      "customerName": "учеба",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-16",
+      "time": "16:00 - 18:00",
+      "status": "Активная",
+      "matchingUsersByPhone": []
+    },
+    {
+      "id": "79a2a277-306d-4b49-919b-b0e619b2ede6",
+      "customerName": "учеба",
+      "phone": null,
+      "normalizedPhone": null,
+      "barber": "Тимур🐼",
+      "date": "2026-03-19",
+      "time": "14:00 - 17:00",
+      "status": "Активная",
+      "matchingUsersByPhone": []
+    }
+  ],
+  "incompleteSchedules": [
+    {
+      "id": "8fadf6dd-b5c1-43c2-824e-6f460b00b430",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": null,
+      "time": null
+    },
+    {
+      "id": "0e5f0208-530b-4ba9-9ec3-af27a9942cbe",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": "17:00-22:00",
+      "time": null
+    },
+    {
+      "id": "6c911946-3c2a-4132-9013-0ef49fd1a029",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": "20:00-22:00",
+      "time": null
+    },
+    {
+      "id": "fe84464b-3c06-4683-b9a4-5aad1d7c8e85",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": "20:00-22:00",
+      "time": null
+    },
+    {
+      "id": "2d011983-35c5-48fd-8b98-db6f07c47fb8",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": "123",
+      "time": null
+    },
+    {
+      "id": "7303fc47-4fb0-4e0f-b92d-df8bb0673588",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": "0",
+      "time": null
+    },
+    {
+      "id": "9352cd60-c553-44b7-8b2b-a7af9cb512aa",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": "0",
+      "time": null
+    },
+    {
+      "id": "26acb716-72b5-4031-aa62-a1f2e5e53a90",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": null,
+      "time": null
+    },
+    {
+      "id": "93c16453-3c80-4c2f-948e-8ed00120e52b",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": "12:00 - 20:00",
+      "time": null
+    },
+    {
+      "id": "af5656c4-d74b-4a15-b1dc-7f63069b5632",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": null,
+      "time": null
+    },
+    {
+      "id": "dc2a33ea-dab3-4c4d-b287-12e7bf3007a0",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": null,
+      "time": null
+    },
+    {
+      "id": "11458523-b48a-4562-85d5-23ed35b95ffb",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": null,
+      "time": null
+    },
+    {
+      "id": "0a28474c-8f7b-4122-9d9e-6d4cb3c0fe3f",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": "20:00 - 23:00",
+      "time": null
+    },
+    {
+      "id": "1c8f5937-5506-44c0-ba0b-67ec84853cbf",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": null,
+      "time": null
+    },
+    {
+      "id": "66029ef2-e62f-450c-8ab7-9ff89dec4964",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": null,
+      "time": null
+    },
+    {
+      "id": "51def764-30da-42e4-83e5-a36b6f7738f7",
+      "barber": null,
+      "date": null,
+      "dayOfWeek": null,
+      "week": null,
+      "time": null
+    }
+  ]
+}

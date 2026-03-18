@@ -1,0 +1,78 @@
+{
+  "generatedAt": "2026-03-18T06:39:14.357Z",
+  "source": {
+    "label": "local",
+    "databaseUrl": "file:.legacy/sqlite-snapshots/prisma-dev.db",
+    "sqlitePath": "D:\\Works\\Barber Bot\\.legacy\\sqlite-snapshots\\prisma-dev.db"
+  },
+  "duplicatePhones": [
+    {
+      "key": "+79086451311",
+      "count": 2,
+      "users": [
+        {
+          "id": "45c06160-a2c0-4f80-aee8-a01c2f291c56",
+          "Name": "Рютинский Руслан",
+          "Phone": "79086451311",
+          "TelegramID": 5476891503,
+          "HomeIsActive": 1,
+          "HomeLastLoginAt": null
+        },
+        {
+          "id": "7eedc13c-155a-439b-9b82-bff4b9791c79",
+          "Name": "Рютинский Руслан",
+          "Phone": "79086451311",
+          "TelegramID": 5042346348,
+          "HomeIsActive": 1,
+          "HomeLastLoginAt": null
+        }
+      ]
+    },
+    {
+      "key": "+89086570935",
+      "count": 2,
+      "users": [
+        {
+          "id": "d71b2d18-72dd-400a-a9cb-09fb1faf7cfa",
+          "Name": "Черемисинов Денис",
+          "Phone": "89086570935",
+          "TelegramID": 1684091972,
+          "HomeIsActive": 1,
+          "HomeLastLoginAt": null
+        },
+        {
+          "id": "2cc84589-0df1-4c13-b30f-427a46ecd6f5",
+          "Name": "Черемисинов Денис",
+          "Phone": "89086570935",
+          "TelegramID": 1134391007,
+          "HomeIsActive": 1,
+          "HomeLastLoginAt": null
+        }
+      ]
+    }
+  ],
+  "duplicateTelegramIds": [
+    {
+      "key": "1484246364",
+      "count": 2,
+      "users": [
+        {
+          "id": "7402964b-2a94-4fb2-ab8c-d590f72422c6",
+          "Name": "Артём Пляцек",
+          "Phone": "79025158030",
+          "TelegramID": 1484246364,
+          "HomeIsActive": 1,
+          "HomeLastLoginAt": null
+        },
+        {
+          "id": "1bd0053d-bb41-4d57-a880-2a255d8e59f9",
+          "Name": "Артём Пляцек",
+          "Phone": "89025158030",
+          "TelegramID": 1484246364,
+          "HomeIsActive": 1,
+          "HomeLastLoginAt": null
+        }
+      ]
+    }
+  ]
+}

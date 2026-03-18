@@ -1,0 +1,103 @@
+{
+  "generatedAt": "2026-03-17T11:10:25.482Z",
+  "label": "server",
+  "counts": {
+    "Users": 215,
+    "Appointments": 286,
+    "Schedules": 72,
+    "Cost": 5,
+    "Barbers": 2,
+    "Positions": 9,
+    "Services": 6,
+    "ServicePrices": 9,
+    "BotSettings": 1,
+    "BotMessages": 2,
+    "TelegramAuthRequests": 18
+  },
+  "issues": {
+    "usersWithoutPhone": 0,
+    "usersWithoutTelegramId": 13,
+    "duplicatePhones": 2,
+    "duplicateTelegramIds": 1,
+    "appointmentsMissingBarber": 0,
+    "appointmentsMissingDate": 0,
+    "appointmentsMissingTime": 0,
+    "appointmentsMissingUserReference": 74,
+    "duplicateActiveSlots": 0,
+    "schedulesMissingBarber": 16,
+    "schedulesMissingDate": 16,
+    "barbersMissingName": 0,
+    "servicesMissingName": 0,
+    "servicePricesMissingBarber": 0,
+    "servicePricesMissingService": 0
+  },
+  "readiness": {
+    "duplicatePhones": 2,
+    "duplicateTelegramIds": 1,
+    "appointmentsMissingUserReference": 74,
+    "incompleteSchedules": 16,
+    "removedExactDuplicateRows": 52,
+    "conflictingDuplicateGroups": 0,
+    "schemaBlockers": [],
+    "readyForSmokeMigration": true
+  },
+  "cleanupBacklogPath": "D:\\Works\\Barber Bot\\docs\\reports\\SERVER_POSTGRES_CLEANUP_BACKLOG_2026-03-17.md",
+  "artifacts": {
+    "inventory": {
+      "path": "D:\\Works\\Barber Bot\\docs\\reports\\server-postgres-migration-inventory.json",
+      "exists": true,
+      "sizeBytes": 1094
+    },
+    "duplicates": {
+      "path": "D:\\Works\\Barber Bot\\docs\\reports\\server-postgres-duplicate-users.json",
+      "exists": true,
+      "sizeBytes": 2072
+    },
+    "cleanup": {
+      "path": "D:\\Works\\Barber Bot\\docs\\reports\\server-postgres-cleanup-candidates.json",
+      "exists": true,
+      "sizeBytes": 27227
+    },
+    "backlog": {
+      "path": "D:\\Works\\Barber Bot\\docs\\reports\\SERVER_POSTGRES_CLEANUP_BACKLOG_2026-03-17.md",
+      "exists": true,
+      "sizeBytes": 2822
+    },
+    "initSql": {
+      "path": "D:\\Works\\Barber Bot\\docs\\reports\\postgres-target-init.sql",
+      "exists": true,
+      "sizeBytes": 6571
+    },
+    "importSql": {
+      "path": "D:\\Works\\Barber Bot\\docs\\reports\\server-postgres-import-sanitized.sql",
+      "exists": true,
+      "sizeBytes": 233903
+    },
+    "bundle": {
+      "path": "D:\\Works\\Barber Bot\\docs\\reports\\server-postgres-export-bundle-sanitized.json",
+      "exists": true,
+      "sizeBytes": 322468
+    },
+    "schemaGap": {
+      "path": "D:\\Works\\Barber Bot\\docs\\reports\\POSTGRES_TARGET_SCHEMA_GAP_2026-03-17.md",
+      "exists": true,
+      "sizeBytes": 381
+    },
+    "sanitization": {
+      "path": "D:\\Works\\Barber Bot\\docs\\reports\\server-postgres-bundle-sanitization.json",
+      "exists": true,
+      "sizeBytes": 8051
+    }
+  },
+  "commands": {
+    "preflight": "npm run db:smoke-preflight -- --database-url \"postgresql://postgres:postgres@127.0.0.1:5432/barber_bot?schema=public\" --init-sql docs/reports/postgres-target-init.sql --import-sql docs/reports/server-postgres-import-sanitized.sql --bundle docs/reports/server-postgres-export-bundle-sanitized.json",
+    "applyInit": "npm run db:apply-sql -- --database-url \"postgresql://postgres:postgres@127.0.0.1:5432/barber_bot?schema=public\" --file docs/reports/postgres-target-init.sql",
+    "applyImport": "npm run db:apply-sql -- --database-url \"postgresql://postgres:postgres@127.0.0.1:5432/barber_bot?schema=public\" --file docs/reports/server-postgres-import-sanitized.sql",
+    "verifyImport": "npm run db:verify-import -- --database-url \"postgresql://postgres:postgres@127.0.0.1:5432/barber_bot?schema=public\" --bundle docs/reports/server-postgres-export-bundle-sanitized.json --write docs/reports/postgres-import-verification.json",
+    "smokeRun": "npm run db:smoke-run -- --database-url \"postgresql://postgres:postgres@127.0.0.1:5432/barber_bot?schema=public\" --init-sql docs/reports/postgres-target-init.sql --import-sql docs/reports/server-postgres-import-sanitized.sql --bundle docs/reports/server-postgres-export-bundle-sanitized.json",
+    "powershellSmokeRun": "powershell -File scripts/run-postgres-smoke.ps1 -DatabaseUrl \"postgresql://postgres:postgres@127.0.0.1:5432/barber_bot?schema=public\" -InitSql \"docs/reports/postgres-target-init.sql\" -ImportSql \"docs/reports/server-postgres-import-sanitized.sql\" -Bundle \"docs/reports/server-postgres-export-bundle-sanitized.json\"",
+    "powershellFullRehearsal": "powershell -File scripts/run-postgres-rehearsal.ps1 -DatabaseUrl \"postgresql://postgres:postgres@127.0.0.1:5432/barber_bot?schema=public\" -InitSql \"docs/reports/postgres-target-init.sql\" -ImportSql \"docs/reports/server-postgres-import-sanitized.sql\" -Bundle \"docs/reports/server-postgres-export-bundle-sanitized.json\" -StartApp",
+    "appSmoke": "npm run app:smoke -- --base-url \"http://127.0.0.1:3000\" --owner-login \"<owner-login>\" --owner-password \"<owner-password>\" --home-phone \"<home-phone>\" --home-password \"<home-password>\" --write docs/reports/app-runtime-smoke.json --write-summary docs/reports/APP_RUNTIME_SMOKE_SUMMARY.md",
+    "powershellAppSmoke": "powershell -File scripts/run-app-smoke.ps1 -BaseUrl \"http://127.0.0.1:3000\" -OwnerLogin \"<owner-login>\" -OwnerPassword \"<owner-password>\" -HomePhone \"<home-phone>\" -HomePassword \"<home-password>\" -WriteJson \"docs/reports/app-runtime-smoke.json\" -WriteSummary \"docs/reports/APP_RUNTIME_SMOKE_SUMMARY.md\""
+  }
+}

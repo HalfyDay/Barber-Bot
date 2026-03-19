@@ -9,6 +9,7 @@
   const REMEMBER_STORAGE_KEY = "home-user-remember";
   const BARBER_SESSION_STORAGE_KEY = "barber-session";
   const BARBER_REMEMBER_STORAGE_KEY = "barber-session-remember";
+  const LOGOUT_MARKER_STORAGE_KEY = "home-user-logout-marker";
   const HOME_PAGE_URL = "/booking/";
   const PANEL_PAGE_URL = "/home/";
   const TELEGRAM_AUTH_POLL_FAST_INTERVAL_MS = 700;
@@ -19,33 +20,49 @@
   const loginTab = document.getElementById("tab-login");
   const registerTab = document.getElementById("tab-register");
   const tabsRoot = document.querySelector(".tabs");
+  const authFrame = document.getElementById("auth-frame");
   const loginForm = document.getElementById("login-form");
   const registerForm = document.getElementById("register-form");
   const loginPhoneInput = document.getElementById("login-phone");
+  const registerFullNameField = document.getElementById("register-fullname-field");
   const registerFullNameInput = document.getElementById("register-fullname");
   const registerPhoneInput = document.getElementById("register-phone");
   const registerPasswordInput = document.getElementById("register-password");
   const registerPasswordRepeatInput = document.getElementById("register-password-repeat");
+  const registerSubmitButton = document.getElementById("register-submit");
   const loginPasswordInput = document.getElementById("login-password");
   const togglePasswordButton = document.getElementById("toggle-password");
   const statusElement = document.getElementById("status");
   const forgotLink = document.getElementById("forgot-link");
+  const telegramDivider = document.getElementById("telegram-divider");
   const telegramButton = document.getElementById("telegram-login");
+  const telegramSetupBanner = document.getElementById("telegram-setup-banner");
+  const telegramSetupEyebrow = document.getElementById("telegram-setup-eyebrow");
+  const telegramSetupTitle = document.getElementById("telegram-setup-title");
+  const telegramSetupDescription = document.getElementById("telegram-setup-description");
 
   const isReady =
     loginTab &&
     registerTab &&
     loginForm &&
     registerForm &&
+    authFrame &&
     loginPhoneInput &&
+    registerFullNameField &&
     registerPhoneInput &&
     registerPasswordInput &&
     registerPasswordRepeatInput &&
+    registerSubmitButton &&
     loginPasswordInput &&
     togglePasswordButton &&
     statusElement &&
     forgotLink &&
-    telegramButton;
+    telegramDivider &&
+    telegramButton &&
+    telegramSetupBanner &&
+    telegramSetupEyebrow &&
+    telegramSetupTitle &&
+    telegramSetupDescription;
 
   if (!isReady) {
     document.body.classList.remove("checking");
@@ -278,6 +295,17 @@
     safeStorageRemove(getStorageArea("session"), SESSION_STORAGE_KEY);
   };
 
+  const clearLogoutMarker = () => {
+    safeStorageRemove(getStorageArea("local"), LOGOUT_MARKER_STORAGE_KEY);
+    safeStorageRemove(getStorageArea("session"), LOGOUT_MARKER_STORAGE_KEY);
+  };
+
+  const hasLogoutMarker = () =>
+    Boolean(
+      safeStorageGet(getStorageArea("local"), LOGOUT_MARKER_STORAGE_KEY) ||
+        safeStorageGet(getStorageArea("session"), LOGOUT_MARKER_STORAGE_KEY),
+    );
+
   const clearBarberSessionPayload = () => {
     safeStorageRemove(getStorageArea("local"), BARBER_SESSION_STORAGE_KEY);
     safeStorageRemove(getStorageArea("session"), BARBER_SESSION_STORAGE_KEY);
@@ -349,6 +377,10 @@
   };
 
   const tryRestoreSession = async () => {
+    if (hasLogoutMarker()) {
+      clearSessionPayload();
+      return null;
+    }
     const persisted = loadPersistedSession();
     if (!persisted.session?.token) return null;
     const checked = await validateSessionToken(persisted.session.token);
@@ -391,6 +423,59 @@
     submitButton.disabled = isPending;
     submitButton.style.opacity = isPending ? "0.72" : "1";
     submitButton.style.cursor = isPending ? "not-allowed" : "pointer";
+  };
+
+  const setElementHidden = (element, hidden) => {
+    if (!element) return;
+    element.hidden = Boolean(hidden);
+  };
+
+  const renderTelegramSetupUi = () => {
+    const isActive = telegramSetupState.active;
+    const isSetPasswordMode = telegramSetupState.mode === "set_password";
+    setElementHidden(telegramDivider, isActive);
+    setElementHidden(telegramButton, isActive);
+    setElementHidden(telegramSetupBanner, !isActive);
+    setElementHidden(tabsRoot, isActive);
+    authFrame.classList.toggle("is-telegram-setup", isActive);
+    registerSubmitButton.classList.toggle("telegram-setup-submit", isActive);
+
+    registerPhoneInput.readOnly = isActive;
+    registerPhoneInput.setAttribute("aria-readonly", isActive ? "true" : "false");
+    registerFullNameInput.readOnly = false;
+    registerFullNameInput.required = true;
+
+    registerSubmitButton.textContent = isActive
+      ? isSetPasswordMode
+        ? "ВОЙТИ"
+        : "ЗАВЕРШИТЬ РЕГИСТРАЦИЮ"
+      : "СОЗДАТЬ АККАУНТ";
+
+    if (!isActive) {
+      telegramSetupEyebrow.textContent = "TELEGRAM ПОДТВЕРЖДЕН";
+      telegramSetupTitle.textContent = "Завершите вход на сайте";
+      telegramSetupDescription.textContent =
+        "Остался последний шаг: заполните данные ниже и сохраните пароль для входа на сайте.";
+      registerFullNameInput.placeholder = "Введите ФИО";
+      registerPhoneInput.placeholder = "Введите номер телефона";
+      return;
+    }
+
+    if (isSetPasswordMode) {
+      telegramSetupEyebrow.textContent = "ПЕРВЫЙ ВХОД ЧЕРЕЗ TELEGRAM";
+      telegramSetupTitle.textContent = "Вы почти вошли";
+      telegramSetupDescription.textContent =
+        "Это нужно только один раз: проверьте имя и задайте пароль для входа на сайте.";
+      registerFullNameInput.placeholder = "ФИО";
+    } else {
+      telegramSetupEyebrow.textContent = "TELEGRAM ПОДТВЕРЖДЕН";
+      telegramSetupTitle.textContent = "Завершите регистрацию";
+      telegramSetupDescription.textContent =
+        "Осталось указать имя и пароль, чтобы завершить вход на сайте.";
+      registerFullNameInput.placeholder = "Введите ФИО";
+    }
+
+    registerPhoneInput.placeholder = "Телефон подтвержден через Telegram";
   };
 
   const switchTab = (tab) => {
@@ -445,6 +530,7 @@
           token: homePayload.token,
           user: homePayload.user,
         });
+        clearLogoutMarker();
         clearBarberSessionPayload();
         persistRememberChoice(true);
         persistSessionPayload(sessionPayload, true);
@@ -539,6 +625,7 @@
         token: payload.token,
         user: payload.user,
       });
+      clearLogoutMarker();
       clearBarberSessionPayload();
       persistRememberChoice(true);
       persistSessionPayload(sessionPayload, true);
@@ -611,6 +698,7 @@
           token: payload.token,
           user: payload.user,
         });
+        clearLogoutMarker();
         clearBarberSessionPayload();
         persistRememberChoice(true);
         persistSessionPayload(sessionPayload, true);
@@ -639,6 +727,7 @@
         token: payload.token,
         user: payload.user,
       });
+      clearLogoutMarker();
       clearBarberSessionPayload();
       persistRememberChoice(true);
       persistSessionPayload(sessionPayload, true);
@@ -688,6 +777,8 @@
     };
     registerPhoneInput.readOnly = false;
     registerFullNameInput.required = true;
+    registerFullNameInput.readOnly = false;
+    renderTelegramSetupUi();
   };
 
   const applyTelegramSetupState = (payload = {}) => {
@@ -705,9 +796,9 @@
       telegramSetupState.displayName,
       telegramSetupState.phone,
     );
-    registerFullNameInput.required = telegramSetupState.mode === "register";
     registerPasswordInput.value = "";
     registerPasswordRepeatInput.value = "";
+    renderTelegramSetupUi();
     switchTab("register");
   };
 
@@ -773,11 +864,7 @@
       if (payload?.success && payload?.needsSetup && payload?.requestId) {
         finishTelegramFlow();
         applyTelegramSetupState(payload);
-        setStatus(
-          payload.setupMode === "set_password"
-            ? "Укажите пароль на сайте для завершения Telegram-входа."
-            : "Заполните ФИО и пароль на сайте для завершения Telegram-входа.",
-        );
+        setStatus("");
         return;
       }
       if (payload?.success && payload?.token && payload?.user) {
@@ -785,6 +872,7 @@
           token: payload.token,
           user: payload.user,
         });
+        clearLogoutMarker();
         clearBarberSessionPayload();
         persistRememberChoice(true);
         persistSessionPayload(sessionPayload, true);

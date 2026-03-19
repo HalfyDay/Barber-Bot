@@ -174,6 +174,7 @@ const registerBotInternalRoutes = ({
       const payload = await processBotInternalTelegramAuthStart({
         code: req.body?.code,
         telegramId: req.body?.telegramId,
+        displayName: req.body?.displayName,
       });
       return res.json(payload);
     } catch (error) {

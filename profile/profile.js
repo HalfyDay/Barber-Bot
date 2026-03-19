@@ -6,6 +6,7 @@
   const HOME_PROFILE_TELEGRAM_UNLINK_API_URL = `${HOME_PROFILE_API_URL}/telegram/unlink`;
   const SESSION_STORAGE_KEY = "home-user-session";
   const REMEMBER_STORAGE_KEY = "home-user-remember";
+  const LOGOUT_MARKER_STORAGE_KEY = "home-user-logout-marker";
   const LOGIN_PAGE_URL = "/login/";
   const TELEGRAM_POLL_INTERVAL_MS = 2000;
 
@@ -211,6 +212,18 @@
     safeStorageRemove(getStorageArea("local"), SESSION_STORAGE_KEY);
     safeStorageRemove(getStorageArea("session"), SESSION_STORAGE_KEY);
   };
+
+  const persistLogoutMarker = () => {
+    const marker = String(Date.now());
+    safeStorageSet(getStorageArea("local"), LOGOUT_MARKER_STORAGE_KEY, marker);
+    safeStorageSet(getStorageArea("session"), LOGOUT_MARKER_STORAGE_KEY, marker);
+  };
+
+  const hasLogoutMarker = () =>
+    Boolean(
+      safeStorageGet(getStorageArea("local"), LOGOUT_MARKER_STORAGE_KEY) ||
+        safeStorageGet(getStorageArea("session"), LOGOUT_MARKER_STORAGE_KEY),
+    );
 
   const loadPersistedSession = () => {
     const localRaw = safeStorageGet(getStorageArea("local"), SESSION_STORAGE_KEY);
@@ -587,6 +600,7 @@
 
   const handleLogout = () => {
     stopTelegramPolling();
+    persistLogoutMarker();
     clearSessionPayload();
     redirectToLogin();
   };
@@ -609,6 +623,11 @@
 
     const persisted = loadPersistedSession();
     state.remember = persisted.remember;
+    if (hasLogoutMarker()) {
+      clearSessionPayload();
+      redirectToLogin();
+      return;
+    }
     if (!persisted.session?.token) {
       redirectToLogin();
       return;

@@ -507,13 +507,14 @@ def update_bot_user_phone(telegram_id: int | str, phone: str) -> dict:
         USER_SUMMARY_CACHE[safe_id] = {"ts": time.time(), "data": payload}
     return payload
 
-def begin_bot_site_login(code: str, telegram_id: int | str) -> dict:
+def begin_bot_site_login(code: str, telegram_id: int | str, display_name: str = "") -> dict:
     return bot_api_request(
         "POST",
         "/telegram-auth/begin",
         payload={
             "code": str(code or "").strip(),
             "telegramId": normalize_telegram_id(telegram_id),
+            "displayName": str(display_name or "").strip(),
         },
     )
 
@@ -818,7 +819,12 @@ async def begin_site_login_flow(
         return MENU
     user_id = update.effective_user.id
     try:
-        response = begin_bot_site_login(code, user_id)
+        telegram_display_name = (
+            (update.effective_user.full_name if update.effective_user else "")
+            or (update.effective_user.first_name if update.effective_user else "")
+            or ""
+        )
+        response = begin_bot_site_login(code, user_id, telegram_display_name)
         status = str(response.get("status") or "").strip()
         flow = str(response.get("flow") or TELEGRAM_AUTH_FLOW_LOGIN).strip() or TELEGRAM_AUTH_FLOW_LOGIN
         request_id = str(response.get("requestId") or "").strip()

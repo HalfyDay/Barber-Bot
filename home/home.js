@@ -7,6 +7,7 @@
   const HOME_BOOKING_TIMES_API_URL = `${window.location.origin}/api/home/booking/times`;
   const HOME_BOOKING_APPOINTMENTS_API_URL = `${window.location.origin}/api/home/booking/appointments`;
   const SESSION_STORAGE_KEY = "home-user-session";
+  const LOGOUT_MARKER_STORAGE_KEY = "home-user-logout-marker";
   const LOGIN_PAGE_URL = "/login/";
   const FALLBACK_BARBER_IMAGE = "/Image/card/Barber_photo.png";
   const WEEKDAY_LABELS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
@@ -201,6 +202,18 @@
     safeStorageRemove(getStorageArea("local"), SESSION_STORAGE_KEY);
     safeStorageRemove(getStorageArea("session"), SESSION_STORAGE_KEY);
   };
+
+  const persistLogoutMarker = () => {
+    const marker = String(Date.now());
+    safeStorageSet(getStorageArea("local"), LOGOUT_MARKER_STORAGE_KEY, marker);
+    safeStorageSet(getStorageArea("session"), LOGOUT_MARKER_STORAGE_KEY, marker);
+  };
+
+  const hasLogoutMarker = () =>
+    Boolean(
+      safeStorageGet(getStorageArea("local"), LOGOUT_MARKER_STORAGE_KEY) ||
+        safeStorageGet(getStorageArea("session"), LOGOUT_MARKER_STORAGE_KEY),
+    );
 
   const updateSessionTokenFromHeader = (response, expectedToken = "") => {
     const refreshedToken = normalizeText(response?.headers?.get("x-home-session-token"));
@@ -733,6 +746,10 @@
   };
 
   const tryRestoreSession = async () => {
+    if (hasLogoutMarker()) {
+      clearSessionPayload();
+      return null;
+    }
     const persisted = loadPersistedSession();
     if (!persisted.session?.token) return null;
     const checked = await validateSessionToken(persisted.session.token);
@@ -1300,6 +1317,7 @@
     bookingState.remember = false;
     bookingState.barbers = [];
     closeBookingFlow();
+    persistLogoutMarker();
     clearSessionPayload();
     setBookingStatus("");
     redirectToLogin();

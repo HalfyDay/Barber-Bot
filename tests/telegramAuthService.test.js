@@ -172,6 +172,33 @@ test("telegram auth start requests contact when user has no phone", async () => 
   assert.equal(requestStore.get("req-4")?.displayName, "Petr");
 });
 
+test("telegram auth start stores telegram display name when linked user is absent", async () => {
+  const { service, requestStore } = createHarness({
+    requests: [
+      {
+        id: "req-4b",
+        code: "444445",
+        status: "pending",
+        flow: "login",
+        expiresAt: "2999-01-01T00:00:00.000Z",
+      },
+    ],
+  });
+
+  const result = await service.processBotInternalTelegramAuthStart({
+    code: "444445",
+    telegramId: "778",
+    displayName: "Ivan Petrov",
+  });
+
+  assert.deepEqual(result, {
+    status: "need_contact",
+    requestId: "req-4b",
+    flow: "login",
+  });
+  assert.equal(requestStore.get("req-4b")?.displayName, "Ivan Petrov");
+});
+
 test("telegram auth phone links existing user by phone and completes request", async () => {
   const { service, requestStore, prismaCalls } = createHarness({
     requests: [
@@ -225,4 +252,36 @@ test("telegram auth phone links existing user by phone and completes request", a
       },
     },
   });
+});
+
+test("telegram auth phone preserves telegram display name for new site registration", async () => {
+  const { service, requestStore } = createHarness({
+    requests: [
+      {
+        id: "req-6",
+        code: "666666",
+        status: "pending",
+        flow: "login",
+        telegramId: "779",
+        displayName: "Maria Ivanova",
+        expiresAt: "2999-01-01T00:00:00.000Z",
+      },
+    ],
+  });
+
+  const result = await service.processBotInternalTelegramAuthPhone({
+    requestId: "req-6",
+    telegramId: "779",
+    phone: "+79991112233",
+  });
+
+  assert.deepEqual(result, {
+    status: "completed_login",
+    requestId: "req-6",
+    flow: "login",
+    phone: "+79991112233",
+    userId: null,
+  });
+  assert.equal(requestStore.get("req-6")?.status, "completed");
+  assert.equal(requestStore.get("req-6")?.displayName, "Maria Ivanova");
 });

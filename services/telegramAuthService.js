@@ -58,9 +58,10 @@ const createTelegramAuthService = ({
     return flow;
   };
 
-  const processBotInternalTelegramAuthStart = async ({ code, telegramId }) => {
+  const processBotInternalTelegramAuthStart = async ({ code, telegramId, displayName }) => {
     const safeCode = normalizeText(code);
     const safeTelegramId = normalizeText(telegramId);
+    const safeDisplayName = normalizeText(displayName);
     if (!/^\d{6}$/.test(safeCode || "")) {
       throw buildError("Invalid code.", "INVALID_CODE");
     }
@@ -76,6 +77,7 @@ const createTelegramAuthService = ({
     await updateRequestById(requestId, {
       status: statusPending,
       telegramId: safeTelegramId,
+      displayName: safeDisplayName || normalizeText(row?.displayName) || null,
       errorMessage: null,
     });
 
@@ -138,7 +140,7 @@ const createTelegramAuthService = ({
         status: statusPending,
         telegramId: safeTelegramId,
         userId: normalizeText(linked.id),
-        displayName: normalizeText(linked.Name) || null,
+        displayName: normalizeText(linked.Name) || safeDisplayName || null,
         errorMessage: null,
       });
     }
@@ -192,11 +194,15 @@ const createTelegramAuthService = ({
       });
     }
 
+    const resolvedDisplayName = existingId
+      ? normalizeText(existing?.Name) || normalizeText(row?.displayName) || safePhone
+      : normalizeText(row?.displayName) || null;
+
     await updateRequestById(safeRequestId, {
       status: statusCompleted,
       telegramId: safeTelegramId,
       phone: safePhone,
-      displayName: existingId ? normalizeText(existing?.Name) || safePhone : null,
+      displayName: resolvedDisplayName,
       userId: existingId || null,
       errorMessage: null,
     });

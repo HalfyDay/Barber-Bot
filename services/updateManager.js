@@ -56,6 +56,12 @@ const quoteShellValue = (value) => {
   return `"${safe.replace(/"/g, '\\"')}"`;
 };
 
+const stripPostgresSchemaQuery = (databaseUrl = '') => {
+  const raw = String(databaseUrl || '').trim();
+  if (!raw) return raw;
+  return raw.replace(/\?schema=public$/i, '');
+};
+
 const resolvePostgresDumpPath = (env = process.env) => {
   const configured = (env.POSTGRES_PG_DUMP_PATH || '').toString().trim();
   if (configured) return configured;
@@ -118,13 +124,14 @@ const createPreUpdateBackup = async () => {
       console.warn('[update] POSTGRES_DATABASE_URL is not set, skipping pre-update backup');
       return null;
     }
+    const cliDatabaseUrl = stripPostgresSchemaQuery(databaseUrl);
     const pgDumpPath = resolvePostgresDumpPath(process.env);
     if (!pgDumpPath) {
       console.warn('[update] pg_dump not found for PostgreSQL runtime, skipping pre-update backup');
       return null;
     }
     const target = path.join(BACKUP_DIR, `backup-pre-update-${timestamp}.sql`);
-    const shellCommand = `${quoteShellValue(pgDumpPath)} --clean --if-exists --no-owner --no-privileges --file ${quoteShellValue(target)} ${quoteShellValue(databaseUrl)}`;
+    const shellCommand = `${quoteShellValue(pgDumpPath)} --clean --if-exists --no-owner --no-privileges --file ${quoteShellValue(target)} ${quoteShellValue(cliDatabaseUrl)}`;
     await runSpawnedCommand(pgDumpPath, [
       '--clean',
       '--if-exists',
@@ -132,7 +139,7 @@ const createPreUpdateBackup = async () => {
       '--no-privileges',
       '--file',
       target,
-      databaseUrl,
+      cliDatabaseUrl,
     ]);
     console.log(`[update] Created pre-update PostgreSQL backup: ${path.relative(PROJECT_ROOT, target)}`);
     console.log(`[update] pg_dump command: ${shellCommand}`);
@@ -596,5 +603,5 @@ module.exports = {
   describeUpdateError,
   createPreUpdateBackup,
   resolvePostgresDumpPath,
+  stripPostgresSchemaQuery,
 };
-

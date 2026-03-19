@@ -13,7 +13,7 @@ const createAppointmentService = ({
   isActiveStatus = () => false,
 }) => {
   const toLower = (value) => normalizeText(value).toLowerCase();
-  const slotBlockTokens = ["block", "Р±Р»РѕРє"];
+  const slotBlockTokens = ["block", "блок"];
   const timeZoneFormatterCache = new Map();
 
   const sanitizeTimeToken = (value) => {

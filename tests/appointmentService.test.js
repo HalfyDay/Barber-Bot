@@ -178,7 +178,7 @@ test("createHomeAppointment writes through prisma transaction", async () => {
         Barber: "Alex",
         Date: "2026-03-20",
         Time: "12:00 - 13:00",
-        Status: "РђРєС‚РёРІРЅР°СЏ",
+        Status: "Активная",
       },
     ],
   });
@@ -201,7 +201,7 @@ test("createHomeAppointment writes through prisma transaction", async () => {
       bookingLimit: 2,
       minLeadHours: 1,
     },
-    activeStatus: "РђРєС‚РёРІРЅР°СЏ",
+    activeStatus: "Активная",
   });
 
   assert.equal(created.id, "test-id");

@@ -1,4 +1,4 @@
-﻿const { exec } = require('child_process');
+const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -42,7 +42,7 @@ const isPostgresStorageError = (error) =>
   POSTGRES_STORAGE_ERROR_RE.test(String(error?.message || error || ''));
 
 const buildPostgresStorageErrorMessage = () =>
-  'PostgreSQL РЅРµРґРѕСЃС‚СѓРїРЅР° РёР»Рё РїРѕРІСЂРµР¶РґРµРЅР°. РџСЂРѕРІРµСЂСЊС‚Рµ РїРѕРґРєР»СЋС‡РµРЅРёРµ Рє Р±Р°Р·Рµ Рё РІРѕСЃСЃС‚Р°РЅРѕРІРёС‚Рµ РµС‘ РёР· СЂРµР·РµСЂРІРЅРѕР№ РєРѕРїРёРё РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё.';
+  'PostgreSQL недоступна или повреждена. Проверьте подключение к базе и восстановите её из резервной копии при необходимости.';
 
 const describeUpdateError = (error) => {
   const baseMessage = String(error?.message || error || 'Unknown error').trim();
@@ -458,7 +458,7 @@ const checkForUpdates = async (force = false) => {
       note = '\u0420\u0435\u043b\u0438\u0437\u044b \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u044b, \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u043c \u0432\u0435\u0442\u043a\u0443.';
     }
   } catch (releaseError) {
-    note = 'РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ СЂРµР»РёР·: ' + describeUpdateError(releaseError);
+    note = 'Не удалось получить релиз: ' + describeUpdateError(releaseError);
     console.warn('[updates] ' + note);
   }
 

@@ -115,9 +115,9 @@ const createHomeProfileService = ({
   const buildLimitBlockedMessage = (fieldLabel, limitState) => {
     const dateLabel = formatLimitDateRu(limitState?.nextAllowedAt);
     if (!dateLabel) {
-      return `Поле В«${fieldLabel}В» можно менять не чаще одного раза РІ 30 дней.`;
+      return `Поле «${fieldLabel}» можно менять не чаще одного раза в 30 дней.`;
     }
-    return `Поле В«${fieldLabel}В» можно менять не чаще одного раза РІ 30 дней. Доступно после ${dateLabel}.`;
+    return `Поле «${fieldLabel}» можно менять не чаще одного раза в 30 дней. Доступно после ${dateLabel}.`;
   };
 
   const toPublicHomeProfile = (row = {}) => {

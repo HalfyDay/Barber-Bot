@@ -195,7 +195,7 @@ const createNotificationReminderService = ({
               clientChatId,
               [
                 "⏰ Напоминание:",
-                `РЈ вас сегодня РІ ${escapeTelegramHtml(timeLabel)} запись к барберу <b>${escapeTelegramHtml(
+                `У вас сегодня в ${escapeTelegramHtml(timeLabel)} запись к барберу <b>${escapeTelegramHtml(
                   appointment?.Barber,
                 )}</b>.`,
               ].join("\n"),
@@ -222,7 +222,7 @@ const createNotificationReminderService = ({
               barberChatId,
               [
                 "⏰ Напоминание:",
-                `РЈ вас сегодня РІ ${escapeTelegramHtml(timeLabel)} запись.`,
+                `У вас сегодня в ${escapeTelegramHtml(timeLabel)} запись.`,
                 `Клиент: <b>${escapeTelegramHtml(
                   appointment?.CustomerName || "Клиент",
                 )}</b>`,

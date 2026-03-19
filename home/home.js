@@ -90,6 +90,7 @@
     activeIndex: 0,
     remember: false,
   };
+  let logoutInProgress = false;
 
   const bookingFlowState = {
     active: false,
@@ -201,9 +202,17 @@
     safeStorageRemove(getStorageArea("session"), SESSION_STORAGE_KEY);
   };
 
-  const updateSessionTokenFromHeader = (response) => {
+  const updateSessionTokenFromHeader = (response, expectedToken = "") => {
     const refreshedToken = normalizeText(response?.headers?.get("x-home-session-token"));
-    if (!refreshedToken || !bookingState.session) return;
+    const currentToken = normalizeText(bookingState.session?.token);
+    if (
+      !refreshedToken ||
+      !currentToken ||
+      logoutInProgress ||
+      (expectedToken && currentToken !== normalizeText(expectedToken))
+    ) {
+      return;
+    }
     bookingState.session.token = refreshedToken;
     persistSessionPayload(bookingState.session, bookingState.remember);
   };
@@ -590,7 +599,7 @@
     const response = await fetch(HOME_BARBERS_API_URL, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    updateSessionTokenFromHeader(response);
+    updateSessionTokenFromHeader(response, token);
     if (response.ok) {
       const payload = await response.json();
       const list = Array.isArray(payload?.barbers) ? payload.barbers : [];
@@ -630,7 +639,7 @@
       ...(options.headers || {}),
     };
     const response = await fetch(url, { ...options, headers });
-    updateSessionTokenFromHeader(response);
+    updateSessionTokenFromHeader(response, token);
     if (response.status === 401) {
       clearSessionPayload();
       redirectToLogin();
@@ -1286,6 +1295,10 @@
   };
 
   const handleLogout = () => {
+    logoutInProgress = true;
+    bookingState.session = null;
+    bookingState.remember = false;
+    bookingState.barbers = [];
     closeBookingFlow();
     clearSessionPayload();
     setBookingStatus("");

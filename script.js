@@ -782,6 +782,20 @@ const getStatusBadgeClasses = (status) => {
     STATUS_BADGE_MAP[normalized] || 'border border-slate-600/60 bg-slate-800/70 text-slate-200'
   );
 };
+const getCompactStatusLabel = (status) => {
+  switch (normalizeStatusValue(status)) {
+    case STATUS_ACTIVE:
+      return 'Актив';
+    case STATUS_DONE:
+      return 'Готово';
+    case STATUS_CANCELLED:
+      return 'Отмена';
+    case STATUS_NO_SHOW:
+      return 'Неявка';
+    default:
+      return normalizeStatusValue(status) || 'Статус';
+  }
+};
 const toWindows1251Mojibake = (value = '') => {
   try {
     return new TextDecoder('windows-1251').decode(new TextEncoder().encode(value));
@@ -6473,6 +6487,7 @@ const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [
 };
 const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = false, showDateBadge = false }) => {
   const statusLabel = normalizeStatusValue(record.Status) || '-';
+  const compactStatusLabel = getCompactStatusLabel(record.Status);
   const { start, end } = parseTimeRangeParts(record.Time);
   const servicesList = parseMultiValue(record.Services);
   const cardRef = useRef(null);
@@ -6539,13 +6554,13 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
               getStatusBadgeClasses(statusLabel)
             )}
           >
-            {statusLabel || 'Без статуса'}
+            {compactStatusLabel}
           </span>
         </div>
       <div className="mt-2 min-w-0">{customerNode}</div>
         {record.Barber && (
-          <p className="mt-1 truncate text-[11px] text-slate-400">
-            Барбер: <span className="font-semibold text-white">{record.Barber}</span>
+          <p className="mt-1 truncate text-[11px] font-semibold text-white">
+            {record.Barber}
           </p>
         )}
         {servicesList.length ? (
@@ -6826,7 +6841,17 @@ const AppointmentsCalendarView = ({
         </div>
       </div>
       {safeViewMode === 'day' && (
-        <div ref={dayViewRef} className={classNames('grid gap-3', scaleConfig.dayGrid)}>
+        <div
+          ref={dayViewRef}
+          className={classNames(
+            'grid gap-3',
+            isMobileViewport
+              ? safeScaleMode === 'compact'
+                ? 'grid-cols-2'
+                : 'grid-cols-1'
+              : scaleConfig.dayGrid
+          )}
+        >
           {(rowsByDate.get(getLocalISODateString(anchorDate)) || []).map((record) => (
             <AppointmentCalendarCard
               key={record.id || `${record.CustomerName}-${record.Time}`}

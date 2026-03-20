@@ -392,10 +392,14 @@ const APPOINTMENT_CALENDAR_SCALE_OPTIONS = [
 const APPOINTMENT_CALENDAR_SCALE_CONFIG = {
   compact: {
     dayGrid: 'lg:grid-cols-3 2xl:grid-cols-4',
+    weekMobileColumnWidth: 220,
+    weekGrid: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7',
     weekColumnWidth: 220,
     weekGap: 'gap-2',
     weekSectionMinHeight: 'min-h-[220px]',
     weekSectionPadding: 'p-2.5',
+    monthMobileColumnWidth: 190,
+    monthGrid: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7',
     monthColumnWidth: 190,
     monthGap: 'gap-2',
     monthSectionMinHeight: 'min-h-[150px]',
@@ -403,10 +407,14 @@ const APPOINTMENT_CALENDAR_SCALE_CONFIG = {
   },
   normal: {
     dayGrid: 'lg:grid-cols-2',
+    weekMobileColumnWidth: 300,
+    weekGrid: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5',
     weekColumnWidth: 300,
     weekGap: 'gap-3',
     weekSectionMinHeight: 'min-h-[240px]',
     weekSectionPadding: 'p-3',
+    monthMobileColumnWidth: 260,
+    monthGrid: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5',
     monthColumnWidth: 260,
     monthGap: 'gap-3',
     monthSectionMinHeight: 'min-h-[180px]',
@@ -414,10 +422,14 @@ const APPOINTMENT_CALENDAR_SCALE_CONFIG = {
   },
   large: {
     dayGrid: 'lg:grid-cols-1',
+    weekMobileColumnWidth: 380,
+    weekGrid: 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3',
     weekColumnWidth: 380,
     weekGap: 'gap-4',
     weekSectionMinHeight: 'min-h-[290px]',
     weekSectionPadding: 'p-4',
+    monthMobileColumnWidth: 340,
+    monthGrid: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
     monthColumnWidth: 340,
     monthGap: 'gap-4',
     monthSectionMinHeight: 'min-h-[220px]',
@@ -5882,6 +5894,19 @@ const TableToolbar = ({
   setAppointmentCalendarScale,
 }) => {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handler = () => setIsMobileViewport(window.innerWidth < 768);
+    handler();
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  const mobileScaleOptions = useMemo(
+    () => APPOINTMENT_CALENDAR_SCALE_OPTIONS.filter((option) => option.id !== 'large'),
+    []
+  );
+  const effectiveScaleValue = isMobileViewport && appointmentCalendarScale === 'large' ? 'normal' : appointmentCalendarScale;
   const chipClass = (active) =>
     classNames(
       'inline-flex h-11 items-center justify-center rounded-xl border px-4 text-xs font-semibold uppercase tracking-wide transition whitespace-nowrap text-center',
@@ -5966,8 +5991,8 @@ const TableToolbar = ({
   const calendarScaleControl =
     tableId === 'Appointments' && typeof setAppointmentCalendarScale === 'function'
       ? renderCycleGroupButton(
-          APPOINTMENT_CALENDAR_SCALE_OPTIONS,
-          appointmentCalendarScale,
+          isMobileViewport ? mobileScaleOptions : APPOINTMENT_CALENDAR_SCALE_OPTIONS,
+          effectiveScaleValue,
           setAppointmentCalendarScale,
           APPOINTMENT_CALENDAR_SCALE_ICONS,
           'Масштаб'
@@ -6044,8 +6069,13 @@ const TableToolbar = ({
         </div>
         <div className={classNames('grid gap-2 sm:grid-cols-2 md:grid-cols-[auto_minmax(0,360px)] xl:items-center', !mobileFiltersOpen && 'hidden md:grid')}>
           {supportsBarberFilter ? <div className="md:hidden">{getBarberSelect()}</div> : null}
-          <div className="md:hidden">{renderStatusControl()}</div>
-          {pastControl}
+          {(supportsStatusFilter || pastControl) ? (
+            <div className="grid grid-cols-2 gap-2 md:hidden">
+              <div>{renderStatusControl()}</div>
+              <div>{pastControl}</div>
+            </div>
+          ) : null}
+          <div className="hidden md:block">{pastControl}</div>
           <div className="grid grid-cols-2 gap-2 sm:col-span-2 md:col-span-1 xl:w-full">
             {calendarViewControl}
             {calendarScaleControl}
@@ -6445,56 +6475,138 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
   const statusLabel = normalizeStatusValue(record.Status) || '-';
   const { start, end } = parseTimeRangeParts(record.Time);
   const servicesList = parseMultiValue(record.Services);
-  const cardClassName = 'flex h-full cursor-pointer flex-col rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-left transition hover:border-indigo-500/70 hover:bg-slate-900/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 sm:p-4';
+  const cardRef = useRef(null);
+  const [autoCompact, setAutoCompact] = useState(false);
+  const AUTO_COMPACT_ENTER_WIDTH = 250;
+  const AUTO_COMPACT_EXIT_WIDTH = 285;
+  useLayoutEffect(() => {
+    const node = cardRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver((entries) => {
+      const nextWidth = entries[0]?.contentRect?.width || 0;
+      setAutoCompact((prev) => {
+        if (nextWidth <= 0) return prev;
+        if (prev) {
+          return nextWidth < AUTO_COMPACT_EXIT_WIDTH;
+        }
+        return nextWidth < AUTO_COMPACT_ENTER_WIDTH;
+      });
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const effectiveCompact = compact || autoCompact;
+  const customerNode = record.CustomerName ? (
+    typeof onOpenProfile === 'function' ? (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenProfile(record.CustomerName);
+        }}
+        className={classNames('block w-full min-w-0 text-left font-semibold text-white hover:text-indigo-300', effectiveCompact ? 'truncate text-sm' : 'truncate')}
+      >
+        {record.CustomerName}
+      </button>
+    ) : (
+      <p className={classNames('font-semibold text-white', effectiveCompact ? 'truncate text-sm' : 'text-base sm:text-lg')}>{record.CustomerName}</p>
+    )
+  ) : (
+    <p className={classNames('font-semibold text-white', effectiveCompact ? 'text-sm' : 'text-base sm:text-lg')}>Без имени</p>
+  );
+  const cardClassName = classNames(
+    'flex h-full cursor-pointer flex-col rounded-2xl border border-slate-800 bg-slate-950/40 text-left transition hover:border-indigo-500/70 hover:bg-slate-900/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/60',
+    effectiveCompact ? 'p-2.5' : 'p-3 sm:p-4'
+  );
+  if (effectiveCompact) {
+    return (
+      <div
+        ref={cardRef}
+        role="button"
+        tabIndex={0}
+        onClick={() => onOpen?.(record, { allowDelete: true })}
+        onKeyDown={(event) => event.key === 'Enter' && onOpen?.(record, { allowDelete: true })}
+        className={cardClassName}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-lg font-semibold text-white">{start || record.Time || '-'}</p>
+            {end && <p className="text-[11px] text-slate-400">до {end}</p>}
+          </div>
+          <span
+            className={classNames(
+              'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+              getStatusBadgeClasses(statusLabel)
+            )}
+          >
+            {statusLabel || 'Без статуса'}
+          </span>
+        </div>
+      <div className="mt-2 min-w-0">{customerNode}</div>
+        {record.Barber && (
+          <p className="mt-1 truncate text-[11px] text-slate-400">
+            Барбер: <span className="font-semibold text-white">{record.Barber}</span>
+          </p>
+        )}
+        {servicesList.length ? (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {servicesList.slice(0, 2).map((service, index) => (
+              <span key={`${service}-${index}`} className="rounded-full border border-slate-700/70 bg-slate-900/70 px-1.5 py-0.5 text-[10px] text-slate-200">
+                {service}
+              </span>
+            ))}
+            {servicesList.length > 2 && <span className="text-[10px] text-slate-500">+{servicesList.length - 2}</span>}
+          </div>
+        ) : (
+          <p className="mt-2 text-[11px] text-slate-500">Услуги не указаны</p>
+        )}
+      </div>
+    );
+  }
   return (
     <div
+      ref={cardRef}
       role="button"
       tabIndex={0}
       onClick={() => onOpen?.(record, { allowDelete: true })}
       onKeyDown={(event) => event.key === 'Enter' && onOpen?.(record, { allowDelete: true })}
       className={cardClassName}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800/70 pb-3">
-        <div className="space-y-1">
-          <div className="flex items-baseline gap-2">
-            <p className="text-2xl font-semibold text-white sm:text-3xl">{start || record.Time || '-'}</p>
-            {end && <p className="text-xs text-slate-400 sm:text-sm">до {end}</p>}
+      <div className={classNames('border-b border-slate-800/70', compact ? 'pb-2' : 'pb-3')}>
+        <div className={classNames('flex', compact ? 'flex-col gap-2' : 'flex-wrap items-start justify-between gap-3')}>
+          <div className="space-y-1">
+            <div className="flex items-baseline gap-2">
+              <p className={classNames('font-semibold text-white', compact ? 'text-lg' : 'text-2xl sm:text-3xl')}>{start || record.Time || '-'}</p>
+              {end && <p className={classNames('text-slate-400', compact ? 'text-[11px]' : 'text-xs sm:text-sm')}>до {end}</p>}
+            </div>
+          </div>
+          <div className={classNames('flex gap-2', compact ? 'flex-wrap items-center' : 'flex-col items-end text-right')}>
+            <span
+              className={classNames(
+                'inline-flex items-center rounded-full font-semibold uppercase tracking-wide',
+                compact ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-1 text-[11px]',
+                getStatusBadgeClasses(statusLabel)
+              )}
+            >
+              {statusLabel || 'Без статуса'}
+            </span>
+            {record.Barber && (
+              <p className={classNames('text-slate-400', compact ? 'min-w-0 text-[11px]' : 'text-xs sm:text-sm')}>
+                Барбер: <span className="font-semibold text-white">{record.Barber}</span>
+              </p>
+            )}
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2 text-right">
-          <span className={classNames('inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide', getStatusBadgeClasses(statusLabel))}>
-            {statusLabel || 'Без статуса'}
-          </span>
-          {record.Barber && (
-            <p className="text-xs text-slate-400 sm:text-sm">
-              Барбер: <span className="font-semibold text-white">{record.Barber}</span>
-            </p>
-          )}
-        </div>
       </div>
-      <div className="mt-3 flex flex-col gap-3 text-[13px] text-slate-300 sm:text-sm">
-        {record.CustomerName ? (
-          typeof onOpenProfile === 'function' ? (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onOpenProfile(record.CustomerName);
-              }}
-              className="text-left font-semibold text-white hover:text-indigo-300"
-            >
-              {record.CustomerName}
-            </button>
-          ) : (
-            <p className="text-base font-semibold text-white sm:text-lg">{record.CustomerName}</p>
-          )
-        ) : (
-          <p className="text-base font-semibold text-white sm:text-lg">Без имени</p>
-        )}
+      <div className="mt-3 flex min-w-0 flex-col gap-3 text-[13px] text-slate-300 sm:text-sm">
+        {customerNode}
         {servicesList.length ? (
           <div className="flex flex-wrap gap-2">
             {servicesList.slice(0, 3).map((service, index) => (
-              <span key={`${service}-${index}`} className="rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-0.5 text-[11px] text-slate-200 sm:text-xs">
+              <span
+                key={`${service}-${index}`}
+                className="rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-0.5 text-[11px] text-slate-200 sm:text-xs"
+              >
                 {service}
               </span>
             ))}
@@ -6517,15 +6629,46 @@ const AppointmentsCalendarView = ({
   setCalendarDate,
   setViewMode,
 }) => {
+  const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
   const safeViewMode = APPOINTMENT_CALENDAR_VIEW_OPTIONS.some((option) => option.id === viewMode) ? viewMode : 'week';
-  const safeScaleMode = APPOINTMENT_CALENDAR_SCALE_OPTIONS.some((option) => option.id === scaleMode) ? scaleMode : 'normal';
+  const resolvedScaleMode = isMobileViewport && scaleMode === 'large' ? 'normal' : scaleMode;
+  const safeScaleMode = APPOINTMENT_CALENDAR_SCALE_OPTIONS.some((option) => option.id === resolvedScaleMode) ? resolvedScaleMode : 'normal';
   const scaleConfig = APPOINTMENT_CALENDAR_SCALE_CONFIG[safeScaleMode] || APPOINTMENT_CALENDAR_SCALE_CONFIG.normal;
+  const mobileVisibleDayCount = safeScaleMode === 'compact' ? 2 : 1;
   const anchorDate = useMemo(() => parseInputDate(calendarDate) || startOfLocalDay(), [calendarDate]);
   const todayKey = getLocalISODateString();
   const todayScrollPendingRef = useRef(false);
   const todayMarkerRef = useRef(null);
   const dayViewRef = useRef(null);
   const datePickerInputRef = useRef(null);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handler = () => setIsMobileViewport(window.innerWidth < 768);
+    handler();
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  const mobileGridWidthPercent = `${(7 / mobileVisibleDayCount) * 100}%`;
+  const mobileWeekGridStyle = useMemo(
+    () =>
+      isMobileViewport
+        ? {
+            gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+            width: mobileGridWidthPercent,
+          }
+        : undefined,
+    [isMobileViewport, mobileGridWidthPercent]
+  );
+  const mobileMonthGridStyle = useMemo(
+    () =>
+      isMobileViewport
+        ? {
+            gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+            width: mobileGridWidthPercent,
+          }
+        : undefined,
+    [isMobileViewport, mobileGridWidthPercent]
+  );
   const weekGridStyle = useMemo(
     () => ({
       gridTemplateColumns: `repeat(7, minmax(${scaleConfig.weekColumnWidth}px, ${scaleConfig.weekColumnWidth}px))`,
@@ -6685,7 +6828,13 @@ const AppointmentsCalendarView = ({
       {safeViewMode === 'day' && (
         <div ref={dayViewRef} className={classNames('grid gap-3', scaleConfig.dayGrid)}>
           {(rowsByDate.get(getLocalISODateString(anchorDate)) || []).map((record) => (
-            <AppointmentCalendarCard key={record.id || `${record.CustomerName}-${record.Time}`} record={record} onOpen={onOpen} onOpenProfile={onOpenProfile} />
+            <AppointmentCalendarCard
+              key={record.id || `${record.CustomerName}-${record.Time}`}
+              record={record}
+              onOpen={onOpen}
+              onOpenProfile={onOpenProfile}
+              compact={isMobileViewport && safeScaleMode === 'compact'}
+            />
           ))}
           {!(rowsByDate.get(getLocalISODateString(anchorDate)) || []).length && (
             <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/30 p-6 text-sm text-slate-400">На этот день записей нет.</div>
@@ -6693,8 +6842,8 @@ const AppointmentsCalendarView = ({
         </div>
       )}
       {safeViewMode === 'week' && (
-        <div className="overflow-x-auto pb-2">
-          <div className={classNames('grid', scaleConfig.weekGap)} style={weekGridStyle}>
+        <div className={classNames('pb-2', isMobileViewport && 'overflow-x-auto')}>
+          <div className={classNames('grid', isMobileViewport ? scaleConfig.weekGap : scaleConfig.weekGrid, scaleConfig.weekGap)} style={isMobileViewport ? mobileWeekGridStyle : undefined}>
           {weekDays.map((day) => {
             const dayKey = getLocalISODateString(day);
             const items = rowsByDate.get(dayKey) || [];
@@ -6723,7 +6872,7 @@ const AppointmentsCalendarView = ({
                       record={record}
                       onOpen={onOpen}
                       onOpenProfile={onOpenProfile}
-                      compact={false}
+                      compact={isMobileViewport && safeScaleMode === 'compact'}
                     />
                   ))}
                   {!items.length && <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-center text-xs text-slate-500">Пусто</div>}
@@ -6735,8 +6884,8 @@ const AppointmentsCalendarView = ({
         </div>
       )}
       {safeViewMode === 'month' && (
-        <div className="overflow-x-auto pb-2">
-          <div className={classNames('grid', scaleConfig.monthGap)} style={monthGridStyle}>
+        <div className={classNames('pb-2', isMobileViewport && 'overflow-x-auto')}>
+          <div className={classNames('grid', isMobileViewport ? scaleConfig.monthGap : scaleConfig.monthGrid, scaleConfig.monthGap)} style={isMobileViewport ? mobileMonthGridStyle : undefined}>
           {monthGridDays.map((day) => {
             const dayKey = getLocalISODateString(day);
             const items = rowsByDate.get(dayKey) || [];
@@ -6768,7 +6917,7 @@ const AppointmentsCalendarView = ({
                       record={record}
                       onOpen={onOpen}
                       onOpenProfile={onOpenProfile}
-                      compact={false}
+                      compact={isMobileViewport && safeScaleMode === 'compact'}
                     />
                   ))}
                   {items.length > 3 && (
@@ -8732,17 +8881,53 @@ const BotControlView = ({
         actions={
           <div className="flex gap-2 text-sm">
             {!botRunning && (
-              <button onClick={onStart} className="rounded-lg bg-emerald-600 px-3 py-1 text-white">
-                Запустить
+              <button
+                type="button"
+                onClick={onStart}
+                aria-label="Запустить"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 p-0 text-white sm:h-10 sm:w-auto sm:px-4 sm:py-2"
+              >
+                <span className="sm:hidden" aria-hidden="true">
+                  <svg viewBox="0 0 20 20" className="h-5 w-5 fill-current">
+                    <path d="M6 4.75a.75.75 0 0 1 1.14-.64l7 4.25a.75.75 0 0 1 0 1.28l-7 4.25A.75.75 0 0 1 6 13.25v-8.5Z" />
+                  </svg>
+                </span>
+                <span className="sr-only sm:hidden">Запустить</span>
+                <span className="hidden sm:inline">Запустить</span>
               </button>
             )}
             {botRunning && (
-              <button onClick={onStop} className="rounded-lg bg-rose-600 px-3 py-1 text-white">
-                Остановить
+              <button
+                type="button"
+                onClick={onStop}
+                aria-label="Остановить"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-600 p-0 text-white sm:h-10 sm:w-auto sm:px-4 sm:py-2"
+              >
+                <span className="sm:hidden" aria-hidden="true">
+                  <svg viewBox="0 0 20 20" className="h-5 w-5 fill-current">
+                    <rect x="4.25" y="4.25" width="11.5" height="11.5" rx="1.5" />
+                  </svg>
+                </span>
+                <span className="sr-only sm:hidden">Остановить</span>
+                <span className="hidden sm:inline">Остановить</span>
               </button>
             )}
-            <button onClick={onRestart} className="rounded-lg bg-slate-600 px-3 py-1 text-white">
-              Перезапустить
+            <button
+              type="button"
+              onClick={onRestart}
+              aria-label="Перезапустить"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-600 p-0 text-white sm:h-10 sm:w-auto sm:px-4 sm:py-2"
+            >
+              <span className="sm:hidden" aria-hidden="true">
+                <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15.5 7.5A6 6 0 0 0 5 5.5" />
+                  <path d="M15.5 7.5v-3h-3" />
+                  <path d="M4.5 12.5A6 6 0 0 0 15 14.5" />
+                  <path d="M4.5 12.5v3h3" />
+                </svg>
+              </span>
+              <span className="sr-only sm:hidden">Перезапустить</span>
+              <span className="hidden sm:inline">Перезапустить</span>
             </button>
           </div>
         }
@@ -9825,10 +10010,29 @@ const handleBarberFieldChange = (id, field, value) => {
     },
     [apiRequest]
   );
+  const fetchBotRuntime = useCallback(async () => {
+    if (!canAccessBot) return null;
+    const botState = await apiRequest('/bot/status');
+    setBotSettings(botState?.settings || null);
+    setBotStatus(botState?.status || null);
+    setBotToken(botState?.token || null);
+    setDashboard((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        bot: {
+          ...(prev.bot || {}),
+          status: botState?.status || null,
+          settings: botState?.settings || null,
+        },
+      };
+    });
+    return botState;
+  }, [apiRequest, canAccessBot]);
   const handleBotToggle = async (enabled) => {
     try {
       await apiRequest('/bot/status', { method: 'POST', body: JSON.stringify({ isBotEnabled: enabled }) });
-      fetchAll();
+      await fetchBotRuntime();
     } catch (error) {
       setGlobalError(error.message || 'Не удалось обновить настройки бота');
     }
@@ -9836,7 +10040,7 @@ const handleBarberFieldChange = (id, field, value) => {
   const handleBotAction = async (action) => {
     try {
       await apiRequest('/bot/status', { method: 'POST', body: JSON.stringify({ action }) });
-      fetchAll();
+      await fetchBotRuntime();
     } catch (error) {
       setGlobalError(error.message || 'Не удалось выполнить действие');
     }

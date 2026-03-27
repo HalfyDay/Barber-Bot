@@ -25,6 +25,7 @@ const registerAdminCrudRoutes = ({
   respondWithAppointmentDomainError,
   requestRealtimePush,
   respondWithLegacyCrudBlock,
+  buildUserInsightsMap,
 }) => {
   const buildScheduleBoard = async () => {
     const barbersList = await getBarbers({ includeInactive: true });
@@ -444,7 +445,20 @@ const registerAdminCrudRoutes = ({
       if (TABLE_ORDERING[tableName]) {
         queryOptions.orderBy = TABLE_ORDERING[tableName];
       }
-      const records = await prisma[modelName].findMany(queryOptions);
+      let records = await prisma[modelName].findMany(queryOptions);
+      if (tableName === "Users" && typeof buildUserInsightsMap === "function") {
+        const [appointmentsRaw, blockedUsers] = await Promise.all([
+          prisma.appointments.findMany(),
+          Promise.resolve(new Set()),
+        ]);
+        const insightsMap = await buildUserInsightsMap(records, appointmentsRaw.map(mapAppointment), blockedUsers);
+        records = records.map((record) => ({
+          ...record,
+          ...(insightsMap.get(record.id) || {}),
+          BS: insightsMap.get(record.id)?.bsBalance || 0,
+          BSColor: insightsMap.get(record.id)?.activityColor || "red",
+        }));
+      }
       return res.json(records);
     } catch (error) {
       console.error("Generic fetch error:", error);

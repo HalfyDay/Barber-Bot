@@ -10,6 +10,7 @@
   const BARBER_SESSION_STORAGE_KEY = "barber-session";
   const BARBER_REMEMBER_STORAGE_KEY = "barber-session-remember";
   const LOGOUT_MARKER_STORAGE_KEY = "home-user-logout-marker";
+  const REFERRAL_STORAGE_KEY = "home-user-referral-code";
   const HOME_PAGE_URL = "/booking/";
   const PANEL_PAGE_URL = "/home/";
   const TELEGRAM_AUTH_POLL_FAST_INTERVAL_MS = 700;
@@ -112,6 +113,18 @@
     } catch {
       // ignore
     }
+  };
+
+  const getPendingReferralCode = () =>
+    normalizeText(safeStorageGet(getStorageArea("local"), REFERRAL_STORAGE_KEY)).toUpperCase();
+
+  const setPendingReferralCode = (value) => {
+    const safeValue = normalizeText(value).toUpperCase();
+    if (!safeValue) {
+      safeStorageRemove(getStorageArea("local"), REFERRAL_STORAGE_KEY);
+      return;
+    }
+    safeStorageSet(getStorageArea("local"), REFERRAL_STORAGE_KEY, safeValue);
   };
 
   const normalizeText = (value) => (value == null ? "" : String(value).trim());
@@ -597,6 +610,7 @@
     );
     const password = normalizeText(registerPasswordInput?.value);
     const passwordRepeat = normalizeText(registerPasswordRepeatInput?.value);
+    const referralCode = getPendingReferralCode();
 
     if (!fullName || !isPhoneComplete(registerPhoneInput.value) || !phone || !password || !passwordRepeat) {
       setStatus("Заполните все поля регистрации.", "error");
@@ -613,7 +627,7 @@
       const response = await fetch(`${HOME_API_BASE_URL}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, password, displayName: fullName }),
+        body: JSON.stringify({ phone, password, displayName: fullName, referralCode }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.success || !payload?.token || !payload?.user) {
@@ -629,6 +643,7 @@
       clearBarberSessionPayload();
       persistRememberChoice(true);
       persistSessionPayload(sessionPayload, true);
+      setPendingReferralCode("");
       redirectToHome();
     } catch {
       setStatus("Сервер недоступен. Попробуйте позже.", "error");
@@ -647,6 +662,7 @@
     );
     const password = normalizeText(registerPasswordInput?.value);
     const passwordRepeat = normalizeText(registerPasswordRepeatInput?.value);
+    const referralCode = getPendingReferralCode();
 
     if (!password || !passwordRepeat) {
       setStatus("Введите пароль и повторите его.", "error");
@@ -683,6 +699,7 @@
             password,
             phone,
             displayName: telegramSetupState.mode === "register" ? fullName : fullName || "",
+            referralCode,
           }),
         });
         const payload = await response.json().catch(() => ({}));
@@ -702,6 +719,7 @@
         clearBarberSessionPayload();
         persistRememberChoice(true);
         persistSessionPayload(sessionPayload, true);
+        setPendingReferralCode("");
         resetTelegramSetupState();
         redirectToHome();
         return;
@@ -715,7 +733,7 @@
       const response = await fetch(`${HOME_API_BASE_URL}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, password, displayName: fullName }),
+        body: JSON.stringify({ phone, password, displayName: fullName, referralCode }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.success || !payload?.token || !payload?.user) {
@@ -731,6 +749,7 @@
       clearBarberSessionPayload();
       persistRememberChoice(true);
       persistSessionPayload(sessionPayload, true);
+      setPendingReferralCode("");
       redirectToHome();
     } catch {
       setStatus("Сервер недоступен. Попробуйте позже.", "error");
@@ -950,6 +969,15 @@
   const init = async () => {
     resetTelegramSetupState();
     tabsRoot.setAttribute("data-active", "login");
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      const referralCode = normalizeText(params.get("ref"));
+      if (referralCode) {
+        setPendingReferralCode(referralCode);
+      }
+    } catch {
+      // ignore malformed query string
+    }
     attachPhoneMask(loginPhoneInput);
     attachPhoneMask(registerPhoneInput);
 

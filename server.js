@@ -33,6 +33,7 @@ const { createCatalogConfigService } = require("./services/catalogConfigService"
 const { createNotificationReminderService } = require("./services/notificationReminderService");
 const { createBotUserService } = require("./services/botUserService");
 const { createHomeProfileService } = require("./services/homeProfileService");
+const { createHomeClientStoreService } = require("./services/homeClientStoreService");
 const { createDateTimeService } = require("./services/dateTimeService");
 const { createAppointmentPresentationService } = require("./services/appointmentPresentationService");
 const { createIdentityAccessService } = require("./services/identityAccessService");
@@ -103,6 +104,7 @@ console.log(
 );
 const CLIENT_ERROR_LOG = path.join(__dirname, "data", "client-error.log");
 const UPDATE_ALERT_LOG = path.join(__dirname, "data", "update-alert.log");
+const HOME_CLIENT_STORE_PATH = path.join(__dirname, "data", "home-client-store.json");
 const HEALTHCHECK_PATH_RAW = (process.env.HEALTHCHECK_PATH || "/api/health")
   .toString()
   .trim();
@@ -253,12 +255,24 @@ app.get("/service-worker.js", (req, res) => {
   res.setHeader("Cache-Control", "no-cache");
   res.sendFile(path.join(__dirname, "service-worker.js"));
 });
+app.get("/client-app.css", (req, res) => {
+  res.type("text/css");
+  res.sendFile(path.join(__dirname, "client-app.css"));
+});
+app.get("/client-app.js", (req, res) => {
+  res.type("application/javascript");
+  res.sendFile(path.join(__dirname, "client-app.js"));
+});
+app.get("/client.webmanifest", (req, res) => {
+  res.type("application/manifest+json");
+  res.sendFile(path.join(__dirname, "client.webmanifest"));
+});
+const CLIENT_APP_SHELL = path.join(__dirname, "home-page", "index.html");
+const sendClientAppShell = (req, res) => {
+  res.sendFile(CLIENT_APP_SHELL);
+};
 app.use("/login", express.static(path.join(__dirname, "login")));
-app.use("/booking", express.static(path.join(__dirname, "home")));
-app.use("/home", express.static(path.join(__dirname, "home-page")));
-app.use("/referral", express.static(path.join(__dirname, "referral")));
-app.use("/shop", express.static(path.join(__dirname, "shop")));
-app.use("/profile", express.static(path.join(__dirname, "profile")));
+app.get(["/home", "/home/", "/booking", "/booking/", "/referral", "/referral/", "/shop", "/shop/", "/profile", "/profile/"], sendClientAppShell);
 app.use("/panel", express.static(path.join(__dirname)));
 app.get(/^\/panel(?:\/.*)?$/, (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
@@ -794,6 +808,35 @@ const {
   prisma,
   normalizeText,
 });
+const {
+  getUserMeta,
+  updateUserMeta,
+  getSiteSettings,
+  updateSiteSettings,
+  applyReferralCode,
+  buildReferralPayload,
+  buildHomeAppPayload,
+  buildUserInsightsMap,
+} = createHomeClientStoreService({
+  fs,
+  dataFilePath: HOME_CLIENT_STORE_PATH,
+  randomUUID,
+  normalizeText,
+  normalizePhone,
+  canonicalizeKey,
+  prisma,
+  readBlockedUsers,
+  getServiceCatalog,
+  getBarbers,
+  getBotSettings,
+  mapAppointment,
+  splitServiceList,
+  getServicePriceForBarber,
+  isCompletedStatus,
+  countAppointmentWarnings,
+  warningLookbackDays: WARNING_LOOKBACK_DAYS,
+  warningBlockThreshold: WARNING_BLOCK_THRESHOLD,
+});
 const REALTIME_POLL_INTERVAL_MS = Math.max(
   2000,
   Number(process.env.REALTIME_POLL_INTERVAL_MS || "5000") || 5000,
@@ -828,6 +871,7 @@ const {
   getWarningCutoffDate,
   warningBlockThreshold: WARNING_BLOCK_THRESHOLD,
   botRuntime,
+  buildUserInsightsMap,
 });
 const {
   buildRevenueSummary,
@@ -853,6 +897,8 @@ const {
   mapAppointment,
   countAppointmentWarnings,
   warningBlockThreshold: WARNING_BLOCK_THRESHOLD,
+  buildHomeAppPayload,
+  buildUserInsightsMap,
 });
 const {
   attachClient: attachRealtimeClient,
@@ -1104,6 +1150,11 @@ registerHomeRoutes({
   buildHomeIdentity,
   signHomeSessionToken,
   buildLimitBlockedMessage,
+  getUserMeta,
+  updateUserMeta,
+  applyReferralCode,
+  buildReferralPayload,
+  buildHomeAppPayload,
   TELEGRAM_BOT_USERNAME,
   markExpiredTelegramAuthRequests,
   createTelegramAuthRequest,
@@ -1205,6 +1256,8 @@ registerOwnerSystemRoutes({
   path,
   BACKUP_DIR,
   fs,
+  getSiteSettings,
+  updateSiteSettings,
 });
 app.get("/api/dashboard/overview", authenticateToken, async (req, res) => {
   try {
@@ -1292,6 +1345,7 @@ registerAdminCrudRoutes({
   respondWithAppointmentDomainError,
   requestRealtimePush,
   respondWithLegacyCrudBlock,
+  buildUserInsightsMap,
 });
 app.get("/api/options/appointments", authenticateToken, async (req, res) => {
   try {
@@ -1432,9 +1486,3 @@ const {
 installBackupCron();
 registerShutdownHandlers();
 bootstrap();
-
-
-
-
-
-

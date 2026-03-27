@@ -6,97 +6,13 @@
   <title>BrotherShop Profile</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/booking/home.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Unbounded:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="/client.webmanifest" />
+  <link rel="stylesheet" href="/client-app.css" />
+  <meta name="theme-color" content="#7d4a2c" />
 </head>
-<body class="booking-page">
-  <main class="home-root">
-    <section class="booking-screen">
-      <div class="booking-stack">
-        <div class="booking-layer booking-layer-stripes" aria-hidden="true"></div>
-        <div class="booking-layer booking-layer-dark" aria-hidden="true"></div>
-        <div class="booking-layer booking-layer-nav-field" aria-hidden="true"></div>
-
-        <div class="booking-shell">
-          <section class="profile-panel" aria-live="polite">
-            <header class="profile-panel-head">
-              <div class="profile-panel-head-main">
-                <h1 class="profile-panel-title">Профиль</h1>
-                <p class="profile-panel-subtitle">Данные аккаунта</p>
-              </div>
-              <button type="button" id="profile-edit-toggle" class="profile-action-btn">Редактировать</button>
-            </header>
-
-            <form id="profile-form" class="profile-form" autocomplete="on">
-              <label class="profile-field">
-                <span class="profile-field-label">ФИО</span>
-                <input id="profile-display-name" type="text" name="displayName" placeholder="Введите ФИО" required />
-                <small id="profile-name-limit" class="profile-field-hint"></small>
-              </label>
-
-              <label class="profile-field">
-                <span class="profile-field-label">Телефон</span>
-                <input id="profile-phone" type="tel" name="phone" inputmode="tel" placeholder="Введите номер телефона" required />
-                <small id="profile-phone-limit" class="profile-field-hint"></small>
-              </label>
-
-              <button type="button" id="profile-password-toggle" class="profile-pass-toggle" hidden>Сменить пароль</button>
-
-              <div id="profile-password-block" class="profile-password-block" hidden>
-                <label class="profile-field">
-                  <span class="profile-field-label">Новый пароль</span>
-                  <input id="profile-password" type="password" name="password" placeholder="Введите новый пароль" autocomplete="new-password" />
-                </label>
-
-                <label class="profile-field">
-                  <span class="profile-field-label">Повторите пароль</span>
-                  <input id="profile-password-repeat" type="password" name="passwordRepeat" placeholder="Повторите новый пароль" autocomplete="new-password" />
-                </label>
-              </div>
-
-              <div id="profile-edit-actions" class="profile-edit-actions" hidden>
-                <button type="button" id="profile-cancel" class="profile-action-btn profile-cancel-btn">Отмена</button>
-                <button type="submit" id="profile-save" class="profile-save-btn">Сохранить</button>
-              </div>
-            </form>
-
-            <p id="profile-status" class="profile-status" role="status"></p>
-
-            <section class="profile-telegram" aria-label="Telegram">
-              <h2 class="profile-telegram-title">Telegram</h2>
-              <p id="profile-telegram-status" class="profile-telegram-status">Не привязан</p>
-              <small id="profile-telegram-limit" class="profile-field-hint"></small>
-              <div class="profile-telegram-actions">
-                <button type="button" id="profile-telegram-link" class="profile-telegram-btn">Привязать Telegram</button>
-                <button type="button" id="profile-telegram-unlink" class="profile-telegram-btn is-danger" hidden>Отвязать Telegram</button>
-              </div>
-            </section>
-
-            <button type="button" id="profile-logout" class="profile-logout-btn">Выйти из аккаунта</button>
-          </section>
-
-          <nav class="bottom-nav" aria-label="Навигация">
-            <a class="bottom-nav-btn" href="/home/" aria-label="Home">
-              <img src="/Image/site/menu/Home.svg" alt="" />
-            </a>
-            <a class="bottom-nav-btn" href="/referral/" aria-label="Referral">
-              <img src="/Image/site/menu/referral.svg" alt="" />
-            </a>
-            <a class="bottom-nav-btn" href="/booking/" aria-label="Booking">
-              <img src="/Image/site/menu/booking.svg" alt="" />
-            </a>
-            <a class="bottom-nav-btn" href="/shop/" aria-label="Shop">
-              <img src="/Image/site/menu/shop.svg" alt="" />
-            </a>
-            <a class="bottom-nav-btn" href="/profile/" aria-label="Profile" aria-current="page">
-              <img src="/Image/site/menu/profile.svg" alt="" />
-            </a>
-          </nav>
-        </div>
-      </div>
-    </section>
-  </main>
-  <script src="profile.js" defer></script>
+<body data-page="profile">
+  <main id="app"></main>
+  <script src="/client-app.js" defer></script>
 </body>
 </html>
-

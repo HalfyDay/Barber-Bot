@@ -18,6 +18,8 @@ const createAdminInsightsService = ({
   mapAppointment,
   countAppointmentWarnings,
   warningBlockThreshold,
+  buildHomeAppPayload,
+  buildUserInsightsMap,
 }) => {
   const buildRevenueSummary = async ({ requestedBarberId, start, end }) => {
     const defaultRange = getDefaultRevenueRange();
@@ -120,6 +122,32 @@ const createAdminInsightsService = ({
     const user = await prisma.users.findFirst({ where: { Name: name } });
     if (!user) {
       return null;
+    }
+    if (buildHomeAppPayload) {
+      const homeAppPayload = await buildHomeAppPayload(user.id);
+      if (homeAppPayload) {
+        return {
+          user: {
+            ...user,
+            birthDate: homeAppPayload.user?.birthDate || null,
+            gender: homeAppPayload.user?.gender || "",
+            avatarUrl: homeAppPayload.user?.avatarUrl || "",
+            warningCount: homeAppPayload.user?.warningCount || 0,
+            manualBlocked: Boolean(homeAppPayload.user?.isBlocked) && homeAppPayload.user?.warningCount < warningBlockThreshold,
+            isBlocked: Boolean(homeAppPayload.user?.isBlocked),
+            bsBalance: homeAppPayload.referral?.bsBalance || 0,
+            activityColor: homeAppPayload.referral?.stats?.green > 0 ? "green" : "",
+            noticeCount: homeAppPayload.user?.noticeCount || 0,
+          },
+          appointments: homeAppPayload.profile?.visitHistory || [],
+          operations: homeAppPayload.profile?.operations || [],
+          notices: homeAppPayload.profile?.notices || [],
+          referral: homeAppPayload.referral || null,
+          warningCount: homeAppPayload.user?.warningCount || 0,
+          manualBlocked: false,
+          isBlocked: Boolean(homeAppPayload.user?.isBlocked),
+        };
+      }
     }
     const blockedUsers = await readBlockedUsers();
     const appointmentsRaw = await prisma.appointments.findMany({

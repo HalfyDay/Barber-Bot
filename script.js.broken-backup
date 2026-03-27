@@ -121,6 +121,8 @@ const TABLE_COLUMNS = {
     { key: 'Phone', label: 'Телефон', editable: true, type: 'text', minWidth: 'w-36' },
     { key: 'TelegramID', label: 'Telegram', editable: true, type: 'text', minWidth: 'w-32' },
     { key: 'Barber', label: 'Любимый мастер', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-40' },
+    { key: 'BS', label: 'BS', editable: false, type: 'text', align: 'center', minWidth: 'w-24' },
+    { key: 'BSColor', label: 'Цвет', editable: false, type: 'text', align: 'center', minWidth: 'w-24' },
   ],
 };
 const BOT_SUPPORTED_STATUS_OPTIONS = ['\u0410\u043a\u0442\u0438\u0432\u043d\u0430\u044f', '\u0412\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430', '\u041e\u0442\u043c\u0435\u043d\u0430', '\u041d\u0435\u044f\u0432\u043a\u0430'];
@@ -141,7 +143,7 @@ const YEAR_IN_MS = 365 * 24 * 60 * 60 * 1000;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const formatCurrencyValue = (value) => {
   const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return value ?? '—';
+  if (!Number.isFinite(numeric)) return value ? String(value) : '—';
   return numeric.toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
 };
 const getLocalISODateString = (value = new Date()) => {
@@ -485,7 +487,7 @@ const pluralize = (count, [one, few, many]) => {
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
   return many;
 };
-const canonicalizeName = (value) => normalizeText(value).replace(/[^a-z0-9а-яё\s]/gi, '').trim();
+const canonicalizeName = (value) => normalizeText(value).replace(/[^a-z0-9Р°-яё\s]/gi, '').trim();
 const resolveLogin = (value) => normalizeText(value);
 const normalizeRoleValue = (value) => {
   if (value === ROLE_CREATOR) return ROLE_CREATOR;
@@ -735,7 +737,7 @@ const formatLiveTimestamp = (value, nowTs = Date.now()) => {
     if (diffMs < 86_400_000) {
       const hours = Math.floor(diffMs / 3_600_000);
       const minutes = Math.floor((diffMs % 3_600_000) / 60_000);
-      return `${hours} ч ${minutes.toString().padStart(2, '0')} мин`;
+      return `${hours} С‡ ${minutes.toString().padStart(2, '0')} мин`;
     }
     return parsed.toLocaleString('ru-RU', {
       day: '2-digit',
@@ -1072,7 +1074,7 @@ const VisitHistoryList = ({
                 )}
               >
                 <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-slate-400">
-                  <span className="font-semibold text-white">Визит №{visit.orderNumber || '—'}</span>
+                  <span className="font-semibold text-white">Визит в„–{visit.orderNumber || '—'}</span>
                   <span>{visit.dateLabel}</span>
                 </div>
                 <p className="mt-1 text-sm text-slate-100">{visit.Barber || '—'}</p>
@@ -1155,12 +1157,6 @@ const IconTrash = ({ className = 'h-5 w-5' }) => (
     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
     <line x1="10" y1="11" x2="10" y2="17" />
     <line x1="14" y1="11" x2="14" y2="17" />
-  </svg>
-);
-const IconPlus = ({ className = 'h-5 w-5' }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <path d="M12 5v14" />
-    <path d="M5 12h14" />
   </svg>
 );
 const IconCheck = ({ className = 'h-5 w-5' }) => (
@@ -1381,8 +1377,8 @@ const VIEW_TAB_ICONS = {
 };
 const SYSTEM_SUB_SECTIONS = Object.freeze([
   { id: 'bot', label: 'Бот' },
-  { id: 'constructor', label: 'Конструктор меню' },
   { id: 'site', label: 'Сайт' },
+  { id: 'constructor', label: 'Конструктор меню' },
   { id: 'system', label: 'Система' },
 ]);
 const UI_TEXT = Object.freeze({
@@ -3152,13 +3148,13 @@ const BarberAvatarPicker = ({
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-white">Описание</label>
                 <textarea
                   rows={4}
                   value={cardFields.description}
                   onChange={(event) => setCardFields((prev) => ({ ...prev, description: event.target.value }))}
                   placeholder="Аккуратен в деталях и доводит стрижку до идеала"
                   className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                />
                 />
                 <p className="text-xs text-slate-500">Каждая строка станет пунктом списка.</p>
               </div>
@@ -3483,9 +3479,9 @@ const BarbersView = ({
     (fields) => {
       if (!fields) return;
       const nextFields = {
-        cardTitle: fields.cardTitle ?? fields.name ?? '',
-        cardDescription: fields.cardDescription ?? fields.description ?? '',
-        cardPhrase: fields.cardPhrase ?? fields.phrase ?? '',
+        cardTitle: fields.cardTitle || fields.name || '',
+        cardDescription: fields.cardDescription || fields.description || '',
+        cardPhrase: fields.cardPhrase || fields.phrase || '',
         cardPhotoGrayscale: fields.cardPhotoGrayscale !== false,
         cardPhotoOutline: fields.cardPhotoOutline !== false,
       };
@@ -3619,7 +3615,7 @@ const BarbersView = ({
                     </div>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 sm:text-sm">
                       <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-200">
-                        ? {ratingLabel}
+                        ★ {ratingLabel}
                       </span>
                       {positionName && (
                         <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-200">
@@ -3854,7 +3850,7 @@ const BarberProfileView = ({
   if (!barber) {
     return (
       <SectionCard title="Профиль сотрудника">
-        <p className="text-sm text-slate-400">Данные профиля недоступны. Обратитесь к администратору.</p>
+          setError('Обратитесь к администратору.');
       </SectionCard>
     );
   }
@@ -3910,9 +3906,9 @@ const BarberProfileView = ({
             cardImageUrl={barber?.cardImageUrl || ''}
             onCardFieldsChange={(fields) => {
               if (!fields || !barber?.id) return;
-              onFieldChange?.(barber.id, 'cardTitle', fields.cardTitle ?? fields.name ?? '');
-              onFieldChange?.(barber.id, 'cardDescription', fields.cardDescription ?? fields.description ?? '');
-              onFieldChange?.(barber.id, 'cardPhrase', fields.cardPhrase ?? fields.phrase ?? '');
+              onFieldChange?.(barber.id, 'cardTitle', fields.cardTitle || fields.name || '');
+              onFieldChange?.(barber.id, 'cardDescription', fields.cardDescription || fields.description || '');
+              onFieldChange?.(barber.id, 'cardPhrase', fields.cardPhrase || fields.phrase || '');
               onFieldChange?.(barber.id, 'cardPhotoGrayscale', fields.cardPhotoGrayscale !== false);
               onFieldChange?.(barber.id, 'cardPhotoOutline', fields.cardPhotoOutline !== false);
             }}
@@ -4117,7 +4113,7 @@ const ServicesView = ({
     const max = Math.max(...values);
     const count = values.length;
     return {
-      label: min === max ? formatCurrency(min) : `${formatCurrency(min)} – ${formatCurrency(max)}`,
+      label: min === max ? formatCurrency(min) : `${formatCurrency(min)} вЂ“ ${formatCurrency(max)}`,
       details: `Для ${count} ${pluralize(count, ['барбера', 'барбера', 'барберов'])}`,
     };
   };
@@ -4342,7 +4338,7 @@ const formatWeekRangeLabel = (startDate) => {
   endDate.setDate(endDate.getDate() + 6);
   const startLabel = formatter.format(startDate).replace('.', '');
   const endLabel = formatter.format(endDate).replace('.', '');
-  return `${startLabel} – ${endLabel}`;
+  return `${startLabel} вЂ“ ${endLabel}`;
 };
 const groupSchedulesByWeek = (slots = []) => {
   const buckets = new Map();
@@ -4598,8 +4594,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
   };
   const getDraft = (position) => {
     const draft = drafts[position.id];
-    const resolvedRate =
-      draft?.rate ?? draft?.commissionRate ?? position.commissionRate;
+    const resolvedRate = draft?.rate ?? draft?.commissionRate ?? position.commissionRate;
     return {
       name: draft?.name ?? position.name ?? '',
       rate: resolvedRate === undefined || resolvedRate === null ? '' : String(resolvedRate),
@@ -4646,7 +4641,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
     const confirmed = requestConfirm
       ? await requestConfirm({
           title: 'Удалить должность?',
-          message: `«${position.name}» будет удалена без возможности восстановления.`,
+          message: `В«${position.name}В» будет удалена без возможности восстановления.`,
           confirmLabel: 'Удалить',
           tone: 'danger',
         })
@@ -4852,7 +4847,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
     () =>
       barbers
         .map((barber) => {
-          const normalizedId = barber?.id ?? barber?.Id ?? barber?.ID ?? barber?.barberId ?? null;
+          const normalizedId = barber?.id || barber?.Id || barber?.ID || barber?.barberId || null;
           if (!normalizedId || !barber?.name) return null;
           return { id: String(normalizedId), name: barber.name };
         })
@@ -4930,7 +4925,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
   }, [summary?.timeline]);
   const totalGross = summary?.totalGross ?? 0;
   const totalCommission = summary?.totalCommission ?? 0;
-  const totalNet = summary?.totalNet ?? totalGross - totalCommission;
+  const totalNet = summary?.totalNet ?? (totalGross - totalCommission);
   const parseGrossValue = useCallback((value) => {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (value == null) return 0;
@@ -5010,12 +5005,12 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
           <div className="grid grid-cols-2 gap-3 sm:col-span-2 lg:col-span-2">
             <div className="space-y-1">
               <label className="text-xs uppercase tracking-wide text-slate-400" htmlFor={startDateId}>
-                Дата с
+                Дата СЃ
               </label>
               <input
                 id={startDateId}
                 name="revenueStartDate"
-                aria-label="Дата с"
+                aria-label="Дата СЃ"
                 type="date"
                 value={startDate}
                 onChange={(event) => handleFilterChange('start', event.target.value)}
@@ -5080,7 +5075,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
               <div className="mt-6 grid gap-3 md:grid-cols-3">
                 <StatCard label="Общая выручка" value={formatCurrency(totalGross)} />
                 <StatCard label="Начислено сотрудникам" value={formatCurrency(totalCommission)} accent="text-rose-300" />
-                <StatCard label="В кассу" value={formatCurrency(totalNet)} accent="text-emerald-300" />
+                <StatCard label="Р’ кассу" value={formatCurrency(totalNet)} accent="text-emerald-300" />
               </div>
             )}
             <div className="mt-6">
@@ -5098,7 +5093,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
                             <th className="px-4 py-3 text-right font-semibold">Выручка</th>
                             <th className="px-4 py-3 text-right font-semibold">Комиссия</th>
                             <th className="px-4 py-3 text-right font-semibold">Выплаты</th>
-                            <th className="px-4 py-3 text-right font-semibold">В кассу</th>
+                            <th className="px-4 py-3 text-right font-semibold">Р’ кассу</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
@@ -5123,7 +5118,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
                           { label: 'Выручка', value: formatCurrency(item.gross), accent: 'text-white', wrapper: 'border-slate-800/70 bg-slate-950/40' },
                           { label: 'Комиссия', value: formatPercent(item.commissionRate), accent: 'text-slate-100', wrapper: 'border-slate-800/70 bg-slate-950/40' },
                           { label: 'Выплаты', value: formatCurrency(item.commission), accent: 'text-emerald-300', wrapper: 'border-emerald-900/80 bg-emerald-500/5' },
-                          { label: 'В кассу', value: formatCurrency(item.net), accent: 'text-indigo-200', wrapper: 'border-indigo-900/80 bg-indigo-500/5' },
+                          { label: 'Р’ кассу', value: formatCurrency(item.net), accent: 'text-indigo-200', wrapper: 'border-indigo-900/80 bg-indigo-500/5' },
                         ];
                         return (
                           <div key={item.id} className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-inner shadow-black/20">
@@ -5320,7 +5315,7 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
                     setOpen(false);
                   }}
                 >
-                  ?
+                  Г—
                 </button>
               </div>
               {draft.length > 0 && (
@@ -5333,7 +5328,7 @@ const MultiSelectCell = ({ value, options = [], onCommit }) => {
                       onClick={() => toggleOption(service)}
                     >
                       {service}
-                      <span className="text-slate-400">?</span>
+                      <span className="text-slate-400">Г—</span>
                     </button>
                   ))}
                 </div>
@@ -5554,9 +5549,9 @@ const AppointmentTimeField = ({
 const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableId }) => {
   const recordId = record?.id || record?.Id || record?.ID || record?.recordId;
   const value = record[column.key];
-  const [draft, setDraft] = useState(value ?? '');
+  const [draft, setDraft] = useState(value ? '');
   useEffect(() => {
-    setDraft(value ?? '');
+    setDraft(value ? '');
   }, [value]);
   if (!column.editable) {
     if (column.isProfileLink) {
@@ -5570,7 +5565,7 @@ const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableI
   }
   const commit = (nextValue) => {
     const payload = nextValue !== undefined ? nextValue : draft;
-    if ((value ?? '') === (payload ?? '')) return;
+    if ((value ? '') === (payload ? '')) return;
     onUpdate(recordId, { [column.key]: payload });
   };
   if (
@@ -5758,7 +5753,7 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
                     <span className="truncate">{option}</span>
                     {isActive && (
                       <span className="text-xs font-semibold text-indigo-300" aria-hidden="true">
-                        ?
+                        вњ“
                       </span>
                     )}
                   </button>
@@ -7167,10 +7162,10 @@ const ClientsList = ({
   };
   const closeClientModal = () =>
     setModalState({ open: false, record: null, history: [], loading: false, error: '', blockBusy: false });
-  const warningCount = Number(modalState.record?.warningCount ?? 0);
+  const warningCount = Number(modalState.record?.warningCount ? 0);
   const manualBlocked = Boolean(modalState.record?.manualBlocked);
   const isBlocked =
-    (modalState.record?.isBlocked ?? manualBlocked) ||
+    (modalState.record?.isBlocked ? manualBlocked) ||
     warningCount >= CLIENT_BLOCK_THRESHOLD;
   const handleFieldChange = (field, value) => {
     setModalState((prev) => ({ ...prev, record: { ...prev.record, [field]: value } }));
@@ -7199,9 +7194,9 @@ const ClientsList = ({
         blockBusy: false,
         record: {
           ...prev.record,
-          isBlocked: result?.blocked ?? nextBlocked,
-          manualBlocked: result?.manualBlocked ?? nextBlocked,
-          warningCount: result?.warnings ?? prev.record?.warningCount ?? warningCount,
+          isBlocked: result?.blocked ? nextBlocked,
+          manualBlocked: result?.manualBlocked ? nextBlocked,
+          warningCount: result?.warnings ? prev.record?.warningCount ? warningCount,
         },
       }));
     } catch (error) {
@@ -7216,7 +7211,7 @@ const ClientsList = ({
     if (!modalState.record || typeof onDelete !== 'function') return;
     const confirmed = await onRequestConfirm?.({
       title: 'Удалить клиента?',
-      message: `Клиент «${modalState.record.Name || 'Без имени'}» будет удален без возможности восстановления.`,
+      message: `Клиент В«${modalState.record.Name || 'Без имени'}В» будет удален без возможности восстановления.`,
       confirmLabel: 'Удалить',
       tone: 'danger',
     });
@@ -7224,6 +7219,18 @@ const ClientsList = ({
     await onDelete(modalState.record, { skipConfirm: true });
     closeClientModal();
   };
+  const colorOrder = ['green', 'yellow', 'red'];
+  const colorLabels = { green: 'Зеленые', yellow: 'Желтые', red: 'Красные' };
+  const groupedRenderData = [
+    ...colorOrder.map((color) => ({
+      color,
+      items: clients.filter((client) => normalizeText(client.BSColor || client.activityColor).toLowerCase() === color),
+    })),
+    {
+      color: 'other',
+      items: clients.filter((client) => !colorOrder.includes(normalizeText(client.BSColor || client.activityColor).toLowerCase())),
+    },
+  ].filter((group) => group.items.length);
   return (
     <div className="space-y-6">
       {clients.length === 0 ? (
@@ -7231,10 +7238,16 @@ const ClientsList = ({
       ) : (
         <div className="rounded-3xl border border-slate-800 bg-slate-950/40 shadow-inner shadow-black/10">
           <div className="divide-y divide-slate-900">
-            {clients.map((client, index) => {
+            {groupedRenderData.map((group) => (
+              <div key={group.color} className="divide-y divide-slate-900">
+                <div className="bg-slate-950/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  {colorLabels[group.color] || 'Без цвета'}
+                </div>
+                {group.items.map((client, index) => {
               const clientNumber = String(index + 1).padStart(2, '0');
               const phoneDisplay = client.Phone ? formatPhoneInput(client.Phone) : '';
               const telegramHandle = formatTelegramHandle(client.TelegramID);
+              const badgeColor = normalizeText(client.BSColor || client.activityColor).toLowerCase();
               return (
                 <button
                   type="button"
@@ -7253,6 +7266,9 @@ const ClientsList = ({
                           {client.Barber && <p className="text-xs text-slate-400">Любимый барбер: {client.Barber}</p>}
                         </div>
                         <div className="hidden text-right text-sm text-slate-300 sm:block">
+                          <p className={classNames('text-xs font-semibold', badgeColor === 'green' && 'text-emerald-300', badgeColor === 'yellow' && 'text-amber-300', badgeColor === 'red' && 'text-rose-300')}>
+                            BS: {Number(client.BS || 0)}
+                          </p>
                           {phoneDisplay && <p>{phoneDisplay}</p>}
                           {telegramHandle && <p className="text-xs text-slate-500">{telegramHandle}</p>}
                         </div>
@@ -7261,7 +7277,9 @@ const ClientsList = ({
                   </div>
                 </button>
               );
-            })}
+                })}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -7554,15 +7572,9 @@ const ProfileModal = ({ state, onClose, onBlockClient }) => {
     setBlockState(null);
     setBlockError('');
   }, [state?.open, user?.id]);
-  const warningCount = blockState?.warningCount ?? state.data?.warningCount ?? user?.warningCount ?? 0;
-  const manualBlocked = blockState?.manualBlocked ?? state.data?.manualBlocked ?? user?.manualBlocked ?? false;
-  const isBlocked =
-    (blockState?.isBlocked ??
-      blockState?.blocked ??
-      state.data?.isBlocked ??
-      user?.isBlocked ??
-      manualBlocked) ||
-    warningCount >= CLIENT_BLOCK_THRESHOLD;
+  const warningCount = blockState?.warningCount ?? state?.data?.warningCount ?? user?.warningCount ?? 0;
+  const manualBlocked = blockState?.manualBlocked ?? state?.data?.manualBlocked ?? user?.manualBlocked ?? false;
+  const isBlocked = Boolean(blockState?.isBlocked ?? state?.data?.isBlocked ?? user?.isBlocked ?? manualBlocked) || warningCount >= CLIENT_BLOCK_THRESHOLD;
   const handleToggleBlock = async () => {
     if (!onBlockClient || !user?.id) return;
     setBlockBusy(true);
@@ -7571,9 +7583,9 @@ const ProfileModal = ({ state, onClose, onBlockClient }) => {
     try {
       const result = await onBlockClient(user.id, nextBlocked);
       setBlockState({
-        warningCount: result?.warnings ?? warningCount,
-        manualBlocked: result?.manualBlocked ?? nextBlocked,
-        isBlocked: result?.blocked ?? nextBlocked,
+        warningCount: result?.warnings ? warningCount,
+        manualBlocked: result?.manualBlocked ? nextBlocked,
+        isBlocked: result?.blocked ? nextBlocked,
       });
     } catch (error) {
       setBlockError(error.message || 'Failed to update block status');
@@ -7587,6 +7599,8 @@ const ProfileModal = ({ state, onClose, onBlockClient }) => {
   const telegramHref = user?.TelegramID ? buildTelegramLink(user.TelegramID) : '';
   const telegramTarget = telegramHref?.startsWith('tg://') ? '_self' : '_blank';
   const telegramRel = telegramHref?.startsWith('tg://') ? undefined : 'noopener noreferrer';
+  const bsBalance = Number(user?.BS || user?.bsBalance || 0);
+  const bsColor = normalizeText(user?.BSColor || user?.activityColor).toLowerCase();
   return (
     <Modal
       title={state.data?.user?.Name || 'Client profile'}
@@ -7628,6 +7642,12 @@ const ProfileModal = ({ state, onClose, onBlockClient }) => {
             )}
           </div>
           <div className="grid gap-2 text-sm text-slate-200">
+            <div>
+              <span className="text-slate-400">BS:</span>{' '}
+              <span className={classNames(bsColor === 'green' && 'text-emerald-300', bsColor === 'yellow' && 'text-amber-300', bsColor === 'red' && 'text-rose-300')}>
+                {bsBalance}
+              </span>
+            </div>
             <div>
               <span className="text-slate-400">Телефон:</span>{" "}
               {phoneLabel && phoneHref ? (
@@ -7928,13 +7948,13 @@ const AppointmentModal = ({
     { key: 'user', label: 'UserID', value: draft.UserID || '-', accent: draft.UserID ? 'text-white' : 'text-slate-500' },
     {
       key: 'clientReminder',
-      label: 'Напоминание клиенту (2ч)',
+      label: 'Напоминание клиенту (2С‡)',
       value: getReminderLabel(draft.Reminder2hClientSent),
       accent: getReminderAccent(draft.Reminder2hClientSent),
     },
     {
       key: 'barberReminder',
-      label: 'Напоминание барберу (2ч)',
+      label: 'Напоминание барберу (2С‡)',
       value: getReminderLabel(draft.Reminder2hBarberSent),
       accent: getReminderAccent(draft.Reminder2hBarberSent),
     },
@@ -8122,7 +8142,7 @@ const AppointmentModal = ({
           onClick={() => setDetailsOpen((prev) => !prev)}
           className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left"
         >
-          <p className="text-sm font-semibold text-white">Данные о записи</p>
+          <p className="text-sm font-semibold text-white">Данные Рѕ записи</p>
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
@@ -8794,7 +8814,7 @@ const BotControlView = ({
       setSavingToken(false);
     }
   }, [onUpdateToken, tokenDraft]);
-  const updateAvailable = Boolean(updateInfo?.available ?? updateInfo?.updateAvailable);
+  const updateAvailable = Boolean(updateInfo?.available ? updateInfo?.updateAvailable);
   const currentVersionLabel =
     updateInfo?.currentVersionLabel || updateInfo?.currentVersion || updateInfo?.version || '-';
   const latestVersionLabel =
@@ -8811,8 +8831,8 @@ const BotControlView = ({
   const currentTokenValue = token || '';
   const canSaveToken = Boolean(onUpdateToken && normalizedTokenDraft && normalizedTokenDraft !== currentTokenValue);
   const restartDisabled = systemBusy || typeof onRestartSystem !== 'function';
-  const updateButtonLabel = systemBusy && pendingReloadReason !== 'restart' ? 'Обновление…' : 'Обновить';
-  const restartButtonLabel = systemBusy && pendingReloadReason === 'restart' ? 'Перезапуск…' : 'Перезапуск';
+  const updateButtonLabel = systemBusy && pendingReloadReason !== 'restart' ? 'ОбновлениевЂ¦' : 'Обновить';
+  const restartButtonLabel = systemBusy && pendingReloadReason === 'restart' ? 'ПерезапусквЂ¦' : 'Перезапуск';
   const isCreator = role === ROLE_CREATOR;
   const licenseList = Array.isArray(licenseStatus?.licenses) ? licenseStatus.licenses : [];
   const hasLicenseList = isCreator && licenseList.length > 0;
@@ -8969,11 +8989,11 @@ const BotControlView = ({
           <input
             type="checkbox"
             name="botEnabled"
-            aria-label="Автостарт вместе с CRM"
+            aria-label="Автостарт вместе СЃ CRM"
             checked={settings?.isBotEnabled !== false}
             onChange={(event) => onToggleEnabled(event.target.checked)}
           />
-          Автостарт вместе с CRM
+          Автостарт вместе СЃ CRM
         </label>
         <div className="mt-4">
           <label className="text-sm text-slate-300">Telegram-токен</label>
@@ -9027,7 +9047,7 @@ const BotControlView = ({
             />
           </div>
           <div>
-            <label className="text-sm text-slate-300">Блок «О нас»</label>
+            <label className="text-sm text-slate-300">Блок В«Рћ насВ»</label>
             <textarea
               ref={aboutRef}
               value={about}
@@ -9075,14 +9095,16 @@ const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
     </div>
   );
 };
-
 const SITE_PAGE_TABS = Object.freeze([
   { id: 'home', label: 'Главная' },
   { id: 'referral', label: 'Рефералы' },
+  { id: 'booking', label: 'Запись' },
   { id: 'shop', label: 'Магазин' },
+  { id: 'profile', label: 'Профиль' },
 ]);
 
 const createSitePromoDraft = () => ({
+  id: `promo-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
   title: '',
   subtitle: '',
   imageUrl: '',
@@ -9107,7 +9129,6 @@ const SiteImageUploadField = ({ label, value = '', onChange, onUploadImage = nul
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const preview = normalizeImagePath(value || '');
-
   const handleFileChange = useCallback(async (event) => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -9163,7 +9184,7 @@ const SiteImageUploadField = ({ label, value = '', onChange, onUploadImage = nul
   );
 };
 
-const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = false, onUploadSiteImage = null, services = [] }) => {
+const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = false, onUploadSiteImage = null }) => {
   const [draft, setDraft] = useState(() => siteConfig || {});
   const [activeTab, setActiveTab] = useState('home');
 
@@ -9175,35 +9196,12 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
     setDraft((prev) => ({ ...prev, [section]: { ...(prev?.[section] || {}), [key]: value } }));
   const updateHomeField = (key, value) => updateSectionField('home', key, value);
   const updateReferralField = (key, value) => updateSectionField('referral', key, value);
+  const updateBookingField = (key, value) => updateSectionField('booking', key, value);
   const updateShopField = (key, value) => updateSectionField('shop', key, value);
+  const updateProfileField = (key, value) => updateSectionField('profile', key, value);
 
   const promos = Array.isArray(draft?.home?.promos) ? draft.home.promos : [];
   const referralLevels = Array.isArray(draft?.referral?.levels) ? draft.referral.levels : [];
-  const serviceOptions = useMemo(
-    () => Array.from(new Set((Array.isArray(services) ? services : []).map((service) => normalizeText(service?.name)).filter(Boolean))),
-    [services]
-  );
-  const derivedReferralRewardColumns = useMemo(() => {
-    const labels = [];
-    referralLevels.forEach((level) => {
-      const rewards = Array.isArray(level?.serviceRewards) ? level.serviceRewards : [];
-      rewards.forEach((reward) => {
-        const label = normalizeText(reward?.label);
-        if (label && !labels.includes(label)) labels.push(label);
-      });
-    });
-    return labels.map((label, index) => ({ id: `column-${index + 1}`, labels: [label] }));
-  }, [referralLevels]);
-  const referralRewardColumns = useMemo(() => {
-    const configured = Array.isArray(draft?.referral?.rewardColumns) ? draft.referral.rewardColumns : [];
-    const sanitized = configured
-      .map((column, index) => ({
-        id: column?.id || `column-${index + 1}`,
-        labels: Array.from(new Set((Array.isArray(column?.labels) ? column.labels : []).map((item) => normalizeText(item)).filter(Boolean))),
-      }))
-      .filter((column) => column.labels.length > 0);
-    return sanitized.length ? sanitized : derivedReferralRewardColumns;
-  }, [draft?.referral?.rewardColumns, derivedReferralRewardColumns]);
 
   const updatePromos = (updater) =>
     setDraft((prev) => {
@@ -9226,15 +9224,6 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
     updateReferralLevels((levels) => levels.map((level, levelIndex) => (levelIndex === index ? { ...level, [key]: value } : level)));
   const addReferralLevel = () => updateReferralLevels((levels) => [...levels, createReferralLevelDraft()]);
   const removeReferralLevel = (index) => updateReferralLevels((levels) => levels.filter((_, levelIndex) => levelIndex !== index));
-  const moveReferralLevel = (index, direction) =>
-    updateReferralLevels((levels) => {
-      const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= levels.length) return levels;
-      const next = [...levels];
-      const [item] = next.splice(index, 1);
-      next.splice(nextIndex, 0, item);
-      return next;
-    });
   const updateReferralRewards = (levelIndex, updater) =>
     updateReferralLevels((levels) => levels.map((level, currentIndex) => {
       if (currentIndex !== levelIndex) return level;
@@ -9246,80 +9235,6 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
     updateReferralRewards(levelIndex, (rewards) => rewards.map((reward, currentIndex) => (currentIndex === rewardIndex ? { ...reward, [key]: value } : reward)));
   const addReferralReward = (levelIndex) => updateReferralRewards(levelIndex, (rewards) => [...rewards, createReferralRewardDraft()]);
   const removeReferralReward = (levelIndex, rewardIndex) => updateReferralRewards(levelIndex, (rewards) => rewards.filter((_, currentIndex) => currentIndex !== rewardIndex));
-  const setReferralRewardColumns = (updater) =>
-    setDraft((prev) => {
-      const currentColumns = Array.isArray(prev?.referral?.rewardColumns) ? prev.referral.rewardColumns : referralRewardColumns;
-      const nextColumns = typeof updater === 'function' ? updater(currentColumns) : updater;
-      return {
-        ...prev,
-        referral: {
-          ...(prev?.referral || {}),
-          rewardColumns: nextColumns,
-        },
-      };
-    });
-  const setReferralRewardAmount = (levelIndex, column, value) =>
-    updateReferralLevels((levels) =>
-      levels.map((level, currentIndex) => {
-        if (currentIndex !== levelIndex) return level;
-        const rewards = Array.isArray(level?.serviceRewards) ? [...level.serviceRewards] : [];
-        const labels = Array.isArray(column?.labels) ? column.labels.map((item) => normalizeText(item)).filter(Boolean) : [];
-        const nextRewards = rewards.filter((reward) => !labels.includes(normalizeText(reward?.label)));
-        labels.forEach((label) => {
-          nextRewards.push({ ...createReferralRewardDraft(), label, bsAmount: value });
-        });
-        return { ...level, serviceRewards: nextRewards };
-      })
-    );
-  const updateReferralRewardColumnLabels = (columnId, nextLabels) => {
-    const normalizedNext = Array.from(new Set((Array.isArray(nextLabels) ? nextLabels : []).map((item) => normalizeText(item)).filter(Boolean)));
-    const currentColumn = referralRewardColumns.find((column) => column.id === columnId) || { id: columnId, labels: [] };
-    const previousLabels = currentColumn.labels.map((item) => normalizeText(item)).filter(Boolean);
-    setReferralRewardColumns((columns) =>
-      columns.map((column) => (column.id === columnId ? { ...column, labels: normalizedNext } : column))
-    );
-    updateReferralLevels((levels) =>
-      levels.map((level) => {
-        const rewards = Array.isArray(level?.serviceRewards) ? [...level.serviceRewards] : [];
-        const preservedAmount =
-          rewards.find((reward) => previousLabels.includes(normalizeText(reward?.label)))?.bsAmount ?? 0;
-        const filtered = rewards.filter((reward) => !previousLabels.includes(normalizeText(reward?.label)));
-        normalizedNext.forEach((label) => {
-          filtered.push({ ...createReferralRewardDraft(), label, bsAmount: preservedAmount });
-        });
-        return { ...level, serviceRewards: filtered };
-      })
-    );
-  };
-  const addReferralRewardColumn = () => {
-    const nextLabel =
-      serviceOptions.find((option) => !referralRewardColumns.some((column) => column.labels.includes(option))) ||
-      `Услуга ${referralRewardColumns.length + 1}`;
-    setReferralRewardColumns((columns) => [
-      ...columns,
-      { id: `column-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`, labels: [nextLabel] },
-    ]);
-  };
-  const removeReferralRewardColumn = (columnId) => {
-    const currentColumn = referralRewardColumns.find((column) => column.id === columnId);
-    const labelsToRemove = Array.isArray(currentColumn?.labels) ? currentColumn.labels.map((item) => normalizeText(item)).filter(Boolean) : [];
-    setReferralRewardColumns((columns) => columns.filter((column) => column.id !== columnId));
-    if (!labelsToRemove.length) return;
-    updateReferralLevels((levels) =>
-      levels.map((level) => ({
-        ...level,
-        serviceRewards: (Array.isArray(level?.serviceRewards) ? level.serviceRewards : []).filter(
-          (reward) => !labelsToRemove.includes(normalizeText(reward?.label))
-        ),
-      }))
-    );
-  };
-  const getReferralRewardAmount = (level, column) => {
-    const rewards = Array.isArray(level?.serviceRewards) ? level.serviceRewards : [];
-    const labels = Array.isArray(column?.labels) ? column.labels.map((item) => normalizeText(item)) : [];
-    const match = rewards.find((reward) => labels.includes(normalizeText(reward?.label)));
-    return match?.bsAmount ?? '';
-  };
 
   const handleSave = async () => {
     if (!onSaveSite) return;
@@ -9368,6 +9283,10 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_240px]">
                 <div className="grid gap-4">
                   <div className="grid gap-4 lg:grid-cols-2">
+                    <label className="space-y-2 text-sm text-slate-300">
+                      <span>Код акции</span>
+                      <input value={promo.id || ''} onChange={(event) => updatePromoField(index, 'id', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                    </label>
                     <label className="space-y-2 text-sm text-slate-300">
                       <span>Заголовок</span>
                       <input value={promo.title || ''} onChange={(event) => updatePromoField(index, 'title', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
@@ -9421,6 +9340,10 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
             <span>Telegram</span>
             <input value={draft?.home?.telegramUrl || ''} onChange={(event) => updateHomeField('telegramUrl', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
           </label>
+          <label className="space-y-2 text-sm text-slate-300">
+            <span>WhatsApp</span>
+            <input value={draft?.home?.whatsappUrl || ''} onChange={(event) => updateHomeField('whatsappUrl', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+          </label>
           <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
             <span>Email</span>
             <input value={draft?.home?.email || ''} onChange={(event) => updateHomeField('email', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
@@ -9459,142 +9382,82 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
 
       <SectionCard title="Уровни и награды">
         <div className="space-y-4">
-          <p className="text-sm text-slate-400">Редактируйте уровни, диапазон рефералов и BS в одной таблице.</p>
-          <div className="overflow-x-auto rounded-3xl border border-slate-800 bg-slate-950/70">
-            <table className="min-w-full border-collapse text-sm text-slate-200">
-              <thead className="bg-slate-900/90">
-                <tr className="align-top">
-                  <th className="min-w-[220px] border-b border-r border-slate-800 px-3 py-3 text-left font-semibold">Уровень</th>
-                  <th className="w-[136px] min-w-[136px] border-b border-r border-slate-800 px-3 py-3 text-left font-semibold">Кол-во рефералов</th>
-                  {referralRewardColumns.map((column, columnIndex) => (
-                    <th key={`${column.id}-${columnIndex}`} className="min-w-[220px] border-b border-r border-slate-800 px-3 py-3 text-left font-semibold last:border-r-0">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="block text-xs uppercase tracking-wide text-slate-400">Бонус за услугу</span>
-                          <button
-                            type="button"
-                            onClick={() => removeReferralRewardColumn(column.id)}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-rose-500/30 text-rose-300 transition hover:bg-rose-500/10"
-                            aria-label="Удалить колонку услуги"
-                            title="Удалить колонку услуги"
-                          >
-                            <IconTrash className="h-4 w-4" />
-                          </button>
-                        </div>
-                        <select
-                          value={column.labels[0] || ''}
-                          onChange={(event) => updateReferralRewardColumnLabels(column.id, event.target.value ? [event.target.value] : [])}
-                          className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
-                        >
-                          <option value="">Выберите услугу</option>
-                          {serviceOptions.map((option) => (
-                            <option key={option} value={option}>{option}</option>
-                          ))}
-                        </select>
-                        <p className="text-[11px] leading-4 text-slate-500">{column.labels[0] || 'Выберите услугу'}</p>
-                      </div>
-                    </th>
-                  ))}
-                  <th className="w-[72px] min-w-[72px] border-b border-r border-slate-800 px-2 py-3 text-center font-semibold">
-                    <button
-                      type="button"
-                      onClick={addReferralRewardColumn}
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-dashed border-slate-600 text-slate-200 transition hover:bg-slate-800"
-                      aria-label="Добавить колонку услуги"
-                      title="Добавить колонку услуги"
-                    >
-                      <IconPlus className="h-4 w-4" />
+          {referralLevels.map((level, levelIndex) => {
+            const rewards = Array.isArray(level?.serviceRewards) ? level.serviceRewards : [];
+            return (
+              <div key={level.id || levelIndex} className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Уровень {levelIndex + 1}</p>
+                    <p className="text-xs text-slate-500">Диапазон рефералов и BS по услугам.</p>
+                  </div>
+                  <button type="button" onClick={() => removeReferralLevel(levelIndex)} className="rounded-xl border border-rose-500/30 px-3 py-2 text-sm font-medium text-rose-300 transition hover:bg-rose-500/10">
+                    Удалить
+                  </button>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-3">
+                  <label className="space-y-2 text-sm text-slate-300">
+                    <span>Название уровня</span>
+                    <input value={level.name || ''} onChange={(event) => updateReferralLevelField(levelIndex, 'name', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                  </label>
+                  <label className="space-y-2 text-sm text-slate-300">
+                    <span>От рефералов</span>
+                    <input type="number" min="0" value={level.minReferrals ?? ''} onChange={(event) => updateReferralLevelField(levelIndex, 'minReferrals', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                  </label>
+                  <label className="space-y-2 text-sm text-slate-300">
+                    <span>До рефералов</span>
+                    <input type="number" min="0" value={level.maxReferrals ?? ''} onChange={(event) => updateReferralLevelField(levelIndex, 'maxReferrals', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" placeholder="Пусто = без верхней границы" />
+                  </label>
+                </div>
+                <div className="mt-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-white">Награды по услугам</p>
+                    <button type="button" onClick={() => addReferralReward(levelIndex)} className="rounded-xl border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800">
+                      Добавить услугу
                     </button>
-                  </th>
-                  <th className="min-w-[120px] border-b border-slate-800 px-3 py-3 text-left font-semibold">Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {referralLevels.map((level, levelIndex) => (
-                  <tr key={level.id || levelIndex} className="align-top">
-                    <td className="border-b border-r border-slate-800 px-3 py-3">
-                      <input
-                        value={level.name || ''}
-                        onChange={(event) => updateReferralLevelField(levelIndex, 'name', event.target.value)}
-                        placeholder={`Уровень ${levelIndex + 1}`}
-                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white"
-                      />
-                    </td>
-                    <td className="border-b border-r border-slate-800 px-3 py-3">
-                      <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="number"
-                        min="0"
-                        value={level.minReferrals ?? ''}
-                        onChange={(event) => updateReferralLevelField(levelIndex, 'minReferrals', event.target.value)}
-                        placeholder="От"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-white"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        value={level.maxReferrals ?? ''}
-                        onChange={(event) => updateReferralLevelField(levelIndex, 'maxReferrals', event.target.value)}
-                        placeholder="До"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-white"
-                      />
+                  </div>
+                  {rewards.map((reward, rewardIndex) => (
+                    <div key={reward.id || rewardIndex} className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-3 lg:grid-cols-[minmax(0,1fr)_160px_auto]">
+                      <label className="space-y-2 text-sm text-slate-300">
+                        <span>Название услуги</span>
+                        <input value={reward.label || ''} onChange={(event) => updateReferralRewardField(levelIndex, rewardIndex, 'label', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white" />
+                      </label>
+                      <label className="space-y-2 text-sm text-slate-300">
+                        <span>BS</span>
+                        <input type="number" min="0" value={reward.bsAmount ?? ''} onChange={(event) => updateReferralRewardField(levelIndex, rewardIndex, 'bsAmount', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white" />
+                      </label>
+                      <div className="flex items-end">
+                        <button type="button" onClick={() => removeReferralReward(levelIndex, rewardIndex)} className="rounded-xl border border-rose-500/30 px-3 py-3 text-sm font-medium text-rose-300 transition hover:bg-rose-500/10">
+                          Удалить
+                        </button>
+                      </div>
                     </div>
-                  </td>
-                  {referralRewardColumns.map((column, columnIndex) => (
-                    <td key={`${level.id || levelIndex}-${column.id}-${columnIndex}`} className="border-b border-r border-slate-800 px-3 py-3 last:border-r-0">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min="0"
-                            value={getReferralRewardAmount(level, column)}
-                            onChange={(event) => setReferralRewardAmount(levelIndex, column, event.target.value)}
-                            placeholder="BS"
-                            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white"
-                          />
-                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">BS</span>
-                        </div>
-                      </td>
-                    ))}
-                    <td className="border-b border-r border-slate-800 px-2 py-3" />
-                    <td className="border-b border-slate-800 px-3 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={() => moveReferralLevel(levelIndex, -1)} disabled={levelIndex === 0} className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
-                          ↑
-                        </button>
-                        <button type="button" onClick={() => moveReferralLevel(levelIndex, 1)} disabled={levelIndex === referralLevels.length - 1} className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
-                          ↓
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeReferralLevel(levelIndex)}
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-rose-500/30 text-rose-300 transition hover:bg-rose-500/10"
-                          aria-label="Удалить уровень"
-                          title="Удалить уровень"
-                        >
-                          <IconTrash className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                <tr>
-                  <td colSpan={referralRewardColumns.length + 4} className="px-3 py-3">
-                    <button
-                      type="button"
-                      onClick={addReferralLevel}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-700 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
-                    >
-                      <IconPlus className="h-4 w-4" />
-                      Добавить уровень
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          <button type="button" onClick={addReferralLevel} className="rounded-2xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800">
+            Добавить уровень
+          </button>
         </div>
       </SectionCard>
     </div>
+  );
+
+  const renderBookingTab = () => (
+    <SectionCard title="Страница записи">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <label className="space-y-2 text-sm text-slate-300">
+          <span>Заголовок страницы</span>
+          <input value={draft?.booking?.pageTitle || ''} onChange={(event) => updateBookingField('pageTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+        </label>
+        <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+          <span>Подсказка к комментарию</span>
+          <input value={draft?.booking?.commentPlaceholder || ''} onChange={(event) => updateBookingField('commentPlaceholder', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+        </label>
+      </div>
+    </SectionCard>
   );
 
   const renderShopTab = () => (
@@ -9612,9 +9475,26 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
     </SectionCard>
   );
 
+  const renderProfileTab = () => (
+    <SectionCard title="Страница профиля">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <label className="space-y-2 text-sm text-slate-300">
+          <span>Заголовок страницы</span>
+          <input value={draft?.profile?.pageTitle || ''} onChange={(event) => updateProfileField('pageTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+        </label>
+        <label className="space-y-2 text-sm text-slate-300">
+          <span>Заголовок истории</span>
+          <input value={draft?.profile?.historyTitle || ''} onChange={(event) => updateProfileField('historyTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+        </label>
+      </div>
+    </SectionCard>
+  );
+
   const renderTabContent = () => {
     if (activeTab === 'referral') return renderReferralTab();
+    if (activeTab === 'booking') return renderBookingTab();
     if (activeTab === 'shop') return renderShopTab();
+    if (activeTab === 'profile') return renderProfileTab();
     return renderHomeTab();
   };
 
@@ -9646,8 +9526,7 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
       </div>
     </div>
   );
-};
-const LoginScreen = ({ onLogin, error, defaultRemember = false, onRememberChange = null }) => {
+};const LoginScreen = ({ onLogin, error, defaultRemember = false, onRememberChange = null }) => {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(defaultRemember);
@@ -10363,7 +10242,7 @@ const apiRequest = useCallback(
     setAuthError('');
     const normalizedPhone = normalizePhoneValue(phone || login);
     const normalizedLogin = resolveLogin(login || phone);
-    const rememberChoice = remember ?? rememberSession;
+    const rememberChoice = remember ? rememberSession;
     if (!normalizedPhone && !normalizedLogin) {
       setAuthError('Укажите номер телефона или логин');
       return;
@@ -10389,7 +10268,7 @@ const apiRequest = useCallback(
       persistSessionPayload(sessionPayload, rememberChoice);
       setSession(sessionPayload);
     } catch (error) {
-      setAuthError('Не удалось подключиться к серверу');
+      setImportStatus({ type: 'error', message: 'Не удалось подключиться к серверу' });
     }
   };
 const handleBarberFieldChange = (id, field, value) => {
@@ -10428,7 +10307,7 @@ const handleBarberFieldChange = (id, field, value) => {
       phone: barberData.phone || '',
       telegramId: barberData.telegramId || '',
       isActive: barberData.isActive !== false,
-      orderIndex: Number(barberData.orderIndex ?? fallbackOrder) || 0,
+      orderIndex: Number(barberData.orderIndex ? fallbackOrder) || 0,
       role: normalizeRoleValue(barberData.role),
       positionId: barberData.positionId || null,
     };
@@ -10453,7 +10332,7 @@ const handleBarberFieldChange = (id, field, value) => {
     if (!barber?.id) return;
     const confirmed = await requestConfirm({
       title: 'Удалить барбера?',
-      message: `Барбер «${barber.name || 'Без имени'}» будет удален без возможности восстановления.`,
+      message: `Барбер В«${barber.name || 'Без имени'}В» будет удален без возможности восстановления.`,
       confirmLabel: 'Удалить',
       tone: 'danger',
     });
@@ -10467,7 +10346,7 @@ const handleBarberFieldChange = (id, field, value) => {
   };
   const handleAddBarber = async (payload) => {
     if (!payload.name || !payload.password) {
-      setGlobalError('Заполните имя, логин и пароль барбера');
+        setImportStatus({ type: 'success', message: 'Данные импортированы: имя, логин и пароль обновлены.' });
       return null;
     }
     try {
@@ -10520,7 +10399,7 @@ const handleBarberFieldChange = (id, field, value) => {
     if (!service?.id) return;
     const confirmed = await requestConfirm({
       title: 'Удалить услугу?',
-      message: `Услуга «${service.name || 'Без названия'}» будет удалена.`,
+      message: `Услуга В«${service.name || 'Без названия'}В» будет удалена.`,
       confirmLabel: 'Удалить',
       tone: 'danger',
     });
@@ -10539,7 +10418,7 @@ const handleBarberFieldChange = (id, field, value) => {
       try {
         await apiRequest(`/services/full/${encodeURIComponent(service.id)}`, {
           method: 'PUT',
-          body: JSON.stringify({ prices: { [staffBarberId]: nextPrice ?? null } }),
+          body: JSON.stringify({ prices: { [staffBarberId]: nextPrice ? null } }),
         });
       } catch (error) {
         setGlobalError(error.message || 'Не удалось сохранить цену услуги.');
@@ -10592,7 +10471,7 @@ const handleBarberFieldChange = (id, field, value) => {
   const handleUploadAvatar = useCallback(
     async ({ name, data }) => {
       if (!name || !data) {
-        throw new Error('Укажите имя и данные изображения.');
+        setImportStatus({ type: 'success', message: 'Импорт завершен: обновлены имя и данные изображения.' });
       }
       return apiRequest('/assets/avatars/upload', {
         method: 'POST',
@@ -10604,7 +10483,7 @@ const handleBarberFieldChange = (id, field, value) => {
   const handleUploadCard = useCallback(
     async ({ barberId, name, data }) => {
       if (!barberId || !data) {
-        throw new Error('Нужны id барбера и данные карточки.');
+        setImportStatus({ type: 'success', message: 'Импорт завершен: обновлены barber id и данные карточки.' });
       }
       return apiRequest('/assets/cards/upload', {
         method: 'POST',
@@ -11010,7 +10889,7 @@ const handleBarberFieldChange = (id, field, value) => {
     console.log('[update] User requested apply update');
     const confirmed = await requestConfirm({
       title: 'Обновить систему?',
-      message: 'CRM и бот будут обновлены до последней версии. Перезапуск может занять несколько минут.',
+      message: 'Система скачает последнюю версию и перезапустит CRM и бот. Продолжить?',
       confirmLabel: 'Обновить',
       tone: 'danger',
     });
@@ -11044,7 +10923,7 @@ const handleBarberFieldChange = (id, field, value) => {
     console.log('[restart] User requested restart');
     const confirmed = await requestConfirm({
       title: 'Перезапустить систему?',
-      message: 'Сайт и бот будут остановлены и запущены заново. Это может занять до нескольких минут.',
+      message: 'Сайт и бот привязаны к одной инфраструктуре и запускаются вместе. Продолжить перезапуск?',
       confirmLabel: 'Перезапуск',
       tone: 'danger',
     });
@@ -11188,7 +11067,6 @@ const handleBarberFieldChange = (id, field, value) => {
             siteSaving={siteConfigSaving}
             onSaveSite={handleSaveSiteConfig}
             onUploadSiteImage={handleUploadAvatar}
-            services={services}
             onRestartSystem={handleRestartSystem}
             pendingReloadReason={pendingReloadReason}
             systemBusy={systemBusy}
@@ -11363,5 +11241,4 @@ const renderApp = () => {
   }
 };
 renderApp();
-
 

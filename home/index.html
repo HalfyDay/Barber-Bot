@@ -6,111 +6,13 @@
   <title>BrotherShop Booking</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="home.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Unbounded:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="/client.webmanifest" />
+  <link rel="stylesheet" href="/client-app.css" />
+  <meta name="theme-color" content="#7d4a2c" />
 </head>
-<body class="checking booking-page">
-  <main class="home-root" aria-live="polite">
-    <section id="booking-screen" class="booking-screen" hidden>
-      <div class="booking-stack">
-        <div class="booking-layer booking-layer-stripes" aria-hidden="true"></div>
-        <div class="booking-layer booking-layer-dark">
-          <div id="booking-dark-center-shape" class="booking-dark-center-shape">
-            <div class="booking-dark-lower-figure">
-              <div class="booking-dark-lower-info">
-                <p id="barber-layer-name" class="booking-dark-lower-name">БАРБЕР</p>
-                <p id="barber-layer-phrase" class="booking-dark-lower-phrase">—</p>
-                <p id="barber-layer-services" class="booking-dark-lower-services">Количество услуг: 0</p>
-              </div>
-              <div class="booking-dark-lower-figure-dark" aria-hidden="true">
-                <img
-                  id="barber-layer-image"
-                  class="booking-dark-layer-image"
-                  src="/Image/card/Barber_photo.png"
-                  alt="Барбер"
-                />
-              </div>
-            </div>
-            <section id="booking-flow" class="booking-flow" hidden aria-live="polite">
-              <div class="booking-flow-top">
-                <p id="booking-flow-step" class="booking-flow-step">Шаг 1</p>
-              </div>
-              <h3 id="booking-flow-title" class="booking-flow-title">Выберите услугу</h3>
-              <p id="booking-flow-meta" class="booking-flow-meta"></p>
-              <div id="booking-flow-content" class="booking-flow-content"></div>
-              <p id="booking-flow-status" class="booking-flow-status"></p>
-            </section>
-          </div>
-          <div id="booking-services-actions-external" class="booking-services-actions-external" hidden></div>
-          <h2 class="booking-dark-notch-title" aria-hidden="true">
-            <span class="booking-dark-notch-title-left">ЗАП</span><span class="booking-dark-notch-title-right">ИСЬ</span>
-          </h2>
-          <div class="carousel-nav booking-dark-pager" aria-label="Навигация по барберам">
-            <button id="prev-barber" type="button" class="nav-arrow" aria-label="Предыдущий барбер"><img src="/Image/site/left.svg" alt="" /></button>
-            <div id="barber-dots" class="barber-dots"></div>
-            <span id="barber-counter" class="barber-counter">0/0</span>
-            <button id="next-barber" type="button" class="nav-arrow" aria-label="Следующий барбер"><img src="/Image/site/right.svg" alt="" /></button>
-          </div>
-          <button id="book-button-dark" type="button" class="booking-dark-book-btn">ЗАПИСАТЬСЯ</button>
-          <button id="booking-flow-confirm" type="button" class="booking-flow-confirm-btn" hidden>
-            ПОДТВЕРДИТЬ ЗАПИСЬ
-          </button>
-          <button id="booking-flow-back" type="button" class="booking-flow-back-corner" aria-label="Назад">
-            <span aria-hidden="true">‹</span>
-          </button>
-        </div>
-        <div class="booking-layer booking-layer-nav-field" aria-hidden="true"></div>
-
-        <div class="booking-shell">
-          <div class="booking-card">
-            <div class="booking-head">
-              <h1 class="booking-title">ЗАПИСЬ</h1>
-              <div class="booking-head-meta">
-                <span class="booking-head-dots" aria-hidden="true">.....</span>
-                <button id="logout-button" type="button" class="logout-btn">ВЫЙТИ</button>
-              </div>
-            </div>
-
-            <div class="booking-stage">
-              <div class="booking-stage-top-shape"></div>
-              <div class="booking-stage-noise"></div>
-              <div class="booking-stage-accent"></div>
-              <div class="booking-stage-dark"></div>
-              <div id="barber-name" class="booking-name">БАРБЕР</div>
-              <img id="barber-main-image" class="booking-main-image" src="/Image/card/Barber_photo.png" alt="Барбер" />
-            </div>
-          </div>
-
-          <p id="booking-subtitle" class="booking-subtitle"></p>
-
-          <div id="barber-thumbs" class="barber-thumbs"></div>
-
-          <button id="book-button" type="button" class="book-btn">ЗАПИСАТЬСЯ</button>
-          <p id="booking-status" class="booking-status"></p>
-
-          <nav class="bottom-nav" aria-label="Навигация">
-            <a class="bottom-nav-btn" href="/home/" aria-label="Home">
-              <img src="/Image/site/menu/Home.svg" alt="" />
-            </a>
-            <a class="bottom-nav-btn" href="/referral/" aria-label="Referral">
-              <img src="/Image/site/menu/referral.svg" alt="" />
-            </a>
-            <a class="bottom-nav-btn is-active" href="/booking/" aria-label="Booking">
-              <img src="/Image/site/menu/sel_booking.svg" alt="" />
-            </a>
-            <a class="bottom-nav-btn" href="/shop/" aria-label="Shop">
-              <img src="/Image/site/menu/shop.svg" alt="" />
-            </a>
-            <a class="bottom-nav-btn" href="/profile/" aria-label="Profile">
-              <img src="/Image/site/menu/profile.svg" alt="" />
-            </a>
-          </nav>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <script src="home.js" defer></script>
+<body data-page="booking">
+  <main id="app"></main>
+  <script src="/client-app.js" defer></script>
 </body>
 </html>
-

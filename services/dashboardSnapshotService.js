@@ -24,6 +24,7 @@ const createDashboardSnapshotService = ({
   getWarningCutoffDate,
   warningBlockThreshold,
   botRuntime,
+  buildUserInsightsMap,
 }) => {
   const buildClientRows = (users, appointments, manualBlockedSet = new Set()) => {
     const now = new Date();
@@ -157,6 +158,9 @@ const createDashboardSnapshotService = ({
       readBlockedUsers(),
     ]);
     const appointments = appointmentsRaw.map(mapAppointment);
+    const insightsMap = buildUserInsightsMap
+      ? await buildUserInsightsMap(users, appointments, blockedUsers)
+      : new Map();
     const now = new Date();
     const todayKey = formatDateOnly(now);
     const yearAgo = new Date(now);
@@ -178,7 +182,10 @@ const createDashboardSnapshotService = ({
     const todaysAppointments = upcoming.filter(
       (appt) => appt.Date === todayKey,
     ).length;
-    const clients = buildClientRows(users, appointments, blockedUsers);
+    const clients = buildClientRows(users, appointments, blockedUsers).map((client) => {
+      const extra = insightsMap.get(client.id) || {};
+      return { ...client, ...extra };
+    });
     const blockedClients = clients.filter((client) => client.isBlocked).length;
     const stats = {
       totalUsers: users.length,

@@ -18,6 +18,13 @@ const registerHomeRoutes = ({
   buildHomeIdentity,
   signHomeSessionToken,
   buildLimitBlockedMessage,
+  getUserMeta,
+  updateUserMeta,
+  applyReferralCode,
+  buildReferralPayload,
+  resolveBsTransferRecipient,
+  transferBsBalance,
+  buildHomeAppPayload,
   TELEGRAM_BOT_USERNAME,
   markExpiredTelegramAuthRequests,
   createTelegramAuthRequest,
@@ -99,6 +106,10 @@ const registerHomeRoutes = ({
         });
       }
       const user = toPublicHomeUser(row);
+      await applyReferralCode({
+        userId: user.id,
+        referralCode: req.body?.referralCode,
+      });
       const identity = buildHomeIdentity({
         userId: user.id,
         phone: user.phone,
@@ -519,6 +530,10 @@ const registerHomeRoutes = ({
         });
       }
       const user = toPublicHomeUser(persisted);
+      await applyReferralCode({
+        userId: user.id,
+        referralCode: req.body?.referralCode,
+      });
       const identity = buildHomeIdentity({
         userId: user.id,
         phone: user.phone,
@@ -581,9 +596,17 @@ const registerHomeRoutes = ({
       ) {
         return res.sendStatus(401);
       }
+      const meta = await getUserMeta(userId);
       return res.json({
         success: true,
-        user: toPublicHomeProfile(stored),
+        user: {
+          ...toPublicHomeProfile(stored),
+          birthDate: meta?.birthDate || null,
+          gender: meta?.gender || "",
+          avatarUrl: meta?.avatarUrl || "",
+          bookingNotificationsEnabled: meta?.bookingNotificationsEnabled !== false,
+          referralCode: meta?.referralCode || "",
+        },
         botUsername: TELEGRAM_BOT_USERNAME || null,
       });
     } catch (error) {
@@ -688,11 +711,28 @@ const registerHomeRoutes = ({
         patch.homePasswordHash = hashHex;
         patch.homePasswordSalt = saltHex;
       }
+      const birthDate = normalizeText(req.body?.birthDate);
+      const gender = normalizeText(req.body?.gender);
+      const avatarUrl = normalizeText(req.body?.avatarUrl);
+      const bookingNotificationsEnabledRaw = req.body?.bookingNotificationsEnabled;
+      const bookingNotificationsEnabled =
+        bookingNotificationsEnabledRaw === undefined
+          ? undefined
+          : !["false", "0", "off", ""].includes(
+              String(bookingNotificationsEnabledRaw).trim().toLowerCase(),
+            );
 
       const updated = await prisma.users.update({
         where: { id: userId },
         data: patch,
         select: HOME_PROFILE_SELECT,
+      });
+      const currentMeta = await getUserMeta(userId);
+      const meta = await updateUserMeta(userId, {
+        birthDate: birthDate || null,
+        gender: gender || "",
+        avatarUrl: avatarUrl || currentMeta?.avatarUrl || "",
+        ...(bookingNotificationsEnabled === undefined ? {} : { bookingNotificationsEnabled }),
       });
       const user = toPublicHomeProfile(updated);
       const identity = buildHomeIdentity({
@@ -705,7 +745,14 @@ const registerHomeRoutes = ({
       return res.json({
         success: true,
         token,
-        user,
+        user: {
+          ...user,
+          birthDate: meta?.birthDate || null,
+          gender: meta?.gender || "",
+          avatarUrl: meta?.avatarUrl || "",
+          bookingNotificationsEnabled: meta?.bookingNotificationsEnabled !== false,
+          referralCode: meta?.referralCode || "",
+        },
       });
     } catch (error) {
       if (
@@ -719,6 +766,109 @@ const registerHomeRoutes = ({
       return res.status(500).json({
         success: false,
         message: "Не удалось сохранить изменения профиля.",
+      });
+    }
+  });
+
+  app.get("/api/home/app", authenticateHomeToken, async (req, res) => {
+    try {
+      const userId = normalizeText(req.homeUser?.userId);
+      if (!userId) return res.sendStatus(401);
+      const payload = await buildHomeAppPayload(userId);
+      if (!payload) return res.sendStatus(401);
+      return res.json({
+        success: true,
+        ...payload,
+        botUsername: TELEGRAM_BOT_USERNAME || null,
+      });
+    } catch (error) {
+      console.error("Home app payload error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Не удалось загрузить данные приложения.",
+      });
+    }
+  });
+
+  app.get("/api/home/referral", authenticateHomeToken, async (req, res) => {
+    try {
+      const userId = normalizeText(req.homeUser?.userId);
+      if (!userId) return res.sendStatus(401);
+      const stored = await prisma.users.findUnique({ where: { id: userId } });
+      if (!stored) return res.sendStatus(401);
+      const referral = await buildReferralPayload(stored);
+      return res.json({
+        success: true,
+        referral,
+      });
+    } catch (error) {
+      console.error("Home referral payload error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Не удалось загрузить реферальную систему.",
+      });
+    }
+  });
+
+  app.post("/api/home/referral/transfer/preview", authenticateHomeToken, async (req, res) => {
+    try {
+      const userId = normalizeText(req.homeUser?.userId);
+      if (!userId) return res.sendStatus(401);
+      const recipient = await resolveBsTransferRecipient({
+        fromUserId: userId,
+        targetPhone: req.body?.targetPhone,
+      });
+      return res.json({
+        success: true,
+        recipient,
+      });
+    } catch (error) {
+      const messageMap = {
+        TARGET_REQUIRED: "Укажите телефон получателя.",
+        TARGET_NOT_FOUND: "Получатель не найден.",
+        SELF_TRANSFER: "Нельзя переводить BS самому себе.",
+        UNAUTHORIZED: "Не удалось подтвердить пользователя.",
+      };
+      const code = normalizeText(error?.message);
+      return res.status(400).json({
+        success: false,
+        message: messageMap[code] || "Не удалось проверить получателя.",
+      });
+    }
+  });
+
+  app.post("/api/home/referral/transfer", authenticateHomeToken, async (req, res) => {
+    try {
+      const userId = normalizeText(req.homeUser?.userId);
+      if (!userId) return res.sendStatus(401);
+      const stored = await prisma.users.findUnique({ where: { id: userId } });
+      if (!stored) return res.sendStatus(401);
+
+      const result = await transferBsBalance({
+        fromUserId: userId,
+        targetPhone: req.body?.targetPhone,
+        amountBs: req.body?.amountBs,
+        comment: req.body?.comment,
+      });
+      const referral = await buildReferralPayload(stored);
+      return res.json({
+        success: true,
+        referral,
+        transfer: result,
+      });
+    } catch (error) {
+      const messageMap = {
+        TARGET_REQUIRED: "Укажите телефон получателя.",
+        INVALID_AMOUNT: "Укажите корректную сумму перевода.",
+        TARGET_NOT_FOUND: "Получатель не найден.",
+        SELF_TRANSFER: "Нельзя переводить BS самому себе.",
+        INSUFFICIENT_BS: "Недостаточно BS для перевода.",
+        UNAUTHORIZED: "Не удалось подтвердить пользователя.",
+      };
+      const code = normalizeText(error?.message);
+      return res.status(400).json({
+        success: false,
+        message: messageMap[code] || "Не удалось выполнить перевод BS.",
       });
     }
   });

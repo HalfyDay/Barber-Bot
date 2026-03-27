@@ -29,6 +29,8 @@ const registerOwnerSystemRoutes = ({
   path,
   BACKUP_DIR,
   fs,
+  getSiteSettings,
+  updateSiteSettings,
 }) => {
   app.get("/api/license/status", authenticateToken, async (req, res) => {
     if (!isOwnerRequest(req)) {
@@ -279,6 +281,32 @@ const registerOwnerSystemRoutes = ({
     } catch (error) {
       console.error("Backup delete error:", error);
       res.status(500).json({ error: "Не удалось удалить бэкап." });
+    }
+  });
+
+  app.get("/api/system/site", authenticateToken, async (req, res) => {
+    if (!isOwnerRequest(req)) {
+      return res.status(403).json({ error: "Недостаточно прав для просмотра сайта." });
+    }
+    try {
+      const site = await getSiteSettings();
+      res.json(site);
+    } catch (error) {
+      console.error("Site settings fetch error:", error);
+      res.status(500).json({ error: "Не удалось загрузить настройки сайта." });
+    }
+  });
+
+  app.put("/api/system/site", authenticateToken, async (req, res) => {
+    if (!isOwnerRequest(req)) {
+      return res.status(403).json({ error: "Недостаточно прав для изменения сайта." });
+    }
+    try {
+      const site = await updateSiteSettings(req.body || {});
+      res.json(site);
+    } catch (error) {
+      console.error("Site settings save error:", error);
+      res.status(500).json({ error: "Не удалось сохранить настройки сайта." });
     }
   });
 };

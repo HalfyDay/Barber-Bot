@@ -3,8 +3,6 @@
   const HOME_TELEGRAM_AUTH_START_API_URL = `${HOME_API_BASE_URL}/telegram/start`;
   const HOME_TELEGRAM_AUTH_STATUS_API_URL = `${HOME_API_BASE_URL}/telegram/status`;
   const HOME_TELEGRAM_AUTH_COMPLETE_API_URL = `${HOME_API_BASE_URL}/telegram/complete`;
-  const BARBER_LOGIN_API_URL = `${window.location.origin}/api/login`;
-  const BARBER_AUTH_ME_API_URL = `${window.location.origin}/api/auth/me`;
   const SESSION_STORAGE_KEY = "home-user-session";
   const REMEMBER_STORAGE_KEY = "home-user-remember";
   const BARBER_SESSION_STORAGE_KEY = "barber-session";
@@ -12,7 +10,6 @@
   const LOGOUT_MARKER_STORAGE_KEY = "home-user-logout-marker";
   const REFERRAL_STORAGE_KEY = "home-user-referral-code";
   const HOME_PAGE_URL = "/booking/";
-  const PANEL_PAGE_URL = "/home/";
   const TELEGRAM_AUTH_POLL_FAST_INTERVAL_MS = 700;
   const TELEGRAM_AUTH_POLL_SLOW_INTERVAL_MS = 1500;
   const TELEGRAM_AUTH_POLL_FAST_ATTEMPTS = 6;
@@ -256,6 +253,13 @@
       id: normalizeText(payload.user?.id),
       phone: normalizePhone(payload.user?.phone),
       displayName: normalizeText(payload.user?.displayName || payload.user?.phone),
+      access: {
+        isBarber: payload.user?.access?.isBarber === true,
+        role: normalizeText(payload.user?.access?.role) || "client",
+        barberId: normalizeText(payload.user?.access?.barberId),
+        barberName: normalizeText(payload.user?.access?.barberName),
+      },
+      authenticatedViaBarberAccess: payload.user?.authenticatedViaBarberAccess === true,
     },
   });
 
@@ -389,10 +393,6 @@
     window.location.replace(HOME_PAGE_URL);
   };
 
-  const redirectToPanel = () => {
-    window.location.replace(PANEL_PAGE_URL);
-  };
-
   const tryRestoreSession = async () => {
     if (hasLogoutMarker()) {
       clearSessionPayload();
@@ -411,18 +411,6 @@
     });
     persistSessionPayload(nextPayload, persisted.remember);
     return nextPayload;
-  };
-
-  const tryRestoreBarberSession = async () => {
-    const persisted = loadPersistedBarberSession();
-    if (!persisted.session?.token) return null;
-    const checked = await validateBarberSessionToken(persisted.session.token);
-    if (!checked?.session?.token) {
-      clearBarberSessionPayload();
-      return null;
-    }
-    persistBarberSessionPayload(checked.session, persisted.remember);
-    return checked.session;
   };
 
   const setStatus = (text, type = "default") => {
@@ -548,51 +536,19 @@
           user: homePayload.user,
         });
         clearLogoutMarker();
-        clearBarberSessionPayload();
         persistRememberChoice(true);
         persistSessionPayload(sessionPayload, true);
         redirectToHome();
         return;
       }
 
-      let barberResponse = null;
-      let barberPayload = {};
-      let barberError = null;
-      try {
-        barberResponse = await fetch(BARBER_LOGIN_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone: normalizedPhone, password }),
-        });
-        barberPayload = await barberResponse.json().catch(() => ({}));
-      } catch (error) {
-        barberError = error;
-      }
-      if (barberResponse?.ok && barberPayload?.success && barberPayload?.token) {
-        const barberSessionPayload = buildBarberSessionPayload({
-          token: barberPayload.token,
-          username: barberPayload.username,
-          displayName: barberPayload.displayName,
-          barberId: barberPayload.barberId,
-          role: barberPayload.role,
-          barberName: barberPayload.barberName,
-          phone: barberPayload.phone || normalizedPhone,
-        });
-        clearSessionPayload();
-        persistBarberRememberChoice(true);
-        persistBarberSessionPayload(barberSessionPayload, true);
-        redirectToPanel();
-        return;
-      }
-
-      if (homeError && barberError) {
+      if (homeError) {
         setStatus("Сервер недоступен. Попробуйте позже.", "error");
         setPending(loginForm, false);
         return;
       }
       setStatus(
         normalizeText(homePayload?.message) ||
-          normalizeText(barberPayload?.message) ||
           "Не удалось выполнить вход.",
         "error",
       );
@@ -644,7 +600,6 @@
         user: payload.user,
       });
       clearLogoutMarker();
-      clearBarberSessionPayload();
       persistRememberChoice(true);
       persistSessionPayload(sessionPayload, true);
       setPendingReferralCode("");
@@ -758,30 +713,6 @@
     } catch {
       setStatus("Сервер недоступен. Попробуйте позже.", "error");
       setPending(registerForm, false);
-    }
-  };
-
-  const validateBarberSessionToken = async (token) => {
-    if (!token) return null;
-    try {
-      const response = await fetch(BARBER_AUTH_ME_API_URL, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) return null;
-      const payload = await response.json().catch(() => ({}));
-      const refreshed = response.headers.get("x-session-token");
-      return {
-        session: buildBarberSessionPayload({
-          token: refreshed || token,
-          username: payload?.username,
-          displayName: payload?.displayName,
-          barberId: payload?.barberId,
-          role: payload?.role,
-          barberName: payload?.barberName,
-        }),
-      };
-    } catch {
-      return null;
     }
   };
 
@@ -1005,12 +936,6 @@
       redirectToHome();
       return;
     }
-    const restoredBarberSession = await tryRestoreBarberSession();
-    if (restoredBarberSession) {
-      redirectToPanel();
-      return;
-    }
-
     document.body.classList.remove("checking");
     setStatus("");
   };

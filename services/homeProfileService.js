@@ -13,6 +13,10 @@ const createHomeProfileService = ({
     userId: normalizeText(payload.userId || payload.id),
     phone: normalizePhone(payload.phone || payload.username || ""),
     displayName: normalizeText(payload.displayName || payload.name || payload.phone || ""),
+    accountRole: normalizeText(payload.accountRole || payload.role || ""),
+    barberId: normalizeText(payload.barberId || ""),
+    barberName: normalizeText(payload.barberName || ""),
+    isBarber: payload.isBarber === true || normalizeText(payload.accountRole || payload.role || "") === "barber",
     scope: "home_client",
   });
 

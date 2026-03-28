@@ -1025,6 +1025,10 @@
       }))),
     ].sort((left, right) => normalizeText(right.createdAt).localeCompare(normalizeText(left.createdAt)));
     await writeStore(store);
+    const matchedBarber =
+      (Array.isArray(barbers) ? barbers : []).find(
+        (barber) => normalizePhone(barber?.phone || "") === normalizePhone(user.Phone || ""),
+      ) || null;
     return {
       user: {
         id: user.id,
@@ -1041,6 +1045,12 @@
         noticeCount: notices.length,
         isBlocked,
         blockThreshold: warningBlockThreshold,
+        access: {
+          isBarber: Boolean(matchedBarber),
+          role: normalizeText(matchedBarber?.role) || "client",
+          barberId: normalizeText(matchedBarber?.id),
+          barberName: normalizeText(matchedBarber?.name),
+        },
       },
       booking: {
         activeAppointments: activeAppointments.map((appointment) => ({

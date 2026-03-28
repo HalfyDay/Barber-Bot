@@ -180,18 +180,34 @@
     }
   };
 
+  const buildSessionPayload = (payload = {}) => ({
+    token: normalizeText(payload.token),
+    user: {
+      id: normalizeText(payload.user?.id),
+      phone: normalizePhone(payload.user?.phone),
+      displayName: normalizeText(payload.user?.displayName || payload.user?.phone),
+      access: {
+        isBarber: payload.user?.access?.isBarber === true,
+        role: normalizeText(payload.user?.access?.role) || "client",
+        barberId: normalizeText(payload.user?.access?.barberId),
+        barberName: normalizeText(payload.user?.access?.barberName),
+      },
+      authenticatedViaBarberAccess: payload.user?.authenticatedViaBarberAccess === true,
+    },
+  });
+
   const loadSession = () => {
     const raw = readStorage(getStorage("local"), SESSION_STORAGE_KEY) || readStorage(getStorage("session"), SESSION_STORAGE_KEY);
     if (!raw) return null;
     try {
-      return JSON.parse(raw);
+      return buildSessionPayload(JSON.parse(raw));
     } catch {
       return null;
     }
   };
 
   const persistSession = (payload) => {
-    const serialized = JSON.stringify(payload);
+    const serialized = JSON.stringify(buildSessionPayload(payload));
     writeStorage(getStorage("local"), SESSION_STORAGE_KEY, serialized);
     writeStorage(getStorage("session"), SESSION_STORAGE_KEY, serialized);
   };

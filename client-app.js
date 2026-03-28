@@ -112,6 +112,28 @@
       preload.src = url;
     });
   };
+  const setupTransferRecipientCarousels = () => {
+    document.querySelectorAll(".referral-transfer-recipient-carousel").forEach((carousel) => {
+      const strip = carousel.querySelector("[data-transfer-recipient-strip]");
+      const prevButton = carousel.querySelector(".referral-transfer-scroll-btn-prev");
+      const nextButton = carousel.querySelector(".referral-transfer-scroll-btn-next");
+      if (!strip || !prevButton || !nextButton) return;
+      const syncButtons = () => {
+        const maxScroll = Math.max(0, strip.scrollWidth - strip.clientWidth);
+        const hasOverflow = maxScroll > 8;
+        const currentScroll = Math.max(0, strip.scrollLeft);
+        carousel.classList.toggle("has-overflow", hasOverflow);
+        prevButton.classList.toggle("is-hidden", !hasOverflow || currentScroll <= 8);
+        nextButton.classList.toggle("is-hidden", !hasOverflow || currentScroll >= maxScroll - 8);
+      };
+      if (carousel.dataset.carouselBound !== "1") {
+        carousel.dataset.carouselBound = "1";
+        strip.addEventListener("scroll", syncButtons, { passive: true });
+      }
+      syncButtons();
+      window.requestAnimationFrame(syncButtons);
+    });
+  };
   const getPageFromPath = (pathname) => {
     const normalized = normalizeText(pathname || window.location.pathname).replace(/\/+$/, "") || "/";
     if (normalized === "/referral") return "referral";
@@ -473,6 +495,12 @@
     }
     if (name === "scan") {
       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M20 7V5a1 1 0 0 0-1-1h-2M4 17v2a1 1 0 0 0 1 1h2M20 17v2a1 1 0 0 1-1 1h-2"></path><path d="M7 12h10"></path></svg>';
+    }
+    if (name === "chevron-left") {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6"></path></svg>';
+    }
+    if (name === "chevron-right") {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6"></path></svg>';
     }
     if (name === "close") {
       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6 18 18"></path><path d="M18 6 6 18"></path></svg>';
@@ -899,7 +927,9 @@
             <span class="referral-transfer-hub-arrow">${iconMarkup("transfer")}</span>
           </button>
           ${transferRecipients.length
-            ? `<div class="referral-transfer-recipient-strip">
+            ? `<div class="referral-transfer-recipient-carousel">
+                <button class="ghost-btn icon-only-btn referral-transfer-scroll-btn referral-transfer-scroll-btn-prev" type="button" data-action="scroll-transfer-recipients" data-direction="prev" aria-label="Прокрутить получателей влево">${iconMarkup("chevron-left")}</button>
+                <div class="referral-transfer-recipient-strip" data-transfer-recipient-strip>
                 ${transferRecipients
                   .map(
                     (recipient) => `
@@ -916,6 +946,8 @@
                       </button>`,
                   )
                   .join("")}
+                </div>
+                <button class="ghost-btn icon-only-btn referral-transfer-scroll-btn referral-transfer-scroll-btn-next" type="button" data-action="scroll-transfer-recipients" data-direction="next" aria-label="Прокрутить получателей вправо">${iconMarkup("chevron-right")}</button>
               </div>`
             : ``}
           <div class="referral-inline-insights">
@@ -1675,6 +1707,7 @@
     state.routeTransitionActive = false;
     bindEvents();
     setupMediaWaveLoading();
+    setupTransferRecipientCarousels();
     const nav = document.querySelector(".bottom-nav");
     if (nav) {
       const targetIndex = Number(nav.dataset.activeIndex || 0);
@@ -2128,6 +2161,17 @@
           fullName: normalizeText(node.dataset.name),
         };
         openNamedSheet("quick-transfer");
+      });
+    });
+    document.querySelectorAll("[data-action='scroll-transfer-recipients']").forEach((node) => {
+      node.addEventListener("click", () => {
+        const carousel = node.closest(".referral-transfer-recipient-carousel");
+        const strip = carousel?.querySelector("[data-transfer-recipient-strip]");
+        if (!strip) return;
+        const firstCard = strip.querySelector(".referral-transfer-recipient");
+        const step = Math.max(strip.clientWidth * 0.82, (firstCard?.clientWidth || 160) + 12);
+        const direction = normalizeText(node.dataset.direction) === "prev" ? -1 : 1;
+        strip.scrollBy({ left: step * direction, behavior: "smooth" });
       });
     });
     document.querySelectorAll("[data-action='transfer-preset']").forEach((node) => {

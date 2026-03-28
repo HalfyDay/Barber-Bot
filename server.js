@@ -815,6 +815,9 @@ const {
   updateSiteSettings,
   applyReferralCode,
   buildReferralPayload,
+  resolveBsTransferRecipient,
+  adjustUserBsBalance,
+  transferBsBalance,
   buildHomeAppPayload,
   buildUserInsightsMap,
 } = createHomeClientStoreService({
@@ -1154,6 +1157,8 @@ registerHomeRoutes({
   updateUserMeta,
   applyReferralCode,
   buildReferralPayload,
+  resolveBsTransferRecipient,
+  transferBsBalance,
   buildHomeAppPayload,
   TELEGRAM_BOT_USERNAME,
   markExpiredTelegramAuthRequests,
@@ -1175,8 +1180,10 @@ registerHomeRoutes({
   getBarbers,
   buildDateWindow,
   STATUS_ACTIVE,
+  STATUS_CANCELLED,
   notifyBarberAboutNewAppointment,
   requestRealtimePush,
+  parseDateTime,
 });
 registerBotInternalRoutes({
   app,
@@ -1346,6 +1353,7 @@ registerAdminCrudRoutes({
   requestRealtimePush,
   respondWithLegacyCrudBlock,
   buildUserInsightsMap,
+  adjustUserBsBalance,
 });
 app.get("/api/options/appointments", authenticateToken, async (req, res) => {
   try {

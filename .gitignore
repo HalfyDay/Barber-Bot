@@ -45,6 +45,9 @@ __pycache__/
 /build/
 /tmp
 /generated/prisma-postgresql-client/
+/android-app/.gradle/
+/android-app/local.properties
+/android-app/**/build/
 
 # Logs
 *.log

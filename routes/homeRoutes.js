@@ -45,8 +45,10 @@ const registerHomeRoutes = ({
   getBarbers,
   buildDateWindow,
   STATUS_ACTIVE,
+  STATUS_CANCELLED,
   notifyBarberAboutNewAppointment,
   requestRealtimePush,
+  parseDateTime,
 }) => {
   app.post("/api/home/auth/register", async (req, res) => {
     try {
@@ -1478,6 +1480,43 @@ const registerHomeRoutes = ({
     } catch (error) {
       console.error("Home booking create error:", error);
       return res.status(500).json({ error: "Не удалось создать запись." });
+    }
+  });
+
+  app.post("/api/home/booking/appointments/:id/cancel", authenticateHomeToken, async (req, res) => {
+    try {
+      const homeUser = await resolveHomeBookingUser(req);
+      if (!homeUser) return res.sendStatus(401);
+      const appointmentId = normalizeText(req.params.id);
+      if (!appointmentId) {
+        return res.status(400).json({ error: "Не указана запись." });
+      }
+      const existing = await prisma.appointments.findUnique({ where: { id: appointmentId } });
+      if (!existing) {
+        return res.status(404).json({ error: "Запись не найдена." });
+      }
+      if (normalizeText(existing.UserID) !== normalizeText(homeUser.id)) {
+        return res.status(403).json({ error: "Нельзя отменить чужую запись." });
+      }
+      if (normalizeText(existing.Status) !== normalizeText(STATUS_ACTIVE)) {
+        return res.status(409).json({ error: "Эту запись уже нельзя отменить." });
+      }
+      const appointmentStart = parseDateTime(existing.Date, existing.Time);
+      if (appointmentStart && appointmentStart.getTime() - Date.now() < 2 * 60 * 60 * 1000) {
+        return res.status(409).json({
+          code: "TOO_LATE_TO_CANCEL",
+          error: "Запись нельзя отменить менее чем за 2 часа до начала.",
+        });
+      }
+      const updated = await prisma.appointments.update({
+        where: { id: appointmentId },
+        data: { Status: STATUS_CANCELLED },
+      });
+      requestRealtimePush(true);
+      return res.json({ appointment: updated });
+    } catch (error) {
+      console.error("Home booking cancel error:", error);
+      return res.status(500).json({ error: "Не удалось отменить запись." });
     }
   });
 };

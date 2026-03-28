@@ -144,6 +144,14 @@ const formatCurrencyValue = (value) => {
   if (!Number.isFinite(numeric)) return value ?? '—';
   return numeric.toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
 };
+const parseBsEditorAmount = (value) => {
+  const normalized = String(value ?? '').trim().replace(',', '.');
+  if (!normalized) return null;
+  if (!/^[+-]?\d+(?:\.\d+)?$/.test(normalized)) return Number.NaN;
+  const numeric = Number(normalized);
+  if (!Number.isFinite(numeric)) return Number.NaN;
+  return Math.trunc(numeric);
+};
 const getLocalISODateString = (value = new Date()) => {
   const date = value instanceof Date ? value : new Date(value);
   if (!date || Number.isNaN(date.getTime())) return '';
@@ -7131,6 +7139,7 @@ const ClientsList = ({
   clients = [],
   barbers = [],
   onUpdate,
+  onAdjustBs,
   onDelete,
   fetchHistory,
   onRequestConfirm,
@@ -7143,11 +7152,28 @@ const ClientsList = ({
     loading: false,
     error: '',
     blockBusy: false,
+    saveBusy: false,
+    bsMode: 'adjust',
+    bsInput: '',
+    bsComment: '',
+    bsError: '',
   });
   const barberOptions = useMemo(() => (Array.isArray(barbers) ? barbers.filter(Boolean) : []), [barbers]);
   const openClientModal = async (client) => {
     if (!client) return;
-    setModalState({ open: true, record: { ...client }, history: [], loading: true, error: '', blockBusy: false });
+    setModalState({
+      open: true,
+      record: { ...client },
+      history: [],
+      loading: true,
+      error: '',
+      blockBusy: false,
+      saveBusy: false,
+      bsMode: 'adjust',
+      bsInput: '',
+      bsComment: '',
+      bsError: '',
+    });
     try {
       if (fetchHistory && client.Name) {
         const profile = await fetchHistory(client);
@@ -7166,7 +7192,19 @@ const ClientsList = ({
     }
   };
   const closeClientModal = () =>
-    setModalState({ open: false, record: null, history: [], loading: false, error: '', blockBusy: false });
+    setModalState({
+      open: false,
+      record: null,
+      history: [],
+      loading: false,
+      error: '',
+      blockBusy: false,
+      saveBusy: false,
+      bsMode: 'adjust',
+      bsInput: '',
+      bsComment: '',
+      bsError: '',
+    });
   const warningCount = Number(modalState.record?.warningCount ?? 0);
   const manualBlocked = Boolean(modalState.record?.manualBlocked);
   const isBlocked =
@@ -7175,18 +7213,63 @@ const ClientsList = ({
   const handleFieldChange = (field, value) => {
     setModalState((prev) => ({ ...prev, record: { ...prev.record, [field]: value } }));
   };
-  const handleSave = () => {
+  const handleBsFieldChange = (field, value) => {
+    setModalState((prev) => ({ ...prev, [field]: value, bsError: field === 'bsInput' || field === 'bsMode' ? '' : prev.bsError }));
+  };
+  const handleBsQuickFill = (value) => {
+    setModalState((prev) => ({ ...prev, bsInput: value, bsError: '' }));
+  };
+  const currentBsBalance = Math.max(0, Math.trunc(Number(modalState.record?.bsBalance) || 0));
+  const parsedBsAmount = parseBsEditorAmount(modalState.bsInput);
+  const hasBsDraft = String(modalState.bsInput || '').trim().length > 0;
+  const projectedBsBalance = !hasBsDraft || Number.isNaN(parsedBsAmount)
+    ? currentBsBalance
+    : modalState.bsMode === 'set'
+      ? parsedBsAmount
+      : currentBsBalance + parsedBsAmount;
+  const handleSave = async () => {
     if (!modalState.record || typeof onUpdate !== 'function') return;
     const recordId = getRecordId(modalState.record);
     if (!recordId) return;
+    if (modalState.saveBusy) return;
     const payload = {
       Name: modalState.record.Name,
       Phone: modalState.record.Phone,
       TelegramID: modalState.record.TelegramID,
       Barber: modalState.record.Barber,
     };
-    onUpdate(recordId, payload);
-    closeClientModal();
+    if (hasBsDraft) {
+      if (Number.isNaN(parsedBsAmount)) {
+        setModalState((prev) => ({ ...prev, bsError: 'Введите целое число. Например: 120, +15 или -10.' }));
+        return;
+      }
+      if (modalState.bsMode === 'set' && parsedBsAmount < 0) {
+        setModalState((prev) => ({ ...prev, bsError: 'Баланс BS не может быть отрицательным.' }));
+        return;
+      }
+      if (projectedBsBalance < 0) {
+        setModalState((prev) => ({ ...prev, bsError: 'После списания баланс не может уйти в минус.' }));
+        return;
+      }
+    }
+    setModalState((prev) => ({ ...prev, saveBusy: true, bsError: '', error: '' }));
+    try {
+      if (hasBsDraft && typeof onAdjustBs === 'function') {
+        await onAdjustBs(recordId, {
+          mode: modalState.bsMode,
+          amountBs: parsedBsAmount,
+          comment: modalState.bsComment,
+        });
+      }
+      onUpdate(recordId, payload);
+      closeClientModal();
+    } catch (error) {
+      setModalState((prev) => ({
+        ...prev,
+        saveBusy: false,
+        bsError: error.message || 'Не удалось изменить баланс BS.',
+      }));
+    }
   };
   const handleBlockToggle = async () => {
     if (!modalState.record?.id || typeof onBlockClient !== 'function') return;
@@ -7304,9 +7387,11 @@ const ClientsList = ({
             </button>
             <button
               onClick={closeClientModal}
+              disabled={modalState.saveBusy}
               className={classNames(
                 RESPONSIVE_ACTION_BUTTON_CLASS,
-                'border border-slate-600 text-white hover:bg-slate-800'
+                'border border-slate-600 text-white hover:bg-slate-800',
+                modalState.saveBusy && 'cursor-not-allowed opacity-60'
               )}
               aria-label="Отмена"
               title="Отмена"
@@ -7316,9 +7401,11 @@ const ClientsList = ({
             </button>
             <button
               onClick={handleSave}
+              disabled={modalState.saveBusy}
               className={classNames(
                 RESPONSIVE_ACTION_BUTTON_CLASS,
-                'bg-emerald-600 text-white hover:bg-emerald-500'
+                'bg-emerald-600 text-white hover:bg-emerald-500',
+                modalState.saveBusy && 'cursor-not-allowed opacity-60'
               )}
               aria-label="Сохранить"
               title="Сохранить"
@@ -7388,6 +7475,71 @@ const ClientsList = ({
                   ))}
                 </select>
               </label>
+            </div>
+            <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">Баланс BS</p>
+                  <p className="text-xs text-slate-400">Можно установить новое значение или быстро прибавить/списать BS.</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Сейчас</p>
+                  <p className="text-2xl font-semibold text-white">{currentBsBalance} BS</p>
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-[minmax(0,170px)_minmax(0,1fr)]">
+                <label className="space-y-1 text-sm text-slate-300">
+                  Режим
+                  <select
+                    value={modalState.bsMode}
+                    onChange={(event) => handleBsFieldChange('bsMode', event.target.value)}
+                    className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                  >
+                    <option value="adjust">Прибавить / списать</option>
+                    <option value="set">Установить вручную</option>
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm text-slate-300">
+                  {modalState.bsMode === 'set' ? 'Новый баланс' : 'Изменение баланса'}
+                  <input
+                    name="clientBs"
+                    aria-label="Баланс BS"
+                    value={modalState.bsInput}
+                    onChange={(event) => handleBsFieldChange('bsInput', event.target.value)}
+                    placeholder={modalState.bsMode === 'set' ? 'Например, 120' : 'Например, +15 или -10'}
+                    className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                  />
+                </label>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {['+5', '+10', '-5', '-10'].map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => handleBsQuickFill(value)}
+                    className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-800"
+                  >
+                    {value} BS
+                  </button>
+                ))}
+              </div>
+              <label className="space-y-1 text-sm text-slate-300">
+                Комментарий
+                <input
+                  name="clientBsComment"
+                  aria-label="Комментарий к изменению BS"
+                  value={modalState.bsComment}
+                  onChange={(event) => handleBsFieldChange('bsComment', event.target.value)}
+                  placeholder="Например, ручная корректировка или списание за услугу"
+                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                />
+              </label>
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                <p className="text-slate-400">
+                  После сохранения будет: <span className={classNames('font-semibold', projectedBsBalance < 0 ? 'text-rose-300' : 'text-white')}>{Number.isNaN(projectedBsBalance) ? '—' : `${projectedBsBalance} BS`}</span>
+                </p>
+                {modalState.bsError && <p className="text-rose-300">{modalState.bsError}</p>}
+              </div>
             </div>
             <div className="space-y-2">
               <p className="text-sm text-slate-400">История визитов</p>
@@ -8181,6 +8333,7 @@ const TablesWorkspace = ({
   deleteAvatar,
   loadAvatarOptions,
   onBlockClient,
+  onAdjustClientBs,
   dataTables = DEFAULT_DATA_TABLES,
   visibleTableOrder = DEFAULT_VISIBLE_TABLE_ORDER,
   role = ROLE_OWNER,
@@ -8661,6 +8814,7 @@ const TablesWorkspace = ({
                   clients={processedRows}
                   barbers={dropdownOptions.barbers || []}
                   onUpdate={handleUpdate}
+                  onAdjustBs={onAdjustClientBs}
                   onDelete={handleDelete}
                   fetchHistory={fetchClientProfile}
                   onRequestConfirm={onRequestConfirm}
@@ -10147,6 +10301,19 @@ const apiRequest = useCallback(
     },
     [apiRequest, fetchAll]
   );
+  const handleAdjustClientBs = useCallback(
+    async (clientId, payload) => {
+      if (!clientId) throw new Error('Не выбран клиент');
+      const result = await apiRequest(`/users/${encodeURIComponent(clientId)}/bs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {}),
+      });
+      fetchAll({ silent: true });
+      return result;
+    },
+    [apiRequest, fetchAll]
+  );
   useEffect(() => {
     if (session?.token) {
       fetchAll();
@@ -11129,6 +11296,7 @@ const handleBarberFieldChange = (id, field, value) => {
             onPreferredTableConsumed={handlePreferredTableConsumed}
             onRequestConfirm={requestConfirm}
             onBlockClient={handleBlockClient}
+            onAdjustClientBs={handleAdjustClientBs}
             uploadAvatar={handleUploadAvatar}
             uploadCard={handleUploadCard}
             deleteAvatar={handleDeleteAvatar}

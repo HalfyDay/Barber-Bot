@@ -17,6 +17,10 @@
   const TELEGRAM_AUTH_POLL_SLOW_INTERVAL_MS = 1500;
   const TELEGRAM_AUTH_POLL_FAST_ATTEMPTS = 6;
   const TELEGRAM_AUTH_INITIAL_POLL_DELAY_MS = 280;
+  const IS_ANDROID_APP_SHELL = /BrotherShopAndroidApp/i.test(window.navigator?.userAgent || "");
+
+  if (document.documentElement) document.documentElement.classList.toggle("android-app-shell", IS_ANDROID_APP_SHELL);
+  if (document.body) document.body.classList.toggle("android-app-shell", IS_ANDROID_APP_SHELL);
 
   const loginTab = document.getElementById("tab-login");
   const registerTab = document.getElementById("tab-register");

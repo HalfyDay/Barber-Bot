@@ -26,6 +26,7 @@ const registerAdminCrudRoutes = ({
   requestRealtimePush,
   respondWithLegacyCrudBlock,
   buildUserInsightsMap,
+  adjustUserBsBalance,
 }) => {
   const buildScheduleBoard = async () => {
     const barbersList = await getBarbers({ includeInactive: true });
@@ -463,6 +464,44 @@ const registerAdminCrudRoutes = ({
     } catch (error) {
       console.error("Generic fetch error:", error);
       return res.status(500).json({ error: "Не удалось загрузить данные." });
+    }
+  });
+
+  app.post("/api/users/:id/bs", authenticateToken, async (req, res) => {
+    if (typeof adjustUserBsBalance !== "function") {
+      return res.status(501).json({ error: "BS operations are unavailable." });
+    }
+    if (isStaffIdentity(req.identity)) {
+      return res.status(403).json({ error: "Недостаточно прав для изменения BS." });
+    }
+    const { id } = req.params;
+    const actorName =
+      normalizeText(req.identity?.displayName) ||
+      normalizeText(req.identity?.name) ||
+      normalizeText(req.identity?.login) ||
+      "";
+    try {
+      const result = await adjustUserBsBalance({
+        userId: id,
+        mode: req.body?.mode,
+        amountBs: req.body?.amountBs,
+        comment: req.body?.comment,
+        actorName,
+      });
+      requestRealtimePush(true);
+      return res.json(result);
+    } catch (error) {
+      if (error?.message === "USER_NOT_FOUND") {
+        return res.status(404).json({ error: "Пользователь не найден." });
+      }
+      if (error?.message === "NEGATIVE_BALANCE") {
+        return res.status(400).json({ error: "Баланс BS не может быть отрицательным." });
+      }
+      if (error?.message === "INVALID_AMOUNT" || error?.message === "USER_REQUIRED") {
+        return res.status(400).json({ error: "Некорректное значение BS." });
+      }
+      console.error("BS adjust error:", error);
+      return res.status(500).json({ error: "Не удалось изменить баланс BS." });
     }
   });
 

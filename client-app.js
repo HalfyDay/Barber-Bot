@@ -5,7 +5,13 @@
   const SESSION_STORAGE_KEY = "home-user-session";
   const LOGOUT_MARKER_STORAGE_KEY = "home-user-logout-marker";
   const CONTACT_PHONE = "+7 908 669-00-94";
+  const IS_ANDROID_APP_SHELL = /BrotherShopAndroidApp/i.test(window.navigator?.userAgent || "");
+  const REFERRAL_TRANSFER_QUICK_AMOUNTS = [10, 25, 50, 100];
+  const BOOKING_NAV_ICON = '<img src="/Image/site/menu/booking.svg" alt="" aria-hidden="true" />';
+  const BOOKING_NAV_ICON_ACTIVE = '<img src="/Image/site/menu/sel_booking.svg" alt="" aria-hidden="true" />';
 
+  if (document.documentElement) document.documentElement.classList.toggle("android-app-shell", IS_ANDROID_APP_SHELL);
+  if (document.body) document.body.classList.toggle("android-app-shell", IS_ANDROID_APP_SHELL);
   if (!ROOT) return;
 
   const state = {
@@ -15,7 +21,10 @@
     session: null,
     payload: null,
     sheet: null,
+    sheetState: "closed",
+    pendingBookingCancellationId: "",
     referralTransferDraft: null,
+    referralQuickAmount: null,
     referralLinkCopied: false,
     transferHistoryFilter: "all",
     profileHistoryFilter: "all",
@@ -29,20 +38,86 @@
       times: [],
       selectedTime: "",
       comment: "",
+      canBook: true,
+      limitMessage: "",
+      bookingLimit: 0,
+      activeAppointmentsCount: 0,
       loading: false,
       submitting: false,
       stepAnimationsEnabled: true,
     },
   };
   let referralCopyFeedbackTimer = null;
+  let sheetCloseTimer = null;
+  let sheetOpenFrame = null;
+  let referralQrScannerStream = null;
+  let referralQrScannerFrame = null;
 
   const normalizeText = (value) => (value == null ? "" : String(value).trim());
   const normalizePhone = (value) => normalizeText(value).replace(/[^\d+]/g, "");
+  const buildReferralQrPayload = (user = {}) => {
+    const phone = normalizePhone(user.phone || "");
+    if (!phone) return "";
+    const url = new URL("brothershop://bs-transfer");
+    url.searchParams.set("phone", phone);
+    if (normalizeText(user.displayName)) url.searchParams.set("name", normalizeText(user.displayName));
+    return url.toString();
+  };
+  const parseReferralQrPayload = (value) => {
+    const safeValue = normalizeText(value);
+    if (!safeValue) return null;
+    if (/^[+\d()\s-]+$/.test(safeValue)) {
+      const phone = normalizePhone(safeValue);
+      return phone ? { phone, name: "" } : null;
+    }
+    try {
+      const parsed = new URL(safeValue);
+      const phone = normalizePhone(parsed.searchParams.get("phone"));
+      if (!phone) return null;
+      return {
+        phone,
+        name: normalizeText(parsed.searchParams.get("name")),
+      };
+    } catch {
+      return null;
+    }
+  };
+  const extractBackgroundImageUrl = (value) => {
+    const match = /url\((['"]?)(.*?)\1\)/.exec(normalizeText(value));
+    return normalizeText(match?.[2]);
+  };
+  const setupMediaWaveLoading = () => {
+    document.querySelectorAll("img").forEach((img) => {
+      if (img.dataset.waveBound === "1") return;
+      img.dataset.waveBound = "1";
+      img.classList.add("media-wave");
+      const markReady = () => img.classList.add("is-ready");
+      if (img.complete && (img.naturalWidth || img.width)) {
+        markReady();
+        return;
+      }
+      img.addEventListener("load", markReady, { once: true });
+      img.addEventListener("error", markReady, { once: true });
+    });
+    document.querySelectorAll("[style*='background-image']").forEach((node) => {
+      if (node.dataset.waveBound === "1") return;
+      const url = extractBackgroundImageUrl(node.style.backgroundImage);
+      if (!url) return;
+      node.dataset.waveBound = "1";
+      node.classList.add("media-wave-surface");
+      const preload = new Image();
+      const markReady = () => node.classList.add("is-ready");
+      preload.onload = markReady;
+      preload.onerror = markReady;
+      preload.src = url;
+    });
+  };
   const getPageFromPath = (pathname) => {
     const normalized = normalizeText(pathname || window.location.pathname).replace(/\/+$/, "") || "/";
     if (normalized === "/referral") return "referral";
     if (normalized === "/booking") return "booking";
     if (normalized === "/shop") return "shop";
+    if (normalized === "/achievements") return "achievements";
     if (normalized === "/profile") return "profile";
     return "home";
   };
@@ -117,6 +192,100 @@
     return `+7 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 8)}-${digits.slice(8, 10)}`;
   };
 
+  const extractPhoneDigits = (value) => {
+    const rawDigits = normalizeText(value).replace(/\D/g, "");
+    if (!rawDigits) return "";
+    let digits = rawDigits;
+    if (digits.startsWith("7") || digits.startsWith("8")) digits = digits.slice(1);
+    return digits.slice(0, 10);
+  };
+
+  const formatPhoneInputValue = (digits) => {
+    const safeDigits = extractPhoneDigits(digits);
+    if (!safeDigits) return "";
+    let output = "+7";
+    const part1 = safeDigits.slice(0, 3);
+    const part2 = safeDigits.slice(3, 6);
+    const part3 = safeDigits.slice(6, 8);
+    const part4 = safeDigits.slice(8, 10);
+    if (part1) {
+      output += ` (${part1}`;
+      if (part1.length === 3) output += ")";
+    }
+    if (part2) output += ` ${part2}`;
+    if (part3) output += `-${part3}`;
+    if (part4) output += `-${part4}`;
+    return output;
+  };
+
+  const countLocalDigitsInSlice = (value) => extractPhoneDigits(value).length;
+
+  const removeDigitFromMaskedValue = (input, mode) => {
+    const current = input.value || "";
+    const digits = extractPhoneDigits(current);
+    if (!digits.length) {
+      input.value = "";
+      return true;
+    }
+    const start = input.selectionStart ?? current.length;
+    const end = input.selectionEnd ?? start;
+    if (start !== end) return false;
+
+    const removeIndex =
+      mode === "backspace"
+        ? countLocalDigitsInSlice(current.slice(0, start)) - 1
+        : countLocalDigitsInSlice(current.slice(0, start));
+    if (removeIndex < 0 || removeIndex >= digits.length) return false;
+
+    const nextDigits = `${digits.slice(0, removeIndex)}${digits.slice(removeIndex + 1)}`;
+    input.value = formatPhoneInputValue(nextDigits);
+    const nextPos = input.value.length;
+    try {
+      input.setSelectionRange(nextPos, nextPos);
+    } catch {
+      // ignore
+    }
+    return true;
+  };
+
+  const applyPhoneMask = (input) => {
+    const digits = extractPhoneDigits(input.value);
+    input.value = formatPhoneInputValue(digits);
+    const nextPos = input.value.length;
+    try {
+      input.setSelectionRange(nextPos, nextPos);
+    } catch {
+      // ignore
+    }
+  };
+
+  const attachPhoneMask = (input) => {
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Backspace" && event.key !== "Delete") return;
+      const value = input.value || "";
+      const start = input.selectionStart ?? value.length;
+      const end = input.selectionEnd ?? start;
+      if (start !== end) return;
+
+      if (event.key === "Backspace") {
+        if (start <= 0) return;
+        const prevChar = value[start - 1];
+        if (/\d/.test(prevChar)) return;
+        if (removeDigitFromMaskedValue(input, "backspace")) event.preventDefault();
+        return;
+      }
+
+      const nextChar = value[start];
+      if (!nextChar || /\d/.test(nextChar)) return;
+      if (removeDigitFromMaskedValue(input, "delete")) event.preventDefault();
+    });
+
+    input.addEventListener("input", () => applyPhoneMask(input));
+    input.addEventListener("blur", () => {
+      if (!extractPhoneDigits(input.value)) input.value = "";
+    });
+  };
+
   const formatDateOnly = (value) => {
     const safeValue = normalizeText(value);
     if (!safeValue) return "Без даты";
@@ -177,6 +346,9 @@
     const visitItems = visitHistory.map((visit) => ({
       id: `visit-${normalizeText(visit.id)}`,
       type: "visit",
+      visitId: normalizeText(visit.id),
+      barber: normalizeText(visit.barber),
+      services: Array.isArray(visit.services) ? visit.services : [],
       createdAt: normalizeText(visit.when || `${visit.date || ""}T00:00:00`),
       title: normalizeText(visit.barber) || "Визит",
       subtitle: visit.services?.length ? normalizeText(visit.services.join(", ")) : "Детали визита",
@@ -186,10 +358,10 @@
       dateLabel: formatDateTime(visit.when || `${visit.date || ""}T${visit.time || "00:00:00"}`),
     }));
     const operationItems = operations
-      .filter((operation) => normalizeText(operation.type) !== "visit")
+      .filter((operation) => normalizeText(operation.type) !== "visit" && !Number(operation.amountBs))
       .map((operation) => ({
         id: `operation-${normalizeText(operation.id)}`,
-        type: Number(operation.amountBs) ? "bs" : "payment",
+        type: "payment",
         createdAt: normalizeText(operation.createdAt),
         title: normalizeText(operation.title) || "Операция",
         subtitle: normalizeText(operation.description),
@@ -203,7 +375,6 @@
 
   const matchesProfileHistoryFilter = (item, filter) => {
     if (filter === "visits") return item.type === "visit";
-    if (filter === "bs") return item.type === "bs";
     if (filter === "payments") return item.type === "payment";
     return true;
   };
@@ -212,14 +383,13 @@
     <div class="timeline-item bank-row history-row">
       <div>
         <div class="history-row-meta">
-          <span class="status-badge ${item.type === "visit" ? "status-green" : item.type === "bs" ? "status-yellow" : "status-red"}">${item.type === "visit" ? "Визит" : item.type === "bs" ? "BS" : "Оплата"}</span>
+          <span class="status-badge ${item.type === "visit" ? "status-green" : "status-red"}">${item.type === "visit" ? "Визит" : "Оплата"}</span>
           <span class="subtitle">${normalizeText(item.dateLabel)}</span>
         </div>
         <p class="list-title">${normalizeText(item.title)}</p>
         <p class="subtitle">${normalizeText(item.subtitle)}</p>
       </div>
       <div>
-        ${item.amountBs ? `<div class="amount-bs">${item.amountBs > 0 ? "+" : ""}${item.amountBs} BS</div>` : ""}
         ${item.amountRub ? `<div class="amount-rub ${item.amountRub < 0 ? "negative" : ""}">${item.amountRub > 0 ? "+" : ""}${formatRub(Math.abs(item.amountRub))}</div>` : ""}
       </div>
     </div>
@@ -243,7 +413,7 @@
     if (avatarUrl) {
       return `<div class="profile-avatar" style="width:${size}px;height:${size}px;"><img src="${avatarUrl}" alt="${title}" /></div>`;
     }
-    return `<div class="profile-avatar" style="width:${size}px;height:${size}px;border-radius:24px;display:grid;place-items:center;background:linear-gradient(135deg,#dba06c,#7d4a2c);color:#fff;font:700 1rem/1 var(--font-display);">${initials}</div>`;
+    return `<div class="profile-avatar" style="width:${size}px;height:${size}px;display:grid;place-items:center;background:linear-gradient(135deg,#dba06c,#7d4a2c);color:#fff;font:700 1rem/1 var(--font-display);">${initials}</div>`;
   };
 
   const statusColorClass = (value) => (value === "green" ? "green" : value === "yellow" ? "yellow" : "red");
@@ -261,6 +431,11 @@
     if (message.includes("сумм")) return "Укажите корректную сумму BS.";
     if (message.includes("недостат")) return "На балансе недостаточно BS для перевода.";
     return "Не удалось выполнить перевод BS. Проверьте номер и попробуйте снова.";
+  };
+  const getReferralLevelName = (referralProgram = {}, activeReferralsCount = 0) => {
+    const currentLevelName = normalizeText(referralProgram.currentLevel?.name);
+    if (currentLevelName) return currentLevelName;
+    return Number(activeReferralsCount || referralProgram.activeReferralsCount || 0) > 0 ? "Не определен" : "Гость";
   };
   const iconMarkup = (name) => {
     if (name === "settings") {
@@ -292,6 +467,12 @@
     }
     if (name === "wallet") {
       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H5.5A2.5 2.5 0 0 1 3 16.5v-9Z"></path><path d="M16 12h5"></path><circle cx="16.5" cy="12" r="1"></circle></svg>';
+    }
+    if (name === "qr") {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"></path><path d="M15 15h2v2h-2zM17 17h3v3h-3zM14 19h2v1h-2zM19 14h1v2h-1z"></path></svg>';
+    }
+    if (name === "scan") {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M20 7V5a1 1 0 0 0-1-1h-2M4 17v2a1 1 0 0 0 1 1h2M20 17v2a1 1 0 0 1-1 1h-2"></path><path d="M7 12h10"></path></svg>';
     }
     if (name === "close") {
       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6 18 18"></path><path d="M18 6 6 18"></path></svg>';
@@ -329,14 +510,66 @@
     return payload;
   };
 
+  const buildBookingStatusSheet = (label) => `
+    <div class="booking-status-sheet" aria-live="polite">
+      <div class="booking-status-icon" aria-hidden="true">
+        <span class="booking-status-icon-ring"></span>
+        <span class="booking-status-icon-check"></span>
+      </div>
+      <div class="booking-status-title">${normalizeText(label)}</div>
+    </div>
+  `;
+
+  const stopReferralQrScanner = () => {
+    if (referralQrScannerFrame) {
+      window.cancelAnimationFrame(referralQrScannerFrame);
+      referralQrScannerFrame = null;
+    }
+    if (referralQrScannerStream) {
+      referralQrScannerStream.getTracks().forEach((track) => track.stop());
+      referralQrScannerStream = null;
+    }
+  };
+
   const openSheet = (title, bodyHtml, footerHtml, className = "") => {
+    stopReferralQrScanner();
+    if (sheetCloseTimer) {
+      window.clearTimeout(sheetCloseTimer);
+      sheetCloseTimer = null;
+    }
+    if (sheetOpenFrame) {
+      window.cancelAnimationFrame(sheetOpenFrame);
+      sheetOpenFrame = null;
+    }
     state.sheet = { title, bodyHtml, footerHtml: footerHtml || "", className: normalizeText(className) };
+    state.sheetState = "entering";
     render();
+    sheetOpenFrame = window.requestAnimationFrame(() => {
+      state.sheetState = "open";
+      sheetOpenFrame = null;
+      render();
+    });
   };
 
   const closeSheet = () => {
-    state.sheet = null;
+    if (!state.sheet) return;
+    stopReferralQrScanner();
+    if (sheetCloseTimer) {
+      window.clearTimeout(sheetCloseTimer);
+      sheetCloseTimer = null;
+    }
+    if (sheetOpenFrame) {
+      window.cancelAnimationFrame(sheetOpenFrame);
+      sheetOpenFrame = null;
+    }
+    state.sheetState = "closing";
     render();
+    sheetCloseTimer = window.setTimeout(() => {
+      state.sheet = null;
+      state.sheetState = "closed";
+      sheetCloseTimer = null;
+      render();
+    }, 280);
   };
 
   const scrollToBookingStep = (stepName) => {
@@ -387,7 +620,9 @@
         id: "booking",
         label: "Booking",
         href: "/booking/",
-        icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M7.2 3.25h9.6A4.55 4.55 0 0 1 21.35 7.8v8.4a4.55 4.55 0 0 1-4.55 4.55H7.2A4.55 4.55 0 0 1 2.65 16.2V7.8A4.55 4.55 0 0 1 7.2 3.25Zm1.55 4.2c0-.55.45-1 1-1h2.1a1 1 0 1 1 0 2h-2.1c-.55 0-1-.45-1-1Zm0 4c0-.55.45-1 1-1h5.35a1 1 0 1 1 0 2H9.75c-.55 0-1-.45-1-1Zm0 4c0-.55.45-1 1-1h5.35a1 1 0 1 1 0 2H9.75c-.55 0-1-.45-1-1Z" clip-rule="evenodd"></path></svg>',
+        icon: BOOKING_NAV_ICON,
+        activeIcon: BOOKING_NAV_ICON_ACTIVE,
+        className: "nav-pill-booking",
       },
       {
         id: "shop",
@@ -402,7 +637,8 @@
         icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M12 3.25A4.75 4.75 0 1 0 12 12.75A4.75 4.75 0 1 0 12 3.25ZM6.77 14.25a4.52 4.52 0 0 0-4.52 4.52c0 1.1.9 1.98 1.98 1.98h15.54c1.09 0 1.98-.89 1.98-1.98a4.52 4.52 0 0 0-4.52-4.52H6.77Z" clip-rule="evenodd"></path></svg>',
       },
     ];
-    const activeIndex = Math.max(0, items.findIndex((item) => item.id === state.currentPage));
+    const navPage = state.currentPage === "achievements" ? "profile" : state.currentPage;
+    const activeIndex = Math.max(0, items.findIndex((item) => item.id === navPage));
     const indicatorIndex = Number.isFinite(Number(state.navIndicatorIndex)) ? Number(state.navIndicatorIndex) : activeIndex;
     return `
       <nav class="bottom-nav" data-active-index="${activeIndex}" style="--indicator-index:${indicatorIndex}; --nav-count:${items.length};">
@@ -410,7 +646,7 @@
         ${items
           .map(
             (item) =>
-              `<a class="nav-pill nav-link ${item.id === state.currentPage ? "active" : ""}" href="${item.href}" aria-label="${item.label}" title="${item.label}"><span class="nav-icon-wrap">${item.icon}</span></a>`,
+              `<a class="nav-pill nav-link ${normalizeText(item.className)} ${item.id === state.currentPage ? "active" : ""}" href="${item.href}" aria-label="${item.label}" title="${item.label}"><span class="nav-icon-wrap">${item.id === state.currentPage && item.activeIcon ? item.activeIcon : item.icon}</span></a>`,
           )
           .join("")}
       </nav>
@@ -444,6 +680,17 @@
           .join("")
       : "";
     const nextAppointment = activeAppointments[0] || null;
+    const appointmentBarber = nextAppointment
+      ? barbers.find((barber) =>
+          normalizeText(barber.id) === normalizeText(nextAppointment.barberId) ||
+          normalizeText(barber.name) === normalizeText(nextAppointment.barber),
+        ) || null
+      : null;
+    const appointmentBarberAvatar = normalizeText(
+      nextAppointment?.barberAvatarUrl ||
+      nextAppointment?.avatarUrl ||
+      appointmentBarber?.avatarUrl,
+    );
     const mapLink = normalizeText(siteHome.mapLink) || "https://go.2gis.com/fPKd6";
     const bookingButtonText = normalizeText(siteHome.bookingButtonText) || "Записаться";
     return `
@@ -462,34 +709,40 @@
               : `<div class="empty-state promo-empty">Скоро здесь появятся актуальные предложения и акции.</div>`}
             </div>
           </section>
+        </article>
+        <article class="appointment-card">
           ${nextAppointment ? `
-          <article class="appointment-card">
             <div class="section-head">
               <div>
                 <div class="section-eyebrow">Моя запись</div>
-                <h2 class="section-title">${nextAppointment ? normalizeText(nextAppointment.barber || "Текущая запись") : "Запись пока не создана"}</h2>
               </div>
             </div>
-            <div class="appointment-grid">
-              <div class="appointment-meta">
-                <span class="field-label">Дата</span>
-                <strong>${nextAppointment ? formatDateOnly(nextAppointment.date) : "Выберите день"}</strong>
+            <button class="appointment-overview" type="button" data-action="open-sheet" data-sheet="manage-booking" data-id="${normalizeText(nextAppointment?.id)}">
+              <div class="appointment-grid">
+                <div class="appointment-meta">
+                  <span class="field-label">Дата</span>
+                  <strong>${nextAppointment ? formatDateOnly(nextAppointment.date) : "Выберите день"}</strong>
+                </div>
+                <div class="appointment-meta">
+                  <span class="field-label">Время</span>
+                  <strong>${nextAppointment ? normalizeText(nextAppointment.time) : "Выберите слот"}</strong>
+                </div>
               </div>
-              <div class="appointment-meta">
-                <span class="field-label">Время</span>
-                <strong>${nextAppointment ? normalizeText(nextAppointment.time) : "Выберите слот"}</strong>
+              <div class="appointment-barber">
+                ${nextAppointment
+                  ? avatarMarkup({ avatarUrl: appointmentBarberAvatar, displayName: nextAppointment.barber }, 56)
+                  : avatarMarkup({ displayName: "BS" }, 56)}
+                <div>
+                  <p class="list-title">${nextAppointment ? normalizeText(nextAppointment.barber || "BrotherShop") : "BrotherShop"}</p>
+                  <p class="subtitle">${nextAppointment ? normalizeText((nextAppointment.services || []).join(", ") || "Детали записи доступны в booking") : "Открой booking и собери удобный слот."}</p>
+                </div>
               </div>
+            </button>
+            <div class="appointment-cta-wrap">
+              <a class="primary-btn booking-cta booking-cta-compact" href="/booking/">${bookingButtonText}</a>
             </div>
-            <div class="appointment-barber">
-              ${nextAppointment ? avatarMarkup({ displayName: nextAppointment.barber }, 56) : avatarMarkup({ displayName: "BS" }, 56)}
-              <div>
-                <p class="list-title">${nextAppointment ? normalizeText(nextAppointment.barber || "BrotherShop") : "BrotherShop"}</p>
-                <p class="subtitle">${nextAppointment ? normalizeText((nextAppointment.services || []).join(", ") || "Детали записи доступны в booking") : "Открой booking и собери удобный слот."}</p>
-              </div>
-            </div>
-          </article>
-          ` : ""}
-          <a class="primary-btn booking-cta" href="/booking/">${bookingButtonText}</a>
+          ` : ``}
+          ${nextAppointment ? "" : `<div class="appointment-cta-wrap"><a class="primary-btn booking-cta" href="/booking/">${bookingButtonText}</a></div>`}
         </article>
         <article class="content-card home-about-card">
           <div>
@@ -501,8 +754,18 @@
         <article class="content-card map-card">
           <h2 class="map-title">${normalizeText(siteHome.mapTitle || "Карта")}</h2>
           <a class="map-link-card" href="${mapLink}" target="_blank" rel="noopener noreferrer">
-            <div class="map-image" style="${normalizeText(siteHome.mapImageUrl) ? `background-image:url('${normalizeText(siteHome.mapImageUrl)}');` : ""}"></div>
-            <div class="map-caption">${normalizeText(siteHome.mapCaption || "")}</div>
+            <div class="map-image" style="${normalizeText(siteHome.mapImageUrl) ? `background-image:url('${normalizeText(siteHome.mapImageUrl)}');` : ""}">
+              <div class="map-overlay-card">
+                <div class="map-overlay-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><circle cx="6.5" cy="7.5" r="2.5"></circle><circle cx="6.5" cy="16.5" r="2.5"></circle><path d="M8.6 8.9 19 3.5"></path><path d="M8.6 15.1 19 20.5"></path><path d="m11.2 12 7.8-8.5"></path><path d="m11.2 12 7.8 8.5"></path></svg>
+                </div>
+                <div class="map-overlay-copy">
+                  <strong>${normalizeText(siteHome.logoText || "BrotherShop")}</strong>
+                  <span>${normalizeText(siteHome.mapCaption || "Открыть маршрут и посмотреть локацию")}</span>
+                </div>
+                <span class="map-overlay-action">На карте</span>
+              </div>
+            </div>
           </a>
         </article>
         <article class="content-card contacts-card">
@@ -563,21 +826,18 @@
     const referralPreview = referrals.slice(0, 4);
     const transferOutOperations = (Array.isArray(referral.operations) ? referral.operations : []).filter((operation) => normalizeText(operation.type) === "transfer_out");
     const transferInOperations = (Array.isArray(referral.operations) ? referral.operations : []).filter((operation) => normalizeText(operation.type) === "transfer_in");
-    const filteredTransferHistory = [...transferOutOperations, ...transferInOperations]
+    const filteredBsActivity = (Array.isArray(referral.operations) ? referral.operations : [])
       .filter((operation) => matchesTransferHistoryFilter(operation, state.transferHistoryFilter))
       .sort((left, right) => normalizeText(right.createdAt).localeCompare(normalizeText(left.createdAt)));
-    const transferHistoryPreview = filteredTransferHistory
-      .sort((left, right) => normalizeText(right.createdAt).localeCompare(normalizeText(left.createdAt)))
-      .slice(0, 4);
-    const activityOperations = (Array.isArray(referral.operations) ? referral.operations : []).filter((operation) => !["transfer_out", "transfer_in"].includes(normalizeText(operation.type)));
-    const operationPreview = activityOperations.slice(0, 4);
-    const positiveOperations = (Array.isArray(referral.operations) ? referral.operations : []).filter((operation) => Number(operation.amountBs) > 0).length;
+    const activityPreview = filteredBsActivity.slice(0, 5);
     const outgoingTransfers = transferOutOperations.length;
     const sentTotal = transferOutOperations.reduce((total, operation) => total + Math.abs(Number(operation.amountBs) || 0), 0);
     const receivedTotal = transferInOperations.reduce((total, operation) => total + Math.max(0, Number(operation.amountBs) || 0), 0);
     const averageTransfer = outgoingTransfers ? Math.round(sentTotal / outgoingTransfers) : 0;
-    const quickAmounts = [10, 25, 50, 100];
     const levelProgress = Math.max(0, Math.min(100, Number(referral.scale?.progress || 0)));
+    const nextReferralTarget = Math.max(0, Number(referral.scale?.next || 0));
+    const currentReferralCount = Math.max(0, Number(referral.program?.activeReferralsCount || referral.stats?.green || referral.scale?.current || 0));
+    const referralLevelName = getReferralLevelName(referralProgram, currentReferralCount);
     const now = new Date();
     const topReferralThisMonth =
       referrals
@@ -598,32 +858,29 @@
           <div class="referral-wallet-sheen"></div>
           <div class="referral-wallet-head">
             <div>
-              <div class="hero-eyebrow">BS wallet</div>
+              <div class="hero-eyebrow">BS Wallet</div>
               <h1 class="hero-title">Бонусы и переводы</h1>
             </div>
             <div class="referral-wallet-mark">${iconMarkup("wallet")}</div>
           </div>
           <div class="referral-wallet-balance">
-            <span class="field-label">Баланс BS</span>
+            <span class="field-label referral-wallet-balance-label">Баланс BS</span>
             <div class="referral-wallet-balance-number">${referral.bsBalance || 0}</div>
-            <p class="referral-wallet-balance-note">Следующая цель: ${referral.scale?.next || 0} BS</p>
+            <button class="referral-wallet-balance-note referral-wallet-level-link" type="button" data-action="open-sheet" data-sheet="referral-levels">Уровень: ${referralLevelName}</button>
           </div>
           <div class="referral-wallet-progress">
             <div class="referral-wallet-progress-head">
               <span class="field-label">Прогресс до следующего уровня</span>
-              <strong>${levelProgress}%</strong>
+              <strong>${referral.scale?.isMaxLevel ? "MAX" : `${currentReferralCount}/${nextReferralTarget}`}</strong>
             </div>
             <div class="progress-track referral-wallet-progress-track"><div class="progress-bar referral-wallet-progress-bar" style="width:${levelProgress}%"></div></div>
           </div>
           <div class="referral-wallet-footer">
-            <button class="referral-wallet-level" type="button" data-action="open-sheet" data-sheet="referral-levels">
-              <span class="field-label">Уровень</span>
-              <strong>${normalizeText(referralProgram.currentLevel?.name) || "Не определен"}</strong>
-              <span class="subtitle">${Number(referralProgram.activeReferralsCount || referral.stats?.green || 0)} активных рефералов</span>
-            </button>
             <div class="referral-wallet-actions">
               <button class="referral-wallet-action referral-copy-btn ${state.referralLinkCopied ? "is-copied" : ""}" type="button" data-action="copy-referral">${iconMarkup("copy")}<span>${state.referralLinkCopied ? "Ссылка скопирована" : "Скопировать ссылку"}</span></button>
               <button class="referral-wallet-action" type="button" data-action="open-sheet" data-sheet="transfer-bs">${iconMarkup("transfer")}<span>Перевести BS</span></button>
+              <button class="referral-wallet-action" type="button" data-action="open-sheet" data-sheet="my-transfer-qr">${iconMarkup("qr")}<span>Мой QR</span></button>
+              <button class="referral-wallet-action referral-wallet-action-scan" type="button" data-action="open-sheet" data-sheet="scan-transfer-qr">${iconMarkup("scan")}<span>Сканировать QR</span></button>
             </div>
           </div>
         </article>
@@ -641,24 +898,6 @@
             </div>
             <span class="referral-transfer-hub-arrow">${iconMarkup("transfer")}</span>
           </button>
-          <div class="referral-transfer-fast-amounts">
-            <span class="field-label">Быстрые суммы</span>
-            <div class="referral-transfer-fast-amount-row">
-              ${quickAmounts
-                .map(
-                  (amount) => `
-                    <button
-                      class="referral-quick-amount"
-                      type="button"
-                      data-action="transfer-preset"
-                      data-amount="${amount}"
-                    >
-                      ${amount} BS
-                    </button>`,
-                )
-                .join("")}
-            </div>
-          </div>
           ${transferRecipients.length
             ? `<div class="referral-transfer-recipient-strip">
                 ${transferRecipients
@@ -674,105 +913,82 @@
                       >
                         ${avatarMarkup({ displayName: recipient.shortName || recipient.fullName }, 56)}
                         <span class="referral-transfer-recipient-name">${normalizeText(recipient.shortName || recipient.fullName)}</span>
-                        <span class="referral-transfer-recipient-meta">${recipient.lastTransferAt ? `Последний перевод ${formatShortDate(recipient.lastTransferAt)}` : "Быстрый повтор"}</span>
                       </button>`,
                   )
                   .join("")}
               </div>`
-            : `<div class="referral-transfer-empty-wrap">
-                <div class="referral-transfer-onboarding">
-                  <div class="referral-transfer-onboarding-copy">
-                    <div class="section-eyebrow">Старт</div>
-                    <p class="list-title">Сделайте первый перевод BS</p>
-                    <p class="subtitle">После первой отправки здесь появятся последние получатели для быстрого повтора и перевод в пару нажатий.</p>
-                  </div>
-                  <button class="primary-btn referral-transfer-onboarding-cta" type="button" data-action="open-sheet" data-sheet="transfer-bs">
-                    ${iconMarkup("transfer")}
-                    <span>Сделать первый перевод</span>
-                  </button>
-                </div>
-              </div>`}
-        </article>
-        <article class="list-card referral-transfer-history-card">
-          <div class="section-head">
-            <div>
-              <div class="section-eyebrow">История переводов</div>
-              <h2 class="section-title">Последние отправки и поступления</h2>
-            </div>
-            <span class="status-badge status-yellow">${filteredTransferHistory.length}</span>
-          </div>
-          <div class="filter-row referral-history-filter-row">
-            <button class="nav-pill ${state.transferHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="all">Все</button>
-            <button class="nav-pill ${state.transferHistoryFilter === "outgoing" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="outgoing">Отправил</button>
-            <button class="nav-pill ${state.transferHistoryFilter === "incoming" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="incoming">Получил</button>
-          </div>
-          <div class="referral-activity-list">
-            ${transferHistoryPreview.length
-              ? transferHistoryPreview.map((operation) => renderReferralOperationCard(operation)).join("")
-              : `<div class="empty-state">Переводов пока не было.</div>`}
-          </div>
-        </article>
-        <article class="list-card referral-insights-card">
-          <div class="section-head">
-            <div>
-              <div class="section-eyebrow">Аналитика</div>
-              <h2 class="section-title">Движение BS</h2>
-            </div>
-          </div>
-          <div class="referral-insights-grid">
-            <div class="referral-insight-tile">
+            : ``}
+          <div class="referral-inline-insights">
+            <div class="referral-inline-insight">
               <span class="field-label">Отправлено</span>
               <strong>${sentTotal} BS</strong>
               <span class="subtitle">${outgoingTransfers} переводов</span>
             </div>
-            <div class="referral-insight-tile">
+            <div class="referral-inline-insight">
               <span class="field-label">Получено</span>
               <strong>${receivedTotal} BS</strong>
               <span class="subtitle">${transferInOperations.length} входящих</span>
             </div>
-            <div class="referral-insight-tile">
+            <div class="referral-inline-insight">
               <span class="field-label">Средний перевод</span>
               <strong>${averageTransfer} BS</strong>
               <span class="subtitle">${transferRecipients.length} получателей</span>
             </div>
           </div>
         </article>
-        <article class="list-card referral-spotlight-card">
-          <div class="section-head">
-            <div>
-              <div class="section-eyebrow">Топ реферал</div>
-              <h2 class="section-title">Реферал месяца</h2>
-            </div>
-          </div>
-          ${topReferralThisMonth
-            ? `<div class="referral-spotlight-body">
-                <div class="referral-spotlight-avatar">${avatarMarkup({ displayName: topReferralThisMonth.fullName }, 72)}</div>
-                <div class="referral-spotlight-copy">
-                  <p class="list-title">${normalizeText(topReferralThisMonth.fullName)}</p>
-                  <p class="subtitle">${topReferralThisMonth.phone ? formatPhone(topReferralThisMonth.phone) : "Телефон скрыт"}</p>
-                </div>
-                <div class="referral-spotlight-stats">
-                  <div class="referral-spotlight-stat">
-                    <span class="field-label">BS</span>
-                    <strong>${topReferralThisMonth.rewardedVisits || 0}</strong>
-                  </div>
-                  <div class="referral-spotlight-stat">
-                    <span class="field-label">Визиты</span>
-                    <strong>${topReferralThisMonth.completedVisits || 0}</strong>
-                  </div>
-                </div>
+        <article class="list-card referral-transfer-history-card">
+          <div class="referral-subsection">
+            <div class="section-head">
+              <div>
+                <div class="section-eyebrow">История переводов</div>
+                <h2 class="section-title">Последние движения BS</h2>
               </div>
-              <p class="subtitle referral-spotlight-note">${topReferralThisMonth.lastVisitAt ? `Последний визит ${formatDateTime(topReferralThisMonth.lastVisitAt)}` : "Новый лидер по текущим начислениям."}</p>`
-            : `<div class="empty-state">Топ реферал появится после первых активных визитов.</div>`}
+              <span class="status-badge">${filteredBsActivity.length}</span>
+            </div>
+            <div class="filter-row referral-history-filter-row">
+              <button class="nav-pill ${state.transferHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="all">Все</button>
+              <button class="nav-pill ${state.transferHistoryFilter === "transfers" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="transfers">Переводы</button>
+              <button class="nav-pill ${state.transferHistoryFilter === "rewards" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="rewards">Награды</button>
+            </div>
+            <div class="referral-activity-list">
+              ${activityPreview.length
+                ? activityPreview.map((operation) => renderReferralOperationCard(operation)).join("")
+                : `<div class="empty-state">Пока нет движений BS.</div>`}
+            </div>
+            <div class="profile-history-more referral-panel-more"><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="referral-history">Показать все</button></div>
+          </div>
         </article>
         <article class="list-card referral-panel-card">
           <div class="section-head">
             <div>
-              <div class="section-eyebrow">Список</div>
+              <div class="section-eyebrow">Реферальная сеть</div>
               <h2 class="section-title">Рефералы</h2>
             </div>
-            <span class="status-badge status-green">${referral.stats?.green || 0}</span>
+            <span class="status-badge">${referral.stats?.green || 0}</span>
           </div>
+          ${topReferralThisMonth
+            ? `<div class="referral-spotlight-card referral-spotlight-embedded">
+                <div class="referral-spotlight-kicker">Лучший в этом месяце</div>
+                <div class="referral-spotlight-body">
+                  <div class="referral-spotlight-avatar">${avatarMarkup({ displayName: topReferralThisMonth.fullName }, 72)}</div>
+                  <div class="referral-spotlight-copy">
+                    <p class="list-title">${normalizeText(topReferralThisMonth.fullName)}</p>
+                    <p class="subtitle">${topReferralThisMonth.phone ? formatPhone(topReferralThisMonth.phone) : "Телефон скрыт"}</p>
+                  </div>
+                  <div class="referral-spotlight-stats">
+                    <div class="referral-spotlight-stat">
+                      <span class="field-label">BS</span>
+                      <strong>${topReferralThisMonth.rewardedVisits || 0}</strong>
+                    </div>
+                    <div class="referral-spotlight-stat">
+                      <span class="field-label">Визиты</span>
+                      <strong>${topReferralThisMonth.completedVisits || 0}</strong>
+                    </div>
+                  </div>
+                </div>
+                <p class="subtitle referral-spotlight-note">${topReferralThisMonth.lastVisitAt ? `Последний визит ${formatDateTime(topReferralThisMonth.lastVisitAt)}` : "Новый лидер по текущим начислениям."}</p>
+              </div>`
+            : ""}
           <div class="list">
             ${referralPreview.length
               ? referralPreview
@@ -797,24 +1013,19 @@
                       </div>`,
                   )
                   .join("")
-              : `<div class="empty-state">Рефералы пока не появились.</div>`}
+              : `<div class="referral-referrals-onboarding">
+                  <div class="referral-transfer-onboarding-copy">
+                    <div class="section-eyebrow">Старт</div>
+                    <p class="list-title">Пригласите первого клиента</p>
+                    <p class="subtitle">Отправьте персональную ссылку и после первого визита здесь появятся ваши рефералы и их активность.</p>
+                  </div>
+                  <button class="primary-btn referral-transfer-onboarding-cta" type="button" data-action="copy-referral">
+                    ${iconMarkup("copy")}
+                    <span>${state.referralLinkCopied ? "Ссылка скопирована" : "Пригласить первого клиента"}</span>
+                  </button>
+                </div>`}
           </div>
           <div class="profile-history-more referral-panel-more"><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="referrals">Показать все</button></div>
-        </article>
-        <article class="list-card referral-panel-card">
-          <div class="section-head">
-            <div>
-              <div class="section-eyebrow">Операции</div>
-              <h2 class="section-title">Последние операции</h2>
-            </div>
-            <span class="status-badge status-yellow">${positiveOperations}</span>
-          </div>
-          <div class="referral-activity-list">
-            ${operationPreview.length
-              ? operationPreview.map((operation) => renderReferralOperationCard(operation)).join("")
-              : `<div class="empty-state">Пока нет начислений и списаний.</div>`}
-          </div>
-          <div class="profile-history-more referral-panel-more"><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="referral-history">Показать все</button></div>
         </article>
       </section>
     `;
@@ -823,10 +1034,9 @@
   const buildQuickTransferSheet = (recipient = {}) => {
     const fullName = normalizeText(recipient.fullName || recipient.shortName || "Клиент");
     const shortName = normalizeText(recipient.shortName || recipient.fullName || "Клиент");
-    const phone = normalizeText(recipient.phone);
-    const quickAmounts = [10, 25, 50, 100];
+    const phone = normalizeText(recipient.phone || recipient.targetPhone);
     return `
-      <div class="referral-quick-transfer">
+      <form class="referral-quick-transfer" id="quick-transfer-form" data-phone="${phone}" data-name="${fullName}" data-short-name="${shortName}">
         <div class="referral-transfer-confirm-card referral-quick-transfer-recipient">
           <div class="referral-quick-transfer-user">
             ${avatarMarkup({ displayName: shortName }, 62)}
@@ -840,8 +1050,8 @@
         <div class="referral-transfer-confirm-card">
           <span class="field-label">Выберите сумму</span>
           <div class="referral-quick-transfer-amounts">
-            ${quickAmounts
-              .map(
+              ${REFERRAL_TRANSFER_QUICK_AMOUNTS
+                .map(
                 (amount) => `
                   <button
                     class="referral-quick-amount"
@@ -857,19 +1067,103 @@
               )
               .join("")}
           </div>
-          <button
-            class="ghost-btn referral-quick-transfer-custom"
-            type="button"
-            data-action="quick-transfer-custom"
-            data-phone="${phone}"
-            data-name="${fullName}"
-            data-short-name="${shortName}"
-          >
-            Своя сумма
-          </button>
+          <label class="field referral-quick-transfer-manual">
+            <span class="field-label">Своя сумма</span>
+            <input type="number" name="amountBs" min="1" step="1" placeholder="Введите сумму BS" />
+          </label>
+          <div class="inline-actions">
+            <button class="primary-btn referral-quick-transfer-custom" type="submit">Продолжить</button>
+          </div>
         </div>
+      </form>
+    `;
+  };
+
+  const buildReferralQrSheet = () => {
+    const user = state.payload?.user || {};
+    const phone = normalizePhone(user.phone);
+    const qrPayload = buildReferralQrPayload(user);
+    if (!phone || !qrPayload) {
+      return `<div class="empty-state">Для QR-перевода в профиле должен быть указан телефон.</div>`;
+    }
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=16&data=${encodeURIComponent(qrPayload)}`;
+    return `
+      <div class="referral-qr-sheet">
+        <div class="referral-transfer-confirm-card referral-qr-card">
+          <span class="field-label">Получатель BS</span>
+          <strong>${normalizeText(user.displayName || "Клиент")}</strong>
+          <span class="subtitle">${formatPhone(phone)}</span>
+        </div>
+        <div class="referral-qr-image-wrap">
+          <img class="referral-qr-image" src="${qrImageUrl}" alt="QR для перевода BS" />
+        </div>
+        <p class="subtitle referral-qr-note">Покажите этот QR отправителю. После сканирования номер получателя подставится автоматически.</p>
       </div>
     `;
+  };
+
+  const buildReferralQrScannerSheet = () => `
+    <div class="referral-qr-sheet">
+      <div class="referral-transfer-confirm-card referral-qr-card">
+        <span class="field-label">Сканирование QR</span>
+        <strong>Наведите камеру на QR получателя</strong>
+        <span class="subtitle" id="referral-qr-scan-status">Ожидание доступа к камере...</span>
+      </div>
+      <div class="referral-qr-scanner-wrap">
+        <video id="referral-qr-video" class="referral-qr-video" autoplay playsinline muted></video>
+      </div>
+      <p class="subtitle referral-qr-note">Если QR считан, форма перевода откроется автоматически с заполненным получателем.</p>
+    </div>
+  `;
+
+  const startReferralQrScanner = async () => {
+    const video = document.getElementById("referral-qr-video");
+    const status = document.getElementById("referral-qr-scan-status");
+    if (!video || !status) return;
+    if (!("BarcodeDetector" in window) || !window.isSecureContext) {
+      status.textContent = "Сканирование доступно только в защищённом браузере с поддержкой QR API.";
+      return;
+    }
+    try {
+      const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+      referralQrScannerStream = await window.navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: false,
+      });
+      video.srcObject = referralQrScannerStream;
+      await video.play();
+      status.textContent = "Ищем QR-код...";
+      const scan = async () => {
+        if (!video.videoWidth || !video.videoHeight) {
+          referralQrScannerFrame = window.requestAnimationFrame(scan);
+          return;
+        }
+        try {
+          const barcodes = await detector.detect(video);
+          const match = Array.isArray(barcodes)
+            ? barcodes.map((item) => parseReferralQrPayload(item?.rawValue)).find(Boolean)
+            : null;
+          if (match?.phone) {
+            stopReferralQrScanner();
+            state.referralTransferDraft = {
+              ...(state.referralTransferDraft || {}),
+              targetPhone: match.phone,
+              fullName: match.name || "",
+              recipientShortName: match.name || "",
+            };
+            openNamedSheet("transfer-bs");
+            return;
+          }
+        } catch {
+          // ignore detector frame errors
+        }
+        referralQrScannerFrame = window.requestAnimationFrame(scan);
+      };
+      referralQrScannerFrame = window.requestAnimationFrame(scan);
+    } catch (error) {
+      status.textContent = normalizeText(error?.message || "Не удалось получить доступ к камере.");
+      stopReferralQrScanner();
+    }
   };
 
   const getReferralOperationIconName = (operation = {}) => {
@@ -898,8 +1192,10 @@
 
   const renderReferralOperationCard = (operation = {}) => `
     <div class="referral-activity-row ${getReferralOperationToneClass(operation)}">
-      <div class="referral-activity-icon ${normalizeText(operation.counterpartName) ? "has-avatar" : ""}">
-        ${normalizeText(operation.counterpartName) ? avatarMarkup({ displayName: operation.counterpartName }, 46) : iconMarkup(getReferralOperationIconName(operation))}
+      <div class="referral-activity-icon ${normalizeText(operation.counterpartName) || normalizeText(operation.counterpartAvatarUrl) ? "has-avatar" : ""}">
+        ${normalizeText(operation.counterpartName) || normalizeText(operation.counterpartAvatarUrl)
+          ? avatarMarkup({ avatarUrl: normalizeText(operation.counterpartAvatarUrl), displayName: operation.counterpartName }, 46)
+          : iconMarkup(getReferralOperationIconName(operation))}
       </div>
       <div class="referral-activity-copy">
         <p class="list-title">${normalizeText(operation.title)}</p>
@@ -914,9 +1210,9 @@
 
   const matchesTransferHistoryFilter = (operation, filter) => {
     const type = normalizeText(operation?.type);
-    if (filter === "outgoing") return type === "transfer_out";
-    if (filter === "incoming") return type === "transfer_in";
-    return type === "transfer_out" || type === "transfer_in";
+    if (filter === "transfers") return type === "transfer_out" || type === "transfer_in";
+    if (filter === "rewards") return type === "reward";
+    return true;
   };
 
   const buildReferralLevelsSheet = () => {
@@ -933,7 +1229,7 @@
           <div class="referral-levels-sheet-summary">
             <div class="referral-levels-sheet-stat">
               <span class="field-label">Текущий уровень</span>
-              <strong>${normalizeText(referralProgram.currentLevel?.name) || "Не определен"}</strong>
+              <strong>${getReferralLevelName(referralProgram, referralProgram.activeReferralsCount || referral.stats?.green || 0)}</strong>
             </div>
             <div class="referral-levels-sheet-stat">
               <span class="field-label">Скидка другу</span>
@@ -979,11 +1275,122 @@
     `;
   };
 
+  const buildAccountAchievements = () => {
+    const user = state.payload?.user || {};
+    const referral = state.payload?.referral || {};
+    const profile = state.payload?.profile || {};
+    const visitHistory = Array.isArray(profile.visitHistory) ? profile.visitHistory : [];
+    const transferOperations = (Array.isArray(referral.operations) ? referral.operations : []).filter((operation) => {
+      const type = normalizeText(operation?.type);
+      return type === "transfer_out" || type === "transfer_in";
+    });
+    const sentTransfers = transferOperations.filter((operation) => normalizeText(operation.type) === "transfer_out").length;
+    const activeReferrals = Number(referral.program?.activeReferralsCount || referral.stats?.green || 0);
+    const profileFieldsFilled = [
+      normalizeText(user.avatarUrl),
+      normalizeText(user.displayName),
+      normalizeText(user.phone),
+      normalizeText(user.birthDate),
+      normalizeText(user.gender),
+      normalizeText(user.telegramId),
+    ].filter(Boolean).length;
+    const profileFieldTarget = 6;
+    return [
+      {
+        id: "first-visit",
+        title: "Первый визит",
+        description: "Завершите первую запись в BrotherShop.",
+        current: visitHistory.length,
+        target: 1,
+        progressLabel: `${visitHistory.length}/1`,
+      },
+      {
+        id: "regular-guest",
+        title: "Постоянный гость",
+        description: "Наберите 5 завершённых визитов.",
+        current: visitHistory.length,
+        target: 5,
+        progressLabel: `${visitHistory.length}/5 визитов`,
+      },
+      {
+        id: "referral-start",
+        title: "Первый реферал",
+        description: "Пригласите первого активного реферала.",
+        current: activeReferrals,
+        target: 1,
+        progressLabel: `${activeReferrals}/1`,
+      },
+      {
+        id: "referral-brother",
+        title: "Старший брат",
+        description: "Доведите сеть до 5 активных рефералов.",
+        current: activeReferrals,
+        target: 5,
+        progressLabel: `${activeReferrals}/5 рефералов`,
+      },
+      {
+        id: "transfer-first",
+        title: "Первый перевод",
+        description: "Сделайте первый перевод BS другому клиенту.",
+        current: sentTransfers,
+        target: 1,
+        progressLabel: `${sentTransfers}/1`,
+      },
+      {
+        id: "profile-complete",
+        title: "Профиль собран",
+        description: "Заполните профиль полностью и добавьте фото.",
+        current: profileFieldsFilled,
+        target: profileFieldTarget,
+        progressLabel: `${profileFieldsFilled}/${profileFieldTarget}`,
+      },
+    ].map((item) => ({
+      ...item,
+      unlocked: item.current >= item.target,
+      progress: Math.max(0, Math.min(100, Math.round((item.current / Math.max(1, item.target)) * 100))),
+    }));
+  };
+
+  const renderAchievementsPage = () => {
+    const achievements = buildAccountAchievements();
+    const unlockedCount = achievements.filter((item) => item.unlocked).length;
+    return `
+      <section class="page profile-page achievements-page">
+        <article class="hero-card page-hero achievements-hero">
+          <div class="hero-eyebrow">Аккаунт</div>
+          <h1 class="hero-title">Достижения</h1>
+          <p class="subtitle achievements-hero-copy">Прогресс аккаунта, визитов, рефералов и переводов BS.</p>
+          <div class="profile-summary-strip achievements-summary-strip">
+            <div class="profile-summary-cell"><span class="field-label">Открыто</span><strong>${unlockedCount}</strong></div>
+            <div class="profile-summary-cell"><span class="field-label">Всего</span><strong>${achievements.length}</strong></div>
+          </div>
+        </article>
+        <div class="achievements-grid">
+          ${achievements.map((item) => `
+            <article class="list-card achievement-card ${item.unlocked ? "is-unlocked" : ""}">
+              <div class="section-head">
+                <div>
+                  <div class="section-eyebrow">${item.unlocked ? "Открыто" : "В процессе"}</div>
+                  <h2 class="section-title">${item.title}</h2>
+                </div>
+                <span class="status-badge ${item.unlocked ? "green" : "yellow"}">${item.progressLabel}</span>
+              </div>
+              <p class="subtitle achievement-description">${item.description}</p>
+              <div class="progress-track"><div class="progress-bar" style="width:${item.progress}%"></div></div>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  };
+
   const renderBookingPage = () => {
     const booking = state.booking;
     const bookingStepClass = booking.stepAnimationsEnabled ? "booking-step-active" : "";
     const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
     const selectedBarber = barbers.find((item) => normalizeText(item.id) === normalizeText(booking.barberId)) || null;
+    const isBookingBlocked = booking.canBook === false;
+    const bookingLimitMessage = normalizeText(booking.limitMessage);
     const selectedServices = booking.services.filter((service) => booking.selectedServices.includes(service.id));
     const selectedTotal = selectedServices.reduce((total, service) => total + (Number(service.price) || 0), 0);
     const completedSteps = [
@@ -994,7 +1401,7 @@
       Boolean(normalizeText(booking.comment)),
     ].filter(Boolean).length;
     const showServicesStep = Boolean(selectedBarber);
-    const showDateStep = Boolean(selectedBarber && booking.selectedServices.length);
+    const showDateStep = Boolean(selectedBarber && booking.selectedServices.length && !isBookingBlocked);
     const showTimeStep = Boolean(showDateStep && booking.selectedDate);
     const showCommentStep = Boolean(showTimeStep && booking.selectedTime);
     const showSummaryStep = Boolean(showCommentStep);
@@ -1035,6 +1442,7 @@
           ${showServicesStep ? `
           <article class="booking-panel booking-step ${bookingStepClass}" data-booking-step="services">
             <div class="booking-step-head"><div class="section-eyebrow">2. Услуги</div><div class="step-badge">${booking.selectedServices.length || 0}</div></div>
+            ${isBookingBlocked && bookingLimitMessage ? `<div class="booking-step-alert status-red"><p class="list-title">Лимит активных записей достигнут</p><p class="subtitle">${bookingLimitMessage}</p></div>` : ""}
             <div class="list">
               ${booking.services.length
                 ? booking.services
@@ -1043,7 +1451,7 @@
                       return `<button class="service-item ${selected ? "is-selected" : ""}" data-action="toggle-service" data-id="${service.id}"><div class="section-head"><div><p class="list-title">${normalizeText(service.name)}</p><p class="subtitle">${normalizeText(service.description || "")}</p></div><strong>${formatRub(service.price)}</strong></div><div class="muted-text">${service.duration || 0} мин</div></button>`;
                     })
                     .join("")
-                : `<div class="empty-state">${selectedBarber ? "Подбираем доступные услуги..." : "Выберите мастера, чтобы увидеть услуги."}</div>`}
+                : `<div class="empty-state">${isBookingBlocked && bookingLimitMessage ? bookingLimitMessage : selectedBarber ? "Подбираем доступные услуги..." : "Выберите мастера, чтобы увидеть услуги."}</div>`}
             </div>
           </article>
           ` : ""}
@@ -1100,8 +1508,9 @@
           <div class="service-chip-row">
             ${selectedServices.length ? selectedServices.map((service) => `<span class="service-chip">${normalizeText(service.name)}</span>`).join("") : `<span class="muted-text">Добавьте хотя бы одну услугу, чтобы увидеть итог записи.</span>`}
           </div>
+          ${isBookingBlocked && bookingLimitMessage ? `<div class="booking-step-alert status-red"><p class="list-title">Новая запись пока недоступна</p><p class="subtitle">${bookingLimitMessage}</p></div>` : ""}
           ${normalizeText(booking.comment) ? `<div class="summary-note"><span class="field-label">Комментарий</span><p class="subtitle">${normalizeText(booking.comment)}</p></div>` : `<div class="summary-note summary-note-muted"><span class="field-label">Комментарий</span><p class="subtitle">Комментарий не добавлен. Этот шаг необязателен.</p></div>`}
-          <div class="hero-actions booking-submit-wrap"><button class="primary-btn" data-action="submit-booking" ${!selectedBarber || !booking.selectedServices.length || !booking.selectedDate || !booking.selectedTime || booking.submitting ? "disabled" : ""}>${booking.submitting ? "Отправляем..." : "Подтвердить запись"}</button></div>
+          <div class="hero-actions booking-submit-wrap"><button class="primary-btn" data-action="submit-booking" ${!selectedBarber || !booking.selectedServices.length || !booking.selectedDate || !booking.selectedTime || booking.submitting || isBookingBlocked ? "disabled" : ""}>${booking.submitting ? "Отправляем..." : "Подтвердить запись"}</button></div>
         </article>
       </section>
     `;
@@ -1115,10 +1524,11 @@
   const renderProfilePage = () => {
     const user = state.payload?.user || {};
     const profile = state.payload?.profile || {};
-    const referral = state.payload?.referral || {};
+    const booking = state.payload?.booking || {};
     const visitHistory = Array.isArray(profile.visitHistory) ? profile.visitHistory : [];
     const operations = Array.isArray(profile.operations) ? profile.operations : [];
     const notices = Array.isArray(profile.notices) ? profile.notices : [];
+    const activeAppointments = Array.isArray(booking.activeAppointments) ? booking.activeAppointments : [];
     const historyItems = buildProfileHistoryItems(visitHistory, operations);
     const filteredHistory = historyItems.filter((item) => matchesProfileHistoryFilter(item, state.profileHistoryFilter));
     const historyPreview = filteredHistory.slice(0, 3);
@@ -1138,7 +1548,10 @@
       <section class="page profile-page">
         <article class="hero-card page-hero profile-hero">
           <div class="profile-cover"></div>
-          <button class="ghost-btn profile-cover-settings icon-only-btn" type="button" data-action="open-sheet" data-sheet="profile-menu" aria-label="Настройки">${iconMarkup("settings")}</button>
+          <div class="profile-cover-actions">
+            <button class="ghost-btn profile-cover-action icon-only-btn" type="button" data-action="navigate" data-href="/achievements/" aria-label="Достижения">${iconMarkup("reward")}</button>
+            <button class="ghost-btn profile-cover-action profile-cover-settings icon-only-btn" type="button" data-action="open-sheet" data-sheet="profile-menu" aria-label="Настройки">${iconMarkup("settings")}</button>
+          </div>
           <div class="profile-social-head">
             <div class="profile-avatar-trigger">${avatarMarkup(user, 108)}</div>
             <div class="profile-social-copy">
@@ -1154,10 +1567,36 @@
           </div>
           ${profileCompletion < 100 ? `<div class="profile-progress-card"><div class="section-head"><div><div class="section-eyebrow">Прогресс профиля</div><h2 class="section-title">Профиль заполнен на ${profileCompletion}%</h2></div><span class="status-badge status-green">${completionFields.filter(Boolean).length}/${completionFields.length}</span></div><div class="progress-track"><div class="progress-bar" style="width:${profileCompletion}%"></div></div></div>` : ""}
           <div class="profile-summary-strip">
-            <div class="profile-summary-cell"><span class="field-label">BS</span><strong>${referral.bsBalance || 0}</strong></div>
             <div class="profile-summary-cell"><span class="field-label">Визиты</span><strong>${visitHistory.length}</strong></div>
             <div class="profile-summary-cell"><span class="field-label">Замечания</span><button class="metric-trigger" type="button" data-action="open-sheet" data-sheet="profile-notices"><strong>${noticeLabel}</strong></button></div>
           </div>
+        </article>
+        <article class="list-card profile-next-booking-card">
+          <div class="section-head">
+            <div><div class="section-eyebrow">Активные записи</div><h2 class="section-title">${activeAppointments.length ? `Всего ${activeAppointments.length}` : "Записей пока нет"}</h2></div>
+          </div>
+          ${activeAppointments.length
+            ? `<div class="profile-active-bookings-list">${activeAppointments
+                .map(
+                  (appointment) => `<button class="profile-next-booking-surface" type="button" data-action="open-sheet" data-sheet="manage-booking" data-id="${normalizeText(appointment.id)}">
+                    <div class="profile-next-booking-main">
+                      <p class="list-title">${normalizeText(appointment.barber || "BrotherShop")}</p>
+                      <p class="subtitle">${normalizeText((appointment.services || []).join(", ") || "Детали доступны в booking")}</p>
+                    </div>
+                    <div class="profile-next-booking-meta">
+                      <div class="profile-summary-cell">
+                        <span class="field-label">Дата</span>
+                        <strong>${formatDateOnly(appointment.date)}</strong>
+                      </div>
+                      <div class="profile-summary-cell">
+                        <span class="field-label">Время</span>
+                        <strong>${normalizeText(appointment.time)}</strong>
+                      </div>
+                    </div>
+                  </button>`,
+                )
+                .join("")}</div>`
+            : `<div class="empty-state">Когда появятся активные записи, они будут отображаться здесь.</div>`}
         </article>
         <article class="list-card profile-history-card" data-action="open-sheet" data-sheet="profile-history">
           <div class="section-head">
@@ -1166,7 +1605,6 @@
           <div class="filter-row">
             <button class="nav-pill ${state.profileHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="all">Все</button>
             <button class="nav-pill ${state.profileHistoryFilter === "visits" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="visits">Визиты</button>
-            <button class="nav-pill ${state.profileHistoryFilter === "bs" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="bs">BS</button>
             <button class="nav-pill ${state.profileHistoryFilter === "payments" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="payments">Оплата</button>
           </div>
           <div class="timeline">${historyPreview.length ? historyPreview.map(renderProfileHistoryRow).join("") : `<div class="empty-state">История пока пуста.</div>`}</div>
@@ -1178,7 +1616,10 @@
 
   const renderSheet = () => {
     if (!state.sheet) return `<div class="sheet-backdrop" id="sheet-backdrop"></div>`;
-    return `<div class="sheet-backdrop open" id="sheet-backdrop"><div class="sheet ${normalizeText(state.sheet.className)}"><div class="sheet-head"><h3 class="section-title" style="margin:0;">${state.sheet.title}</h3><button class="ghost-btn icon-only-btn sheet-close-btn" type="button" data-action="close-sheet" aria-label="Закрыть">${iconMarkup("close")}</button></div><div>${state.sheet.bodyHtml || ""}</div>${state.sheet.footerHtml ? `<div style="margin-top:16px;">${state.sheet.footerHtml}</div>` : ""}</div></div>`;
+    const sheetStateClass = state.sheetState === "closing" ? "is-closing" : state.sheetState === "open" ? "is-open" : "is-entering";
+    const className = normalizeText(state.sheet.className);
+    const isSuccessSheet = className.includes("sheet-success");
+    return `<div class="sheet-backdrop ${sheetStateClass}" id="sheet-backdrop"><div class="sheet ${sheetStateClass} ${className}">${isSuccessSheet ? `<button class="ghost-btn icon-only-btn sheet-close-btn sheet-success-close" type="button" data-action="close-sheet" aria-label="Закрыть">${iconMarkup("close")}</button>` : `<div class="sheet-head"><h3 class="section-title" style="margin:0;">${state.sheet.title}</h3><button class="ghost-btn icon-only-btn sheet-close-btn" type="button" data-action="close-sheet" aria-label="Закрыть">${iconMarkup("close")}</button></div>`}<div>${state.sheet.bodyHtml || ""}</div>${state.sheet.footerHtml ? `<div style="margin-top:16px;">${state.sheet.footerHtml}</div>` : ""}</div></div>`;
   };
 
   const renderCurrentPage = () => {
@@ -1186,6 +1627,7 @@
     if (state.currentPage === "referral") return renderReferralPage();
     if (state.currentPage === "booking") return renderBookingPage();
     if (state.currentPage === "shop") return renderShopPage();
+    if (state.currentPage === "achievements") return renderAchievementsPage();
     if (state.currentPage === "profile") return renderProfilePage();
     return renderHomePage();
   };
@@ -1196,6 +1638,7 @@
       referral: "BrotherShop • Бонусы",
       booking: "BrotherShop • Запись",
       shop: "BrotherShop • Магазин",
+      achievements: "BrotherShop • Достижения",
       profile: "BrotherShop • Профиль",
     };
     document.title = titles[state.currentPage] || "BrotherShop";
@@ -1231,6 +1674,7 @@
     ROOT.innerHTML = `<div class="client-app"><div class="app-shell ${state.routeTransitionActive ? "route-transition" : ""}">${renderTopbar()}${renderCurrentPage()}${renderBottomNav()}</div></div>${renderSheet()}`;
     state.routeTransitionActive = false;
     bindEvents();
+    setupMediaWaveLoading();
     const nav = document.querySelector(".bottom-nav");
     if (nav) {
       const targetIndex = Number(nav.dataset.activeIndex || 0);
@@ -1248,7 +1692,11 @@
     if (!state.booking.barberId) return;
     state.booking.loading = true;
     const payload = await apiRequest(`/booking/services?barberId=${encodeURIComponent(state.booking.barberId)}`);
-    state.booking.services = Array.isArray(payload.services) ? payload.services : [];
+    state.booking.canBook = payload?.canBook !== false;
+    state.booking.limitMessage = normalizeText(payload?.message);
+    state.booking.bookingLimit = Math.max(0, Number(payload?.bookingLimit) || 0);
+    state.booking.activeAppointmentsCount = Math.max(0, Number(payload?.activeAppointments) || 0);
+    state.booking.services = state.booking.canBook && Array.isArray(payload.services) ? payload.services : [];
     state.booking.selectedServices = [];
     state.booking.dates = [];
     state.booking.selectedDate = "";
@@ -1304,11 +1752,15 @@
         times: [],
         selectedTime: "",
         comment: "",
+        canBook: true,
+        limitMessage: "",
+        bookingLimit: 0,
+        activeAppointmentsCount: 0,
         loading: false,
         submitting: false,
         stepAnimationsEnabled: false,
       };
-      openSheet("Запись создана", `<div class="list-item"><p class="list-title">Запись успешно оформлена.</p><p class="subtitle">Она уже появилась в профиле и будет видна в CRM.</p></div>`);
+      openSheet("Запись создана", buildBookingStatusSheet("Запись создана"), "", "sheet-success");
     } catch (error) {
       state.booking.submitting = false;
       openSheet("Ошибка записи", `<div class="list-item"><p class="list-title">${normalizeText(error.message || "Не удалось создать запись.")}</p></div>`);
@@ -1316,11 +1768,23 @@
     render();
   };
 
+  const cancelHomeBooking = async (appointmentId) => {
+    const safeId = normalizeText(appointmentId);
+    if (!safeId) throw new Error("Не удалось определить запись.");
+    await apiRequest(`/booking/appointments/${encodeURIComponent(safeId)}/cancel`, {
+      method: "POST",
+    });
+    state.payload = await apiRequest("/app");
+    closeSheet();
+    openSheet("Запись отменена", buildBookingStatusSheet("Запись отменена"), "", "sheet-success");
+    render();
+  };
+
   const requestReferralTransferPreview = async (draft) => {
     const payload = await apiRequest("/referral/transfer/preview", {
       method: "POST",
       body: JSON.stringify({
-        targetPhone: normalizeText(draft?.targetPhone),
+        targetPhone: normalizePhone(draft?.targetPhone),
       }),
     });
     return payload?.recipient || null;
@@ -1330,7 +1794,7 @@
     const payload = await apiRequest("/referral/transfer", {
       method: "POST",
       body: JSON.stringify({
-        targetPhone: normalizeText(draft?.targetPhone),
+        targetPhone: normalizePhone(draft?.targetPhone),
         amountBs: Number(draft?.amountBs || 0),
         comment: normalizeText(draft?.comment),
       }),
@@ -1345,10 +1809,7 @@
       state.payload = await apiRequest("/app");
     }
     closeSheet();
-    openSheet(
-      "Перевод выполнен",
-      `<div class="list-item"><p class="list-title">BS успешно переведены.</p><p class="subtitle">${normalizeText(payload?.transfer?.recipient?.shortName || payload?.transfer?.recipient?.fullName || "")}${payload?.transfer?.amountBs ? ` · ${payload.transfer.amountBs} BS` : ""}</p></div>`,
-    );
+    openSheet("Перевод выполнен", buildBookingStatusSheet("Перевод выполнен"), "", "sheet-success");
     render();
   };
 
@@ -1396,12 +1857,33 @@
     }
     if (sheetId === "transfer-bs") {
       const draft = state.referralTransferDraft || {};
+      const selectedQuickAmount = Number(draft.amountBs || state.referralQuickAmount || 0);
       openSheet(
         "Перевести BS",
-        `<form class="form-grid referral-transfer-form" id="referral-transfer-form"><div class="referral-transfer-balance"><span class="field-label">Доступно сейчас</span><strong>${Number(state.payload?.referral?.bsBalance || 0)} BS</strong></div><label class="field"><span class="field-label">Телефон получателя</span><input name="targetPhone" placeholder="+7..." value="${normalizeText(draft.targetPhone)}" required /></label><label class="field"><span class="field-label">Сумма BS</span><input type="number" name="amountBs" min="1" step="1" value="${normalizeText(draft.amountBs)}" required /></label><label class="field"><span class="field-label">Комментарий</span><input name="comment" placeholder="Необязательно" value="${normalizeText(draft.comment)}" /></label><div class="inline-actions"><button class="primary-btn" type="submit">Продолжить</button><button class="ghost-btn" type="button" data-action="close-sheet">Отмена</button></div></form>`,
+        `<form class="form-grid referral-transfer-form" id="referral-transfer-form"><div class="referral-transfer-balance"><span class="field-label">Доступно сейчас</span><strong>${Number(state.payload?.referral?.bsBalance || 0)} BS</strong></div><label class="field"><span class="field-label">Телефон получателя</span><input type="tel" inputmode="tel" autocomplete="tel" name="targetPhone" placeholder="+7..." value="${formatPhoneInputValue(draft.targetPhone)}" required /></label><label class="field"><span class="field-label">Сумма BS</span><input type="number" name="amountBs" min="1" step="1" value="${normalizeText(draft.amountBs)}" required /></label><div class="referral-transfer-form-presets"><span class="field-label">Быстрые суммы</span><div class="referral-quick-transfer-amounts">${REFERRAL_TRANSFER_QUICK_AMOUNTS
+          .map(
+            (amount) => `
+              <button
+                class="referral-quick-amount ${selectedQuickAmount === amount ? "is-selected" : ""}"
+                type="button"
+                data-action="transfer-preset"
+                data-amount="${amount}"
+              >
+                ${amount} BS
+              </button>`,
+          )
+          .join("")}</div></div><label class="field"><span class="field-label">Комментарий</span><input name="comment" placeholder="Необязательно" value="${normalizeText(draft.comment)}" /></label><div class="inline-actions"><button class="primary-btn" type="submit">Продолжить</button><button class="ghost-btn" type="button" data-action="close-sheet">Отмена</button></div></form>`,
         "",
         "sheet-wide",
       );
+      return;
+    }
+    if (sheetId === "my-transfer-qr") {
+      openSheet("Мой QR для BS", buildReferralQrSheet(), "", "sheet-wide");
+      return;
+    }
+    if (sheetId === "scan-transfer-qr") {
+      openSheet("Сканировать QR", buildReferralQrScannerSheet(), "", "sheet-wide");
       return;
     }
     if (sheetId === "quick-transfer") {
@@ -1416,6 +1898,28 @@
         `<div class="referral-transfer-confirm"><div class="referral-transfer-confirm-card"><span class="field-label">Получатель</span><strong>${normalizeText(draft.recipientShortName || "Не найден")}</strong><span class="subtitle">${draft.targetPhone ? formatPhone(draft.targetPhone) : ""}</span></div><div class="referral-transfer-confirm-card"><span class="field-label">Сумма</span><strong>${Number(draft.amountBs || 0)} BS</strong><span class="subtitle">${normalizeText(draft.comment) ? normalizeText(draft.comment) : "Без комментария"}</span></div><div class="inline-actions"><button class="primary-btn" type="button" data-action="confirm-referral-transfer">Отправить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="transfer-bs">Назад</button></div></div>`,
         "",
         "sheet-wide",
+      );
+      return;
+    }
+    if (sheetId === "manage-booking") {
+      const appointment = Array.isArray(state.payload?.booking?.activeAppointments)
+        ? state.payload.booking.activeAppointments.find((item) => normalizeText(item.id) === normalizeText(state.pendingBookingCancellationId))
+        : null;
+      const targetId = normalizeText(state.pendingBookingCancellationId || appointment?.id || "");
+      openSheet(
+        "Управление записью",
+        `<div class="list appointment-sheet-list"><div class="list-item"><p class="list-title">${normalizeText(appointment?.barber || "Текущая запись")}</p><p class="subtitle">${appointment?.date ? formatDateOnly(appointment.date) : ""}${appointment?.time ? ` · ${normalizeText(appointment.time)}` : ""}</p></div><div class="list-item"><p class="list-title">Услуги</p><p class="subtitle">${normalizeText((appointment?.services || []).join(", ") || "Детали доступны в booking.")}</p></div></div><div class="inline-actions"><button class="ghost-btn danger-surface" type="button" data-action="open-sheet" data-sheet="cancel-booking" data-id="${targetId}">Отменить запись</button></div>`,
+      );
+      return;
+    }
+    if (sheetId === "cancel-booking") {
+      const appointment = Array.isArray(state.payload?.booking?.activeAppointments)
+        ? state.payload.booking.activeAppointments.find((item) => normalizeText(item.id) === normalizeText(state.pendingBookingCancellationId))
+        : null;
+      const targetId = normalizeText(state.pendingBookingCancellationId || appointment?.id || "");
+      openSheet(
+        "Отменить запись",
+        `<div class="list-item"><p class="list-title">Отменить текущую запись?</p><p class="subtitle">Запись будет отменена без возможности вернуть её автоматически.${appointment?.date ? ` · ${formatDateOnly(appointment.date)}` : ""}${appointment?.time ? ` · ${normalizeText(appointment.time)}` : ""}</p></div><div class="inline-actions"><button class="danger-btn" type="button" data-action="confirm-cancel-booking" data-id="${targetId}">Отменить запись</button><button class="ghost-btn" type="button" data-action="close-sheet">Назад</button></div>`,
       );
       return;
     }
@@ -1480,7 +1984,7 @@
       const operations = Array.isArray(profile.operations) ? profile.operations : [];
       const historyItems = buildProfileHistoryItems(visitHistory, operations);
       const filteredHistory = historyItems.filter((item) => matchesProfileHistoryFilter(item, state.profileHistoryFilter));
-      openSheet("Вся история", `<div class="filter-row sheet-filter-row"><button class="nav-pill ${state.profileHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="all">Все</button><button class="nav-pill ${state.profileHistoryFilter === "visits" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="visits">Визиты</button><button class="nav-pill ${state.profileHistoryFilter === "bs" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="bs">BS</button><button class="nav-pill ${state.profileHistoryFilter === "payments" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="payments">Оплата</button></div><div class="timeline">${filteredHistory.length ? filteredHistory.map(renderProfileHistoryRow).join("") : `<div class="empty-state">История пока пуста.</div>`}</div>`);
+      openSheet("Вся история", `<div class="filter-row sheet-filter-row"><button class="nav-pill ${state.profileHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="all">Все</button><button class="nav-pill ${state.profileHistoryFilter === "visits" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="visits">Визиты</button><button class="nav-pill ${state.profileHistoryFilter === "payments" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="payments">Оплата</button></div><div class="timeline">${filteredHistory.length ? filteredHistory.map(renderProfileHistoryRow).join("") : `<div class="empty-state">История пока пуста.</div>`}</div>`);
       return;
     }
   };
@@ -1561,7 +2065,17 @@
     document.querySelectorAll("[data-action='unlink-telegram']").forEach((node) => node.addEventListener("click", unlinkTelegram));
     document.querySelectorAll("[data-action='check-telegram-link']").forEach((node) => node.addEventListener("click", checkTelegramLink));
     document.querySelectorAll("[data-action='close-sheet']").forEach((node) => node.addEventListener("click", closeSheet));
-    document.querySelectorAll("[data-action='open-sheet']").forEach((node) => node.addEventListener("click", () => openNamedSheet(node.dataset.sheet)));
+    document.querySelectorAll("[data-action='open-sheet']").forEach((node) => node.addEventListener("click", () => {
+      if (["cancel-booking", "manage-booking"].includes(normalizeText(node.dataset.sheet))) {
+        state.pendingBookingCancellationId = normalizeText(node.dataset.id);
+      }
+      openNamedSheet(node.dataset.sheet);
+    }));
+    document.querySelectorAll("[data-action='navigate']").forEach((node) => node.addEventListener("click", () => {
+      const href = normalizeText(node.dataset.href);
+      if (!href) return;
+      navigateTo(href);
+    }));
     document.querySelectorAll("[data-action='set-history-filter']").forEach((node) => node.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -1616,19 +2130,9 @@
         openNamedSheet("quick-transfer");
       });
     });
-    document.querySelectorAll("[data-action='quick-transfer-custom']").forEach((node) => {
-      node.addEventListener("click", () => {
-        state.referralTransferDraft = {
-          ...(state.referralTransferDraft || {}),
-          targetPhone: normalizeText(node.dataset.phone),
-          recipientShortName: normalizeText(node.dataset.shortName || node.dataset.name),
-          fullName: normalizeText(node.dataset.name),
-        };
-        openNamedSheet("transfer-bs");
-      });
-    });
     document.querySelectorAll("[data-action='transfer-preset']").forEach((node) => {
       node.addEventListener("click", () => {
+        state.referralQuickAmount = Number(node.dataset.amount || 0);
         state.referralTransferDraft = {
           ...(state.referralTransferDraft || {}),
           amountBs: Number(node.dataset.amount || 0),
@@ -1658,6 +2162,31 @@
         }
       });
     });
+    const quickTransferForm = document.getElementById("quick-transfer-form");
+    if (quickTransferForm) {
+      quickTransferForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const amountInput = quickTransferForm.elements?.amountBs;
+        try {
+          const draft = {
+            targetPhone: normalizeText(quickTransferForm.dataset.phone),
+            amountBs: Number(amountInput?.value || 0),
+            recipientShortName: normalizeText(quickTransferForm.dataset.shortName || quickTransferForm.dataset.name),
+            fullName: normalizeText(quickTransferForm.dataset.name),
+            comment: "",
+          };
+          const recipient = await requestReferralTransferPreview(draft);
+          state.referralTransferDraft = {
+            ...draft,
+            recipientId: normalizeText(recipient?.id),
+            recipientShortName: normalizeText(recipient?.shortName || draft.recipientShortName || draft.fullName),
+          };
+          openNamedSheet("confirm-transfer-bs");
+        } catch (error) {
+          openSheet("Ошибка перевода", `<div class="list-item"><p class="list-title">${humanizeReferralTransferError(error)}</p></div>`);
+        }
+      });
+    }
     document.querySelectorAll("[data-action='select-barber']").forEach((node) => node.addEventListener("click", async () => {
       state.booking.barberId = normalizeText(node.dataset.id);
       await loadServices();
@@ -1715,12 +2244,17 @@
     }));
     const referralTransferForm = document.getElementById("referral-transfer-form");
     if (referralTransferForm) {
+      const targetPhoneInput = referralTransferForm.elements?.targetPhone;
+      if (targetPhoneInput) {
+        applyPhoneMask(targetPhoneInput);
+        attachPhoneMask(targetPhoneInput);
+      }
       referralTransferForm.addEventListener("submit", async (event) => {
         event.preventDefault();
         const formData = new window.FormData(referralTransferForm);
         try {
           const draft = {
-            targetPhone: normalizeText(formData.get("targetPhone")),
+            targetPhone: normalizePhone(formData.get("targetPhone")),
             amountBs: Number(formData.get("amountBs") || 0),
             comment: normalizeText(formData.get("comment")),
           };
@@ -1739,6 +2273,9 @@
         }
       });
     }
+    if (normalizeText(state.sheet?.title) === "Сканировать QR") {
+      startReferralQrScanner();
+    }
     document.querySelectorAll("[data-action='confirm-referral-transfer']").forEach((node) => {
       node.addEventListener("click", async () => {
         try {
@@ -1748,6 +2285,15 @@
             "Ошибка перевода",
             `<div class="list-item"><p class="list-title">${humanizeReferralTransferError(error)}</p></div>`,
           );
+        }
+      });
+    });
+    document.querySelectorAll("[data-action='confirm-cancel-booking']").forEach((node) => {
+      node.addEventListener("click", async () => {
+        try {
+          await cancelHomeBooking(node.dataset.id);
+        } catch (error) {
+          openSheet("Ошибка отмены", `<div class="list-item"><p class="list-title">${normalizeText(error.message || "Не удалось отменить запись.")}</p></div>`);
         }
       });
     });

@@ -161,6 +161,40 @@
     return `${surname} ${initials}`.trim();
   };
 
+  const extractComparablePhoneDigits = (value) => {
+    const normalized = normalizePhone(value || "");
+    const digits = normalized.replace(/\D/g, "");
+    if (!digits) return "";
+    if (digits.length >= 10) return digits.slice(-10);
+    return digits;
+  };
+
+  const phonesMatch = (left, right) => {
+    const normalizedLeft = normalizePhone(left || "");
+    const normalizedRight = normalizePhone(right || "");
+    if (normalizedLeft && normalizedRight && normalizedLeft === normalizedRight) return true;
+    const comparableLeft = extractComparablePhoneDigits(left);
+    const comparableRight = extractComparablePhoneDigits(right);
+    return Boolean(comparableLeft && comparableRight && comparableLeft === comparableRight);
+  };
+
+  const repairStoredText = (value) => {
+    const safeValue = normalizeText(value);
+    if (!safeValue) return "";
+    const replacements = [
+      ["РћРїРµСЂР°С†РёСЏ", "Операция"],
+      ["РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ", "Пользователь"],
+      ["РџРµСЂРµРІРѕРґ BS", "Перевод BS"],
+      ["РџРѕР»СѓС‡РµРЅРёРµ BS", "Получение BS"],
+      ["РџРµСЂРµРІРѕРґ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ ", "Перевод пользователю "],
+      ["РџРµСЂРµРІРѕРґ РѕС‚ ", "Перевод от "],
+    ];
+    return replacements.reduce(
+      (result, [needle, replacement]) => result.split(needle).join(replacement),
+      safeValue,
+    );
+  };
+
   const ensureStoreShape = (input) => {
     const store = input && typeof input === "object" ? input : DEFAULT_STORE;
     return {
@@ -294,14 +328,15 @@
     return {
       id: normalizeText(transaction.id) || randomUUID(),
       type: normalizeText(transaction.type) || "manual",
-      title: normalizeText(transaction.title) || "РћРїРµСЂР°С†РёСЏ",
-      description: normalizeText(transaction.description) || "",
+      title: repairStoredText(transaction.title) || "Операция",
+      description: repairStoredText(transaction.description) || "",
       amountBs: Number.isFinite(amountBs) ? amountBs : 0,
       createdAt: safeCreatedAt,
       status: normalizeText(transaction.status) || "posted",
       counterpartId: normalizeText(transaction.counterpartId) || "",
       counterpartName: normalizeText(transaction.counterpartName) || "",
       counterpartPhone: normalizePhone(transaction.counterpartPhone || "") || "",
+      counterpartAvatarUrl: normalizeText(transaction.counterpartAvatarUrl) || "",
     };
   };
 
@@ -600,6 +635,9 @@
     const referralLevels = Array.isArray(referralProgram.levels) ? referralProgram.levels : [];
     const appointments = appointmentsRaw.map(mapAppointment);
     const ownerMeta = ensureUserMeta(store, safeUserId);
+    const userMetaById = new Map(
+      users.map((candidate) => [normalizeText(candidate.id), ensureUserMeta(store, candidate.id)]),
+    );
     const referredUsers = users.filter((candidate) => {
       const candidateMeta = ensureUserMeta(store, candidate.id);
       return normalizeText(candidateMeta.referredByUserId) === safeUserId;
@@ -623,7 +661,12 @@
       };
     });
     const activeReferralsCount = referrals.filter((referral) => referral.color === 'green').length;
-    const currentLevel = resolveReferralLevel(referralLevels, activeReferralsCount);
+    const sortedLevels = [...referralLevels].sort(
+      (left, right) => Math.max(0, Number(left?.minReferrals) || 0) - Math.max(0, Number(right?.minReferrals) || 0),
+    );
+    const currentLevel = resolveReferralLevel(sortedLevels, activeReferralsCount);
+    const nextLevel =
+      sortedLevels.find((level) => Math.max(0, Number(level?.minReferrals) || 0) > activeReferralsCount) || null;
     const rewardOperations = [];
     const visibleReferrals = referrals
       .map((referral) => {
@@ -656,7 +699,16 @@
         };
       })
       .filter((referral) => referral.color !== 'red');
-    const manualTransactions = (ownerMeta.transactions || []).map(sanitizeTransaction);
+    const manualTransactions = (ownerMeta.transactions || []).map((transaction) => {
+      const sanitized = sanitizeTransaction(transaction);
+      const fallbackAvatarUrl = normalizeText(
+        userMetaById.get(normalizeText(sanitized.counterpartId))?.avatarUrl || "",
+      );
+      return {
+        ...sanitized,
+        counterpartAvatarUrl: normalizeText(sanitized.counterpartAvatarUrl) || fallbackAvatarUrl,
+      };
+    });
     const operations = [...rewardOperations, ...manualTransactions].sort((left, right) =>
       normalizeText(right.createdAt).localeCompare(normalizeText(left.createdAt)),
     );
@@ -680,15 +732,18 @@
         });
       });
     const bsBalance = operations.reduce((total, operation) => total + (Number(operation.amountBs) || 0), 0);
-    const nextThreshold = BS_THRESHOLDS.find((threshold) => bsBalance < threshold) || BS_THRESHOLDS[BS_THRESHOLDS.length - 1];
-    const progressMax = nextThreshold || 1;
+    const progressStart = Math.max(0, Number(currentLevel?.minReferrals) || 0);
+    const progressNext = nextLevel ? Math.max(0, Number(nextLevel.minReferrals) || 0) : progressStart;
+    const progressSpan = nextLevel ? Math.max(1, progressNext - progressStart) : 1;
+    const progressValue = nextLevel ? Math.max(0, activeReferralsCount - progressStart) : progressSpan;
     await writeStore(store);
     return {
       bsBalance,
       scale: {
-        current: bsBalance,
-        next: nextThreshold,
-        progress: Math.max(0, Math.min(100, Math.round((bsBalance / progressMax) * 100))),
+        current: activeReferralsCount,
+        next: progressNext,
+        progress: Math.max(0, Math.min(100, Math.round((progressValue / progressSpan) * 100))),
+        isMaxLevel: !nextLevel,
       },
       referralCode: ownerMeta.referralCode,
       referralLink: `/login/?ref=${encodeURIComponent(ownerMeta.referralCode)}`,
@@ -709,7 +764,7 @@
       program: {
         friendDiscountRub: Math.max(0, Number(referralProgram.friendDiscountRub) || 0),
         bsToRubRate: Math.max(1, Number(referralProgram.bsToRubRate) || 1),
-        levels: referralLevels,
+        levels: sortedLevels,
         currentLevel,
         activeReferralsCount,
       },
@@ -731,11 +786,11 @@
     if (!senderUser) throw new Error("UNAUTHORIZED");
 
     const recipientUser =
-      users.find((candidate) => normalizePhone(candidate.Phone || "") === safeTargetPhone) || null;
+      users.find((candidate) => phonesMatch(candidate.Phone || "", safeTargetPhone)) || null;
     if (!recipientUser) throw new Error("TARGET_NOT_FOUND");
     if (normalizeText(recipientUser.id) === safeFromUserId) throw new Error("SELF_TRANSFER");
 
-    const fullName = normalizeText(recipientUser.Name) || normalizePhone(recipientUser.Phone || "") || "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ";
+    const fullName = normalizeText(recipientUser.Name) || normalizePhone(recipientUser.Phone || "") || "Пользователь";
     return {
       id: recipientUser.id,
       fullName,
@@ -773,7 +828,7 @@
       const candidateMeta = ensureUserMeta(store, candidate.id);
       const candidatePhone = normalizePhone(candidate.Phone || "");
       const candidateReferralCode = normalizeText(candidateMeta.referralCode).toUpperCase();
-      if (safeTargetPhone && candidatePhone && candidatePhone === safeTargetPhone) {
+      if (safeTargetPhone && candidatePhone && phonesMatch(candidatePhone, safeTargetPhone)) {
         recipientUser = candidate;
         return;
       }
@@ -791,22 +846,23 @@
 
     const senderMeta = ensureUserMeta(store, safeFromUserId);
     const recipientMeta = ensureUserMeta(store, recipientUser.id);
-    const senderLabel = normalizeText(senderUser.Name) || normalizePhone(senderUser.Phone || "") || "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ";
-    const recipientLabel = normalizeText(recipientUser.Name) || normalizePhone(recipientUser.Phone || "") || "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ";
+    const senderLabel = normalizeText(senderUser.Name) || normalizePhone(senderUser.Phone || "") || "Пользователь";
+    const recipientLabel = normalizeText(recipientUser.Name) || normalizePhone(recipientUser.Phone || "") || "Пользователь";
     const createdAt = new Date().toISOString();
 
     senderMeta.transactions = [
       ...(Array.isArray(senderMeta.transactions) ? senderMeta.transactions : []),
       sanitizeTransaction({
         type: "transfer_out",
-        title: "РџРµСЂРµРІРѕРґ BS",
-        description: `РџРµСЂРµРІРѕРґ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ ${recipientLabel}${safeComment ? ` В· ${safeComment}` : ""}`,
+        title: "Перевод BS",
+        description: `Перевод пользователю ${recipientLabel}${safeComment ? ` · ${safeComment}` : ""}`,
         amountBs: -safeAmount,
         createdAt,
         status: "posted",
         counterpartId: recipientUser.id,
         counterpartName: recipientLabel,
         counterpartPhone: normalizePhone(recipientUser.Phone || "") || "",
+        counterpartAvatarUrl: normalizeText(recipientMeta.avatarUrl) || "",
       }),
     ];
 
@@ -814,14 +870,15 @@
       ...(Array.isArray(recipientMeta.transactions) ? recipientMeta.transactions : []),
       sanitizeTransaction({
         type: "transfer_in",
-        title: "РџРѕР»СѓС‡РµРЅРёРµ BS",
-        description: `РџРµСЂРµРІРѕРґ РѕС‚ ${senderLabel}${safeComment ? ` В· ${safeComment}` : ""}`,
+        title: "Получение BS",
+        description: `Перевод от ${senderLabel}${safeComment ? ` · ${safeComment}` : ""}`,
         amountBs: safeAmount,
         createdAt,
         status: "posted",
         counterpartId: safeFromUserId,
         counterpartName: senderLabel,
         counterpartPhone: normalizePhone(senderUser.Phone || "") || "",
+        counterpartAvatarUrl: normalizeText(senderMeta.avatarUrl) || "",
       }),
     ];
 
@@ -836,6 +893,80 @@
         fullName: recipientLabel,
         phone: normalizePhone(recipientUser.Phone || "") || "",
       },
+    };
+  };
+
+  const adjustUserBsBalance = async ({
+    userId,
+    mode,
+    amountBs,
+    comment,
+    actorName,
+  }) => {
+    const safeUserId = normalizeText(userId);
+    const safeMode = normalizeText(mode) === "set" ? "set" : "adjust";
+    const safeAmount = Math.trunc(Number(amountBs));
+    const safeComment = normalizeText(comment);
+    const safeActorName = normalizeText(actorName);
+    if (!safeUserId) throw new Error("USER_REQUIRED");
+    if (!Number.isFinite(safeAmount)) throw new Error("INVALID_AMOUNT");
+
+    const [store, user] = await Promise.all([
+      readStore(),
+      prisma.users.findUnique({ where: { id: safeUserId } }),
+    ]);
+    if (!user) throw new Error("USER_NOT_FOUND");
+
+    const referralPayload = await buildReferralPayload(user);
+    const currentBalance = Math.max(0, Math.trunc(Number(referralPayload?.bsBalance) || 0));
+    const delta = safeMode === "set" ? safeAmount - currentBalance : safeAmount;
+    const nextBalance = currentBalance + delta;
+    if (!Number.isFinite(nextBalance)) throw new Error("INVALID_AMOUNT");
+    if (safeMode === "set" && safeAmount < 0) throw new Error("NEGATIVE_BALANCE");
+    if (nextBalance < 0) throw new Error("NEGATIVE_BALANCE");
+    if (delta === 0) {
+      return {
+        userId: safeUserId,
+        mode: safeMode,
+        amountBs: 0,
+        previousBalance: currentBalance,
+        balance: currentBalance,
+      };
+    }
+
+    const userMeta = ensureUserMeta(store, safeUserId);
+    const createdAt = new Date().toISOString();
+    const title =
+      safeMode === "set"
+        ? "Ручная установка BS"
+        : delta > 0
+          ? "Ручное начисление BS"
+          : "Ручное списание BS";
+    const actorSuffix = safeActorName ? ` Админ: ${safeActorName}.` : "";
+    const descriptionBase =
+      safeMode === "set"
+        ? `Баланс изменён с ${currentBalance} BS до ${nextBalance} BS.${actorSuffix}`
+        : `${delta > 0 ? "Начислено" : "Списано"} ${Math.abs(delta)} BS.${actorSuffix}`;
+    userMeta.transactions = [
+      ...(Array.isArray(userMeta.transactions) ? userMeta.transactions : []),
+      sanitizeTransaction({
+        type: safeMode === "set" ? "manual_set" : "manual_adjust",
+        title,
+        description: `${descriptionBase}${safeComment ? ` ${safeComment}` : ""}`.trim(),
+        amountBs: delta,
+        createdAt,
+        status: "posted",
+      }),
+    ];
+    store.users[safeUserId] = sanitizeUserMeta(userMeta);
+    await writeStore(store);
+
+    return {
+      userId: safeUserId,
+      mode: safeMode,
+      amountBs: delta,
+      previousBalance: currentBalance,
+      balance: nextBalance,
     };
   };
 
@@ -917,6 +1048,13 @@
           date: appointment.Date,
           time: appointment.Time,
           barber: appointment.Barber,
+          barberId: appointment.BarberID || "",
+          barberAvatarUrl:
+            (Array.isArray(barbers) ? barbers : []).find(
+              (barber) =>
+                canonicalizeKey(barber?.id) === canonicalizeKey(appointment.BarberID) ||
+                canonicalizeKey(barber?.name) === canonicalizeKey(appointment.Barber),
+            )?.avatarUrl || "",
           services: splitServiceList(appointment.Services),
           status: appointment.Status,
         })),
@@ -969,6 +1107,7 @@
     buildReferralPayload,
     resolveBsTransferRecipient,
     transferBsBalance,
+    adjustUserBsBalance,
     buildHomeAppPayload,
     buildUserInsightsMap,
   };

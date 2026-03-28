@@ -178,23 +178,6 @@
     return Boolean(comparableLeft && comparableRight && comparableLeft === comparableRight);
   };
 
-  const repairStoredText = (value) => {
-    const safeValue = normalizeText(value);
-    if (!safeValue) return "";
-    const replacements = [
-      ["РћРїРµСЂР°С†РёСЏ", "Операция"],
-      ["РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ", "Пользователь"],
-      ["РџРµСЂРµРІРѕРґ BS", "Перевод BS"],
-      ["РџРѕР»СѓС‡РµРЅРёРµ BS", "Получение BS"],
-      ["РџРµСЂРµРІРѕРґ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ ", "Перевод пользователю "],
-      ["РџРµСЂРµРІРѕРґ РѕС‚ ", "Перевод от "],
-    ];
-    return replacements.reduce(
-      (result, [needle, replacement]) => result.split(needle).join(replacement),
-      safeValue,
-    );
-  };
-
   const ensureStoreShape = (input) => {
     const store = input && typeof input === "object" ? input : DEFAULT_STORE;
     return {
@@ -328,8 +311,8 @@
     return {
       id: normalizeText(transaction.id) || randomUUID(),
       type: normalizeText(transaction.type) || "manual",
-      title: repairStoredText(transaction.title) || "Операция",
-      description: repairStoredText(transaction.description) || "",
+      title: normalizeText(transaction.title) || "Операция",
+      description: normalizeText(transaction.description) || "",
       amountBs: Number.isFinite(amountBs) ? amountBs : 0,
       createdAt: safeCreatedAt,
       status: normalizeText(transaction.status) || "posted",
@@ -452,20 +435,20 @@
   const resolveActivity = (lastAppointment) => {
     const lastDateIso = normalizeText(lastAppointment?.startDateTime || lastAppointment?.Date);
     if (!lastDateIso) {
-      return { color: "red", label: "РќРµР°РєС‚РёРІРЅС‹Р№", lastVisitAt: null };
+      return { color: "red", label: "Неактивный", lastVisitAt: null };
     }
     const lastDate = new Date(lastDateIso);
     if (Number.isNaN(lastDate.getTime())) {
-      return { color: "red", label: "РќРµР°РєС‚РёРІРЅС‹Р№", lastVisitAt: null };
+      return { color: "red", label: "Неактивный", lastVisitAt: null };
     }
     const diffDays = Math.floor((Date.now() - lastDate.getTime()) / (24 * 60 * 60 * 1000));
     if (diffDays <= ACTIVITY_GREEN_DAYS) {
-      return { color: "green", label: "РђРєС‚РёРІРЅС‹Р№", lastVisitAt: lastDate.toISOString() };
+      return { color: "green", label: "Активный", lastVisitAt: lastDate.toISOString() };
     }
     if (diffDays <= ACTIVITY_YELLOW_DAYS) {
-      return { color: "yellow", label: "Р РµРґРєРёР№", lastVisitAt: lastDate.toISOString() };
+      return { color: "yellow", label: "Редкий", lastVisitAt: lastDate.toISOString() };
     }
-    return { color: "red", label: "РќРµР°РєС‚РёРІРЅС‹Р№", lastVisitAt: lastDate.toISOString() };
+    return { color: "red", label: "Неактивный", lastVisitAt: lastDate.toISOString() };
   };
 
   const buildCatalogHelpers = async () => {
@@ -544,11 +527,11 @@
       .map((appointment) => ({
         id: normalizeText(appointment.id) || randomUUID(),
         createdAt: normalizeText(appointment.startDateTime) || null,
-        title: appointment?.Status === "no_show" ? "РќРµСЏРІРєР°" : "Р—Р°РјРµС‡Р°РЅРёРµ",
+        title: appointment?.Status === "no_show" ? "Неявка" : "Замечание",
         description:
           appointment?.Status === "no_show"
-            ? "РљР»РёРµРЅС‚ РїСЂРѕРїСѓСЃС‚РёР» Р·Р°РїРёСЃСЊ."
-            : "РџРѕ Р·Р°РїРёСЃРё Р±С‹Р»Рѕ Р·Р°С„РёРєСЃРёСЂРѕРІР°РЅРѕ РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёРµ.",
+            ? "Клиент пропустил запись."
+            : "По записи было зафиксировано предупреждение.",
       }));
   };
 

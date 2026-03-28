@@ -247,6 +247,15 @@ const getRestartStrategy = () => {
 };
 app.use(cors());
 app.use(express.json({ limit: "12mb" }));
+const setNoStoreHeaders = (res) => {
+  res.setHeader(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, proxy-revalidate",
+  );
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+};
 app.get("/", (req, res) => {
   res.redirect(302, "/login");
 });
@@ -256,22 +265,36 @@ app.get("/service-worker.js", (req, res) => {
   res.sendFile(path.join(__dirname, "service-worker.js"));
 });
 app.get("/client-app.css", (req, res) => {
+  setNoStoreHeaders(res);
   res.type("text/css");
   res.sendFile(path.join(__dirname, "client-app.css"));
 });
 app.get("/client-app.js", (req, res) => {
+  setNoStoreHeaders(res);
   res.type("application/javascript");
   res.sendFile(path.join(__dirname, "client-app.js"));
 });
 app.get("/client.webmanifest", (req, res) => {
+  setNoStoreHeaders(res);
   res.type("application/manifest+json");
   res.sendFile(path.join(__dirname, "client.webmanifest"));
 });
 const CLIENT_APP_SHELL = path.join(__dirname, "home-page", "index.html");
 const sendClientAppShell = (req, res) => {
+  setNoStoreHeaders(res);
   res.sendFile(CLIENT_APP_SHELL);
 };
-app.use("/login", express.static(path.join(__dirname, "login")));
+app.get("/login/login.css", (req, res) => {
+  setNoStoreHeaders(res);
+  res.type("text/css");
+  res.sendFile(path.join(__dirname, "home", "home.css"));
+});
+app.use(
+  "/login",
+  express.static(path.join(__dirname, "login"), {
+    setHeaders: setNoStoreHeaders,
+  }),
+);
 app.get(["/home", "/home/", "/booking", "/booking/", "/referral", "/referral/", "/shop", "/shop/", "/profile", "/profile/"], sendClientAppShell);
 app.use("/panel", express.static(path.join(__dirname)));
 app.get(/^\/panel(?:\/.*)?$/, (req, res) => {
@@ -322,13 +345,7 @@ app.post("/api/log", async (req, res) => {
   res.status(204).end();
 });
 const noCacheMiddleware = (req, res, next) => {
-  res.setHeader(
-    "Cache-Control",
-    "no-store, no-cache, must-revalidate, proxy-revalidate",
-  );
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  res.setHeader("Surrogate-Control", "no-store");
+  setNoStoreHeaders(res);
   next();
 };
 app.use("/api", noCacheMiddleware);

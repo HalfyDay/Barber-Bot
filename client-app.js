@@ -20,6 +20,7 @@
     routeTransitionActive: false,
     session: null,
     payload: null,
+    bootstrapError: "",
     sheet: null,
     sheetState: "closed",
     pendingBookingCancellationId: "",
@@ -1655,6 +1656,18 @@
   };
 
   const renderCurrentPage = () => {
+    if (state.bootstrapError) {
+      return `
+        <section class="app-bootstrap-error loading-state">
+          <p class="list-title">Не удалось загрузить приложение</p>
+          <p>${normalizeText(state.bootstrapError)}</p>
+          <div class="sheet-actions app-bootstrap-error-actions">
+            <button class="secondary-btn" type="button" data-action="logout">Выйти</button>
+            <button class="primary-btn" type="button" data-action="reload-app">Повторить</button>
+          </div>
+        </section>
+      `;
+    }
     if (!state.payload) return `<div class="loading-state">Загрузка приложения...</div>`;
     if (state.currentPage === "referral") return renderReferralPage();
     if (state.currentPage === "booking") return renderBookingPage();
@@ -2094,6 +2107,9 @@
       });
     });
     document.querySelectorAll("[data-action='logout']").forEach((node) => node.addEventListener("click", logout));
+    document.querySelectorAll("[data-action='reload-app']").forEach((node) => node.addEventListener("click", () => {
+      window.location.reload();
+    }));
     document.querySelectorAll("[data-action='link-telegram']").forEach((node) => node.addEventListener("click", startTelegramLink));
     document.querySelectorAll("[data-action='unlink-telegram']").forEach((node) => node.addEventListener("click", unlinkTelegram));
     document.querySelectorAll("[data-action='check-telegram-link']").forEach((node) => node.addEventListener("click", checkTelegramLink));
@@ -2428,6 +2444,7 @@
     }
     try {
       state.payload = await apiRequest("/app");
+      state.bootstrapError = "";
       window.addEventListener("popstate", () => {
         state.navIndicatorIndex = Math.max(0, ["home", "referral", "booking", "shop", "profile"].findIndex((item) => item === state.currentPage));
         syncPageFromLocation();
@@ -2436,8 +2453,10 @@
         render();
       });
       render();
-    } catch {
-      redirectToLogin();
+    } catch (error) {
+      state.bootstrapError =
+        normalizeText(error?.message) || "Не удалось загрузить данные приложения.";
+      render();
     }
   };
 

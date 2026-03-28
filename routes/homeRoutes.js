@@ -784,7 +784,12 @@ const registerHomeRoutes = ({
         botUsername: TELEGRAM_BOT_USERNAME || null,
       });
     } catch (error) {
-      console.error("Home app payload error:", error);
+      console.error("Home app payload error:", {
+        userId: normalizeText(req.homeUser?.userId),
+        phone: normalizeText(req.homeUser?.phone),
+        message: error?.message || error,
+        stack: error?.stack || null,
+      });
       return res.status(500).json({
         success: false,
         message: "Не удалось загрузить данные приложения.",

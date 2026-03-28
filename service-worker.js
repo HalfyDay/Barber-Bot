@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 const CACHE_PREFIX = "brothershop-cache";
 const CACHE_NAME = `${CACHE_PREFIX}-${CACHE_VERSION}`;
 const OFFLINE_URL = "/panel/";
@@ -34,6 +34,10 @@ self.addEventListener("activate", (event) => {
 
 const isSameOrigin = (url) => url.origin === self.location.origin;
 const shouldBypass = (url) => url.pathname.startsWith("/api");
+const isPanelScope = (url) =>
+  url.pathname === "/panel" ||
+  url.pathname === "/panel/" ||
+  url.pathname.startsWith("/panel/");
 const isAssetDestination = (destination) =>
   ["script", "style", "font", "image"].includes(destination);
 
@@ -42,7 +46,7 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
-  if (!isSameOrigin(url) || shouldBypass(url)) return;
+  if (!isSameOrigin(url) || shouldBypass(url) || !isPanelScope(url)) return;
 
   if (url.pathname === BUNDLE_ASSET) {
     event.respondWith(networkFirst(request));

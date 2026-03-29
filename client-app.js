@@ -56,12 +56,34 @@
   let sheetCloseTimer = null;
   let sheetOpenFrame = null;
   let renderFrame = null;
+  let pendingRenderApp = true;
+  let pendingRenderSheet = true;
   let suppressSheetHistoryBack = false;
   let referralQrScannerStream = null;
   let referralQrScannerFrame = null;
   let delegatedHandlersBound = false;
+  const derivedDataCache = {
+    profileHistory: { visitHistoryRef: null, operationsRef: null, items: [] },
+    filteredProfileHistory: { itemsRef: null, filter: "", filtered: [] },
+    referralOperations: { operationsRef: null, transferOut: [], transferIn: [] },
+    filteredReferralActivity: { operationsRef: null, filter: "", filtered: [] },
+    renderedFragments: new Map(),
+  };
+  const lastRenderedHtml = {
+    app: "",
+    sheet: "",
+  };
 
   const normalizeText = (value) => (value == null ? "" : String(value).trim());
+  const areMemoDepsEqual = (left = [], right = []) =>
+    left.length === right.length && left.every((value, index) => value === right[index]);
+  const memoizeRenderedFragment = (key, deps, renderFactory) => {
+    const cached = derivedDataCache.renderedFragments.get(key);
+    if (cached && areMemoDepsEqual(cached.deps, deps)) return cached.html;
+    const html = renderFactory();
+    derivedDataCache.renderedFragments.set(key, { deps: deps.slice(), html });
+    return html;
+  };
   const normalizePhone = (value) => normalizeText(value).replace(/[^\d+]/g, "");
   const buildReferralQrPayload = (user = {}) => {
     const phone = normalizePhone(user.phone || "");
@@ -103,12 +125,14 @@
       return safeValue;
     }
   };
-  const setupMediaWaveLoading = () => {
-    document.querySelectorAll("img").forEach((img) => {
-      if (img.dataset.noWave === "1") {
-        img.classList.remove("media-wave", "is-ready");
-        return;
-      }
+  const queryById = (root, id) => {
+    if (!root || !id) return null;
+    return root.querySelector(`#${id}`);
+  };
+  const setupMediaWaveLoading = (scope = ROOT) => {
+    const container = scope instanceof Element ? scope : ROOT;
+    if (!container) return;
+    container.querySelectorAll("img:not([data-no-wave='1'])").forEach((img) => {
       if (img.dataset.waveBound === "1") return;
       img.dataset.waveBound = "1";
       img.classList.add("media-wave");
@@ -124,7 +148,7 @@
       img.addEventListener("load", markReady, { once: true });
       img.addEventListener("error", () => img.classList.add("is-ready"), { once: true });
     });
-    document.querySelectorAll("[style*='background-image']").forEach((node) => {
+    container.querySelectorAll("[style*='background-image']").forEach((node) => {
       if (node.dataset.waveBound === "1") return;
       const url = extractBackgroundImageUrl(node.style.backgroundImage);
       if (!url) return;
@@ -145,8 +169,10 @@
       preload.src = backgroundUrl || url;
     });
   };
-  const setupTransferRecipientCarousels = () => {
-    document.querySelectorAll(".referral-transfer-recipient-carousel").forEach((carousel) => {
+  const setupTransferRecipientCarousels = (scope = ROOT) => {
+    const container = scope instanceof Element ? scope : ROOT;
+    if (!container) return;
+    container.querySelectorAll(".referral-transfer-recipient-carousel").forEach((carousel) => {
       const strip = carousel.querySelector("[data-transfer-recipient-strip]");
       const prevButton = carousel.querySelector(".referral-transfer-scroll-btn-prev");
       const nextButton = carousel.querySelector(".referral-transfer-scroll-btn-next");
@@ -440,14 +466,42 @@
         amountBs: Number(operation.amountBs) || 0,
         status: normalizeText(operation.status),
         dateLabel: formatDateTime(operation.createdAt),
-      }));
+    }));
     return [...visitItems, ...operationItems].sort((left, right) => normalizeText(right.createdAt).localeCompare(normalizeText(left.createdAt)));
+  };
+  const getProfileHistoryItems = (visitHistory = [], operations = []) => {
+    if (
+      derivedDataCache.profileHistory.visitHistoryRef === visitHistory &&
+      derivedDataCache.profileHistory.operationsRef === operations
+    ) {
+      return derivedDataCache.profileHistory.items;
+    }
+    const items = buildProfileHistoryItems(visitHistory, operations);
+    derivedDataCache.profileHistory = {
+      visitHistoryRef: visitHistory,
+      operationsRef: operations,
+      items,
+    };
+    derivedDataCache.filteredProfileHistory = { itemsRef: null, filter: "", filtered: [] };
+    return items;
   };
 
   const matchesProfileHistoryFilter = (item, filter) => {
     if (filter === "visits") return item.type === "visit";
     if (filter === "payments") return item.type === "payment";
     return true;
+  };
+  const getFilteredProfileHistoryItems = (items = [], filter = "all") => {
+    if (derivedDataCache.filteredProfileHistory.itemsRef === items && derivedDataCache.filteredProfileHistory.filter === filter) {
+      return derivedDataCache.filteredProfileHistory.filtered;
+    }
+    const filtered = items.filter((item) => matchesProfileHistoryFilter(item, filter));
+    derivedDataCache.filteredProfileHistory = {
+      itemsRef: items,
+      filter,
+      filtered,
+    };
+    return filtered;
   };
 
   const renderProfileHistoryRow = (item) => `
@@ -655,6 +709,26 @@
       : null,
   });
 
+  const applySheetStateToDom = (sheetState) => {
+    const backdrop = ROOT.querySelector("#sheet-backdrop");
+    const sheet = backdrop?.querySelector(".sheet");
+    if (!backdrop || !sheet) return;
+    const nextClass = sheetState === "closing" ? "is-closing" : sheetState === "open" ? "is-open" : "is-entering";
+    backdrop.classList.remove("is-entering", "is-open", "is-closing");
+    sheet.classList.remove("is-entering", "is-open", "is-closing");
+    backdrop.classList.add(nextClass);
+    sheet.classList.add(nextClass);
+  };
+  const ensureRenderHosts = () => {
+    let appHost = ROOT.querySelector("[data-render-host='app']");
+    let sheetHost = ROOT.querySelector("[data-render-host='sheet']");
+    if (appHost && sheetHost) return { appHost, sheetHost };
+    ROOT.innerHTML = `<div data-render-host="app"></div><div data-render-host="sheet"></div>`;
+    appHost = ROOT.querySelector("[data-render-host='app']");
+    sheetHost = ROOT.querySelector("[data-render-host='sheet']");
+    return { appHost, sheetHost };
+  };
+
   const openSheet = (title, bodyHtml, footerHtml, className = "", options = {}) => {
     stopReferralQrScanner();
     if (sheetCloseTimer) {
@@ -670,11 +744,11 @@
     if (options.syncHistory !== false) {
       window.history.pushState(buildHistoryState(state.sheet), "", `${window.location.pathname}${window.location.search}${window.location.hash}`);
     }
-    render();
+    render({ app: false });
     sheetOpenFrame = window.requestAnimationFrame(() => {
       state.sheetState = "open";
       sheetOpenFrame = null;
-      render();
+      applySheetStateToDom("open");
     });
   };
 
@@ -694,12 +768,12 @@
       sheetOpenFrame = null;
     }
     state.sheetState = "closing";
-    render();
+    applySheetStateToDom("closing");
     sheetCloseTimer = window.setTimeout(() => {
       state.sheet = null;
       state.sheetState = "closed";
       sheetCloseTimer = null;
-      render();
+      render({ app: false });
     }, 280);
   };
 
@@ -731,7 +805,7 @@
   const renderTopbar = () => {
     const user = state.payload?.user || {};
     const siteHome = state.payload?.site?.home || {};
-    return `
+    return memoizeRenderedFragment("topbar", [user, siteHome], () => `
       <header class="topbar">
         <div class="brand">
           <span class="brand-title">${normalizeText(siteHome.logoText || "BrotherShop")}</span>
@@ -740,7 +814,7 @@
           <div class="chip">${avatarMarkup(user, 44)}<span>${normalizeText(user.displayName || "Клиент")}</span></div>
         </div>
       </header>
-    `;
+    `);
   };
 
   const renderBottomNav = () => {
@@ -781,7 +855,7 @@
     const navPage = state.currentPage === "achievements" ? "profile" : state.currentPage;
     const activeIndex = Math.max(0, items.findIndex((item) => item.id === navPage));
     const indicatorIndex = Number.isFinite(Number(state.navIndicatorIndex)) ? Number(state.navIndicatorIndex) : activeIndex;
-    return `
+    return memoizeRenderedFragment("bottom-nav", [state.currentPage, activeIndex, indicatorIndex], () => `
       <nav class="bottom-nav" data-active-index="${activeIndex}" style="--indicator-index:${indicatorIndex}; --nav-count:${items.length};">
         <div class="bottom-nav-indicator" aria-hidden="true"></div>
         ${items
@@ -791,50 +865,51 @@
           )
           .join("")}
       </nav>
-    `;
+    `);
   };
 
   const renderHomePage = () => {
     const siteHome = state.payload?.site?.home || {};
     const activeAppointments = Array.isArray(state.payload?.booking?.activeAppointments) ? state.payload.booking.activeAppointments : [];
     const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers.slice(0, 4) : [];
-    const promos = Array.isArray(siteHome.promos) ? siteHome.promos : [];
-    const promoLaneItems = (() => {
-      if (promos.length <= 1) return promos;
-      const repeated = [];
-      while (repeated.length < Math.max(6, promos.length * 2)) {
-        repeated.push(...promos);
-      }
-      return repeated.slice(0, Math.max(6, promos.length * 2));
-    })();
-    const promoCards = promoLaneItems.length
-      ? promoLaneItems
-          .map(
-            (promo) => `
-              <button class="promo-thumb" data-action="open-promo" data-id="${normalizeText(promo.id)}" style="${normalizeText(promo.imageUrl) ? `background-image:url('${normalizeText(promo.imageUrl)}');` : ""}">
-                <span class="promo-thumb-overlay">
-                  <strong>${normalizeText(promo.title)}</strong>
-                  <small>${normalizeText(promo.subtitle)}</small>
-                </span>
-              </button>`,
-          )
-          .join("")
-      : "";
-    const nextAppointment = activeAppointments[0] || null;
-    const appointmentBarber = nextAppointment
-      ? barbers.find((barber) =>
-          normalizeText(barber.id) === normalizeText(nextAppointment.barberId) ||
-          normalizeText(barber.name) === normalizeText(nextAppointment.barber),
-        ) || null
-      : null;
-    const appointmentBarberAvatar = normalizeText(
-      nextAppointment?.barberAvatarUrl ||
-      nextAppointment?.avatarUrl ||
-      appointmentBarber?.avatarUrl,
-    );
-    const mapLink = normalizeText(siteHome.mapLink) || "https://go.2gis.com/fPKd6";
-    const bookingButtonText = normalizeText(siteHome.bookingButtonText) || "Записаться";
-    return `
+    return memoizeRenderedFragment("page-home", [siteHome, activeAppointments, barbers], () => {
+      const promos = Array.isArray(siteHome.promos) ? siteHome.promos : [];
+      const promoLaneItems = (() => {
+        if (promos.length <= 1) return promos;
+        const repeated = [];
+        while (repeated.length < Math.max(6, promos.length * 2)) {
+          repeated.push(...promos);
+        }
+        return repeated.slice(0, Math.max(6, promos.length * 2));
+      })();
+      const promoCards = promoLaneItems.length
+        ? promoLaneItems
+            .map(
+              (promo) => `
+                <button class="promo-thumb" data-action="open-promo" data-id="${normalizeText(promo.id)}" style="${normalizeText(promo.imageUrl) ? `background-image:url('${normalizeText(promo.imageUrl)}');` : ""}">
+                  <span class="promo-thumb-overlay">
+                    <strong>${normalizeText(promo.title)}</strong>
+                    <small>${normalizeText(promo.subtitle)}</small>
+                  </span>
+                </button>`,
+            )
+            .join("")
+        : "";
+      const nextAppointment = activeAppointments[0] || null;
+      const appointmentBarber = nextAppointment
+        ? barbers.find((barber) =>
+            normalizeText(barber.id) === normalizeText(nextAppointment.barberId) ||
+            normalizeText(barber.name) === normalizeText(nextAppointment.barber),
+          ) || null
+        : null;
+      const appointmentBarberAvatar = normalizeText(
+        nextAppointment?.barberAvatarUrl ||
+        nextAppointment?.avatarUrl ||
+        appointmentBarber?.avatarUrl,
+      );
+      const mapLink = normalizeText(siteHome.mapLink) || "https://go.2gis.com/fPKd6";
+      const bookingButtonText = normalizeText(siteHome.bookingButtonText) || "Записаться";
+      return `
       <section class="page home-page home-mobile-layout">
         <article class="hero-card home-frame">
           <div class="home-brand-row">
@@ -956,6 +1031,7 @@
         </article>
       </section>
     `;
+    });
   };
 
   const renderReferralPage = () => {
@@ -964,36 +1040,35 @@
     const referralProgram = referral.program || {};
     const transferRecipients = Array.isArray(referral.recentTransferRecipients) ? referral.recentTransferRecipients : [];
     const levels = Array.isArray(referralProgram.levels) ? referralProgram.levels : [];
-    const referralPreview = referrals.slice(0, 4);
-    const transferOutOperations = (Array.isArray(referral.operations) ? referral.operations : []).filter((operation) => normalizeText(operation.type) === "transfer_out");
-    const transferInOperations = (Array.isArray(referral.operations) ? referral.operations : []).filter((operation) => normalizeText(operation.type) === "transfer_in");
-    const filteredBsActivity = (Array.isArray(referral.operations) ? referral.operations : [])
-      .filter((operation) => matchesTransferHistoryFilter(operation, state.transferHistoryFilter))
-      .sort((left, right) => normalizeText(right.createdAt).localeCompare(normalizeText(left.createdAt)));
-    const activityPreview = filteredBsActivity.slice(0, 5);
-    const outgoingTransfers = transferOutOperations.length;
-    const sentTotal = transferOutOperations.reduce((total, operation) => total + Math.abs(Number(operation.amountBs) || 0), 0);
-    const receivedTotal = transferInOperations.reduce((total, operation) => total + Math.max(0, Number(operation.amountBs) || 0), 0);
-    const averageTransfer = outgoingTransfers ? Math.round(sentTotal / outgoingTransfers) : 0;
-    const levelProgress = Math.max(0, Math.min(100, Number(referral.scale?.progress || 0)));
-    const nextReferralTarget = Math.max(0, Number(referral.scale?.next || 0));
-    const currentReferralCount = Math.max(0, Number(referral.program?.activeReferralsCount || referral.stats?.green || referral.scale?.current || 0));
-    const referralLevelName = getReferralLevelName(referralProgram, currentReferralCount);
-    const now = new Date();
-    const topReferralThisMonth =
-      referrals
-        .filter((item) => {
-          const date = normalizeText(item.lastVisitAt);
-          if (!date) return false;
-          const parsed = new Date(date);
-          return !Number.isNaN(parsed.getTime()) && parsed.getMonth() === now.getMonth() && parsed.getFullYear() === now.getFullYear();
-        })
-        .sort((left, right) => (Number(right.rewardedVisits || 0) - Number(left.rewardedVisits || 0)) || (Number(right.completedVisits || 0) - Number(left.completedVisits || 0)))[0] ||
-      referrals
-        .slice()
-        .sort((left, right) => (Number(right.rewardedVisits || 0) - Number(left.rewardedVisits || 0)) || (Number(right.completedVisits || 0) - Number(left.completedVisits || 0)))[0] ||
-      null;
-    return `
+    const operations = Array.isArray(referral.operations) ? referral.operations : [];
+    return memoizeRenderedFragment("page-referral", [referral, state.transferHistoryFilter, state.referralLinkCopied], () => {
+      const referralPreview = referrals.slice(0, 4);
+      const { transferOut: transferOutOperations, transferIn: transferInOperations } = getReferralOperationGroups(operations);
+      const filteredBsActivity = getFilteredReferralActivity(operations, state.transferHistoryFilter);
+      const activityPreview = filteredBsActivity.slice(0, 5);
+      const outgoingTransfers = transferOutOperations.length;
+      const sentTotal = transferOutOperations.reduce((total, operation) => total + Math.abs(Number(operation.amountBs) || 0), 0);
+      const receivedTotal = transferInOperations.reduce((total, operation) => total + Math.max(0, Number(operation.amountBs) || 0), 0);
+      const averageTransfer = outgoingTransfers ? Math.round(sentTotal / outgoingTransfers) : 0;
+      const levelProgress = Math.max(0, Math.min(100, Number(referral.scale?.progress || 0)));
+      const nextReferralTarget = Math.max(0, Number(referral.scale?.next || 0));
+      const currentReferralCount = Math.max(0, Number(referral.program?.activeReferralsCount || referral.stats?.green || referral.scale?.current || 0));
+      const referralLevelName = getReferralLevelName(referralProgram, currentReferralCount);
+      const now = new Date();
+      const topReferralThisMonth =
+        referrals
+          .filter((item) => {
+            const date = normalizeText(item.lastVisitAt);
+            if (!date) return false;
+            const parsed = new Date(date);
+            return !Number.isNaN(parsed.getTime()) && parsed.getMonth() === now.getMonth() && parsed.getFullYear() === now.getFullYear();
+          })
+          .sort((left, right) => (Number(right.rewardedVisits || 0) - Number(left.rewardedVisits || 0)) || (Number(right.completedVisits || 0) - Number(left.completedVisits || 0)))[0] ||
+        referrals
+          .slice()
+          .sort((left, right) => (Number(right.rewardedVisits || 0) - Number(left.rewardedVisits || 0)) || (Number(right.completedVisits || 0) - Number(left.completedVisits || 0)))[0] ||
+        null;
+      return `
       <section class="page referral-page">
         <article class="hero-card referral-wallet-card">
           <div class="referral-wallet-sheen"></div>
@@ -1174,6 +1249,7 @@
         </article>
       </section>
     `;
+    });
   };
 
   const buildQuickTransferSheet = (recipient = {}) => {
@@ -1359,6 +1435,37 @@
     if (filter === "rewards") return type === "reward";
     return true;
   };
+  const getReferralOperationGroups = (operations = []) => {
+    if (derivedDataCache.referralOperations.operationsRef === operations) {
+      return {
+        transferOut: derivedDataCache.referralOperations.transferOut,
+        transferIn: derivedDataCache.referralOperations.transferIn,
+      };
+    }
+    const transferOut = operations.filter((operation) => normalizeText(operation.type) === "transfer_out");
+    const transferIn = operations.filter((operation) => normalizeText(operation.type) === "transfer_in");
+    derivedDataCache.referralOperations = {
+      operationsRef: operations,
+      transferOut,
+      transferIn,
+    };
+    derivedDataCache.filteredReferralActivity = { operationsRef: null, filter: "", filtered: [] };
+    return { transferOut, transferIn };
+  };
+  const getFilteredReferralActivity = (operations = [], filter = "all") => {
+    if (derivedDataCache.filteredReferralActivity.operationsRef === operations && derivedDataCache.filteredReferralActivity.filter === filter) {
+      return derivedDataCache.filteredReferralActivity.filtered;
+    }
+    const filtered = operations
+      .filter((operation) => matchesTransferHistoryFilter(operation, filter))
+      .sort((left, right) => normalizeText(right.createdAt).localeCompare(normalizeText(left.createdAt)));
+    derivedDataCache.filteredReferralActivity = {
+      operationsRef: operations,
+      filter,
+      filtered,
+    };
+    return filtered;
+  };
 
   const buildReferralLevelsSheet = () => {
     const referral = state.payload?.referral || {};
@@ -1497,9 +1604,10 @@
   };
 
   const renderAchievementsPage = () => {
-    const achievements = buildAccountAchievements();
-    const unlockedCount = achievements.filter((item) => item.unlocked).length;
-    return `
+    return memoizeRenderedFragment("page-achievements", [state.payload?.user, state.payload?.profile, state.payload?.referral], () => {
+      const achievements = buildAccountAchievements();
+      const unlockedCount = achievements.filter((item) => item.unlocked).length;
+      return `
       <section class="page profile-page achievements-page">
         <article class="hero-card page-hero achievements-hero">
           <div class="hero-eyebrow">Аккаунт</div>
@@ -1527,6 +1635,7 @@
         </div>
       </section>
     `;
+    });
   };
 
   const renderBookingPage = () => {
@@ -1696,22 +1805,23 @@
     const operations = Array.isArray(profile.operations) ? profile.operations : [];
     const notices = Array.isArray(profile.notices) ? profile.notices : [];
     const activeAppointments = Array.isArray(booking.activeAppointments) ? booking.activeAppointments : [];
-    const historyItems = buildProfileHistoryItems(visitHistory, operations);
-    const filteredHistory = historyItems.filter((item) => matchesProfileHistoryFilter(item, state.profileHistoryFilter));
-    const historyPreview = filteredHistory.slice(0, 3);
-    const genderLabel = user.gender === "male" ? "Мужской" : user.gender === "female" ? "Женский" : user.gender === "other" ? "Другой" : "Не указан";
-    const profileBio = [normalizeText(user.birthDate), normalizeText(user.gender) ? genderLabel : ""].filter(Boolean).join(" · ");
-    const noticeLabel = user.noticeCount || 0;
-    const completionFields = [
-      normalizeText(user.avatarUrl),
-      normalizeText(user.displayName),
-      normalizeText(user.phone),
-      normalizeText(user.birthDate),
-      normalizeText(user.gender),
-      normalizeText(user.telegramId),
-    ];
-    const profileCompletion = Math.round((completionFields.filter(Boolean).length / completionFields.length) * 100);
-    return `
+    return memoizeRenderedFragment("page-profile", [user, profile, booking, state.profileHistoryFilter], () => {
+      const historyItems = getProfileHistoryItems(visitHistory, operations);
+      const filteredHistory = getFilteredProfileHistoryItems(historyItems, state.profileHistoryFilter);
+      const historyPreview = filteredHistory.slice(0, 3);
+      const genderLabel = user.gender === "male" ? "Мужской" : user.gender === "female" ? "Женский" : user.gender === "other" ? "Другой" : "Не указан";
+      const profileBio = [normalizeText(user.birthDate), normalizeText(user.gender) ? genderLabel : ""].filter(Boolean).join(" · ");
+      const noticeLabel = user.noticeCount || 0;
+      const completionFields = [
+        normalizeText(user.avatarUrl),
+        normalizeText(user.displayName),
+        normalizeText(user.phone),
+        normalizeText(user.birthDate),
+        normalizeText(user.gender),
+        normalizeText(user.telegramId),
+      ];
+      const profileCompletion = Math.round((completionFields.filter(Boolean).length / completionFields.length) * 100);
+      return `
       <section class="page profile-page">
         <article class="hero-card page-hero profile-hero">
           <div class="profile-cover"></div>
@@ -1779,6 +1889,7 @@
         </article>
       </section>
     `;
+    });
   };
 
   const renderSheet = () => {
@@ -1831,8 +1942,6 @@
     }
     const nextPage = getPageFromPath(url.pathname);
     if (!options.replace && `${url.pathname}${url.search}${url.hash}` === `${window.location.pathname}${window.location.search}${window.location.hash}`) {
-      syncPageFromLocation();
-      render();
       return;
     }
     if (options.replace) {
@@ -1851,19 +1960,45 @@
   const renderNow = () => {
     renderFrame = null;
     syncDocumentMeta();
-    ROOT.innerHTML = `<div class="client-app"><div class="app-shell ${state.routeTransitionActive ? "route-transition" : ""}">${renderTopbar()}${renderCurrentPage()}${renderBottomNav()}</div></div>${renderSheet()}`;
+    const { appHost, sheetHost } = ensureRenderHosts();
+    let appChanged = false;
+    let sheetChanged = false;
+    if (pendingRenderApp) {
+      const appHtml = `<div class="client-app"><div class="app-shell ${state.routeTransitionActive ? "route-transition" : ""}">${renderTopbar()}${renderCurrentPage()}${renderBottomNav()}</div></div>`;
+      appChanged = lastRenderedHtml.app !== appHtml;
+      if (appChanged) {
+        appHost.innerHTML = appHtml;
+        lastRenderedHtml.app = appHtml;
+      }
+    }
+    if (pendingRenderSheet) {
+      const sheetHtml = renderSheet();
+      sheetChanged = lastRenderedHtml.sheet !== sheetHtml;
+      if (sheetChanged) {
+        sheetHost.innerHTML = sheetHtml;
+        lastRenderedHtml.sheet = sheetHtml;
+      }
+    }
+    pendingRenderApp = false;
+    pendingRenderSheet = false;
     document.documentElement.classList.toggle("sheet-open", Boolean(state.sheet));
     document.body.classList.toggle("sheet-open", Boolean(state.sheet));
     state.routeTransitionActive = false;
-    bindEvents();
-    setupMediaWaveLoading();
+    bindEvents({
+      appRoot: appChanged ? appHost : null,
+      sheetRoot: sheetChanged ? sheetHost : null,
+    });
+    const renderScope = appHost.querySelector(".client-app") || appHost;
+    const sheetScope = sheetHost.querySelector(".sheet-backdrop");
+    if (appChanged) setupMediaWaveLoading(renderScope);
+    if (sheetChanged && sheetScope) setupMediaWaveLoading(sheetScope);
     if (
       state.currentPage === "referral" ||
       ["Быстрый перевод", "Перевести BS"].includes(normalizeText(state.sheet?.title))
     ) {
-      setupTransferRecipientCarousels();
+      setupTransferRecipientCarousels(sheetChanged && sheetScope ? sheetScope : renderScope);
     }
-    const nav = document.querySelector(".bottom-nav");
+    const nav = appHost.querySelector(".bottom-nav");
     if (nav) {
       const targetIndex = Number(nav.dataset.activeIndex || 0);
       window.requestAnimationFrame(() => {
@@ -1876,7 +2011,9 @@
     }
   };
 
-  const render = () => {
+  const render = (options = {}) => {
+    pendingRenderApp = options.app === false ? pendingRenderApp : true;
+    pendingRenderSheet = options.sheet === false ? pendingRenderSheet : true;
     if (renderFrame !== null) return;
     renderFrame = window.requestAnimationFrame(renderNow);
   };
@@ -1968,12 +2105,13 @@
         submitting: false,
         stepAnimationsEnabled: false,
       };
+      render({ sheet: false });
       openSheet("Запись создана", buildBookingStatusSheet("Запись создана"), "", "sheet-success");
     } catch (error) {
       state.booking.submitting = false;
       openSheet("Ошибка записи", `<div class="list-item"><p class="list-title">${normalizeText(error.message || "Не удалось создать запись.")}</p></div>`);
+      return;
     }
-    render();
   };
 
   const cancelHomeBooking = async (appointmentId) => {
@@ -1983,9 +2121,9 @@
       method: "POST",
     });
     state.payload = await apiRequest("/app");
+    render({ sheet: false });
     closeSheet();
     openSheet("Запись отменена", buildBookingStatusSheet("Запись отменена"), "", "sheet-success");
-    render();
   };
 
   const requestReferralTransferPreview = async (draft) => {
@@ -2016,9 +2154,9 @@
     } else {
       state.payload = await apiRequest("/app");
     }
+    render({ sheet: false });
     closeSheet();
     openSheet("Перевод выполнен", buildBookingStatusSheet("Перевод выполнен"), "", "sheet-success");
-    render();
   };
 
   const openNamedSheet = (sheetId) => {
@@ -2191,8 +2329,8 @@
       const profile = state.payload?.profile || {};
       const visitHistory = Array.isArray(profile.visitHistory) ? profile.visitHistory : [];
       const operations = Array.isArray(profile.operations) ? profile.operations : [];
-      const historyItems = buildProfileHistoryItems(visitHistory, operations);
-      const filteredHistory = historyItems.filter((item) => matchesProfileHistoryFilter(item, state.profileHistoryFilter));
+      const historyItems = getProfileHistoryItems(visitHistory, operations);
+      const filteredHistory = getFilteredProfileHistoryItems(historyItems, state.profileHistoryFilter);
       openSheet("Вся история", `<div class="filter-row sheet-filter-row"><button class="nav-pill ${state.profileHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="all">Все</button><button class="nav-pill ${state.profileHistoryFilter === "visits" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="visits">Визиты</button><button class="nav-pill ${state.profileHistoryFilter === "payments" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="payments">Оплата</button></div><div class="timeline">${filteredHistory.length ? filteredHistory.map(renderProfileHistoryRow).join("") : `<div class="empty-state">История пока пуста.</div>`}</div>`);
       return;
     }
@@ -2239,8 +2377,8 @@
     if (payload?.done && payload?.success && payload?.user) {
       state.payload = await apiRequest("/app");
       state.telegramLinkRequestId = "";
+      render({ sheet: false });
       openSheet("Telegram привязан", `<div class="list-item"><p class="list-title">Аккаунт успешно привязан.</p></div>`);
-      render();
       return;
     }
     if (payload?.done && !payload?.success) {
@@ -2254,7 +2392,7 @@
   const unlinkTelegram = async () => {
     await apiRequest("/profile/telegram/unlink", { method: "POST" });
     state.payload = await apiRequest("/app");
-    render();
+    render({ sheet: false });
   };
 
   const syncReferralCopyButtons = () => {
@@ -2366,7 +2504,11 @@
         case "set-history-filter":
           event.preventDefault();
           event.stopPropagation();
-          state.profileHistoryFilter = normalizeText(actionNode.dataset.filter) || "all";
+          {
+            const nextFilter = normalizeText(actionNode.dataset.filter) || "all";
+            if (state.profileHistoryFilter === nextFilter) return;
+            state.profileHistoryFilter = nextFilter;
+          }
           if (state.sheet && normalizeText(state.sheet.title).includes("истор")) {
             openNamedSheet("profile-history");
             return;
@@ -2376,7 +2518,11 @@
         case "set-transfer-filter":
           event.preventDefault();
           event.stopPropagation();
-          state.transferHistoryFilter = normalizeText(actionNode.dataset.filter) || "all";
+          {
+            const nextFilter = normalizeText(actionNode.dataset.filter) || "all";
+            if (state.transferHistoryFilter === nextFilter) return;
+            state.transferHistoryFilter = nextFilter;
+          }
           render();
           return;
         case "open-promo":
@@ -2483,7 +2629,14 @@
           return;
         case "select-time":
           event.preventDefault();
-          state.booking.selectedTime = normalizeText(actionNode.dataset.id);
+          {
+            const nextTime = normalizeText(actionNode.dataset.id);
+            if (state.booking.selectedTime === nextTime) {
+              scrollToBookingStep("comment");
+              return;
+            }
+            state.booking.selectedTime = nextTime;
+          }
           render();
           scrollToBookingStep("comment");
           return;
@@ -2527,8 +2680,8 @@
     });
   };
 
-  const bindEvents = () => {
-    const quickTransferForm = document.getElementById("quick-transfer-form");
+  const bindEvents = ({ appRoot = null, sheetRoot = null } = {}) => {
+    const quickTransferForm = queryById(sheetRoot, "quick-transfer-form");
     if (quickTransferForm) {
       quickTransferForm.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -2553,7 +2706,7 @@
         }
       });
     }
-    const bookingCommentInput = document.getElementById("booking-comment-input");
+    const bookingCommentInput = queryById(appRoot, "booking-comment-input");
     if (bookingCommentInput) {
       bookingCommentInput.addEventListener("input", () => {
         state.booking.comment = normalizeText(bookingCommentInput.value);
@@ -2563,7 +2716,7 @@
         scrollToBookingStep("summary");
       });
     }
-    const bookingBsInput = document.getElementById("booking-bs-input");
+    const bookingBsInput = queryById(appRoot, "booking-bs-input");
     if (bookingBsInput) {
       bookingBsInput.addEventListener("input", () => {
         state.booking.appliedBs = Math.max(0, Math.trunc(Number(bookingBsInput.value) || 0));
@@ -2586,8 +2739,8 @@
       syncState();
     };
 
-    const bindProfileForm = (id, buildPatch) => {
-      const form = document.getElementById(id);
+    const bindProfileForm = (root, id, buildPatch) => {
+      const form = queryById(root, id);
       if (!form) return;
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -2599,20 +2752,20 @@
         }
       });
     };
-    bindProfileForm("profile-name-form", async (formData) => ({ displayName: normalizeText(formData.get("displayName")) }));
-    bindProfileForm("profile-phone-form", async (formData) => ({ phone: normalizeText(formData.get("phone")) }));
-    bindProfileForm("profile-birthdate-form", async (formData) => ({ birthDate: normalizeText(formData.get("birthDate")) }));
-    bindProfileForm("profile-gender-form", async (formData) => ({ gender: normalizeText(formData.get("gender")) }));
-    bindProfileForm("profile-password-form", async (formData) => ({ password: normalizeText(formData.get("password")) }));
-    bindProfileForm("profile-notifications-form", async (formData) => ({
+    bindProfileForm(sheetRoot, "profile-name-form", async (formData) => ({ displayName: normalizeText(formData.get("displayName")) }));
+    bindProfileForm(sheetRoot, "profile-phone-form", async (formData) => ({ phone: normalizeText(formData.get("phone")) }));
+    bindProfileForm(sheetRoot, "profile-birthdate-form", async (formData) => ({ birthDate: normalizeText(formData.get("birthDate")) }));
+    bindProfileForm(sheetRoot, "profile-gender-form", async (formData) => ({ gender: normalizeText(formData.get("gender")) }));
+    bindProfileForm(sheetRoot, "profile-password-form", async (formData) => ({ password: normalizeText(formData.get("password")) }));
+    bindProfileForm(sheetRoot, "profile-notifications-form", async (formData) => ({
       bookingNotificationsEnabled: formData.get("bookingNotificationsEnabled") === "on",
     }));
-    const profilePasswordForm = document.getElementById("profile-password-form");
+    const profilePasswordForm = queryById(sheetRoot, "profile-password-form");
     setupProfileFormDirtyState(profilePasswordForm, () => {
       const passwordField = profilePasswordForm?.elements?.password;
       return normalizeText(passwordField?.value).length > 0;
     });
-    const profileNotificationsForm = document.getElementById("profile-notifications-form");
+    const profileNotificationsForm = queryById(sheetRoot, "profile-notifications-form");
     if (profileNotificationsForm) {
       const initialNotificationsEnabled = state.payload?.user?.bookingNotificationsEnabled !== false;
       setupProfileFormDirtyState(profileNotificationsForm, () => {
@@ -2620,7 +2773,7 @@
         return currentValue !== initialNotificationsEnabled;
       });
     }
-    const referralTransferForm = document.getElementById("referral-transfer-form");
+    const referralTransferForm = queryById(sheetRoot, "referral-transfer-form");
     if (referralTransferForm) {
       const targetPhoneInput = referralTransferForm.elements?.targetPhone;
       if (targetPhoneInput) {
@@ -2654,7 +2807,7 @@
     if (normalizeText(state.sheet?.title) === "Сканировать QR") {
       startReferralQrScanner();
     }
-    bindProfileForm("profile-edit-form", async (formData) => {
+    bindProfileForm(sheetRoot, "profile-edit-form", async (formData) => {
       const patch = {
         displayName: normalizeText(formData.get("displayName")),
         phone: normalizeText(formData.get("phone")),
@@ -2674,7 +2827,7 @@
       }
       return patch;
     });
-    const profileEditForm = document.getElementById("profile-edit-form");
+    const profileEditForm = queryById(sheetRoot, "profile-edit-form");
     if (profileEditForm) {
       const initialUser = state.payload?.user || {};
       setupProfileFormDirtyState(profileEditForm, () => {
@@ -2692,10 +2845,10 @@
         );
       });
     }
-    const avatarInput = document.getElementById("profile-avatar-input");
-    const avatarPreview = document.getElementById("profile-avatar-upload-preview");
-    const avatarCard = document.getElementById("profile-avatar-upload-card");
-    const avatarStatus = document.getElementById("profile-avatar-upload-status");
+    const avatarInput = queryById(sheetRoot, "profile-avatar-input");
+    const avatarPreview = queryById(sheetRoot, "profile-avatar-upload-preview");
+    const avatarCard = queryById(sheetRoot, "profile-avatar-upload-card");
+    const avatarStatus = queryById(sheetRoot, "profile-avatar-upload-status");
     if (avatarInput && avatarPreview && avatarCard && avatarStatus) {
       avatarInput.addEventListener("change", async () => {
         const file = avatarInput.files && avatarInput.files[0];
@@ -2734,7 +2887,7 @@
         }
       });
     }
-    bindProfileForm("profile-avatar-form", async (formData) => {
+    bindProfileForm(sheetRoot, "profile-avatar-form", async (formData) => {
       const file = formData.get("avatarFile");
       if (!(file instanceof File) || !file.name) {
         throw new Error("Выберите изображение.");

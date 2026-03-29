@@ -61,6 +61,7 @@
   let suppressSheetHistoryBack = false;
   let referralQrScannerStream = null;
   let referralQrScannerFrame = null;
+  let referralQrScannerSession = 0;
   let delegatedHandlersBound = false;
   const derivedDataCache = {
     profileHistory: { visitHistoryRef: null, operationsRef: null, items: [] },
@@ -687,6 +688,7 @@
   `;
 
   const stopReferralQrScanner = () => {
+    referralQrScannerSession += 1;
     if (referralQrScannerFrame) {
       window.cancelAnimationFrame(referralQrScannerFrame);
       referralQrScannerFrame = null;
@@ -1341,20 +1343,35 @@
     const video = document.getElementById("referral-qr-video");
     const status = document.getElementById("referral-qr-scan-status");
     if (!video || !status) return;
+    const scannerSession = referralQrScannerSession + 1;
+    referralQrScannerSession = scannerSession;
     if (!("BarcodeDetector" in window) || !window.isSecureContext) {
       status.textContent = "Сканирование доступно только в защищённом браузере с поддержкой QR API.";
       return;
     }
     try {
       const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
-      referralQrScannerStream = await window.navigator.mediaDevices.getUserMedia({
+      const stream = await window.navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" } },
         audio: false,
       });
-      video.srcObject = referralQrScannerStream;
+      if (scannerSession !== referralQrScannerSession || normalizeText(state.sheet?.title) !== "Сканировать QR") {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      referralQrScannerStream = stream;
+      video.srcObject = stream;
       await video.play();
+      if (scannerSession !== referralQrScannerSession || normalizeText(state.sheet?.title) !== "Сканировать QR") {
+        stopReferralQrScanner();
+        return;
+      }
       status.textContent = "Ищем QR-код...";
       const scan = async () => {
+        if (scannerSession !== referralQrScannerSession || normalizeText(state.sheet?.title) !== "Сканировать QR") {
+          stopReferralQrScanner();
+          return;
+        }
         if (!video.videoWidth || !video.videoHeight) {
           referralQrScannerFrame = window.requestAnimationFrame(scan);
           return;

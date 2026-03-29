@@ -114,11 +114,21 @@ body.android-app-shell {
 }
 
 body.android-app-shell .client-app {
-  padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px) + 8px);
+  padding-top: 0;
+  padding-bottom: calc(108px + 8px);
 }
 
 body.android-app-shell .app-shell {
   min-height: 100dvh;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+body.android-app-shell .topbar {
+  margin-top: 16px;
+}
+
+body.android-app-shell .bottom-nav {
+  bottom: 18px;
 }
 
 a {
@@ -1436,6 +1446,26 @@ img.media-wave.is-ready {
 
 .bottom-nav .nav-pill.active .nav-icon-wrap {
   transform: none;
+}
+
+@media (display-mode: standalone) {
+  .client-app {
+    padding-top: 0;
+    padding-bottom: calc(108px + 8px);
+  }
+
+  .app-shell {
+    min-height: 100dvh;
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .topbar {
+    margin-top: 16px;
+  }
+
+  .bottom-nav {
+    bottom: 18px;
+  }
 }
 
 .sheet-backdrop {

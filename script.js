@@ -9317,7 +9317,7 @@ const SiteImageUploadField = ({ label, value = '', onChange, onUploadImage = nul
   );
 };
 
-const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = false, onUploadSiteImage = null, services = [] }) => {
+const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = false, onUploadSiteImage = null, services = [], siteOnlineStats = null }) => {
   const [draft, setDraft] = useState(() => siteConfig || {});
   const [activeTab, setActiveTab] = useState('home');
 
@@ -9358,6 +9358,8 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
       .filter((column) => column.labels.length > 0);
     return sanitized.length ? sanitized : derivedReferralRewardColumns;
   }, [draft?.referral?.rewardColumns, derivedReferralRewardColumns]);
+  const onlineCount = Number.isFinite(Number(siteOnlineStats?.onlineCount)) ? Number(siteOnlineStats.onlineCount) : 0;
+  const siteUpdatedAt = normalizeText(siteOnlineStats?.updatedAt);
 
   const updatePromos = (updater) =>
     setDraft((prev) => {
@@ -9482,38 +9484,103 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
 
   const renderHomeTab = () => (
     <div className="space-y-5">
-      <SectionCard title="Главная">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <label className="space-y-2 text-sm text-slate-300">
-            <span>Название в шапке</span>
-            <input value={draft?.home?.logoText || ''} onChange={(event) => updateHomeField('logoText', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300">
-            <span>Текст кнопки записи</span>
-            <input value={draft?.home?.bookingButtonText || ''} onChange={(event) => updateHomeField('bookingButtonText', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
-            <span>Заголовок блока о бренде</span>
-            <input value={draft?.home?.aboutTitle || ''} onChange={(event) => updateHomeField('aboutTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
-            <span>Текст блока о бренде</span>
-            <textarea value={draft?.home?.aboutText || ''} onChange={(event) => updateHomeField('aboutText', event.target.value)} rows={4} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <div className="lg:col-span-2">
-            <SiteImageUploadField label="Изображение блока о бренде" value={draft?.home?.aboutImageUrl || ''} onChange={(value) => updateHomeField('aboutImageUrl', value)} onUploadImage={onUploadSiteImage} helperText="Загружайте готовое изображение. Ссылка вручную больше не нужна." />
+      <SectionCard title="Главная страница">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <label className="space-y-2 text-sm text-slate-300">
+                <span>Название в шапке</span>
+                <input value={draft?.home?.logoText || ''} onChange={(event) => updateHomeField('logoText', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              </label>
+              <label className="space-y-2 text-sm text-slate-300">
+                <span>Текст кнопки записи</span>
+                <input value={draft?.home?.bookingButtonText || ''} onChange={(event) => updateHomeField('bookingButtonText', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              </label>
+              <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+                <span>Заголовок блока о бренде</span>
+                <input value={draft?.home?.aboutTitle || ''} onChange={(event) => updateHomeField('aboutTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              </label>
+              <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+                <span>Текст блока о бренде</span>
+                <textarea value={draft?.home?.aboutText || ''} onChange={(event) => updateHomeField('aboutText', event.target.value)} rows={5} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              </label>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <label className="space-y-2 text-sm text-slate-300">
+                <span>Заголовок контактов</span>
+                <input value={draft?.home?.contactsTitle || ''} onChange={(event) => updateHomeField('contactsTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              </label>
+              <label className="space-y-2 text-sm text-slate-300">
+                <span>Телефон</span>
+                <input value={draft?.home?.phone || ''} onChange={(event) => updateHomeField('phone', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              </label>
+              <label className="space-y-2 text-sm text-slate-300">
+                <span>Telegram</span>
+                <input value={draft?.home?.telegramUrl || ''} onChange={(event) => updateHomeField('telegramUrl', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              </label>
+              <label className="space-y-2 text-sm text-slate-300">
+                <span>Email</span>
+                <input value={draft?.home?.email || ''} onChange={(event) => updateHomeField('email', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              </label>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <SiteImageUploadField label="Изображение блока о бренде" value={draft?.home?.aboutImageUrl || ''} onChange={(value) => updateHomeField('aboutImageUrl', value)} onUploadImage={onUploadSiteImage} helperText="Изображение для блока о бренде на главной." />
+            <div className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4">
+              <p className="text-sm font-semibold text-white">Быстрый просмотр</p>
+              <div className="mt-4 space-y-3">
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Шапка</p>
+                  <p className="mt-2 text-lg font-semibold text-white">{draft?.home?.logoText || 'BrotherShop'}</p>
+                  <p className="mt-1 text-sm text-emerald-300">{draft?.home?.bookingButtonText || 'Записаться'}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Контакты</p>
+                  <div className="mt-3 space-y-2 text-sm text-slate-300">
+                    <p>{draft?.home?.phone || 'Телефон не заполнен'}</p>
+                    <p>{draft?.home?.telegramUrl || 'Telegram не заполнен'}</p>
+                    <p>{draft?.home?.email || 'Email не заполнен'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </SectionCard>
 
-      <SectionCard title="Акции">
+      <SectionCard title="Карта и контакты">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <label className="space-y-2 text-sm text-slate-300">
+              <span>Заголовок карты</span>
+              <input value={draft?.home?.mapTitle || ''} onChange={(event) => updateHomeField('mapTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+            </label>
+            <label className="space-y-2 text-sm text-slate-300">
+              <span>Ссылка на карту</span>
+              <input value={draft?.home?.mapLink || ''} onChange={(event) => updateHomeField('mapLink', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+            </label>
+            <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+              <span>Подпись под картой</span>
+              <textarea value={draft?.home?.mapCaption || ''} onChange={(event) => updateHomeField('mapCaption', event.target.value)} rows={3} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+            </label>
+          </div>
+          <SiteImageUploadField label="Изображение карты" value={draft?.home?.mapImageUrl || ''} onChange={(value) => updateHomeField('mapImageUrl', value)} onUploadImage={onUploadSiteImage} />
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Акции" actions={<button type="button" onClick={addPromo} className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800">Добавить акцию</button>}>
         <div className="space-y-4">
+          {!promos.length ? (
+            <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-950/50 px-4 py-8 text-center text-sm text-slate-400">
+              Акции пока не добавлены.
+            </div>
+          ) : null}
           {promos.map((promo, index) => (
             <div key={promo.id || index} className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-white">Акция {index + 1}</p>
-                  <p className="text-xs text-slate-500">Карточка для блока акций.</p>
+                  <p className="text-xs text-slate-500">Карточка промо-блока на главной.</p>
                 </div>
                 <button type="button" onClick={() => removePromo(index)} className="rounded-xl border border-rose-500/30 px-3 py-2 text-sm font-medium text-rose-300 transition hover:bg-rose-500/10">
                   Удалить
@@ -9540,45 +9607,6 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
               </div>
             </div>
           ))}
-          <button type="button" onClick={addPromo} className="rounded-2xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800">
-            Добавить акцию
-          </button>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Карта и контакты">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <label className="space-y-2 text-sm text-slate-300">
-            <span>Заголовок карты</span>
-            <input value={draft?.home?.mapTitle || ''} onChange={(event) => updateHomeField('mapTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300">
-            <span>Ссылка на карту</span>
-            <input value={draft?.home?.mapLink || ''} onChange={(event) => updateHomeField('mapLink', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <div className="lg:col-span-2">
-            <SiteImageUploadField label="Изображение карты" value={draft?.home?.mapImageUrl || ''} onChange={(value) => updateHomeField('mapImageUrl', value)} onUploadImage={onUploadSiteImage} />
-          </div>
-          <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
-            <span>Подпись под картой</span>
-            <textarea value={draft?.home?.mapCaption || ''} onChange={(event) => updateHomeField('mapCaption', event.target.value)} rows={2} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300">
-            <span>Заголовок контактов</span>
-            <input value={draft?.home?.contactsTitle || ''} onChange={(event) => updateHomeField('contactsTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300">
-            <span>Телефон</span>
-            <input value={draft?.home?.phone || ''} onChange={(event) => updateHomeField('phone', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300">
-            <span>Telegram</span>
-            <input value={draft?.home?.telegramUrl || ''} onChange={(event) => updateHomeField('telegramUrl', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
-            <span>Email</span>
-            <input value={draft?.home?.email || ''} onChange={(event) => updateHomeField('email', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
         </div>
       </SectionCard>
     </div>
@@ -9587,27 +9615,47 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
   const renderReferralTab = () => (
     <div className="space-y-5">
       <SectionCard title="Реферальная программа">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <label className="space-y-2 text-sm text-slate-300">
-            <span>Заголовок страницы</span>
-            <input value={draft?.referral?.pageTitle || ''} onChange={(event) => updateReferralField('pageTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300">
-            <span>Скидка другу, ₽</span>
-            <input type="number" min="0" value={draft?.referral?.friendDiscountRub ?? ''} onChange={(event) => updateReferralField('friendDiscountRub', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
-            <span>Основной текст программы</span>
-            <textarea value={draft?.referral?.introText || ''} onChange={(event) => updateReferralField('introText', event.target.value)} rows={4} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
-            <span>Дополнительные условия</span>
-            <textarea value={draft?.referral?.participationText || ''} onChange={(event) => updateReferralField('participationText', event.target.value)} rows={4} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300">
-            <span>Курс BS к рублю</span>
-            <input type="number" min="1" value={draft?.referral?.bsToRubRate ?? ''} onChange={(event) => updateReferralField('bsToRubRate', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_320px]">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <label className="space-y-2 text-sm text-slate-300">
+              <span>Заголовок страницы</span>
+              <input value={draft?.referral?.pageTitle || ''} onChange={(event) => updateReferralField('pageTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+            </label>
+            <label className="space-y-2 text-sm text-slate-300">
+              <span>Скидка другу, ₽</span>
+              <input type="number" min="0" value={draft?.referral?.friendDiscountRub ?? ''} onChange={(event) => updateReferralField('friendDiscountRub', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+            </label>
+            <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+              <span>Основной текст программы</span>
+              <textarea value={draft?.referral?.introText || ''} onChange={(event) => updateReferralField('introText', event.target.value)} rows={4} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+            </label>
+            <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+              <span>Дополнительные условия</span>
+              <textarea value={draft?.referral?.participationText || ''} onChange={(event) => updateReferralField('participationText', event.target.value)} rows={4} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+            </label>
+            <label className="space-y-2 text-sm text-slate-300">
+              <span>Курс BS к рублю</span>
+              <input type="number" min="1" value={draft?.referral?.bsToRubRate ?? ''} onChange={(event) => updateReferralField('bsToRubRate', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+            </label>
+          </div>
+          <div className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4">
+            <p className="text-sm font-semibold text-white">Сводка программы</p>
+            <div className="mt-4 grid gap-3">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+                <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Друг получает</p>
+                <p className="mt-2 text-2xl font-semibold text-white">{draft?.referral?.friendDiscountRub || 0} ₽</p>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+                <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Курс</p>
+                <p className="mt-2 text-2xl font-semibold text-white">{draft?.referral?.bsToRubRate || 0} BS</p>
+                <p className="mt-1 text-sm text-slate-400">за 1 рубль</p>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+                <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Уровни</p>
+                <p className="mt-2 text-2xl font-semibold text-white">{referralLevels.length}</p>
+              </div>
+            </div>
+          </div>
         </div>
       </SectionCard>
 
@@ -9753,15 +9801,25 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
 
   const renderShopTab = () => (
     <SectionCard title="Страница магазина">
-      <div className="grid gap-4 lg:grid-cols-2">
-        <label className="space-y-2 text-sm text-slate-300">
-          <span>Заголовок тизера</span>
-          <input value={draft?.shop?.teaserTitle || ''} onChange={(event) => updateShopField('teaserTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-        </label>
-        <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
-          <span>Текст тизера</span>
-          <textarea value={draft?.shop?.teaserText || ''} onChange={(event) => updateShopField('teaserText', event.target.value)} rows={3} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-        </label>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid gap-4">
+          <label className="space-y-2 text-sm text-slate-300">
+            <span>Заголовок тизера</span>
+            <input value={draft?.shop?.teaserTitle || ''} onChange={(event) => updateShopField('teaserTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+          </label>
+          <label className="space-y-2 text-sm text-slate-300">
+            <span>Текст тизера</span>
+            <textarea value={draft?.shop?.teaserText || ''} onChange={(event) => updateShopField('teaserText', event.target.value)} rows={4} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+          </label>
+        </div>
+        <div className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4">
+          <p className="text-sm font-semibold text-white">Предпросмотр</p>
+          <div className="mt-4 rounded-3xl border border-slate-800 bg-slate-900/80 p-5">
+            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Тизер магазина</p>
+            <p className="mt-3 text-xl font-semibold text-white">{draft?.shop?.teaserTitle || 'Скоро в магазине'}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-300">{draft?.shop?.teaserText || 'Добавьте короткий анонс, чтобы клиент понимал, что скоро появится.'}</p>
+          </div>
+        </div>
       </div>
     </SectionCard>
   );
@@ -9774,23 +9832,29 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2 rounded-3xl border border-slate-800 bg-slate-950/80 p-2">
-        {SITE_PAGE_TABS.map((tab) => {
-          const isActive = tab.id === activeTab;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={classNames(
-                'rounded-2xl px-4 py-2 text-sm font-semibold transition',
-                isActive ? 'bg-emerald-500 text-slate-950 shadow shadow-emerald-950/40' : 'bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white'
-              )}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
+      <div className="flex flex-col gap-3 rounded-3xl border border-slate-800 bg-slate-950/80 p-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {SITE_PAGE_TABS.map((tab) => {
+            const isActive = tab.id === activeTab;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={classNames(
+                  'rounded-2xl px-4 py-2 text-sm font-semibold transition',
+                  isActive ? 'bg-emerald-500 text-slate-950 shadow shadow-emerald-950/40' : 'bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white'
+                )}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2 self-start rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200 sm:self-auto">
+          <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+          Онлайн: {onlineCount}
+        </div>
       </div>
       {renderTabContent()}
       <div className="flex justify-end">
@@ -9962,6 +10026,7 @@ const App = () => {
   const [botMenuSaving, setBotMenuSaving] = useState(false);
   const [siteConfig, setSiteConfig] = useState(null);
   const [siteConfigSaving, setSiteConfigSaving] = useState(false);
+  const [siteOnlineStats, setSiteOnlineStats] = useState(null);
   const [licenseStatus, setLicenseStatus] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [optionsCache, setOptionsCache] = useState(null);
@@ -10217,6 +10282,9 @@ const apiRequest = useCallback(
       const siteConfigPromise = canAccessSystem
         ? withFallback(apiRequest('/system/site'), null, 'Site config')
         : Promise.resolve(null);
+      const siteOnlinePromise = canAccessSystem
+        ? withFallback(apiRequest('/system/site/online'), null, 'Site online')
+        : Promise.resolve(null);
       const licensePromise = canAccessSystem
         ? withFallback(apiRequest('/license/status'), null, 'License')
         : Promise.resolve(null);
@@ -10235,6 +10303,7 @@ const apiRequest = useCallback(
         botMessagesPayload,
         botMenuPayload,
         sitePayload,
+        siteOnlinePayload,
         license,
         update,
         options,
@@ -10245,6 +10314,7 @@ const apiRequest = useCallback(
         botMessagesPromise,
         botMenuPromise,
         siteConfigPromise,
+        siteOnlinePromise,
         licensePromise,
         updatePromise,
         optionsPromise,
@@ -10273,6 +10343,7 @@ const apiRequest = useCallback(
       setBotMenuSaving(false);
       setSiteConfig(canAccessSystem ? sitePayload : null);
       setSiteConfigSaving(false);
+      setSiteOnlineStats(canAccessSystem ? siteOnlinePayload : null);
       setLicenseStatus(canAccessSystem ? license : null);
       setUpdateInfo(canAccessSystem ? normalizeUpdateInfo(update) : null);
       const normalizedOptions = { ...options, statuses: normalizeStatusList(options.statuses || []) };
@@ -10288,6 +10359,18 @@ const apiRequest = useCallback(
 	      }
 	    }
 	  }, [apiRequest, canAccessBot, canAccessSystem, session?.token]);
+  useEffect(() => {
+    if (!canAccessSystem || !session?.token) return undefined;
+    const intervalId = window.setInterval(async () => {
+      try {
+        const payload = await apiRequest('/system/site/online');
+        setSiteOnlineStats(payload || null);
+      } catch (error) {
+        console.warn('Site online poll skipped:', error?.message || error);
+      }
+    }, 30000);
+    return () => window.clearInterval(intervalId);
+  }, [apiRequest, canAccessSystem, session?.token]);
   const handleBlockClient = useCallback(
     async (clientId, blocked = true) => {
       if (!clientId) throw new Error('No client id');
@@ -11354,6 +11437,7 @@ const handleBarberFieldChange = (id, field, value) => {
             menuSaving={botMenuSaving}
             siteConfig={siteConfig}
             siteSaving={siteConfigSaving}
+            siteOnlineStats={siteOnlineStats}
             onSaveSite={handleSaveSiteConfig}
             onUploadSiteImage={handleUploadAvatar}
             services={services}

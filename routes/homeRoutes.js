@@ -51,6 +51,8 @@
   notifyBarberAboutNewAppointment,
   requestRealtimePush,
   parseDateTime,
+  touchSitePresenceSession,
+  removeSitePresenceSession,
 }) => {
   const buildClientAccessPayload = async (phone) => {
     const safePhone = normalizePhone(phone);
@@ -873,6 +875,48 @@
       return res.status(500).json({
         success: false,
         message: "Не удалось загрузить данные приложения.",
+      });
+    }
+  });
+
+  app.post("/api/home/presence", authenticateHomeToken, async (req, res) => {
+    try {
+      const userId = normalizeText(req.homeUser?.userId);
+      if (!userId) return res.sendStatus(401);
+      const sessionId = normalizeText(req.body?.sessionId);
+      const result = touchSitePresenceSession({
+        sessionId,
+        userId,
+        userAgent: req.get("user-agent") || "",
+      });
+      return res.json({
+        success: true,
+        onlineCount: result.onlineCount,
+      });
+    } catch (error) {
+      console.error("Home presence touch error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Не удалось обновить онлайн-статус.",
+      });
+    }
+  });
+
+  app.post("/api/home/presence/offline", authenticateHomeToken, async (req, res) => {
+    try {
+      const userId = normalizeText(req.homeUser?.userId);
+      if (!userId) return res.sendStatus(401);
+      const sessionId = normalizeText(req.body?.sessionId);
+      const result = removeSitePresenceSession(sessionId);
+      return res.json({
+        success: true,
+        onlineCount: result.onlineCount,
+      });
+    } catch (error) {
+      console.error("Home presence remove error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Не удалось снять онлайн-статус.",
       });
     }
   });

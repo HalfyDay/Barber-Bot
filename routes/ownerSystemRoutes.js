@@ -31,6 +31,7 @@ const registerOwnerSystemRoutes = ({
   fs,
   getSiteSettings,
   updateSiteSettings,
+  getSiteOnlineCount,
 }) => {
   app.get("/api/license/status", authenticateToken, async (req, res) => {
     if (!isOwnerRequest(req)) {
@@ -307,6 +308,20 @@ const registerOwnerSystemRoutes = ({
     } catch (error) {
       console.error("Site settings save error:", error);
       res.status(500).json({ error: "Не удалось сохранить настройки сайта." });
+    }
+  });
+  app.get("/api/system/site/online", authenticateToken, async (req, res) => {
+    if (!isOwnerRequest(req)) {
+      return res.status(403).json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РїСЂРѕСЃРјРѕС‚СЂР° РѕРЅР»Р°Р№РЅР° СЃР°Р№С‚Р°." });
+    }
+    try {
+      res.json({
+        onlineCount: Number(getSiteOnlineCount?.() || 0),
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Site online count fetch error:", error);
+      res.status(500).json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РѕРЅР»Р°Р№РЅ СЃР°Р№С‚Р°." });
     }
   });
 };

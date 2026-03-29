@@ -4,6 +4,8 @@
   const LOGIN_PAGE_URL = "/login/";
   const SESSION_STORAGE_KEY = "home-user-session";
   const LOGOUT_MARKER_STORAGE_KEY = "home-user-logout-marker";
+  const SITE_PRESENCE_SESSION_KEY = "home-site-presence-session-id";
+  const SITE_PRESENCE_PING_INTERVAL_MS = 30000;
   const CONTACT_PHONE = "+7 908 669-00-94";
   const IS_ANDROID_APP_SHELL = /BrotherShopAndroidApp/i.test(window.navigator?.userAgent || "");
   const IS_DESKTOP_SHEET_DISMISS = Boolean(window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches);
@@ -64,6 +66,7 @@
   let referralQrScannerFrame = null;
   let referralQrScannerSession = 0;
   let delegatedHandlersBound = false;
+  let sitePresenceTimer = null;
   const derivedDataCache = {
     profileHistory: { visitHistoryRef: null, operationsRef: null, items: [] },
     filteredProfileHistory: { itemsRef: null, filter: "", filtered: [] },
@@ -690,6 +693,52 @@
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(normalizeText(payload.message || payload.error) || "Ошибка запроса.");
     return payload;
+  };
+
+  const ensureSitePresenceSessionId = () => {
+    const existing = normalizeText(window.sessionStorage.getItem(SITE_PRESENCE_SESSION_KEY));
+    if (existing) return existing;
+    const nextValue =
+      typeof window.crypto?.randomUUID === "function"
+        ? window.crypto.randomUUID()
+        : `presence-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+    window.sessionStorage.setItem(SITE_PRESENCE_SESSION_KEY, nextValue);
+    return nextValue;
+  };
+
+  const sendSitePresence = async (mode = "online") => {
+    const token = normalizeText(state.session?.token);
+    if (!token) return;
+    const sessionId = ensureSitePresenceSessionId();
+    const endpoint = mode === "offline" ? "/presence/offline" : "/presence";
+    try {
+      await fetch(`${API_ROOT}${endpoint}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sessionId }),
+        keepalive: mode === "offline",
+      });
+    } catch {
+      // Best-effort presence sync.
+    }
+  };
+
+  const stopSitePresenceLoop = () => {
+    if (!sitePresenceTimer) return;
+    window.clearInterval(sitePresenceTimer);
+    sitePresenceTimer = null;
+  };
+
+  const startSitePresenceLoop = () => {
+    stopSitePresenceLoop();
+    void sendSitePresence("online");
+    sitePresenceTimer = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      void sendSitePresence("online");
+    }, SITE_PRESENCE_PING_INTERVAL_MS);
   };
 
   const buildBookingStatusSheet = (label) => `
@@ -3008,8 +3057,18 @@
         render();
         suppressSheetHistoryBack = false;
       });
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          void sendSitePresence("online");
+        }
+      });
+      window.addEventListener("beforeunload", () => {
+        void sendSitePresence("offline");
+      });
+      startSitePresenceLoop();
       render();
     } catch (error) {
+      stopSitePresenceLoop();
       state.bootstrapError =
         normalizeText(error?.message) || "Не удалось загрузить данные приложения.";
       render();

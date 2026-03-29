@@ -40,6 +40,7 @@ const { createIdentityAccessService } = require("./services/identityAccessServic
 const { createCatalogLookupService } = require("./services/catalogLookupService");
 const { createBookingUtilityService } = require("./services/bookingUtilityService");
 const { createBarberAliasService } = require("./services/barberAliasService");
+const { createSitePresenceService } = require("./services/sitePresenceService");
 const { createPrismaClient, getPrismaRuntimeConfig, validatePrismaRuntimeConfig } = require("./services/prismaRuntime");
 const { registerAdminCrudRoutes } = require("./routes/adminCrudRoutes");
 const { registerHomeRoutes } = require("./routes/homeRoutes");
@@ -937,6 +938,11 @@ const {
   keepAliveMs: REALTIME_KEEPALIVE_MS,
   randomUUID,
 });
+const {
+  touchSession: touchSitePresenceSession,
+  removeSession: removeSitePresenceSession,
+  getOnlineCount: getSiteOnlineCount,
+} = createSitePresenceService();
 const stopHttpServer = () =>
   new Promise((resolve) => {
     if (!httpServer) return resolve();
@@ -1205,6 +1211,8 @@ registerHomeRoutes({
   notifyBarberAboutNewAppointment,
   requestRealtimePush,
   parseDateTime,
+  touchSitePresenceSession,
+  removeSitePresenceSession,
 });
 registerBotInternalRoutes({
   app,
@@ -1286,6 +1294,7 @@ registerOwnerSystemRoutes({
   fs,
   getSiteSettings,
   updateSiteSettings,
+  getSiteOnlineCount,
 });
 app.get("/api/dashboard/overview", authenticateToken, async (req, res) => {
   try {

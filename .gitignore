@@ -1,6 +1,7 @@
 /node_modules/
 /old_code/
 /backups/
+/android-app/
 /Image/generated/
 
 # Environment & secrets

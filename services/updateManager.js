@@ -22,6 +22,7 @@ const UPDATE_COMMAND_MAX_BUFFER_BYTES =
 const PRISMA_RUNTIME_CONFIG = getPrismaRuntimeConfig(process.env);
 const { schemaPath: PRISMA_SCHEMA_PATH } = PRISMA_RUNTIME_CONFIG;
 const BACKUP_DIR = path.join(PROJECT_ROOT, 'backups');
+const RUNTIME_IMAGE_ROOT = 'Image';
 const WEB_BUILD_OUTPUTS = [
   path.join(PROJECT_ROOT, 'bot-constructor.bundle.js'),
   path.join(PROJECT_ROOT, 'script.bundle.js'),
@@ -157,6 +158,52 @@ const getWorkingTreeStatus = async () => {
   } catch (error) {
     console.warn('[update] git status failed:', error.message);
     return '';
+  }
+};
+
+const listUntrackedRuntimeAssets = async () => {
+  try {
+    const { stdout } = await runCommand(`git ls-files --others --exclude-standard -- ${RUNTIME_IMAGE_ROOT}`);
+    return String(stdout || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.endsWith('/'));
+  } catch (error) {
+    console.warn('[update] Failed to list untracked runtime assets:', error.message);
+    return [];
+  }
+};
+
+const backupRuntimeAssetsBeforeUpdate = async () => {
+  const files = await listUntrackedRuntimeAssets();
+  if (!files.length) return null;
+  await fs.promises.mkdir(BACKUP_DIR, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const targetDir = path.join(BACKUP_DIR, `runtime-assets-pre-update-${stamp}`);
+  await fs.promises.mkdir(targetDir, { recursive: true });
+  const copiedFiles = [];
+  for (const relativeFile of files) {
+    const sourcePath = path.join(PROJECT_ROOT, relativeFile);
+    if (!fs.existsSync(sourcePath)) continue;
+    const backupPath = path.join(targetDir, relativeFile);
+    await fs.promises.mkdir(path.dirname(backupPath), { recursive: true });
+    await fs.promises.copyFile(sourcePath, backupPath);
+    copiedFiles.push(relativeFile);
+  }
+  if (!copiedFiles.length) return null;
+  console.log(`[update] Backed up runtime assets: ${copiedFiles.join(', ')}`);
+  return { targetDir, files: copiedFiles };
+};
+
+const restoreRuntimeAssetsAfterUpdate = async (snapshot) => {
+  if (!snapshot?.targetDir || !Array.isArray(snapshot.files) || !snapshot.files.length) return;
+  for (const relativeFile of snapshot.files) {
+    const backupPath = path.join(snapshot.targetDir, relativeFile);
+    const targetPath = path.join(PROJECT_ROOT, relativeFile);
+    if (!fs.existsSync(backupPath) || fs.existsSync(targetPath)) continue;
+    await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.promises.copyFile(backupPath, targetPath);
+    console.log(`[update] Restored runtime asset: ${relativeFile}`);
   }
 };
 
@@ -542,6 +589,7 @@ const checkForUpdates = async (force = false) => {
 const applyUpdate = async () => {
   console.log("[update] applying update...");
   await createPreUpdateBackup();
+  const runtimeAssetSnapshot = await backupRuntimeAssetsBeforeUpdate();
   const stashRef = await stashWorkingTree();
   try {
     const previousCommit = normalizeCommitHash(await getLocalCommitHash());
@@ -607,6 +655,7 @@ const applyUpdate = async () => {
     if (stashRef) {
       await popStash(stashRef);
     }
+    await restoreRuntimeAssetsAfterUpdate(runtimeAssetSnapshot);
   }
 };
 

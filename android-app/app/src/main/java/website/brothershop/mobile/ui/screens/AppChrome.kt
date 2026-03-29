@@ -32,8 +32,20 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import website.brothershop.mobile.ui.theme.Carbon
+import website.brothershop.mobile.ui.theme.CarbonHigh
+import website.brothershop.mobile.ui.theme.Fog
+import website.brothershop.mobile.ui.theme.Ink
+import website.brothershop.mobile.ui.theme.Mint
+import website.brothershop.mobile.ui.theme.MintDeep
+import website.brothershop.mobile.ui.theme.MintGlow
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun AppBackdrop(
@@ -45,24 +57,19 @@ fun AppBackdrop(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(Color(0xFF070909), Color(0xFF0A0D0D), Color(0xFF0B0E0E)),
+                    colors = listOf(Ink, Color(0xFF0A0D0D), Color(0xFF0E1312)),
                 ),
             )
             .drawBehind {
                 drawCircle(
-                    color = Color(0x3300BFAF),
+                    color = Color(0x2400BFAF),
                     radius = size.minDimension * 0.34f,
-                    center = Offset(size.width * 0.12f, size.height * 0.08f),
+                    center = Offset(size.width * 0.08f, size.height * 0.04f),
                 )
                 drawCircle(
-                    color = Color(0x1800BFAF),
-                    radius = size.minDimension * 0.24f,
-                    center = Offset(size.width * 0.88f, size.height * 0.16f),
-                )
-                drawCircle(
-                    color = Color(0x12FFFFFF),
-                    radius = size.minDimension * 0.28f,
-                    center = Offset(size.width * 0.55f, size.height * 0.96f),
+                    color = Color(0x1200BFAF),
+                    radius = size.minDimension * 0.26f,
+                    center = Offset(size.width * 0.9f, size.height * 0.16f),
                 )
             },
         content = content,
@@ -72,19 +79,19 @@ fun AppBackdrop(
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(18.dp),
+    contentPadding: PaddingValues = PaddingValues(20.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, Color(0x12FFFFFF), RoundedCornerShape(28.dp)),
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF141818)),
+            .border(1.dp, Color(0x0FFFFFFF), RoundedCornerShape(30.dp)),
+        shape = RoundedCornerShape(30.dp),
+        colors = CardDefaults.cardColors(containerColor = CarbonHigh),
     ) {
         Column(
             modifier = Modifier.padding(contentPadding),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content,
         )
     }
@@ -101,22 +108,24 @@ fun HeroCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, Color(0x18FFFFFF), RoundedCornerShape(32.dp)),
-        shape = RoundedCornerShape(32.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            .border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(30.dp)),
+        shape = RoundedCornerShape(30.dp),
+        colors = CardDefaults.cardColors(containerColor = CarbonHigh),
     ) {
         Column(
             modifier = Modifier
                 .background(
-                    Brush.verticalGradient(listOf(Color(0xFF102A29), Color(0xFF131A1A))),
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFF1A2222), CarbonHigh),
+                    ),
                 )
-                .padding(22.dp),
+                .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
                 text = eyebrow.uppercase(),
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
+                color = MintGlow,
             )
             Text(
                 text = title,
@@ -126,7 +135,7 @@ fun HeroCard(
             Text(
                 text = body,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Fog,
             )
             footer()
         }
@@ -146,7 +155,7 @@ fun MetricPill(
         Text(
             text = label.uppercase(),
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = Fog,
         )
         Text(
             text = value,
@@ -161,23 +170,36 @@ fun MetricPill(
 fun InitialBadge(
     text: String,
     modifier: Modifier = Modifier,
+    imageUrl: String = "",
+    size: Int = 58,
 ) {
+    val badgeSize = size.dp
+    val initial = text.take(1).ifBlank { "B" }
     Box(
         modifier = modifier
-            .size(58.dp)
+            .size(badgeSize)
             .clip(CircleShape)
             .background(
-                Brush.radialGradient(listOf(Color(0x4400BFAF), Color(0xFF1A2323))),
+                Brush.radialGradient(listOf(Color(0x3300BFAF), Color(0xFF1A1F1F))),
             )
-            .border(1.dp, Color(0x20FFFFFF), CircleShape),
+            .border(1.dp, Color(0x14FFFFFF), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = text.take(1).ifBlank { "B" },
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.Bold,
-        )
+        if (imageUrl.isNotBlank()) {
+            WebsiteImage(
+                imageUrl = imageUrl,
+                contentDescription = text,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Text(
+                text = initial,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }
 
@@ -192,10 +214,10 @@ fun PrimaryAction(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
+            containerColor = Mint,
+            contentColor = Ink,
             disabledContainerColor = Color(0x4D00BFAF),
             disabledContentColor = Color(0x99070909),
         ),
@@ -217,9 +239,9 @@ fun SecondaryAction(
     Button(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = Color(0xFF232B2B),
+            containerColor = Carbon,
             contentColor = MaterialTheme.colorScheme.onSurface,
         ),
     ) {
@@ -240,7 +262,7 @@ fun SectionHeader(
         Text(
             text = eyebrow.uppercase(),
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            color = MintGlow,
         )
         Text(
             text = title,
@@ -272,7 +294,7 @@ fun EmptyStateCard(
             Text(
                 text = body,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Fog,
             )
             Spacer(modifier = Modifier.height(4.dp))
             PrimaryAction(label = actionLabel, onClick = onAction, enabled = enabled)
@@ -286,9 +308,17 @@ fun TopIdentityBar(
     subtitle: String,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
-    GlassCard(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp)) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color.Transparent, RoundedCornerShape(18.dp)),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xF70F1212)),
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -298,14 +328,20 @@ fun TopIdentityBar(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.displaySmall,
                     color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (subtitle.isNotBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Fog,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -314,4 +350,52 @@ fun TopIdentityBar(
             )
         }
     }
+}
+
+@Composable
+fun IdentityChip(
+    label: String,
+    imageUrl: String = "",
+) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(Color(0xFF121616))
+            .padding(2.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        InitialBadge(
+            text = label,
+            imageUrl = imageUrl,
+            size = 44,
+        )
+    }
+}
+
+@Composable
+fun WebsiteImage(
+    imageUrl: String,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+) {
+    if (imageUrl.isBlank()) {
+        Box(
+            modifier = modifier.background(
+                Brush.linearGradient(listOf(MintDeep, Carbon)),
+            ),
+        )
+        return
+    }
+
+    AsyncImage(
+        model = ImageRequest.Builder(LocalContext.current)
+            .data(imageUrl)
+            .crossfade(true)
+            .build(),
+        contentDescription = contentDescription,
+        modifier = modifier,
+        contentScale = contentScale,
+    )
 }

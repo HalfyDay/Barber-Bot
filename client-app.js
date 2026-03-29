@@ -55,9 +55,11 @@
   let referralCopyFeedbackTimer = null;
   let sheetCloseTimer = null;
   let sheetOpenFrame = null;
+  let renderFrame = null;
   let suppressSheetHistoryBack = false;
   let referralQrScannerStream = null;
   let referralQrScannerFrame = null;
+  let delegatedHandlersBound = false;
 
   const normalizeText = (value) => (value == null ? "" : String(value).trim());
   const normalizePhone = (value) => normalizeText(value).replace(/[^\d+]/g, "");
@@ -450,16 +452,16 @@
 
   const renderProfileHistoryRow = (item) => `
     <div class="timeline-item bank-row history-row">
-      <div>
-        <div class="history-row-meta">
-          <span class="status-badge ${item.type === "visit" ? "status-green" : "status-red"}">${item.type === "visit" ? "Визит" : "Оплата"}</span>
-          <span class="subtitle">${normalizeText(item.dateLabel)}</span>
+      <div class="history-row-main">
+        <div class="history-row-head">
+          <div class="history-row-meta">
+            <span class="status-badge ${item.type === "visit" ? "status-green" : "status-red"}">${item.type === "visit" ? "Визит" : "Оплата"}</span>
+            <span class="subtitle">${normalizeText(item.dateLabel)}</span>
+          </div>
+          ${item.amountRub ? `<div class="amount-rub history-row-amount ${item.amountRub < 0 ? "negative" : ""}">${item.amountRub > 0 ? "+" : ""}${formatRub(Math.abs(item.amountRub))}</div>` : ""}
         </div>
         <p class="list-title">${normalizeText(item.title)}</p>
         <p class="subtitle">${normalizeText(item.subtitle)}</p>
-      </div>
-      <div>
-        ${item.amountRub ? `<div class="amount-rub ${item.amountRub < 0 ? "negative" : ""}">${item.amountRub > 0 ? "+" : ""}${formatRub(Math.abs(item.amountRub))}</div>` : ""}
       </div>
     </div>
   `;
@@ -1846,7 +1848,8 @@
     window.scrollTo({ top: 0, behavior: "auto" });
   };
 
-  const render = () => {
+  const renderNow = () => {
+    renderFrame = null;
     syncDocumentMeta();
     ROOT.innerHTML = `<div class="client-app"><div class="app-shell ${state.routeTransitionActive ? "route-transition" : ""}">${renderTopbar()}${renderCurrentPage()}${renderBottomNav()}</div></div>${renderSheet()}`;
     document.documentElement.classList.toggle("sheet-open", Boolean(state.sheet));
@@ -1854,7 +1857,12 @@
     state.routeTransitionActive = false;
     bindEvents();
     setupMediaWaveLoading();
-    setupTransferRecipientCarousels();
+    if (
+      state.currentPage === "referral" ||
+      ["Быстрый перевод", "Перевести BS"].includes(normalizeText(state.sheet?.title))
+    ) {
+      setupTransferRecipientCarousels();
+    }
     const nav = document.querySelector(".bottom-nav");
     if (nav) {
       const targetIndex = Number(nav.dataset.activeIndex || 0);
@@ -1866,6 +1874,11 @@
     if (state.currentPage === "booking" && state.booking.stepAnimationsEnabled) {
       state.booking.stepAnimationsEnabled = false;
     }
+  };
+
+  const render = () => {
+    if (renderFrame !== null) return;
+    renderFrame = window.requestAnimationFrame(renderNow);
   };
 
   const loadServices = async () => {
@@ -2244,159 +2257,277 @@
     render();
   };
 
-  const bindEvents = () => {
-    document.querySelectorAll("a[href]").forEach((node) => {
-      const href = normalizeText(node.getAttribute("href"));
-      if (!href || href.startsWith("#") || node.hasAttribute("download")) return;
-      if (node.target && node.target !== "_self") return;
-      if (/^(mailto:|tel:|https?:)/i.test(href) && !href.startsWith("/")) return;
-      node.addEventListener("click", (event) => {
-        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-        event.preventDefault();
-        navigateTo(href);
-      });
-    });
-    document.querySelectorAll("[data-action='logout']").forEach((node) => node.addEventListener("click", logout));
-    document.querySelectorAll("[data-action='reload-app']").forEach((node) => node.addEventListener("click", () => {
-      window.location.reload();
-    }));
-    document.querySelectorAll("[data-action='link-telegram']").forEach((node) => node.addEventListener("click", startTelegramLink));
-    document.querySelectorAll("[data-action='unlink-telegram']").forEach((node) => node.addEventListener("click", unlinkTelegram));
-    document.querySelectorAll("[data-action='check-telegram-link']").forEach((node) => node.addEventListener("click", checkTelegramLink));
-    document.querySelectorAll("[data-action='show-password-change']").forEach((node) => node.addEventListener("click", () => {
-      const passwordFields = document.getElementById("security-password-fields");
-      if (!passwordFields) return;
-      passwordFields.hidden = false;
-      node.hidden = true;
-      const passwordInput = passwordFields.querySelector("input[name='password']");
-      if (passwordInput) passwordInput.focus();
-      passwordInput?.dispatchEvent(new Event("input", { bubbles: true }));
-    }));
-    document.querySelectorAll("[data-action='close-sheet']").forEach((node) => node.addEventListener("click", closeSheet));
-    document.querySelectorAll("[data-action='dismiss-sheet']").forEach((node) => node.addEventListener("click", dismissSheet));
-    document.querySelectorAll("[data-action='open-sheet']").forEach((node) => node.addEventListener("click", () => {
-      if (["cancel-booking", "manage-booking"].includes(normalizeText(node.dataset.sheet))) {
-        state.pendingBookingCancellationId = normalizeText(node.dataset.id);
+  const syncReferralCopyButtons = () => {
+    document.querySelectorAll("[data-action='copy-referral']").forEach((button) => {
+      const copied = state.referralLinkCopied === true;
+      button.classList.toggle("is-copied", copied);
+      const label = button.querySelector("span:last-child");
+      if (!label) return;
+      if (button.classList.contains("referral-wallet-action")) {
+        label.textContent = copied ? "Ссылка скопирована" : "Реферальная ссылка";
+      } else {
+        label.textContent = copied ? "Ссылка скопирована" : "Пригласить первого клиента";
       }
-      openNamedSheet(node.dataset.sheet);
-    }));
-    document.querySelectorAll("[data-action='navigate']").forEach((node) => node.addEventListener("click", () => {
-      const href = normalizeText(node.dataset.href);
-      if (!href) return;
-      navigateTo(href);
-    }));
-    document.querySelectorAll("[data-action='set-history-filter']").forEach((node) => node.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.profileHistoryFilter = normalizeText(node.dataset.filter) || "all";
-      if (state.sheet && normalizeText(state.sheet.title).includes("истор")) {
-        openNamedSheet("profile-history");
-        return;
-      }
-      render();
-    }));
-    document.querySelectorAll("[data-action='set-transfer-filter']").forEach((node) => node.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.transferHistoryFilter = normalizeText(node.dataset.filter) || "all";
-      render();
-    }));
-    document.querySelectorAll("[data-action='open-promo']").forEach((node) => {
-      node.addEventListener("click", () => {
-        const promos = Array.isArray(state.payload?.site?.home?.promos) ? state.payload.site.home.promos : [];
-        const promo = promos.find((item) => normalizeText(item.id) === normalizeText(node.dataset.id));
-        if (!promo) return;
-        openSheet(
-          normalizeText(promo.title || "Акция"),
-          `<div class="list-item"><p class="list-title">${normalizeText(promo.subtitle)}</p><p class="subtitle">${normalizeText(promo.details)}</p></div>${normalizeText(promo.imageUrl) ? `<div class="promo-sheet-image" style="background-image:url('${normalizeText(promo.imageUrl)}');"></div>` : ""}`,
-        );
-      });
     });
-    const syncReferralCopyButtons = () => {
-      document.querySelectorAll("[data-action='copy-referral']").forEach((button) => {
-        const copied = state.referralLinkCopied === true;
-        button.classList.toggle("is-copied", copied);
-        const label = button.querySelector("span:last-child");
-        if (label) {
-          if (button.classList.contains("referral-wallet-action")) {
-            label.textContent = copied ? "Ссылка скопирована" : "Реферальная ссылка";
-          } else {
-            label.textContent = copied ? "Ссылка скопирована" : "Пригласить первого клиента";
+  };
+
+  const openPromoSheet = (promoId) => {
+    const promos = Array.isArray(state.payload?.site?.home?.promos) ? state.payload.site.home.promos : [];
+    const promo = promos.find((item) => normalizeText(item.id) === normalizeText(promoId));
+    if (!promo) return;
+    openSheet(
+      normalizeText(promo.title || "Акция"),
+      `<div class="list-item"><p class="list-title">${normalizeText(promo.subtitle)}</p><p class="subtitle">${normalizeText(promo.details)}</p></div>${normalizeText(promo.imageUrl) ? `<div class="promo-sheet-image" style="background-image:url('${normalizeText(promo.imageUrl)}');"></div>` : ""}`,
+    );
+  };
+
+  const installDelegatedHandlers = () => {
+    if (delegatedHandlersBound) return;
+    delegatedHandlersBound = true;
+
+    ROOT.addEventListener("click", (event) => {
+      const link = event.target.closest("a[href]");
+      if (link && ROOT.contains(link)) {
+        const href = normalizeText(link.getAttribute("href"));
+        if (
+          href &&
+          !href.startsWith("#") &&
+          !link.hasAttribute("download") &&
+          (!link.target || link.target === "_self") &&
+          !(/^(mailto:|tel:|https?:)/i.test(href) && !href.startsWith("/"))
+        ) {
+          if (!(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)) {
+            event.preventDefault();
+            navigateTo(href);
+            return;
           }
         }
-      });
-    };
+      }
 
-    document.querySelectorAll("[data-action='copy-referral']").forEach((node) => {
-      node.addEventListener("click", async () => {
-        const link = `${window.location.origin}${normalizeText(state.payload?.referral?.referralLink || "/login/")}`;
-        try {
-          await navigator.clipboard.writeText(link);
-          state.referralLinkCopied = true;
-          syncReferralCopyButtons();
-          if (referralCopyFeedbackTimer) window.clearTimeout(referralCopyFeedbackTimer);
-          referralCopyFeedbackTimer = window.setTimeout(() => {
-            state.referralLinkCopied = false;
-            syncReferralCopyButtons();
-          }, 1600);
-        } catch {
-          openSheet("Скопируйте ссылку", `<div class="list-item"><p class="list-title">${link}</p><p class="subtitle">Не удалось скопировать автоматически. Скопируйте ссылку вручную.</p></div>`);
+      const actionNode = event.target.closest("[data-action]");
+      if (!actionNode || !ROOT.contains(actionNode)) return;
+      const action = normalizeText(actionNode.dataset.action);
+      if (!action) return;
+
+      switch (action) {
+        case "logout":
+          event.preventDefault();
+          logout();
+          return;
+        case "reload-app":
+          event.preventDefault();
+          window.location.reload();
+          return;
+        case "link-telegram":
+          event.preventDefault();
+          void startTelegramLink();
+          return;
+        case "unlink-telegram":
+          event.preventDefault();
+          void unlinkTelegram();
+          return;
+        case "check-telegram-link":
+          event.preventDefault();
+          void checkTelegramLink();
+          return;
+        case "show-password-change": {
+          event.preventDefault();
+          const passwordFields = document.getElementById("security-password-fields");
+          if (!passwordFields) return;
+          passwordFields.hidden = false;
+          actionNode.hidden = true;
+          const passwordInput = passwordFields.querySelector("input[name='password']");
+          if (passwordInput) passwordInput.focus();
+          passwordInput?.dispatchEvent(new Event("input", { bubbles: true }));
+          return;
         }
-      });
-    });
-    document.querySelectorAll("[data-action='open-quick-transfer']").forEach((node) => {
-      node.addEventListener("click", () => {
-        state.referralTransferDraft = {
-          targetPhone: normalizeText(node.dataset.phone),
-          recipientShortName: normalizeText(node.dataset.shortName || node.dataset.name),
-          fullName: normalizeText(node.dataset.name),
-        };
-        openNamedSheet("quick-transfer");
-      });
-    });
-    document.querySelectorAll("[data-action='scroll-transfer-recipients']").forEach((node) => {
-      node.addEventListener("click", () => {
-        const carousel = node.closest(".referral-transfer-recipient-carousel");
-        const strip = carousel?.querySelector("[data-transfer-recipient-strip]");
-        if (!strip) return;
-        const firstCard = strip.querySelector(".referral-transfer-recipient");
-        const step = Math.max(strip.clientWidth * 0.82, (firstCard?.clientWidth || 160) + 12);
-        const direction = normalizeText(node.dataset.direction) === "prev" ? -1 : 1;
-        strip.scrollBy({ left: step * direction, behavior: "smooth" });
-      });
-    });
-    document.querySelectorAll("[data-action='transfer-preset']").forEach((node) => {
-      node.addEventListener("click", () => {
-        state.referralQuickAmount = Number(node.dataset.amount || 0);
-        state.referralTransferDraft = {
-          ...(state.referralTransferDraft || {}),
-          amountBs: Number(node.dataset.amount || 0),
-        };
-        openNamedSheet("transfer-bs");
-      });
-    });
-    document.querySelectorAll("[data-action='quick-transfer-amount']").forEach((node) => {
-      node.addEventListener("click", async () => {
-        try {
-          const draft = {
-            targetPhone: normalizeText(node.dataset.phone),
-            amountBs: Number(node.dataset.amount || 0),
-            recipientShortName: normalizeText(node.dataset.shortName || node.dataset.name),
-            fullName: normalizeText(node.dataset.name),
-            comment: "",
-          };
-          const recipient = await requestReferralTransferPreview(draft);
+        case "close-sheet":
+          event.preventDefault();
+          closeSheet();
+          return;
+        case "dismiss-sheet":
+          event.preventDefault();
+          dismissSheet();
+          return;
+        case "open-sheet":
+          event.preventDefault();
+          if (["cancel-booking", "manage-booking"].includes(normalizeText(actionNode.dataset.sheet))) {
+            state.pendingBookingCancellationId = normalizeText(actionNode.dataset.id);
+          }
+          openNamedSheet(actionNode.dataset.sheet);
+          return;
+        case "navigate": {
+          event.preventDefault();
+          const href = normalizeText(actionNode.dataset.href);
+          if (!href) return;
+          navigateTo(href);
+          return;
+        }
+        case "set-history-filter":
+          event.preventDefault();
+          event.stopPropagation();
+          state.profileHistoryFilter = normalizeText(actionNode.dataset.filter) || "all";
+          if (state.sheet && normalizeText(state.sheet.title).includes("истор")) {
+            openNamedSheet("profile-history");
+            return;
+          }
+          render();
+          return;
+        case "set-transfer-filter":
+          event.preventDefault();
+          event.stopPropagation();
+          state.transferHistoryFilter = normalizeText(actionNode.dataset.filter) || "all";
+          render();
+          return;
+        case "open-promo":
+          event.preventDefault();
+          openPromoSheet(actionNode.dataset.id);
+          return;
+        case "copy-referral":
+          event.preventDefault();
+          void (async () => {
+            const linkValue = `${window.location.origin}${normalizeText(state.payload?.referral?.referralLink || "/login/")}`;
+            try {
+              await navigator.clipboard.writeText(linkValue);
+              state.referralLinkCopied = true;
+              syncReferralCopyButtons();
+              if (referralCopyFeedbackTimer) window.clearTimeout(referralCopyFeedbackTimer);
+              referralCopyFeedbackTimer = window.setTimeout(() => {
+                state.referralLinkCopied = false;
+                syncReferralCopyButtons();
+              }, 1600);
+            } catch {
+              openSheet("Скопируйте ссылку", `<div class="list-item"><p class="list-title">${linkValue}</p><p class="subtitle">Не удалось скопировать автоматически. Скопируйте ссылку вручную.</p></div>`);
+            }
+          })();
+          return;
+        case "open-quick-transfer":
+          event.preventDefault();
           state.referralTransferDraft = {
-            ...draft,
-            recipientId: normalizeText(recipient?.id),
-            recipientShortName: normalizeText(recipient?.shortName || draft.recipientShortName || draft.fullName),
+            targetPhone: normalizeText(actionNode.dataset.phone),
+            recipientShortName: normalizeText(actionNode.dataset.shortName || actionNode.dataset.name),
+            fullName: normalizeText(actionNode.dataset.name),
           };
-          openNamedSheet("confirm-transfer-bs");
-        } catch (error) {
-          openSheet("Ошибка перевода", `<div class="list-item"><p class="list-title">${humanizeReferralTransferError(error)}</p></div>`);
+          openNamedSheet("quick-transfer");
+          return;
+        case "scroll-transfer-recipients": {
+          event.preventDefault();
+          const carousel = actionNode.closest(".referral-transfer-recipient-carousel");
+          const strip = carousel?.querySelector("[data-transfer-recipient-strip]");
+          if (!strip) return;
+          const firstCard = strip.querySelector(".referral-transfer-recipient");
+          const step = Math.max(strip.clientWidth * 0.82, (firstCard?.clientWidth || 160) + 12);
+          const direction = normalizeText(actionNode.dataset.direction) === "prev" ? -1 : 1;
+          strip.scrollBy({ left: step * direction, behavior: "smooth" });
+          return;
         }
-      });
+        case "transfer-preset":
+          event.preventDefault();
+          state.referralQuickAmount = Number(actionNode.dataset.amount || 0);
+          state.referralTransferDraft = {
+            ...(state.referralTransferDraft || {}),
+            amountBs: Number(actionNode.dataset.amount || 0),
+          };
+          openNamedSheet("transfer-bs");
+          return;
+        case "quick-transfer-amount":
+          event.preventDefault();
+          void (async () => {
+            try {
+              const draft = {
+                targetPhone: normalizeText(actionNode.dataset.phone),
+                amountBs: Number(actionNode.dataset.amount || 0),
+                recipientShortName: normalizeText(actionNode.dataset.shortName || actionNode.dataset.name),
+                fullName: normalizeText(actionNode.dataset.name),
+                comment: "",
+              };
+              const recipient = await requestReferralTransferPreview(draft);
+              state.referralTransferDraft = {
+                ...draft,
+                recipientId: normalizeText(recipient?.id),
+                recipientShortName: normalizeText(recipient?.shortName || draft.recipientShortName || draft.fullName),
+              };
+              openNamedSheet("confirm-transfer-bs");
+            } catch (error) {
+              openSheet("Ошибка перевода", `<div class="list-item"><p class="list-title">${humanizeReferralTransferError(error)}</p></div>`);
+            }
+          })();
+          return;
+        case "select-barber":
+          event.preventDefault();
+          void (async () => {
+            state.booking.barberId = normalizeText(actionNode.dataset.id);
+            await loadServices();
+            scrollToBookingStep("services");
+          })();
+          return;
+        case "toggle-service":
+          event.preventDefault();
+          void (async () => {
+            const id = normalizeText(actionNode.dataset.id);
+            state.booking.selectedServices = state.booking.selectedServices.includes(id)
+              ? state.booking.selectedServices.filter((item) => item !== id)
+              : [...state.booking.selectedServices, id];
+            await loadDates();
+            syncBookingBsCover();
+            if (state.booking.selectedServices.length) scrollToBookingStep("date");
+          })();
+          return;
+        case "select-date":
+          event.preventDefault();
+          void (async () => {
+            state.booking.selectedDate = normalizeText(actionNode.dataset.id);
+            await loadTimes();
+            scrollToBookingStep("time");
+          })();
+          return;
+        case "select-time":
+          event.preventDefault();
+          state.booking.selectedTime = normalizeText(actionNode.dataset.id);
+          render();
+          scrollToBookingStep("comment");
+          return;
+        case "toggle-booking-bs":
+          event.preventDefault();
+          state.booking.bsCoverExpanded = !state.booking.bsCoverExpanded;
+          render();
+          return;
+        case "submit-booking":
+          event.preventDefault();
+          void submitBooking();
+          return;
+        case "confirm-referral-transfer":
+          event.preventDefault();
+          void (async () => {
+            try {
+              await submitReferralTransfer(state.referralTransferDraft || {});
+            } catch (error) {
+              openSheet("Ошибка перевода", `<div class="list-item"><p class="list-title">${humanizeReferralTransferError(error)}</p></div>`);
+            }
+          })();
+          return;
+        case "confirm-cancel-booking":
+          event.preventDefault();
+          void (async () => {
+            try {
+              await cancelHomeBooking(actionNode.dataset.id);
+            } catch (error) {
+              openSheet("Ошибка отмены", `<div class="list-item"><p class="list-title">${normalizeText(error.message || "Не удалось отменить запись.")}</p></div>`);
+            }
+          })();
+          return;
+        default:
+          break;
+      }
     });
+
+    ROOT.addEventListener("click", (event) => {
+      const backdrop = event.target.closest("#sheet-backdrop");
+      if (backdrop && event.target === backdrop) closeSheet();
+    });
+  };
+
+  const bindEvents = () => {
     const quickTransferForm = document.getElementById("quick-transfer-form");
     if (quickTransferForm) {
       quickTransferForm.addEventListener("submit", async (event) => {
@@ -2422,28 +2553,6 @@
         }
       });
     }
-    document.querySelectorAll("[data-action='select-barber']").forEach((node) => node.addEventListener("click", async () => {
-      state.booking.barberId = normalizeText(node.dataset.id);
-      await loadServices();
-      scrollToBookingStep("services");
-    }));
-    document.querySelectorAll("[data-action='toggle-service']").forEach((node) => node.addEventListener("click", async () => {
-      const id = normalizeText(node.dataset.id);
-      state.booking.selectedServices = state.booking.selectedServices.includes(id) ? state.booking.selectedServices.filter((item) => item !== id) : [...state.booking.selectedServices, id];
-      await loadDates();
-      syncBookingBsCover();
-      if (state.booking.selectedServices.length) scrollToBookingStep("date");
-    }));
-    document.querySelectorAll("[data-action='select-date']").forEach((node) => node.addEventListener("click", async () => {
-      state.booking.selectedDate = normalizeText(node.dataset.id);
-      await loadTimes();
-      scrollToBookingStep("time");
-    }));
-    document.querySelectorAll("[data-action='select-time']").forEach((node) => node.addEventListener("click", () => {
-      state.booking.selectedTime = normalizeText(node.dataset.id);
-      render();
-      scrollToBookingStep("comment");
-    }));
     const bookingCommentInput = document.getElementById("booking-comment-input");
     if (bookingCommentInput) {
       bookingCommentInput.addEventListener("input", () => {
@@ -2465,15 +2574,6 @@
         render();
       });
     }
-    document.querySelectorAll("[data-action='toggle-booking-bs']").forEach((node) =>
-      node.addEventListener("click", () => {
-        state.booking.bsCoverExpanded = !state.booking.bsCoverExpanded;
-        render();
-      }),
-    );
-    document.querySelectorAll("[data-action='submit-booking']").forEach((node) => node.addEventListener("click", submitBooking));
-    const backdrop = document.getElementById("sheet-backdrop");
-    if (backdrop) backdrop.addEventListener("click", (event) => { if (event.target === backdrop) closeSheet(); });
     const setupProfileFormDirtyState = (form, hasChanges) => {
       if (!form || typeof hasChanges !== "function") return;
       const submitButton = form.querySelector("button[type='submit']");
@@ -2554,27 +2654,6 @@
     if (normalizeText(state.sheet?.title) === "Сканировать QR") {
       startReferralQrScanner();
     }
-    document.querySelectorAll("[data-action='confirm-referral-transfer']").forEach((node) => {
-      node.addEventListener("click", async () => {
-        try {
-          await submitReferralTransfer(state.referralTransferDraft || {});
-        } catch (error) {
-          openSheet(
-            "Ошибка перевода",
-            `<div class="list-item"><p class="list-title">${humanizeReferralTransferError(error)}</p></div>`,
-          );
-        }
-      });
-    });
-    document.querySelectorAll("[data-action='confirm-cancel-booking']").forEach((node) => {
-      node.addEventListener("click", async () => {
-        try {
-          await cancelHomeBooking(node.dataset.id);
-        } catch (error) {
-          openSheet("Ошибка отмены", `<div class="list-item"><p class="list-title">${normalizeText(error.message || "Не удалось отменить запись.")}</p></div>`);
-        }
-      });
-    });
     bindProfileForm("profile-edit-form", async (formData) => {
       const patch = {
         displayName: normalizeText(formData.get("displayName")),
@@ -2673,6 +2752,7 @@
 
   const init = async () => {
     syncPageFromLocation();
+    installDelegatedHandlers();
     state.session = loadSession();
     if (!state.session?.token) {
       redirectToLogin();

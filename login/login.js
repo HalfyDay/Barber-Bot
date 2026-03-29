@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const HOME_API_BASE_URL = `${window.location.origin}/api/home/auth`;
   const HOME_TELEGRAM_AUTH_START_API_URL = `${HOME_API_BASE_URL}/telegram/start`;
   const HOME_TELEGRAM_AUTH_STATUS_API_URL = `${HOME_API_BASE_URL}/telegram/status`;
@@ -452,12 +452,12 @@
 
     registerSubmitButton.textContent = isActive
       ? isSetPasswordMode
-        ? "ВОЙТИ"
-        : "ЗАВЕРШИТЬ РЕГИСТРАЦИЮ"
-      : "СОЗДАТЬ АККАУНТ";
+        ? "Войти"
+        : "Завершить регистрацию"
+      : "Создать аккаунт";
 
     if (!isActive) {
-      telegramSetupEyebrow.textContent = "TELEGRAM ПОДТВЕРЖДЕН";
+      telegramSetupEyebrow.textContent = "Telegram подтверждён";
       telegramSetupTitle.textContent = "Завершите вход на сайте";
       telegramSetupDescription.textContent =
         "Остался последний шаг: заполните данные ниже и сохраните пароль для входа на сайте.";
@@ -467,20 +467,20 @@
     }
 
     if (isSetPasswordMode) {
-      telegramSetupEyebrow.textContent = "ПЕРВЫЙ ВХОД ЧЕРЕЗ TELEGRAM";
+      telegramSetupEyebrow.textContent = "Первый вход через Telegram";
       telegramSetupTitle.textContent = "Вы почти вошли";
       telegramSetupDescription.textContent =
         "Это нужно только один раз: проверьте имя и задайте пароль для входа на сайте.";
       registerFullNameInput.placeholder = "ФИО";
     } else {
-      telegramSetupEyebrow.textContent = "TELEGRAM ПОДТВЕРЖДЕН";
+      telegramSetupEyebrow.textContent = "Telegram подтверждён";
       telegramSetupTitle.textContent = "Завершите регистрацию";
       telegramSetupDescription.textContent =
         "Осталось указать имя и пароль, чтобы завершить вход на сайте.";
       registerFullNameInput.placeholder = "Введите ФИО";
     }
 
-    registerPhoneInput.placeholder = "Телефон подтвержден через Telegram";
+    registerPhoneInput.placeholder = "Телефон подтверждён через Telegram";
   };
 
   const switchTab = (tab) => {
@@ -549,7 +549,7 @@
       }
       setStatus(
         normalizeText(homePayload?.message) ||
-          "Не удалось выполнить вход.",
+          "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ РІС…РѕРґ.",
         "error",
       );
       setPending(loginForm, false);
@@ -591,7 +591,7 @@
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.success || !payload?.token || !payload?.user) {
-        setStatus(payload?.message || "Не удалось зарегистрироваться.", "error");
+        setStatus(payload?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°С‚СЊСЃСЏ.", "error");
         setPending(registerForm, false);
         return;
       }
@@ -664,7 +664,7 @@
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || !payload?.success || !payload?.token || !payload?.user) {
           setStatus(
-            payload?.message || "Не удалось завершить вход через Telegram.",
+            payload?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РІРµСЂС€РёС‚СЊ РІС…РѕРґ С‡РµСЂРµР· Telegram.",
             "error",
           );
           setPending(registerForm, false);
@@ -696,7 +696,7 @@
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.success || !payload?.token || !payload?.user) {
-        setStatus(payload?.message || "Не удалось зарегистрироваться.", "error");
+        setStatus(payload?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°С‚СЊСЃСЏ.", "error");
         setPending(registerForm, false);
         return;
       }
@@ -835,7 +835,7 @@
         return;
       }
       setStatus(
-        normalizeText(payload?.message) || "Telegram-авторизация не завершена.",
+        normalizeText(payload?.message) || "Telegram-Р°РІС‚РѕСЂРёР·Р°С†РёСЏ РЅРµ Р·Р°РІРµСЂС€РµРЅР°.",
         "error",
       );
       finishTelegramFlow();
@@ -870,7 +870,7 @@
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.success || !payload?.requestId || !payload?.code) {
         setStatus(
-          normalizeText(payload?.message) || "Не удалось запустить Telegram-авторизацию.",
+          normalizeText(payload?.message) || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ Telegram-Р°РІС‚РѕСЂРёР·Р°С†РёСЋ.",
           "error",
         );
         setTelegramPending(false);

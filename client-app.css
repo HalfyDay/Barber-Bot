@@ -1902,7 +1902,8 @@ img.media-wave.is-ready {
 }
 
 .referral-wallet-action {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, max-content);
   align-items: center;
   justify-content: center;
   gap: 10px;
@@ -1911,12 +1912,16 @@ img.media-wave.is-ready {
   width: 100%;
   padding: 12px 15px;
   border-radius: 26px;
-  border: 1px solid transparent;
+  border: 0;
   background: color-mix(in srgb, var(--md-sys-color-surface-container-low) 90%, var(--md-sys-color-primary-container) 10%);
+  background-clip: padding-box;
   color: var(--text);
   cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  transition: background-color 0.22s ease, background 0.22s ease, box-shadow 0.22s ease, filter 0.22s ease;
   backdrop-filter: blur(10px);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
 }
 
 .referral-wallet-action-scan {
@@ -1924,8 +1929,20 @@ img.media-wave.is-ready {
 }
 
 .referral-wallet-action:hover {
-  transform: translateY(-1px);
   box-shadow: var(--md-sys-elevation-2);
+}
+
+.referral-wallet-action:active {
+  filter: brightness(0.98);
+  box-shadow: none;
+}
+
+.referral-wallet-action:focus,
+.referral-wallet-action:focus-visible,
+.referral-wallet-level-link:focus,
+.referral-wallet-level-link:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .referral-wallet-card .hero-title {
@@ -1943,12 +1960,15 @@ img.media-wave.is-ready {
   stroke: currentColor;
   stroke-width: 1.8;
   fill: none;
+  align-self: center;
 }
 
 .referral-wallet-action span:last-child {
   font-weight: 700;
   line-height: 1.2;
   text-wrap: balance;
+  text-align: center;
+  max-width: 12ch;
 }
 
 .referral-level-chip-note,
@@ -3685,6 +3705,7 @@ img.media-wave.is-ready {
     min-height: 66px;
     padding: 10px 10px;
     border-radius: 18px;
+    gap: 8px;
   }
 
   .referral-wallet-action-scan {
@@ -3699,6 +3720,7 @@ img.media-wave.is-ready {
   .referral-wallet-action span:last-child {
     font-size: 0.9rem;
     line-height: 1.15;
+    max-width: 10ch;
   }
 
   .referral-wallet-balance,
@@ -3938,11 +3960,21 @@ img.media-wave.is-ready {
     grid-template-columns: minmax(0, 1fr) minmax(102px, 0.78fr);
     grid-template-areas:
       "head head"
-      "description description"
+      "description visual"
       "bottom visual";
-    row-gap: 4px;
+    row-gap: 8px;
     column-gap: 8px;
     padding: 14px 14px 12px;
+  }
+
+  .home-barber-card .booking-barber-surface::before {
+    inset: 15px 14px auto auto;
+  }
+
+  .home-barber-head {
+    min-height: 28px;
+    padding-right: 86px;
+    align-items: start;
   }
 
   .home-barber-card .home-barber-description {
@@ -3952,6 +3984,7 @@ img.media-wave.is-ready {
     text-overflow: clip;
     line-height: 1.3;
     padding-right: 0;
+    margin-top: 2px;
   }
 
   .home-barber-bottom {
@@ -3963,7 +3996,7 @@ img.media-wave.is-ready {
 
   .home-barber-card .barber-name {
     font-size: clamp(1.12rem, 5vw, 1.42rem);
-    line-height: 1;
+    line-height: 1.06;
   }
 
   .home-barber-bottom {
@@ -3983,7 +4016,25 @@ img.media-wave.is-ready {
   }
 
   .home-barber-card .booking-barber-visual {
-    min-height: 170px;
+    min-height: 146px;
+    align-self: end;
+  }
+
+  .home-barber-card .booking-barber-visual::before {
+    inset: 4px 0 0 18px;
+    border-radius: 32px 32px 0 0;
+  }
+
+  .home-barber-card .booking-barber-visual::after {
+    left: 4px;
+    right: 16px;
+    height: 36%;
+    border-radius: 24px 24px 0 0;
+  }
+
+  .home-barber-card .booking-barber-visual-frame {
+    align-items: end;
+    justify-content: end;
   }
 
   .home-barber-card .booking-barber-photo {
@@ -3991,6 +4042,8 @@ img.media-wave.is-ready {
     min-width: 136px;
     max-width: 160px;
     max-height: 176px;
+    object-position: center bottom;
+    transform: translateX(2px) translateY(2px);
   }
 
 }
@@ -4771,6 +4824,10 @@ img.media-wave.is-ready {
 
   .page {
     gap: 12px;
+  }
+
+  .home-page .barber-grid {
+    grid-template-columns: 1fr;
   }
 
   .slide {

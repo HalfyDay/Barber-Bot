@@ -949,7 +949,7 @@
           </div>
           <div class="referral-wallet-footer">
             <div class="referral-wallet-actions">
-              <button class="referral-wallet-action referral-copy-btn ${state.referralLinkCopied ? "is-copied" : ""}" type="button" data-action="copy-referral">${iconMarkup("copy")}<span>${state.referralLinkCopied ? "Ссылка скопирована" : "Скопировать ссылку"}</span></button>
+              <button class="referral-wallet-action referral-copy-btn ${state.referralLinkCopied ? "is-copied" : ""}" type="button" data-action="copy-referral">${iconMarkup("copy")}<span>${state.referralLinkCopied ? "Ссылка скопирована" : "Реферальная ссылка"}</span></button>
               <button class="referral-wallet-action" type="button" data-action="open-sheet" data-sheet="transfer-bs">${iconMarkup("transfer")}<span>Перевести BS</span></button>
               <button class="referral-wallet-action" type="button" data-action="open-sheet" data-sheet="my-transfer-qr">${iconMarkup("qr")}<span>Мой QR</span></button>
               <button class="referral-wallet-action referral-wallet-action-scan" type="button" data-action="open-sheet" data-sheet="scan-transfer-qr">${iconMarkup("scan")}<span>Сканировать QR</span></button>
@@ -2195,17 +2195,32 @@
         );
       });
     });
+    const syncReferralCopyButtons = () => {
+      document.querySelectorAll("[data-action='copy-referral']").forEach((button) => {
+        const copied = state.referralLinkCopied === true;
+        button.classList.toggle("is-copied", copied);
+        const label = button.querySelector("span:last-child");
+        if (label) {
+          if (button.classList.contains("referral-wallet-action")) {
+            label.textContent = copied ? "Ссылка скопирована" : "Реферальная ссылка";
+          } else {
+            label.textContent = copied ? "Ссылка скопирована" : "Пригласить первого клиента";
+          }
+        }
+      });
+    };
+
     document.querySelectorAll("[data-action='copy-referral']").forEach((node) => {
       node.addEventListener("click", async () => {
         const link = `${window.location.origin}${normalizeText(state.payload?.referral?.referralLink || "/login/")}`;
         try {
           await navigator.clipboard.writeText(link);
           state.referralLinkCopied = true;
-          render();
+          syncReferralCopyButtons();
           if (referralCopyFeedbackTimer) window.clearTimeout(referralCopyFeedbackTimer);
           referralCopyFeedbackTimer = window.setTimeout(() => {
             state.referralLinkCopied = false;
-            render();
+            syncReferralCopyButtons();
           }, 1600);
         } catch {
           openSheet("Скопируйте ссылку", `<div class="list-item"><p class="list-title">${link}</p><p class="subtitle">Не удалось скопировать автоматически. Скопируйте ссылку вручную.</p></div>`);

@@ -7,8 +7,10 @@
   const CONTACT_PHONE = "+7 908 669-00-94";
   const IS_ANDROID_APP_SHELL = /BrotherShopAndroidApp/i.test(window.navigator?.userAgent || "");
   const REFERRAL_TRANSFER_QUICK_AMOUNTS = [10, 25, 50, 100];
-  const BOOKING_NAV_ICON = '<img src="/Image/site/menu/booking.svg" alt="" aria-hidden="true" />';
-  const BOOKING_NAV_ICON_ACTIVE = '<img src="/Image/site/menu/sel_booking.svg" alt="" aria-hidden="true" />';
+  const BOOKING_NAV_ICON = '<img src="/Image/site/menu/booking.svg" alt="" aria-hidden="true" data-no-wave="1" />';
+  const BOOKING_NAV_ICON_ACTIVE = '<img src="/Image/site/menu/sel_booking.svg" alt="" aria-hidden="true" data-no-wave="1" />';
+  const loadedImageUrls = new Set();
+  const loadedBackgroundUrls = new Set();
 
   if (document.documentElement) document.documentElement.classList.toggle("android-app-shell", IS_ANDROID_APP_SHELL);
   if (document.body) document.body.classList.toggle("android-app-shell", IS_ANDROID_APP_SHELL);
@@ -87,30 +89,55 @@
     const match = /url\((['"]?)(.*?)\1\)/.exec(normalizeText(value));
     return normalizeText(match?.[2]);
   };
+  const resolveMediaAssetUrl = (value) => {
+    const safeValue = normalizeText(value);
+    if (!safeValue) return "";
+    try {
+      return new URL(safeValue, window.location.origin).toString();
+    } catch {
+      return safeValue;
+    }
+  };
   const setupMediaWaveLoading = () => {
     document.querySelectorAll("img").forEach((img) => {
+      if (img.dataset.noWave === "1") {
+        img.classList.remove("media-wave", "is-ready");
+        return;
+      }
       if (img.dataset.waveBound === "1") return;
       img.dataset.waveBound = "1";
       img.classList.add("media-wave");
-      const markReady = () => img.classList.add("is-ready");
-      if (img.complete && (img.naturalWidth || img.width)) {
+      const imageUrl = resolveMediaAssetUrl(img.currentSrc || img.getAttribute("src") || "");
+      const markReady = () => {
+        if (imageUrl) loadedImageUrls.add(imageUrl);
+        img.classList.add("is-ready");
+      };
+      if ((imageUrl && loadedImageUrls.has(imageUrl)) || (img.complete && (img.naturalWidth || img.width))) {
         markReady();
         return;
       }
       img.addEventListener("load", markReady, { once: true });
-      img.addEventListener("error", markReady, { once: true });
+      img.addEventListener("error", () => img.classList.add("is-ready"), { once: true });
     });
     document.querySelectorAll("[style*='background-image']").forEach((node) => {
       if (node.dataset.waveBound === "1") return;
       const url = extractBackgroundImageUrl(node.style.backgroundImage);
       if (!url) return;
+      const backgroundUrl = resolveMediaAssetUrl(url);
       node.dataset.waveBound = "1";
       node.classList.add("media-wave-surface");
+      const markReady = () => {
+        if (backgroundUrl) loadedBackgroundUrls.add(backgroundUrl);
+        node.classList.add("is-ready");
+      };
+      if (backgroundUrl && loadedBackgroundUrls.has(backgroundUrl)) {
+        markReady();
+        return;
+      }
       const preload = new Image();
-      const markReady = () => node.classList.add("is-ready");
       preload.onload = markReady;
-      preload.onerror = markReady;
-      preload.src = url;
+      preload.onerror = () => node.classList.add("is-ready");
+      preload.src = backgroundUrl || url;
     });
   };
   const setupTransferRecipientCarousels = () => {

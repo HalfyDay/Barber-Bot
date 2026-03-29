@@ -33,20 +33,30 @@ import website.brothershop.mobile.data.network.HomeAppPayload
 @Composable
 fun HomeScreen(
     payload: HomeAppPayload?,
+    isLoading: Boolean,
+    errorMessage: String?,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
     if (payload == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Button(onClick = onRefresh) {
-                Text("Загрузить")
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding),
+            contentAlignment = Alignment.Center,
+        ) {
+            Button(onClick = onRefresh, enabled = !isLoading) {
+                Text(if (isLoading) "Загрузка..." else "Загрузить")
             }
         }
         return
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(contentPadding),
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -81,9 +91,9 @@ fun HomeScreen(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         AssistChip(onClick = {}, label = { Text("BS ${payload.referral.bsBalance}") })
-                        AssistChip(onClick = {}, label = { Text("Notice ${payload.user.noticeCount}") })
+                        AssistChip(onClick = {}, label = { Text("Уведомления ${payload.user.noticeCount}") })
                         if (payload.user.isBlocked) {
-                            AssistChip(onClick = {}, label = { Text("Blocked") })
+                            AssistChip(onClick = {}, label = { Text("Блокировка") })
                         }
                     }
                     Text(
@@ -91,9 +101,21 @@ fun HomeScreen(
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
+                    if (!errorMessage.isNullOrBlank()) {
+                        Text(
+                            text = errorMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Button(onClick = onRefresh, shape = RoundedCornerShape(20.dp)) {
-                            Text("Обновить")
+                        Button(
+                            onClick = onRefresh,
+                            enabled = !isLoading,
+                            shape = RoundedCornerShape(20.dp),
+                        ) {
+                            Text(if (isLoading) "Загрузка..." else "Обновить")
                         }
                         Button(onClick = onLogout, shape = RoundedCornerShape(20.dp)) {
                             Text("Выйти")

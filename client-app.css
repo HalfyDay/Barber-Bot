@@ -91,6 +91,12 @@ body {
   -webkit-touch-callout: none;
 }
 
+html.sheet-open,
+body.sheet-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   overflow-x: hidden;
   background:
@@ -1471,16 +1477,13 @@ img.media-wave.is-ready {
   max-height: min(84vh, 760px);
   overflow: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 24px;
   border-radius: 36px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background:
-    radial-gradient(circle at top right, rgba(143, 232, 216, 0.08), transparent 24%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0)),
-    rgba(15, 17, 17, 0.995);
-  box-shadow:
-    0 12px 28px rgba(0, 0, 0, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border: 0;
+  background: var(--md-sys-color-surface-container);
+  box-shadow: var(--md-sys-elevation-3);
   transform: translateY(28px) scale(0.975);
   opacity: 0;
   transition: transform 0.28s cubic-bezier(.2,.8,.2,1), opacity 0.28s cubic-bezier(.2,.8,.2,1);
@@ -1517,31 +1520,46 @@ img.media-wave.is-ready {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 22px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   padding-bottom: 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 0;
 }
 
 .sheet.sheet-wide .sheet-head {
-  align-items: flex-start;
+  align-items: center;
   margin-bottom: 20px;
-  padding-inline: 6px;
+  padding-inline: 0;
 }
 
 .sheet-close-btn {
   flex: 0 0 auto;
   border-radius: 18px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0)),
-    rgba(20, 23, 23, 0.96);
+  background: transparent;
   color: var(--md-sys-color-on-secondary-container);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border: 0;
+  box-shadow: none;
+  outline: none;
 }
 
 .sheet-close-btn svg {
   width: 20px;
   height: 20px;
+}
+
+.sheet-close-btn:hover,
+.sheet-close-btn:focus,
+.sheet-close-btn:focus-visible,
+.sheet-close-btn:active {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  outline: none;
+  transform: none;
+}
+
+.sheet-title {
+  margin: 0;
+  line-height: 1.04;
 }
 
 .sheet-success-close {
@@ -4348,7 +4366,8 @@ img.media-wave.is-ready {
 
 .danger-surface {
   border-color: transparent;
-  background: rgba(209, 59, 24, 0.22);
+  background: color-mix(in srgb, var(--md-sys-color-error) 20%, transparent 80%);
+  color: var(--md-sys-color-on-error);
 }
 
 .telegram-sheet-card {
@@ -4562,6 +4581,70 @@ img.media-wave.is-ready {
   align-content: center;
 }
 
+.security-password-toggle {
+  padding-inline: 6px;
+}
+
+.security-password-trigger {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile-security-telegram {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: 0;
+}
+
+.profile-security-row-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-security-row-copy .list-title,
+.profile-security-row-copy .subtitle {
+  margin: 0;
+}
+
+.profile-security-telegram .inline-actions {
+  justify-content: flex-start;
+}
+
+.security-password-trigger-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 132px;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: var(--md-sys-color-surface-container);
+  color: #dbe2df;
+  font-size: 0.96rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.security-password-trigger:hover .security-password-trigger-action,
+.security-password-trigger:focus-visible .security-password-trigger-action {
+  background: var(--md-sys-color-surface-container-high);
+}
+
 .profile-edit-telegram-wrap {
   display: grid;
   align-content: start;
@@ -4574,6 +4657,17 @@ img.media-wave.is-ready {
 .sheet .telegram-sheet-card,
 .sheet .toggle-card {
   padding-inline: 6px;
+}
+
+.sheet .inline-actions {
+  align-items: stretch;
+  justify-content: flex-end;
+}
+
+.sheet .inline-actions > .ghost-btn,
+.sheet .inline-actions > .primary-btn,
+.sheet .inline-actions > .danger-btn {
+  min-width: 132px;
 }
 
 .sheet .list-item {
@@ -4598,18 +4692,24 @@ img.media-wave.is-ready {
 }
 
 .sheet .danger-surface .list-title {
-  color: var(--md-sys-color-on-error-container);
+  color: var(--md-sys-color-error);
 }
 
 .sheet .danger-surface .subtitle {
-  color: color-mix(in srgb, var(--md-sys-color-on-error-container) 76%, var(--md-sys-color-surface) 24%);
+  color: color-mix(in srgb, var(--md-sys-color-on-error) 72%, transparent 28%);
+}
+
+.sheet .danger-btn {
+  background: var(--md-sys-color-error);
+  color: var(--md-sys-color-on-error);
+  box-shadow: var(--md-sys-elevation-2);
 }
 
 .toggle-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 16px;
-  align-items: center;
+  align-items: start;
   padding: 16px;
   border-radius: 20px;
   background: var(--md-sys-color-surface-container-low);
@@ -4624,6 +4724,7 @@ img.media-wave.is-ready {
 .toggle-card input[type="checkbox"] {
   appearance: none;
   position: relative;
+  justify-self: end;
   width: 54px;
   height: 32px;
   border-radius: 999px;
@@ -5090,7 +5191,20 @@ img.media-wave.is-ready {
   }
 
   .toggle-card {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .profile-security-telegram,
+  .security-password-trigger {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .profile-security-telegram .inline-actions,
+  .security-password-trigger-action,
+  .toggle-card input[type="checkbox"] {
+    justify-self: end;
   }
 
   .profile-history-card .section-head {

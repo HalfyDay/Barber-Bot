@@ -2,6 +2,7 @@ package website.brothershop.mobile.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -15,10 +16,12 @@ import androidx.compose.ui.unit.dp
 fun PlaceholderScreen(
     title: String,
     body: String,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .padding(contentPadding)
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

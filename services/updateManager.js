@@ -160,25 +160,38 @@ const getWorkingTreeStatus = async () => {
   }
 };
 
+const getLatestStashRef = async () => {
+  try {
+    const { stdout } = await runCommand('git stash list --format="%gd" -n 1');
+    const match = String(stdout || '').trim().match(/stash@\{\d+\}/);
+    return match ? match[0] : null;
+  } catch (error) {
+    console.warn('[update] git stash list failed:', error.message);
+    return null;
+  }
+};
+
 const stashWorkingTree = async () => {
   const status = await getWorkingTreeStatus();
   if (!status) return null;
   console.log('[update] Working tree is dirty, creating stash before pull...');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const message = `auto-update-${stamp}`;
-  const parseStashRef = (stdout = '') => {
-    const match = stdout.match(/(stash@\{[^}]+\})/);
-    return match ? match[1] : null;
+  const previousTopRef = await getLatestStashRef();
+  const resolveCreatedStashRef = async () => {
+    const currentTopRef = await getLatestStashRef();
+    if (!currentTopRef) return null;
+    return currentTopRef !== previousTopRef ? currentTopRef : null;
   };
-  const logStashResult = (stdout = '', mode = 'default') => {
-    const ref = parseStashRef(stdout);
+  const logStashResult = async (mode = 'default') => {
+    const ref = await resolveCreatedStashRef();
     const suffix = mode === 'tracked-only' ? ' (tracked files only)' : '';
     console.log(`[update] Stashed changes${ref ? ` as ${ref}` : ''}${suffix}`);
     return ref;
   };
   try {
-    const { stdout } = await runCommand(`git stash push -u -m "${message}"`);
-    return logStashResult(stdout);
+    await runCommand(`git stash push -u -m "${message}"`);
+    return await logStashResult();
   } catch (error) {
     const details = String(error?.message || error || '');
     const canRetryTrackedOnly =
@@ -190,8 +203,8 @@ const stashWorkingTree = async () => {
         error.message,
       );
       try {
-        const { stdout } = await runCommand(`git stash push -m "${message}"`);
-        return logStashResult(stdout, 'tracked-only');
+        await runCommand(`git stash push -m "${message}"`);
+        return await logStashResult('tracked-only');
       } catch (fallbackError) {
         console.error('[update] Tracked-only stash also failed:', fallbackError.message);
       }

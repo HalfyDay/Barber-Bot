@@ -53,6 +53,7 @@
   let referralCopyFeedbackTimer = null;
   let sheetCloseTimer = null;
   let sheetOpenFrame = null;
+  let suppressSheetHistoryBack = false;
   let referralQrScannerStream = null;
   let referralQrScannerFrame = null;
 
@@ -531,6 +532,9 @@
     if (name === "reward") {
       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 5.3 5.9.9-4.2 4.1 1 5.8L12 16.6 6.7 19.1l1-5.8L3.5 9.2l5.9-.9L12 3Z"></path></svg>';
     }
+    if (name === "trophy") {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v2h2a1 1 0 0 1 1 1v1a5 5 0 0 1-4.5 4.97A5.5 5.5 0 0 1 13 15.7V18h3v2H8v-2h3v-2.3a5.5 5.5 0 0 1-1.5-2.73A5 5 0 0 1 5 8V7a1 1 0 0 1 1-1h2V4Zm-1 4a3 3 0 0 0 2.1 2.87A8.2 8.2 0 0 1 8.03 8H7Zm10 0a8.2 8.2 0 0 1-1.07 2.87A3 3 0 0 0 18 8h-1Z"></path></svg>';
+    }
     if (name === "wallet") {
       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H5.5A2.5 2.5 0 0 1 3 16.5v-9Z"></path><path d="M16 12h5"></path><circle cx="16.5" cy="12" r="1"></circle></svg>';
     }
@@ -603,7 +607,19 @@
     }
   };
 
-  const openSheet = (title, bodyHtml, footerHtml, className = "") => {
+  const buildHistoryState = (sheet = null) => ({
+    page: state.currentPage,
+    sheet: sheet
+      ? {
+          title: normalizeText(sheet.title),
+          bodyHtml: sheet.bodyHtml || "",
+          footerHtml: sheet.footerHtml || "",
+          className: normalizeText(sheet.className),
+        }
+      : null,
+  });
+
+  const openSheet = (title, bodyHtml, footerHtml, className = "", options = {}) => {
     stopReferralQrScanner();
     if (sheetCloseTimer) {
       window.clearTimeout(sheetCloseTimer);
@@ -615,6 +631,9 @@
     }
     state.sheet = { title, bodyHtml, footerHtml: footerHtml || "", className: normalizeText(className) };
     state.sheetState = "entering";
+    if (options.syncHistory !== false) {
+      window.history.pushState(buildHistoryState(state.sheet), "", `${window.location.pathname}${window.location.search}${window.location.hash}`);
+    }
     render();
     sheetOpenFrame = window.requestAnimationFrame(() => {
       state.sheetState = "open";
@@ -623,8 +642,12 @@
     });
   };
 
-  const closeSheet = () => {
+  const closeSheet = (options = {}) => {
     if (!state.sheet) return;
+    if (options.syncHistory !== false && window.history.state?.sheet && !suppressSheetHistoryBack) {
+      window.history.back();
+      return;
+    }
     stopReferralQrScanner();
     if (sheetCloseTimer) {
       window.clearTimeout(sheetCloseTimer);
@@ -642,6 +665,16 @@
       sheetCloseTimer = null;
       render();
     }, 280);
+  };
+
+  const dismissSheet = () => {
+    if (!state.sheet) return;
+    suppressSheetHistoryBack = true;
+    window.history.replaceState(buildHistoryState(), "", `${window.location.pathname}${window.location.search}${window.location.hash}`);
+    closeSheet({ syncHistory: false });
+    window.setTimeout(() => {
+      suppressSheetHistoryBack = false;
+    }, 0);
   };
 
   const scrollToBookingStep = (stepName) => {
@@ -1625,7 +1658,7 @@
         <article class="hero-card page-hero profile-hero">
           <div class="profile-cover"></div>
           <div class="profile-cover-actions">
-            <button class="ghost-btn profile-cover-action icon-only-btn" type="button" data-action="navigate" data-href="/achievements/" aria-label="Достижения">${iconMarkup("reward")}</button>
+            <button class="ghost-btn profile-cover-action icon-only-btn" type="button" data-action="navigate" data-href="/achievements/" aria-label="Достижения">${iconMarkup("trophy")}</button>
             <button class="ghost-btn profile-cover-action profile-cover-settings icon-only-btn" type="button" data-action="open-sheet" data-sheet="profile-menu" aria-label="Настройки">${iconMarkup("settings")}</button>
           </div>
           <div class="profile-social-head">
@@ -1695,7 +1728,7 @@
     const sheetStateClass = state.sheetState === "closing" ? "is-closing" : state.sheetState === "open" ? "is-open" : "is-entering";
     const className = normalizeText(state.sheet.className);
     const isSuccessSheet = className.includes("sheet-success");
-    return `<div class="sheet-backdrop ${sheetStateClass}" id="sheet-backdrop"><div class="sheet ${sheetStateClass} ${className}">${isSuccessSheet ? `<button class="ghost-btn icon-only-btn sheet-close-btn sheet-success-close" type="button" data-action="close-sheet" aria-label="Закрыть">${iconMarkup("close")}</button>` : `<div class="sheet-head"><h3 class="section-title" style="margin:0;">${state.sheet.title}</h3><button class="ghost-btn icon-only-btn sheet-close-btn" type="button" data-action="close-sheet" aria-label="Закрыть">${iconMarkup("close")}</button></div>`}<div>${state.sheet.bodyHtml || ""}</div>${state.sheet.footerHtml ? `<div style="margin-top:16px;">${state.sheet.footerHtml}</div>` : ""}</div></div>`;
+    return `<div class="sheet-backdrop ${sheetStateClass}" id="sheet-backdrop"><div class="sheet ${sheetStateClass} ${className}">${isSuccessSheet ? `<button class="ghost-btn icon-only-btn sheet-close-btn sheet-success-close" type="button" data-action="dismiss-sheet" aria-label="Закрыть">${iconMarkup("close")}</button>` : `<div class="sheet-head"><h3 class="section-title sheet-title">${state.sheet.title}</h3><button class="ghost-btn icon-only-btn sheet-close-btn" type="button" data-action="dismiss-sheet" aria-label="Закрыть">${iconMarkup("close")}</button></div>`}<div>${state.sheet.bodyHtml || ""}</div>${state.sheet.footerHtml ? `<div style="margin-top:16px;">${state.sheet.footerHtml}</div>` : ""}</div></div>`;
   };
 
   const renderCurrentPage = () => {
@@ -1745,9 +1778,9 @@
       return;
     }
     if (options.replace) {
-      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+      window.history.replaceState(buildHistoryState(), "", url.pathname + url.search + url.hash);
     } else {
-      window.history.pushState({}, "", url.pathname + url.search + url.hash);
+      window.history.pushState(buildHistoryState(), "", url.pathname + url.search + url.hash);
     }
     state.navIndicatorIndex = Math.max(0, ["home", "referral", "booking", "shop", "profile"].findIndex((item) => item === state.currentPage));
     state.currentPage = nextPage;
@@ -1760,6 +1793,8 @@
   const render = () => {
     syncDocumentMeta();
     ROOT.innerHTML = `<div class="client-app"><div class="app-shell ${state.routeTransitionActive ? "route-transition" : ""}">${renderTopbar()}${renderCurrentPage()}${renderBottomNav()}</div></div>${renderSheet()}`;
+    document.documentElement.classList.toggle("sheet-open", Boolean(state.sheet));
+    document.body.classList.toggle("sheet-open", Boolean(state.sheet));
     state.routeTransitionActive = false;
     bindEvents();
     setupMediaWaveLoading();
@@ -2013,25 +2048,26 @@
       return;
     }
     if (sheetId === "profile-menu") {
-      openSheet("Настройки", `<div class="list"><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-edit"><p class="list-title">Редактировать профиль</p><p class="subtitle">Имя, телефон, дата рождения, пол, фото и Telegram.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-security"><p class="list-title">Безопасность</p><p class="subtitle">Смена пароля и защита доступа.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-notifications"><p class="list-title">Настройки уведомлений</p><p class="subtitle">Управление уведомлениями о записях на сайте.</p></button><button class="list-item menu-action danger-surface" type="button" data-action="open-sheet" data-sheet="profile-logout-confirm"><p class="list-title">Выход</p><p class="subtitle">Завершить текущую сессию.</p></button></div>`);
+      openSheet("Настройки", `<div class="list"><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-edit"><p class="list-title">Редактировать профиль</p><p class="subtitle">Имя, телефон, дата рождения, пол и фото.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-security"><p class="list-title">Безопасность</p><p class="subtitle">Смена пароля, Telegram и защита доступа.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-notifications"><p class="list-title">Настройки уведомлений</p><p class="subtitle">Управление уведомлениями о записях на сайте.</p></button><button class="list-item menu-action danger-surface" type="button" data-action="open-sheet" data-sheet="profile-logout-confirm"><p class="list-title">Выход</p><p class="subtitle">Завершить текущую сессию.</p></button></div>`);
       return;
     }
     if (sheetId === "profile-logout-confirm") {
-      openSheet("Подтвердите выход", `<div class="list-item"><p class="list-title">Выйти из аккаунта?</p><p class="subtitle">Текущая сессия на этом устройстве будет завершена.</p></div><div class="inline-actions"><button class="danger-btn" type="button" data-action="logout">Выйти</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Отмена</button></div>`);
+      openSheet("Подтвердите выход", `<div class="list-item"><p class="list-title">Выйти из аккаунта?</p><p class="subtitle">Текущая сессия на этом устройстве будет завершена.</p></div><div class="inline-actions"><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button><button class="danger-btn" type="button" data-action="logout">Завершить сессию</button></div>`);
       return;
     }
     if (sheetId === "profile-edit") {
       const user = state.payload?.user || {};
-      openSheet("Редактировать профиль", `<form class="form-grid profile-edit-form-layout" id="profile-edit-form"><label class="field"><span class="field-label">ФИО</span><input name="displayName" value="${normalizeText(user.displayName)}" required /></label><label class="field"><span class="field-label">Телефон</span><input name="phone" value="${normalizeText(user.phone)}" required /></label><label class="field"><span class="field-label">Дата рождения</span><input type="date" name="birthDate" value="${normalizeText(user.birthDate)}" /></label><label class="field"><span class="field-label">Пол</span><select name="gender"><option value="">Не указан</option><option value="male" ${user.gender === "male" ? "selected" : ""}>Мужской</option><option value="female" ${user.gender === "female" ? "selected" : ""}>Женский</option><option value="other" ${user.gender === "other" ? "selected" : ""}>Другой</option></select></label><div class="field profile-avatar-field"><span class="field-label">Фото профиля</span><div class="profile-avatar-upload-card" id="profile-avatar-upload-card"><div class="profile-avatar-upload-preview" id="profile-avatar-upload-preview">${avatarMarkup(user, 84)}</div><div class="profile-avatar-upload-copy"><strong>Загрузить новое фото</strong><span class="muted-text" id="profile-avatar-upload-status">Файл до 5 МБ. Изображение автоматически обрежется по центру.</span><div class="inline-actions"><label class="ghost-btn file-select-btn" for="profile-avatar-input">Выбрать фото</label></div></div><input id="profile-avatar-input" class="visually-hidden-input" type="file" name="avatarFile" accept="image/*" /></div></div><div class="field profile-edit-telegram-wrap"><span class="field-label">Telegram</span><div class="telegram-sheet-card profile-edit-telegram"><div><p class="list-title">${user.telegramId ? "Telegram привязан" : "Telegram не подключен"}</p><p class="subtitle">${user.telegramId ? "Быстрый вход через Telegram уже доступен." : "Подключите Telegram для быстрого входа в личный кабинет."}</p></div><div class="inline-actions"><button class="primary-btn" type="button" data-action="${user.telegramId ? "unlink-telegram" : "link-telegram"}">${user.telegramId ? "Отвязать Telegram" : "Привязать Telegram"}</button></div></div></div><div class="inline-actions profile-edit-submit"><button class="primary-btn" type="submit">Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">К настройкам</button></div></form>`, "", "sheet-wide");
+      openSheet("Редактировать профиль", `<form class="form-grid profile-edit-form-layout" id="profile-edit-form"><label class="field"><span class="field-label">ФИО</span><input name="displayName" value="${normalizeText(user.displayName)}" required /></label><label class="field"><span class="field-label">Телефон</span><input name="phone" value="${normalizeText(user.phone)}" required /></label><label class="field"><span class="field-label">Дата рождения</span><input type="date" name="birthDate" value="${normalizeText(user.birthDate)}" /></label><label class="field"><span class="field-label">Пол</span><select name="gender"><option value="">Не указан</option><option value="male" ${user.gender === "male" ? "selected" : ""}>Мужской</option><option value="female" ${user.gender === "female" ? "selected" : ""}>Женский</option><option value="other" ${user.gender === "other" ? "selected" : ""}>Другой</option></select></label><div class="field profile-avatar-field"><span class="field-label">Фото профиля</span><div class="profile-avatar-upload-card" id="profile-avatar-upload-card"><div class="profile-avatar-upload-preview" id="profile-avatar-upload-preview">${avatarMarkup(user, 84)}</div><div class="profile-avatar-upload-copy"><strong>Загрузить новое фото</strong><span class="muted-text" id="profile-avatar-upload-status">Файл до 5 МБ. Изображение автоматически обрежется по центру.</span><div class="inline-actions"><label class="ghost-btn file-select-btn" for="profile-avatar-input">Выбрать фото</label></div></div><input id="profile-avatar-input" class="visually-hidden-input" type="file" name="avatarFile" accept="image/*" /></div></div><div class="inline-actions profile-edit-submit"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`, "", "sheet-wide");
       return;
     }
     if (sheetId === "profile-security") {
-      openSheet("Безопасность", `<form class="form-grid" id="profile-password-form"><label class="field"><span class="field-label">Новый пароль</span><input type="password" name="password" required /></label><div class="inline-actions"><button class="primary-btn" type="submit">Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">К настройкам</button></div></form>`);
+      const user = state.payload?.user || {};
+      openSheet("Безопасность", `<form class="form-grid" id="profile-password-form"><div class="telegram-sheet-card profile-edit-telegram profile-security-telegram"><div class="profile-security-row-copy"><p class="list-title">${user.telegramId ? "Telegram привязан" : "Telegram не подключен"}</p><p class="subtitle">${user.telegramId ? "Быстрый вход через Telegram уже доступен." : "Подключите Telegram для быстрого входа в личный кабинет."}</p></div><div class="inline-actions"><button class="tonal-btn" type="button" data-action="${user.telegramId ? "unlink-telegram" : "link-telegram"}">${user.telegramId ? "Отвязать Telegram" : "Привязать Telegram"}</button></div></div><div class="security-password-toggle"><button class="security-password-trigger" type="button" data-action="show-password-change"><div class="profile-security-row-copy"><p class="list-title">Сменить пароль</p><p class="subtitle">Задайте новый пароль для входа на сайте.</p></div><span class="security-password-trigger-action">Изменить</span></button></div><div id="security-password-fields" hidden><label class="field"><span class="field-label">Новый пароль</span><input type="password" name="password" /></label></div><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
       return;
     }
     if (sheetId === "profile-notifications") {
       const user = state.payload?.user || {};
-      openSheet("Уведомления", `<form class="form-grid" id="profile-notifications-form"><label class="toggle-card"><div><p class="list-title">Уведомления о записях</p><p class="subtitle">Показывать уведомления на сайте о создании и изменениях записи к барберу.</p></div><input type="checkbox" name="bookingNotificationsEnabled" ${user.bookingNotificationsEnabled !== false ? "checked" : ""} /></label><div class="inline-actions"><button class="primary-btn" type="submit">Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">К настройкам</button></div></form>`);
+      openSheet("Уведомления", `<form class="form-grid" id="profile-notifications-form"><label class="toggle-card"><div><p class="list-title">Уведомления о записях</p><p class="subtitle">Показывать уведомления на сайте о создании и изменениях записи к барберу.</p></div><input type="checkbox" name="bookingNotificationsEnabled" ${user.bookingNotificationsEnabled !== false ? "checked" : ""} /></label><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
       return;
     }
     if (sheetId === "profile-notices") {
@@ -2156,7 +2192,17 @@
     document.querySelectorAll("[data-action='link-telegram']").forEach((node) => node.addEventListener("click", startTelegramLink));
     document.querySelectorAll("[data-action='unlink-telegram']").forEach((node) => node.addEventListener("click", unlinkTelegram));
     document.querySelectorAll("[data-action='check-telegram-link']").forEach((node) => node.addEventListener("click", checkTelegramLink));
+    document.querySelectorAll("[data-action='show-password-change']").forEach((node) => node.addEventListener("click", () => {
+      const passwordFields = document.getElementById("security-password-fields");
+      if (!passwordFields) return;
+      passwordFields.hidden = false;
+      node.hidden = true;
+      const passwordInput = passwordFields.querySelector("input[name='password']");
+      if (passwordInput) passwordInput.focus();
+      passwordInput?.dispatchEvent(new Event("input", { bubbles: true }));
+    }));
     document.querySelectorAll("[data-action='close-sheet']").forEach((node) => node.addEventListener("click", closeSheet));
+    document.querySelectorAll("[data-action='dismiss-sheet']").forEach((node) => node.addEventListener("click", dismissSheet));
     document.querySelectorAll("[data-action='open-sheet']").forEach((node) => node.addEventListener("click", () => {
       if (["cancel-booking", "manage-booking"].includes(normalizeText(node.dataset.sheet))) {
         state.pendingBookingCancellationId = normalizeText(node.dataset.id);
@@ -2339,6 +2385,18 @@
     document.querySelectorAll("[data-action='submit-booking']").forEach((node) => node.addEventListener("click", submitBooking));
     const backdrop = document.getElementById("sheet-backdrop");
     if (backdrop) backdrop.addEventListener("click", (event) => { if (event.target === backdrop) closeSheet(); });
+    const setupProfileFormDirtyState = (form, hasChanges) => {
+      if (!form || typeof hasChanges !== "function") return;
+      const submitButton = form.querySelector("button[type='submit']");
+      if (!submitButton) return;
+      const syncState = () => {
+        submitButton.disabled = !hasChanges();
+      };
+      form.addEventListener("input", syncState);
+      form.addEventListener("change", syncState);
+      syncState();
+    };
+
     const bindProfileForm = (id, buildPatch) => {
       const form = document.getElementById(id);
       if (!form) return;
@@ -2360,6 +2418,19 @@
     bindProfileForm("profile-notifications-form", async (formData) => ({
       bookingNotificationsEnabled: formData.get("bookingNotificationsEnabled") === "on",
     }));
+    const profilePasswordForm = document.getElementById("profile-password-form");
+    setupProfileFormDirtyState(profilePasswordForm, () => {
+      const passwordField = profilePasswordForm?.elements?.password;
+      return normalizeText(passwordField?.value).length > 0;
+    });
+    const profileNotificationsForm = document.getElementById("profile-notifications-form");
+    if (profileNotificationsForm) {
+      const initialNotificationsEnabled = state.payload?.user?.bookingNotificationsEnabled !== false;
+      setupProfileFormDirtyState(profileNotificationsForm, () => {
+        const currentValue = profileNotificationsForm.elements?.bookingNotificationsEnabled?.checked === true;
+        return currentValue !== initialNotificationsEnabled;
+      });
+    }
     const referralTransferForm = document.getElementById("referral-transfer-form");
     if (referralTransferForm) {
       const targetPhoneInput = referralTransferForm.elements?.targetPhone;
@@ -2435,6 +2506,24 @@
       }
       return patch;
     });
+    const profileEditForm = document.getElementById("profile-edit-form");
+    if (profileEditForm) {
+      const initialUser = state.payload?.user || {};
+      setupProfileFormDirtyState(profileEditForm, () => {
+        const currentDisplayName = normalizeText(profileEditForm.elements?.displayName?.value);
+        const currentPhone = normalizeText(profileEditForm.elements?.phone?.value);
+        const currentBirthDate = normalizeText(profileEditForm.elements?.birthDate?.value);
+        const currentGender = normalizeText(profileEditForm.elements?.gender?.value);
+        const hasAvatarFile = Boolean(profileEditForm.elements?.avatarFile?.files?.length);
+        return (
+          currentDisplayName !== normalizeText(initialUser.displayName) ||
+          currentPhone !== normalizeText(initialUser.phone) ||
+          currentBirthDate !== normalizeText(initialUser.birthDate) ||
+          currentGender !== normalizeText(initialUser.gender) ||
+          hasAvatarFile
+        );
+      });
+    }
     const avatarInput = document.getElementById("profile-avatar-input");
     const avatarPreview = document.getElementById("profile-avatar-upload-preview");
     const avatarCard = document.getElementById("profile-avatar-upload-card");
@@ -2503,12 +2592,28 @@
     try {
       state.payload = await apiRequest("/app");
       state.bootstrapError = "";
-      window.addEventListener("popstate", () => {
+      window.history.replaceState(buildHistoryState(), "", `${window.location.pathname}${window.location.search}${window.location.hash}`);
+      window.addEventListener("popstate", (event) => {
+        suppressSheetHistoryBack = true;
+        stopReferralQrScanner();
         state.navIndicatorIndex = Math.max(0, ["home", "referral", "booking", "shop", "profile"].findIndex((item) => item === state.currentPage));
         syncPageFromLocation();
         state.booking.stepAnimationsEnabled = state.currentPage === "booking";
         state.routeTransitionActive = true;
+        if (event.state?.sheet) {
+          state.sheet = {
+            title: normalizeText(event.state.sheet.title),
+            bodyHtml: event.state.sheet.bodyHtml || "",
+            footerHtml: event.state.sheet.footerHtml || "",
+            className: normalizeText(event.state.sheet.className),
+          };
+          state.sheetState = "open";
+        } else {
+          state.sheet = null;
+          state.sheetState = "closed";
+        }
         render();
+        suppressSheetHistoryBack = false;
       });
       render();
     } catch (error) {

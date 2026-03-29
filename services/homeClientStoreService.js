@@ -313,6 +313,7 @@
       type: normalizeText(transaction.type) || "manual",
       title: normalizeText(transaction.title) || "Операция",
       description: normalizeText(transaction.description) || "",
+      comment: normalizeText(transaction.comment) || "",
       amountBs: Number.isFinite(amountBs) ? amountBs : 0,
       createdAt: safeCreatedAt,
       status: normalizeText(transaction.status) || "posted",
@@ -970,7 +971,8 @@
       sanitizeTransaction({
         type: "transfer_out",
         title: "Перевод BS",
-        description: `Перевод пользователю ${recipientLabel}${safeComment ? ` · ${safeComment}` : ""}`,
+        description: `Перевод пользователю ${recipientLabel}`,
+        comment: safeComment,
         amountBs: -safeAmount,
         createdAt,
         status: "posted",
@@ -986,7 +988,8 @@
       sanitizeTransaction({
         type: "transfer_in",
         title: "Получение BS",
-        description: `Перевод от ${senderLabel}${safeComment ? ` · ${safeComment}` : ""}`,
+        description: `Перевод от ${senderLabel}`,
+        comment: safeComment,
         amountBs: safeAmount,
         createdAt,
         status: "posted",
@@ -1067,7 +1070,8 @@
       sanitizeTransaction({
         type: safeMode === "set" ? "manual_set" : "manual_adjust",
         title,
-        description: `${descriptionBase}${safeComment ? ` ${safeComment}` : ""}`.trim(),
+        description: descriptionBase.trim(),
+        comment: safeComment,
         amountBs: delta,
         createdAt,
         status: "posted",

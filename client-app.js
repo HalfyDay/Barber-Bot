@@ -6,6 +6,7 @@
   const LOGOUT_MARKER_STORAGE_KEY = "home-user-logout-marker";
   const CONTACT_PHONE = "+7 908 669-00-94";
   const IS_ANDROID_APP_SHELL = /BrotherShopAndroidApp/i.test(window.navigator?.userAgent || "");
+  const IS_DESKTOP_SHEET_DISMISS = Boolean(window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches);
   const REFERRAL_TRANSFER_QUICK_AMOUNTS = [10, 25, 50, 100];
   const BOOKING_NAV_ICON = '<img src="/Image/site/menu/booking.svg" alt="" aria-hidden="true" data-no-wave="1" />';
   const BOOKING_NAV_ICON_ACTIVE = '<img src="/Image/site/menu/sel_booking.svg" alt="" aria-hidden="true" data-no-wave="1" />';
@@ -179,8 +180,15 @@
       const nextButton = carousel.querySelector(".referral-transfer-scroll-btn-next");
       if (!strip || !prevButton || !nextButton) return;
       const syncButtons = () => {
+        const itemWidths = Array.from(strip.querySelectorAll(".referral-transfer-recipient")).reduce(
+          (total, item) => total + item.getBoundingClientRect().width,
+          0,
+        );
+        const computedGap = Number.parseFloat(window.getComputedStyle(strip).columnGap || window.getComputedStyle(strip).gap || "0") || 0;
+        const itemsCount = strip.querySelectorAll(".referral-transfer-recipient").length;
+        const contentWidth = itemWidths + Math.max(0, itemsCount - 1) * computedGap;
         const maxScroll = Math.max(0, strip.scrollWidth - strip.clientWidth);
-        const hasOverflow = maxScroll > 8;
+        const hasOverflow = maxScroll > 8 && contentWidth - strip.clientWidth > 8;
         const currentScroll = Math.max(0, strip.scrollLeft);
         carousel.classList.toggle("has-overflow", hasOverflow);
         prevButton.classList.toggle("is-hidden", !hasOverflow || currentScroll <= 8);
@@ -407,6 +415,13 @@
     if (Number.isNaN(parsed.getTime())) return safeValue;
     return parsed.toLocaleDateString("ru-RU", { day: "2-digit", month: "short" });
   };
+  const formatShortDateTime = (value) => {
+    const safeValue = normalizeText(value);
+    if (!safeValue) return "";
+    const parsed = new Date(safeValue);
+    if (Number.isNaN(parsed.getTime())) return safeValue;
+    return parsed.toLocaleString("ru-RU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  };
 
   const readFileAsDataUrl = (file) =>
     new Promise((resolve, reject) => {
@@ -571,7 +586,7 @@
     if (avatarUrl) {
       return `<div class="profile-avatar" style="width:${size}px;height:${size}px;"><img src="${avatarUrl}" alt="${title}" /></div>`;
     }
-    return `<div class="profile-avatar" style="width:${size}px;height:${size}px;display:grid;place-items:center;background:linear-gradient(135deg,#dba06c,#7d4a2c);color:#fff;font:700 1rem/1 var(--font-display);">${initials}</div>`;
+    return `<div class="profile-avatar" style="width:${size}px;height:${size}px;display:grid;place-items:center;background:linear-gradient(135deg,var(--md-sys-color-primary),#0b6662);color:#fff;font:700 1rem/1 var(--font-display);">${initials}</div>`;
   };
 
   const statusColorClass = (value) => (value === "green" ? "green" : value === "yellow" ? "yellow" : "red");
@@ -913,11 +928,7 @@
       const bookingButtonText = normalizeText(siteHome.bookingButtonText) || "Записаться";
       return `
       <section class="page home-page home-mobile-layout">
-        <article class="hero-card home-frame">
-          <div class="home-brand-row">
-            <div class="brand-mark">${normalizeText(siteHome.logoText || "BrotherShop")}</div>
-            <div class="home-brand-dots"><span></span><span></span><span></span><span></span></div>
-          </div>
+        <section class="home-frame home-promo-strip">
           <section class="promo-marquee${promos.length > 1 ? " is-animated" : ""}" aria-label="Акции">
             <div class="promo-track${promos.length > 1 ? " is-animated" : ""}">
             ${promos.length
@@ -927,7 +938,7 @@
               : `<div class="empty-state promo-empty">Скоро здесь появятся актуальные предложения и акции.</div>`}
             </div>
           </section>
-        </article>
+        </section>
         <article class="appointment-card">
           ${nextAppointment ? `
             <div class="section-head">
@@ -1000,7 +1011,7 @@
           <div class="section-head">
             <div>
               <div class="section-eyebrow">Барберы</div>
-              <h2 class="section-title">Мастера BrotherShop.</h2>
+              <h2 class="section-title">Мастера BrotherShop</h2>
             </div>
           </div>
           <div class="barber-grid">
@@ -1177,7 +1188,7 @@
                 ? activityPreview.map((operation) => renderReferralOperationCard(operation)).join("")
                 : `<div class="empty-state">Пока нет движений BS.</div>`}
             </div>
-            <div class="profile-history-more referral-panel-more"><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="referral-history">Показать все</button></div>
+            <div class="profile-history-more referral-panel-more"><button class="ghost-btn history-more-btn" type="button" data-action="open-sheet" data-sheet="referral-history">Показать все</button></div>
           </div>
         </article>
         <article class="list-card referral-panel-card">
@@ -1247,7 +1258,7 @@
                   </button>
                 </div>`}
           </div>
-          <div class="profile-history-more referral-panel-more"><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="referrals">Показать все</button></div>
+          <div class="profile-history-more referral-panel-more"><button class="ghost-btn history-more-btn" type="button" data-action="open-sheet" data-sheet="referrals">Показать все</button></div>
         </article>
       </section>
     `;
@@ -1427,6 +1438,34 @@
     if (type === "reward") return "Награда";
     return "Операция";
   };
+  const getReferralOperationMetaLabel = (operation = {}) => {
+    const type = normalizeText(operation.type);
+    const counterpartName = normalizeText(operation.counterpartName);
+    const timestamp = formatShortDateTime(operation.createdAt);
+    if (type === "transfer_out" || type === "transfer_in") {
+      return [counterpartName, timestamp].filter(Boolean).join(" · ");
+    }
+    return timestamp;
+  };
+  const getReferralOperationComment = (operation = {}) => {
+    const type = normalizeText(operation.type);
+    const explicitComment = normalizeText(operation.comment);
+    if (explicitComment) return explicitComment;
+    const description = normalizeText(operation.description);
+    if (!description) return "";
+    if (type === "transfer_out" || type === "transfer_in") {
+      const transferComment = description.split(" · ").slice(1).join(" · ").trim();
+      return transferComment;
+    }
+    if (type === "manual_adjust" || type === "manual_set") {
+      const adminMarker = /\.?\s*Админ:[^.]*\.\s*/i;
+      const normalizedDescription = description.replace(adminMarker, " ").trim();
+      const manualPrefix = /^(Баланс изменён с .*? BS до .*? BS\.?|Начислено \d+ BS\.?|Списано \d+ BS\.?)/i;
+      const manualComment = normalizedDescription.replace(manualPrefix, "").trim();
+      return manualComment;
+    }
+    return "";
+  };
 
   const renderReferralOperationCard = (operation = {}) => `
     <div class="referral-activity-row ${getReferralOperationToneClass(operation)}">
@@ -1437,7 +1476,8 @@
       </div>
       <div class="referral-activity-copy">
         <p class="list-title">${normalizeText(operation.title)}</p>
-        <p class="subtitle">${normalizeText(operation.description)} · ${formatDateTime(operation.createdAt)}</p>
+        <p class="subtitle">${getReferralOperationMetaLabel(operation)}</p>
+        ${getReferralOperationComment(operation) ? `<p class="subtitle referral-activity-comment">${getReferralOperationComment(operation)}</p>` : ""}
       </div>
       <div class="referral-activity-meta">
         <div class="amount-bs ${Number(operation.amountBs) < 0 ? "negative" : ""}">${Number(operation.amountBs) > 0 ? "+" : ""}${Number(operation.amountBs) || 0} BS</div>
@@ -1902,7 +1942,7 @@
             <button class="nav-pill ${state.profileHistoryFilter === "payments" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="payments">Оплата</button>
           </div>
           <div class="timeline">${historyPreview.length ? historyPreview.map(renderProfileHistoryRow).join("") : `<div class="empty-state">История пока пуста.</div>`}</div>
-          <div class="profile-history-more"><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-history">Вся история</button></div>
+          <div class="profile-history-more"><button class="ghost-btn history-more-btn" type="button" data-action="open-sheet" data-sheet="profile-history">Вся история</button></div>
         </article>
       </section>
     `;
@@ -2204,14 +2244,18 @@
     }
     if (sheetId === "referral-history") {
       const operations = Array.isArray(state.payload?.referral?.operations) ? state.payload.referral.operations : [];
+      const filteredOperations = getFilteredReferralActivity(operations, state.transferHistoryFilter);
       openSheet(
         "История BS",
         operations.length
-          ? `<div class="timeline referral-history-list">${operations
-              .map(
-                (operation) => `<div class="timeline-item bank-row referral-history-item"><div><p class="list-title">${normalizeText(operation.title)}</p><p class="subtitle">${normalizeText(operation.description)} · ${formatDateTime(operation.createdAt)}</p></div><div class="amount-bs ${Number(operation.amountBs) < 0 ? "negative" : ""}">${Number(operation.amountBs) > 0 ? "+" : ""}${Number(operation.amountBs) || 0} BS</div></div>`,
-              )
-              .join("")}</div>`
+          ? `<div class="filter-row sheet-filter-row referral-history-filter-row">
+              <button class="nav-pill ${state.transferHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="all">Все</button>
+              <button class="nav-pill ${state.transferHistoryFilter === "transfers" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="transfers">Переводы</button>
+              <button class="nav-pill ${state.transferHistoryFilter === "rewards" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="rewards">Награды</button>
+            </div>
+            <div class="referral-activity-list referral-history-list">${filteredOperations.length
+              ? filteredOperations.map((operation) => renderReferralOperationCard(operation)).join("")
+              : `<div class="empty-state">По этому фильтру пока нет движений BS.</div>`}</div>`
           : `<div class="empty-state">Пока нет начислений и списаний.</div>`,
         "",
         "sheet-wide",
@@ -2526,7 +2570,7 @@
             if (state.profileHistoryFilter === nextFilter) return;
             state.profileHistoryFilter = nextFilter;
           }
-          if (state.sheet && normalizeText(state.sheet.title).includes("истор")) {
+          if (actionNode.closest("[data-render-host='sheet']")) {
             openNamedSheet("profile-history");
             return;
           }
@@ -2539,6 +2583,10 @@
             const nextFilter = normalizeText(actionNode.dataset.filter) || "all";
             if (state.transferHistoryFilter === nextFilter) return;
             state.transferHistoryFilter = nextFilter;
+          }
+          if (actionNode.closest("[data-render-host='sheet']")) {
+            openNamedSheet("referral-history");
+            return;
           }
           render();
           return;
@@ -2693,7 +2741,13 @@
 
     ROOT.addEventListener("click", (event) => {
       const backdrop = event.target.closest("#sheet-backdrop");
-      if (backdrop && event.target === backdrop) closeSheet();
+      if (backdrop && event.target === backdrop) {
+        if (IS_DESKTOP_SHEET_DISMISS) {
+          dismissSheet();
+          return;
+        }
+        closeSheet();
+      }
     });
   };
 
@@ -2964,5 +3018,3 @@
 
   init();
 })();
-
-

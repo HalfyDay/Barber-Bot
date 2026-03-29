@@ -622,6 +622,21 @@ textarea:focus-visible {
   isolation: isolate;
 }
 
+.home-frame {
+  padding: 14px;
+}
+
+.home-frame.home-promo-strip {
+  width: 100%;
+  max-width: 100%;
+  padding: 8px 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  overflow: hidden;
+  border-radius: 0;
+}
+
 .home-frame::before,
 .home-about-card::after,
 .contacts-card::after {
@@ -733,12 +748,12 @@ img.media-wave.is-ready {
 .promo-marquee {
   --promo-gap: 10px;
   overflow: hidden;
-  margin-bottom: 18px;
-  border-radius: 32px;
-  padding: 4px;
-  background: var(--md-sys-color-surface-container-high);
-  border: 1px solid transparent;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  margin: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .promo-track {
@@ -925,6 +940,11 @@ img.media-wave.is-ready {
     linear-gradient(180deg, var(--md-sys-color-surface-container-high), var(--md-sys-color-surface-container));
   border-color: transparent;
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.22);
+}
+
+.home-frame.home-promo-strip {
+  background: transparent;
+  box-shadow: none;
 }
 
 .home-about-card,
@@ -2132,6 +2152,10 @@ img.media-wave.is-ready {
   border-bottom: 0;
 }
 
+.referral-transfer-history-card .section-head {
+  padding-bottom: 0;
+}
+
 .referral-transfer-card .section-head > div,
 .referral-transfer-history-card .section-head > div,
 .referral-insights-card .section-head > div,
@@ -2281,7 +2305,9 @@ img.media-wave.is-ready {
   background: rgba(12, 15, 15, 0.88);
   backdrop-filter: blur(10px);
   box-shadow: var(--md-sys-elevation-2);
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .referral-transfer-scroll-btn-prev {
@@ -2292,9 +2318,19 @@ img.media-wave.is-ready {
   right: 8px;
 }
 
+.referral-transfer-recipient-carousel.has-overflow .referral-transfer-scroll-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .referral-transfer-scroll-btn.is-hidden {
   opacity: 0;
   pointer-events: none;
+}
+
+.referral-transfer-scroll-btn:hover,
+.referral-transfer-scroll-btn:active {
+  transform: translateY(-50%);
 }
 
 .referral-transfer-scroll-btn svg {
@@ -2441,7 +2477,7 @@ img.media-wave.is-ready {
 
 .referral-transfer-history-card {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   padding: 18px;
   border-radius: 30px;
   background: linear-gradient(180deg, var(--referral-surface-2), var(--md-sys-color-surface-container));
@@ -2449,6 +2485,7 @@ img.media-wave.is-ready {
 }
 
 .referral-history-filter-row {
+  margin: 0;
   flex-wrap: wrap;
   gap: 10px;
 }
@@ -2482,12 +2519,15 @@ img.media-wave.is-ready {
 
 .referral-activity-icon.has-avatar {
   background: transparent;
+  border-radius: 50%;
+  overflow: hidden;
 }
 
 .referral-activity-icon .profile-avatar {
   width: 46px !important;
   height: 46px !important;
   border-radius: 50% !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-primary) 24%, transparent 76%);
 }
 
 .referral-activity-icon svg {
@@ -2525,6 +2565,10 @@ img.media-wave.is-ready {
 .referral-activity-copy .subtitle {
   margin-top: 4px;
   line-height: 1.35;
+}
+
+.referral-activity-comment {
+  margin-top: 8px;
 }
 
 .referral-activity-meta {
@@ -2712,6 +2756,18 @@ img.media-wave.is-ready {
 
 .referral-panel-more .ghost-btn {
   width: 100%;
+}
+
+.history-more-btn {
+  border-color: transparent;
+  background: color-mix(in srgb, rgba(88, 95, 95, 0.82) 58%, rgba(12, 15, 15, 0.96) 42%);
+  color: color-mix(in srgb, #f3f6f6 90%, #c8d0d0 10%);
+  box-shadow: none;
+}
+
+.history-more-btn:hover,
+.history-more-btn:active {
+  background: color-mix(in srgb, rgba(104, 112, 112, 0.9) 62%, rgba(12, 15, 15, 0.98) 38%);
 }
 
 .referral-sheet-list,
@@ -3901,6 +3957,10 @@ img.media-wave.is-ready {
     padding-bottom: 10px;
   }
 
+  .referral-transfer-history-card .section-head {
+    padding-bottom: 0;
+  }
+
   .referral-transfer-hub {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -3983,14 +4043,15 @@ img.media-wave.is-ready {
   }
 
   .referral-activity-row {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: start;
   }
 
   .referral-activity-meta {
-    grid-column: 2;
-    justify-items: start;
-    min-width: 0;
+    grid-column: 3;
+    justify-items: end;
+    align-self: start;
+    min-width: 84px;
   }
 
   .referral-quick-transfer-amounts {

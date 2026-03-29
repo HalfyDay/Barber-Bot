@@ -6,45 +6,68 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
+private val DisplayFamily = FontFamily.SansSerif
+private val BodyFamily = FontFamily.SansSerif
+
 val BrotherShopTypography = Typography(
-    displayMedium = TextStyle(
-        fontFamily = FontFamily.Serif,
-        fontWeight = FontWeight.Bold,
+    displayLarge = TextStyle(
+        fontFamily = DisplayFamily,
+        fontWeight = FontWeight.ExtraBold,
         fontSize = 42.sp,
-        lineHeight = 46.sp,
+        lineHeight = 44.sp,
+        letterSpacing = (-1.4).sp,
     ),
-    displaySmall = TextStyle(
-        fontFamily = FontFamily.Serif,
-        fontWeight = FontWeight.Bold,
+    displayMedium = TextStyle(
+        fontFamily = DisplayFamily,
+        fontWeight = FontWeight.ExtraBold,
         fontSize = 34.sp,
         lineHeight = 38.sp,
+        letterSpacing = (-1.1).sp,
+    ),
+    displaySmall = TextStyle(
+        fontFamily = DisplayFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 28.sp,
+        lineHeight = 31.sp,
+        letterSpacing = (-0.8).sp,
     ),
     headlineSmall = TextStyle(
-        fontWeight = FontWeight.Bold,
-        fontSize = 26.sp,
-        lineHeight = 30.sp,
-    ),
-    titleLarge = TextStyle(
+        fontFamily = DisplayFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 22.sp,
-        lineHeight = 28.sp,
+        lineHeight = 26.sp,
+        letterSpacing = (-0.5).sp,
+    ),
+    titleLarge = TextStyle(
+        fontFamily = DisplayFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 18.sp,
+        lineHeight = 23.sp,
+        letterSpacing = (-0.2).sp,
     ),
     titleMedium = TextStyle(
+        fontFamily = DisplayFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 18.sp,
-        lineHeight = 24.sp,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
     ),
     bodyLarge = TextStyle(
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
+        fontFamily = BodyFamily,
+        fontWeight = FontWeight.Medium,
+        fontSize = 15.sp,
+        lineHeight = 22.sp,
     ),
     bodyMedium = TextStyle(
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
+        fontFamily = BodyFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 13.sp,
+        lineHeight = 19.sp,
     ),
     labelLarge = TextStyle(
-        fontWeight = FontWeight.Medium,
-        fontSize = 13.sp,
-        lineHeight = 18.sp,
+        fontFamily = DisplayFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.8.sp,
     ),
 )

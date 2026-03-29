@@ -2,10 +2,16 @@ package website.brothershop.mobile.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Sand = Color(0xFFF6E8D5)
-val Clay = Color(0xFFB96A3B)
-val Ember = Color(0xFF8E3E22)
-val Espresso = Color(0xFF26150E)
-val Mist = Color(0xFFF7F3EE)
-val Moss = Color(0xFF596B4F)
-val RoseDust = Color(0xFFE8C0B2)
+val Ink = Color(0xFF070909)
+val InkSoft = Color(0xFF0D1010)
+val Carbon = Color(0xFF131717)
+val CarbonHigh = Color(0xFF1A1F1F)
+val Mist = Color(0xFFE7ECEB)
+val Fog = Color(0xFFB6C0BE)
+val Mint = Color(0xFF00BFAF)
+val MintDeep = Color(0xFF0A3A35)
+val MintGlow = Color(0xFF8FF4EA)
+val Slate = Color(0xFF2A3130)
+val RoseOxide = Color(0xFFB35339)
+val RoseShell = Color(0xFF34150F)
+val Steel = Color(0xFF243332)

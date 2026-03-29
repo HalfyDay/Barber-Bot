@@ -320,6 +320,7 @@
       counterpartName: normalizeText(transaction.counterpartName) || "",
       counterpartPhone: normalizePhone(transaction.counterpartPhone || "") || "",
       counterpartAvatarUrl: normalizeText(transaction.counterpartAvatarUrl) || "",
+      appointmentId: normalizeText(transaction.appointmentId) || "",
     };
   };
 
@@ -753,6 +754,137 @@
       },
     };
   };
+
+  const getNetAppliedBsForAppointment = (transactions = [], appointmentId) => {
+    const safeAppointmentId = normalizeText(appointmentId);
+    if (!safeAppointmentId) return 0;
+    return Math.max(
+      0,
+      (Array.isArray(transactions) ? transactions : [])
+        .map(sanitizeTransaction)
+        .filter(
+          (transaction) =>
+            normalizeText(transaction.appointmentId) === safeAppointmentId &&
+            ["booking_payment", "booking_refund"].includes(normalizeText(transaction.type)),
+        )
+        .reduce((total, transaction) => total - (Number(transaction.amountBs) || 0), 0),
+    );
+  };
+
+  const applyBsToBookingAppointment = async ({
+    userId,
+    appointmentId,
+    amountBs,
+    amountRub,
+    serviceTotalRub,
+    bsToRubRate,
+    barberName,
+    dateKey,
+    timeRange,
+  }) => {
+    const safeUserId = normalizeText(userId);
+    const safeAppointmentId = normalizeText(appointmentId);
+    const safeAmountBs = Math.max(0, Math.trunc(Number(amountBs) || 0));
+    const safeAmountRub = Math.max(0, Math.round(Number(amountRub) || 0));
+    const safeServiceTotalRub = Math.max(0, Math.round(Number(serviceTotalRub) || 0));
+    const safeBsToRubRate = Math.max(1, Math.trunc(Number(bsToRubRate) || 1));
+    if (!safeUserId) throw new Error("UNAUTHORIZED");
+    if (!safeAppointmentId) throw new Error("APPOINTMENT_REQUIRED");
+    if (!safeAmountBs) {
+      return {
+        appointmentId: safeAppointmentId,
+        amountBs: 0,
+        amountRub: 0,
+        amountDueRub: safeServiceTotalRub,
+      };
+    }
+
+    const [store, user] = await Promise.all([
+      readStore(),
+      prisma.users.findUnique({ where: { id: safeUserId } }),
+    ]);
+    if (!user) throw new Error("UNAUTHORIZED");
+
+    const userMeta = ensureUserMeta(store, safeUserId);
+    if (getNetAppliedBsForAppointment(userMeta.transactions, safeAppointmentId) > 0) {
+      throw new Error("BOOKING_BS_ALREADY_APPLIED");
+    }
+
+    const referralPayload = await buildReferralPayload(user);
+    const currentBalance = Math.max(0, Math.trunc(Number(referralPayload?.bsBalance) || 0));
+    if (currentBalance < safeAmountBs) throw new Error("INSUFFICIENT_BS");
+
+    userMeta.transactions = [
+      ...(Array.isArray(userMeta.transactions) ? userMeta.transactions : []),
+      sanitizeTransaction({
+        type: "booking_payment",
+        title: "Оплата записи BS",
+        description: `Списано ${safeAmountBs} BS за запись к ${normalizeText(barberName) || "барберу"}${normalizeText(dateKey) ? ` · ${normalizeText(dateKey)}` : ""}${normalizeText(timeRange) ? ` · ${normalizeText(timeRange)}` : ""}`,
+        amountBs: -safeAmountBs,
+        createdAt: new Date().toISOString(),
+        status: "posted",
+        appointmentId: safeAppointmentId,
+      }),
+    ];
+    store.users[safeUserId] = sanitizeUserMeta(userMeta);
+    await writeStore(store);
+
+    return {
+      appointmentId: safeAppointmentId,
+      amountBs: safeAmountBs,
+      amountRub: safeAmountRub,
+      amountDueRub: Math.max(0, safeServiceTotalRub - safeAmountRub),
+      bsToRubRate: safeBsToRubRate,
+    };
+  };
+
+  const refundBsForCancelledAppointment = async ({
+    userId,
+    appointmentId,
+    barberName,
+    dateKey,
+    timeRange,
+  }) => {
+    const safeUserId = normalizeText(userId);
+    const safeAppointmentId = normalizeText(appointmentId);
+    if (!safeUserId) throw new Error("UNAUTHORIZED");
+    if (!safeAppointmentId) throw new Error("APPOINTMENT_REQUIRED");
+
+    const [store, user] = await Promise.all([
+      readStore(),
+      prisma.users.findUnique({ where: { id: safeUserId } }),
+    ]);
+    if (!user) throw new Error("UNAUTHORIZED");
+
+    const userMeta = ensureUserMeta(store, safeUserId);
+    const refundAmountBs = getNetAppliedBsForAppointment(userMeta.transactions, safeAppointmentId);
+    if (!refundAmountBs) {
+      return {
+        appointmentId: safeAppointmentId,
+        amountBs: 0,
+      };
+    }
+
+    userMeta.transactions = [
+      ...(Array.isArray(userMeta.transactions) ? userMeta.transactions : []),
+      sanitizeTransaction({
+        type: "booking_refund",
+        title: "Возврат BS",
+        description: `Возврат ${refundAmountBs} BS за отменённую запись к ${normalizeText(barberName) || "барберу"}${normalizeText(dateKey) ? ` · ${normalizeText(dateKey)}` : ""}${normalizeText(timeRange) ? ` · ${normalizeText(timeRange)}` : ""}`,
+        amountBs: refundAmountBs,
+        createdAt: new Date().toISOString(),
+        status: "posted",
+        appointmentId: safeAppointmentId,
+      }),
+    ];
+    store.users[safeUserId] = sanitizeUserMeta(userMeta);
+    await writeStore(store);
+
+    return {
+      appointmentId: safeAppointmentId,
+      amountBs: refundAmountBs,
+    };
+  };
   const resolveBsTransferRecipient = async ({
     fromUserId,
     targetPhone,
@@ -1101,6 +1233,8 @@
     resolveBsTransferRecipient,
     transferBsBalance,
     adjustUserBsBalance,
+    applyBsToBookingAppointment,
+    refundBsForCancelledAppointment,
     buildHomeAppPayload,
     buildUserInsightsMap,
   };

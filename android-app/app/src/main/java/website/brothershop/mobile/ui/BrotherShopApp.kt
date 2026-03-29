@@ -44,8 +44,14 @@ fun BrotherShopApp() {
                 payload = uiState.homePayload,
                 isLoading = uiState.isLoading,
                 errorMessage = uiState.errorMessage,
+                bookingComposer = uiState.bookingComposer,
                 onRefresh = appViewModel::refreshHome,
                 onLogout = appViewModel::logout,
+                onSelectBarber = appViewModel::selectBarber,
+                onToggleBookingService = appViewModel::toggleBookingService,
+                onSelectBookingDate = appViewModel::selectBookingDate,
+                onSelectBookingTime = appViewModel::selectBookingTime,
+                onCreateBooking = appViewModel::createBooking,
             )
         }
     }

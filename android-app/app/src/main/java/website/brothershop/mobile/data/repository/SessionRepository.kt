@@ -4,7 +4,12 @@ import com.google.gson.Gson
 import kotlinx.coroutines.flow.Flow
 import website.brothershop.mobile.data.local.SessionStore
 import website.brothershop.mobile.data.network.ApiErrorResponse
+import website.brothershop.mobile.data.network.BookingDatesPayload
+import website.brothershop.mobile.data.network.BookingServicesPayload
+import website.brothershop.mobile.data.network.BookingTimesPayload
 import website.brothershop.mobile.data.network.BrotherShopApi
+import website.brothershop.mobile.data.network.CreateAppointmentRequest
+import website.brothershop.mobile.data.network.CreatedAppointmentPayload
 import website.brothershop.mobile.data.network.HomeAppPayload
 import website.brothershop.mobile.data.network.LoginRequest
 
@@ -39,6 +44,57 @@ class SessionRepository(
             throw IllegalStateException(readErrorMessage(response.errorBody()?.string()))
         }
         return requireNotNull(response.body()) { "Пустой payload приложения." }
+    }
+
+    suspend fun fetchBookingServices(barberId: String): BookingServicesPayload {
+        val response = api.getBookingServices(barberId)
+        if (!response.isSuccessful) {
+            throw IllegalStateException(readErrorMessage(response.errorBody()?.string()))
+        }
+        return requireNotNull(response.body()) { "Пустой payload услуг." }
+    }
+
+    suspend fun fetchBookingDates(
+        barberId: String,
+        serviceIds: List<String>,
+    ): BookingDatesPayload {
+        val response = api.getBookingDates(barberId, serviceIds.joinToString(","))
+        if (!response.isSuccessful) {
+            throw IllegalStateException(readErrorMessage(response.errorBody()?.string()))
+        }
+        return requireNotNull(response.body()) { "Пустой payload дат." }
+    }
+
+    suspend fun fetchBookingTimes(
+        barberId: String,
+        serviceIds: List<String>,
+        date: String,
+    ): BookingTimesPayload {
+        val response = api.getBookingTimes(barberId, serviceIds.joinToString(","), date)
+        if (!response.isSuccessful) {
+            throw IllegalStateException(readErrorMessage(response.errorBody()?.string()))
+        }
+        return requireNotNull(response.body()) { "Пустой payload времени." }
+    }
+
+    suspend fun createAppointment(
+        barberId: String,
+        serviceIds: List<String>,
+        date: String,
+        startTime: String,
+    ): CreatedAppointmentPayload {
+        val response = api.createAppointment(
+            CreateAppointmentRequest(
+                barberId = barberId,
+                serviceIds = serviceIds,
+                date = date,
+                startTime = startTime,
+            ),
+        )
+        if (!response.isSuccessful) {
+            throw IllegalStateException(readErrorMessage(response.errorBody()?.string()))
+        }
+        return requireNotNull(response.body()) { "Пустой ответ создания записи." }.appointment
     }
 
     suspend fun logout() {

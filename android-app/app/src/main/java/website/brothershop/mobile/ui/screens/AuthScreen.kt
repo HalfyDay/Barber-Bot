@@ -1,8 +1,6 @@
 package website.brothershop.mobile.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -16,11 +14,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -36,83 +34,91 @@ fun AuthScreen(
     onPasswordChange: (String) -> Unit,
     onLogin: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.primaryContainer,
-                        MaterialTheme.colorScheme.background,
-                    ),
-                ),
-            )
-            .padding(horizontal = 24.dp),
-    ) {
+    AppBackdrop {
         Column(
             modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth()
-                .background(
-                    color = MaterialTheme.colorScheme.surface,
-                    shape = RoundedCornerShape(32.dp),
-                )
-                .padding(PaddingValues(horizontal = 24.dp, vertical = 28.dp)),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .fillMaxSize()
+                .padding(horizontal = 20.dp, vertical = 24.dp),
+            verticalArrangement = Arrangement.Center,
         ) {
-            Text(
-                text = "BrotherShop",
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.Bold,
+            HeroCard(
+                eyebrow = "BrotherShop",
+                title = "Нативный клиент",
+                body = "Темная мобильная оболочка для записи, профиля и бонусного баланса.",
             )
-            Text(
-                text = "Мобильный клиент для записи, профиля и BS-баланса.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (!errorMessage.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(14.dp))
+            GlassCard(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 22.dp)) {
                 Text(
-                    text = errorMessage,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                    fontWeight = FontWeight.Medium,
+                    text = "Вход",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
                 )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = phone,
-                onValueChange = onPhoneChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Телефон") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                singleLine = true,
-                shape = RoundedCornerShape(20.dp),
-            )
-            OutlinedTextField(
-                value = password,
-                onValueChange = onPasswordChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Пароль") },
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                singleLine = true,
-                shape = RoundedCornerShape(20.dp),
-            )
-            Button(
-                onClick = onLogin,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading,
-                shape = RoundedCornerShape(22.dp),
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary,
+                Text(
+                    text = "Используйте телефон и пароль от домашнего кабинета.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (!errorMessage.isNullOrBlank()) {
+                    Text(
+                        text = errorMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Medium,
                     )
-                } else {
-                    Text("Войти")
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = onPhoneChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Телефон") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    singleLine = true,
+                    shape = RoundedCornerShape(18.dp),
+                    colors = authFieldColors(),
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = onPasswordChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Пароль") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    singleLine = true,
+                    shape = RoundedCornerShape(18.dp),
+                    colors = authFieldColors(),
+                )
+                Button(
+                    onClick = onLogin,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading,
+                    shape = RoundedCornerShape(18.dp),
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    } else {
+                        Text("Войти")
+                    }
                 }
             }
         }
     }
 }
+
+@Composable
+private fun authFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedContainerColor = Color(0xFF151919),
+    unfocusedContainerColor = Color(0xFF151919),
+    disabledContainerColor = Color(0xFF151919),
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
+    unfocusedBorderColor = Color(0x20FFFFFF),
+    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+    focusedLabelColor = MaterialTheme.colorScheme.primary,
+    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    cursorColor = MaterialTheme.colorScheme.primary,
+)

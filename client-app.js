@@ -36,6 +36,8 @@
       barberId: "",
       services: [],
       selectedServices: [],
+      appliedBs: 0,
+      bsCoverExpanded: false,
       dates: [],
       selectedDate: "",
       times: [],
@@ -466,6 +468,38 @@
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return "0 ₽";
     return `${numeric.toLocaleString("ru-RU")} ₽`;
+  };
+
+  const getBookingPricingSummary = (bookingState = state.booking, referral = state.payload?.referral || {}) => {
+    const selectedServices = (Array.isArray(bookingState?.services) ? bookingState.services : []).filter((service) =>
+      (bookingState?.selectedServices || []).includes(service.id),
+    );
+    const totalRub = Math.max(
+      0,
+      Math.round(selectedServices.reduce((total, service) => total + (Number(service.price) || 0), 0)),
+    );
+    const bsToRubRate = Math.max(1, Number(referral?.program?.bsToRubRate) || 1);
+    const balanceBs = Math.max(0, Math.trunc(Number(referral?.bsBalance) || 0));
+    const maxCoverBs = Math.max(0, Math.min(balanceBs, Math.floor(totalRub / bsToRubRate)));
+    const appliedBs = Math.max(0, Math.min(maxCoverBs, Math.trunc(Number(bookingState?.appliedBs) || 0)));
+    const coveredRub = appliedBs * bsToRubRate;
+    return {
+      selectedServices,
+      totalRub,
+      bsToRubRate,
+      balanceBs,
+      maxCoverBs,
+      appliedBs,
+      coveredRub,
+      payableRub: Math.max(0, totalRub - coveredRub),
+    };
+  };
+
+  const syncBookingBsCover = () => {
+    const pricing = getBookingPricingSummary();
+    state.booking.appliedBs = pricing.appliedBs;
+    if (pricing.appliedBs > 0) state.booking.bsCoverExpanded = true;
+    return pricing;
   };
 
   const avatarMarkup = (user, size) => {
@@ -1500,8 +1534,9 @@
     const selectedBarber = barbers.find((item) => normalizeText(item.id) === normalizeText(booking.barberId)) || null;
     const isBookingBlocked = booking.canBook === false;
     const bookingLimitMessage = normalizeText(booking.limitMessage);
-    const selectedServices = booking.services.filter((service) => booking.selectedServices.includes(service.id));
-    const selectedTotal = selectedServices.reduce((total, service) => total + (Number(service.price) || 0), 0);
+    const bookingPricing = getBookingPricingSummary(booking, state.payload?.referral || {});
+    const selectedServices = bookingPricing.selectedServices;
+    const selectedTotal = bookingPricing.totalRub;
     const completedSteps = [
       Boolean(selectedBarber),
       Boolean(booking.selectedServices.length),
@@ -1614,6 +1649,27 @@
             <div class="summary-item"><span class="field-label">Время</span><strong>${booking.selectedTime || "не выбрано"}</strong></div>
             <div class="summary-item"><span class="field-label">Сумма</span><strong>${formatRub(selectedTotal)}</strong></div>
           </div>
+          ${bookingPricing.maxCoverBs > 0 ? `
+            <div class="booking-bs-cover-card ${booking.bsCoverExpanded ? "is-expanded" : "is-collapsed"}">
+              <button class="booking-bs-cover-toggle" type="button" data-action="toggle-booking-bs">
+                <div class="booking-bs-cover-head">
+                  <div>
+                    <strong>${bookingPricing.appliedBs > 0 ? `Списать ${bookingPricing.appliedBs} BS` : "Использовать BS"}</strong>
+                  </div>
+                  <div class="booking-bs-cover-side">
+                    <span class="status-badge green">${bookingPricing.maxCoverBs} BS</span>
+                    <span class="booking-bs-chevron" aria-hidden="true">${iconMarkup(booking.bsCoverExpanded ? "chevron-left" : "chevron-right")}</span>
+                  </div>
+                </div>
+              </button>
+              ${booking.bsCoverExpanded ? `
+                <label class="field booking-bs-field">
+                  <input id="booking-bs-input" type="number" min="0" max="${bookingPricing.maxCoverBs}" step="1" value="${bookingPricing.appliedBs || ""}" placeholder="0" />
+                </label>
+                <p class="subtitle booking-bs-note">К оплате после списания: <strong>${formatRub(bookingPricing.payableRub)}</strong></p>
+              ` : ""}
+            </div>
+          ` : ""}
           <div class="service-chip-row">
             ${selectedServices.length ? selectedServices.map((service) => `<span class="service-chip">${normalizeText(service.name)}</span>`).join("") : `<span class="muted-text">Добавьте хотя бы одну услугу, чтобы увидеть итог записи.</span>`}
           </div>
@@ -1822,6 +1878,8 @@
     state.booking.activeAppointmentsCount = Math.max(0, Number(payload?.activeAppointments) || 0);
     state.booking.services = state.booking.canBook && Array.isArray(payload.services) ? payload.services : [];
     state.booking.selectedServices = [];
+    state.booking.appliedBs = 0;
+    state.booking.bsCoverExpanded = false;
     state.booking.dates = [];
     state.booking.selectedDate = "";
     state.booking.times = [];
@@ -1832,9 +1890,18 @@
   };
 
   const loadDates = async () => {
-    if (!state.booking.barberId || !state.booking.selectedServices.length) return;
+    if (!state.booking.barberId || !state.booking.selectedServices.length) {
+      state.booking.dates = [];
+      state.booking.selectedDate = "";
+      state.booking.times = [];
+      state.booking.selectedTime = "";
+      state.booking.comment = "";
+      render();
+      return;
+    }
     const payload = await apiRequest(`/booking/dates?barberId=${encodeURIComponent(state.booking.barberId)}&serviceIds=${encodeURIComponent(state.booking.selectedServices.join(","))}`);
     state.booking.dates = Array.isArray(payload.dates) ? payload.dates : [];
+    syncBookingBsCover();
     state.booking.selectedDate = "";
     state.booking.times = [];
     state.booking.selectedTime = "";
@@ -1846,6 +1913,7 @@
     if (!state.booking.barberId || !state.booking.selectedServices.length || !state.booking.selectedDate) return;
     const payload = await apiRequest(`/booking/times?barberId=${encodeURIComponent(state.booking.barberId)}&serviceIds=${encodeURIComponent(state.booking.selectedServices.join(","))}&date=${encodeURIComponent(state.booking.selectedDate)}`);
     state.booking.times = Array.isArray(payload.times) ? payload.times : [];
+    syncBookingBsCover();
     state.booking.selectedTime = "";
     state.booking.comment = "";
     render();
@@ -1864,6 +1932,7 @@
           date: state.booking.selectedDate,
           startTime: state.booking.selectedTime,
           comment: normalizeText(state.booking.comment),
+          coverBsAmount: Math.max(0, Math.trunc(Number(state.booking.appliedBs) || 0)),
         }),
       });
       state.payload = await apiRequest("/app");
@@ -1871,6 +1940,8 @@
         barberId: "",
         services: [],
         selectedServices: [],
+        appliedBs: 0,
+        bsCoverExpanded: false,
         dates: [],
         selectedDate: "",
         times: [],
@@ -2360,6 +2431,7 @@
       const id = normalizeText(node.dataset.id);
       state.booking.selectedServices = state.booking.selectedServices.includes(id) ? state.booking.selectedServices.filter((item) => item !== id) : [...state.booking.selectedServices, id];
       await loadDates();
+      syncBookingBsCover();
       if (state.booking.selectedServices.length) scrollToBookingStep("date");
     }));
     document.querySelectorAll("[data-action='select-date']").forEach((node) => node.addEventListener("click", async () => {
@@ -2382,6 +2454,23 @@
         scrollToBookingStep("summary");
       });
     }
+    const bookingBsInput = document.getElementById("booking-bs-input");
+    if (bookingBsInput) {
+      bookingBsInput.addEventListener("input", () => {
+        state.booking.appliedBs = Math.max(0, Math.trunc(Number(bookingBsInput.value) || 0));
+        if (state.booking.appliedBs > 0) state.booking.bsCoverExpanded = true;
+      });
+      bookingBsInput.addEventListener("blur", () => {
+        syncBookingBsCover();
+        render();
+      });
+    }
+    document.querySelectorAll("[data-action='toggle-booking-bs']").forEach((node) =>
+      node.addEventListener("click", () => {
+        state.booking.bsCoverExpanded = !state.booking.bsCoverExpanded;
+        render();
+      }),
+    );
     document.querySelectorAll("[data-action='submit-booking']").forEach((node) => node.addEventListener("click", submitBooking));
     const backdrop = document.getElementById("sheet-backdrop");
     if (backdrop) backdrop.addEventListener("click", (event) => { if (event.target === backdrop) closeSheet(); });

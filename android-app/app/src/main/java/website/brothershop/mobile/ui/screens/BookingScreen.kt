@@ -1,11 +1,9 @@
 package website.brothershop.mobile.ui.screens
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -30,9 +28,11 @@ import androidx.compose.ui.unit.dp
 import website.brothershop.mobile.core.BookingComposerState
 import website.brothershop.mobile.data.network.BarberCard
 import website.brothershop.mobile.data.network.HomeAppPayload
+import website.brothershop.mobile.ui.site.toWebsiteBookingModel
+import website.brothershop.mobile.ui.site.websiteLabel
 
 @Composable
-fun TeamScreen(
+fun BookingScreen(
     payload: HomeAppPayload?,
     contentPadding: PaddingValues,
     title: String,
@@ -44,14 +44,15 @@ fun TeamScreen(
     onSelectBookingTime: (String) -> Unit,
     onCreateBooking: () -> Unit,
 ) {
-    val barbers = payload?.booking?.barbers.orEmpty()
+    val model = payload?.toWebsiteBookingModel()
+    val barbers = model?.barbers.orEmpty()
     val selectedBarber = barbers.firstOrNull { it.id == bookingComposer.selectedBarberId } ?: barbers.firstOrNull()
 
     if (barbers.isEmpty()) {
         EmptyStateCard(
-            title = "Команда",
-            body = "Карточки барберов появятся здесь после загрузки данных сервера.",
-            actionLabel = "Обновить позже",
+            title = "Онлайн-запись",
+            body = "Данные о барберах и слотах пока не загружены.",
+            actionLabel = "Недоступно",
             onAction = {},
             modifier = Modifier
                 .fillMaxSize()
@@ -74,11 +75,18 @@ fun TeamScreen(
                 InitialBadge(text = "B")
             }
         }
-        item { SectionHeader(eyebrow = "Crew", title = "Выбор барбера и запись") }
+        item {
+            HeroCard(
+                eyebrow = "Booking",
+                title = model?.pageTitle ?: "Онлайн-запись",
+                body = "Выберите барбера, услуги, дату и время. Экран выровнен под booking-страницу сайта.",
+            )
+        }
+        item { SectionHeader(eyebrow = "Step 1", title = "Барбер") }
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(barbers) { barber ->
-                    BarberSelectorCard(
+                    BookingBarberCard(
                         barber = barber,
                         selected = bookingComposer.selectedBarberId == barber.id,
                         onClick = { onSelectBarber(barber.id) },
@@ -91,6 +99,7 @@ fun TeamScreen(
                 BookingComposerCard(
                     barber = selectedBarber,
                     state = bookingComposer,
+                    commentPlaceholder = model?.commentPlaceholder ?: "Комментарий для мастера",
                     onToggleBookingService = onToggleBookingService,
                     onSelectBookingDate = onSelectBookingDate,
                     onSelectBookingTime = onSelectBookingTime,
@@ -102,7 +111,7 @@ fun TeamScreen(
 }
 
 @Composable
-private fun BarberSelectorCard(
+private fun BookingBarberCard(
     barber: BarberCard,
     selected: Boolean,
     onClick: () -> Unit,
@@ -111,15 +120,19 @@ private fun BarberSelectorCard(
         modifier = Modifier
             .width(300.dp)
             .clickable(onClick = onClick)
-            .border(
-                BorderStroke(
-                    1.dp,
-                    if (selected) MaterialTheme.colorScheme.primary else Color(0x12FFFFFF),
-                ),
-                RoundedCornerShape(28.dp),
-            ),
+            .padding(1.dp),
     ) {
         Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    BorderStroke(
+                        1.dp,
+                        if (selected) MaterialTheme.colorScheme.primary else Color(0x12FFFFFF),
+                    ),
+                    RoundedCornerShape(22.dp),
+                )
+                .padding(14.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -149,6 +162,7 @@ private fun BarberSelectorCard(
 private fun BookingComposerCard(
     barber: BarberCard,
     state: BookingComposerState,
+    commentPlaceholder: String,
     onToggleBookingService: (String) -> Unit,
     onSelectBookingDate: (String) -> Unit,
     onSelectBookingTime: (String) -> Unit,
@@ -156,12 +170,12 @@ private fun BookingComposerCard(
 ) {
     GlassCard {
         Text(
-            text = "Запись к ${barber.name}",
-            style = MaterialTheme.typography.displaySmall,
+            text = "2. Услуги",
+            style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
-            text = barber.phrase.ifBlank { "Подберите услуги, дату и время." },
+            text = barber.phrase.ifBlank { "Подберите услуги и удобный слот." },
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -172,37 +186,14 @@ private fun BookingComposerCard(
                 color = MaterialTheme.colorScheme.primary,
             )
         }
-        if (!state.successMessage.isNullOrBlank()) {
-            Text(
-                text = state.successMessage,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        Text(
-            text = "Услуги",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
         FlowChipRow(
-            items = state.services.map { it.id to "${it.name} • ${it.duration} мин" },
+            items = state.services.map { it.id to it.websiteLabel() },
             selected = state.selectedServiceIds,
             onSelect = onToggleBookingService,
         )
-
-        if (state.totalDuration > 0) {
-            Text(
-                text = "Длительность: ${state.totalDuration} мин",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
         if (state.availableDates.isNotEmpty()) {
             Text(
-                text = "Даты",
+                text = "3. Дата",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -212,10 +203,9 @@ private fun BookingComposerCard(
                 onSelect = onSelectBookingDate,
             )
         }
-
         if (state.availableTimes.isNotEmpty()) {
             Text(
-                text = "Время",
+                text = "4. Время",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -225,9 +215,21 @@ private fun BookingComposerCard(
                 onSelect = onSelectBookingTime,
             )
         }
-
+        Text(
+            text = "5. Комментарий: $commentPlaceholder",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (!state.successMessage.isNullOrBlank()) {
+            Text(
+                text = state.successMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+            )
+        }
         PrimaryAction(
-            label = if (state.isLoading) "Загрузка..." else "Создать запись",
+            label = if (state.isLoading) "Загрузка..." else "Подтвердить запись",
             onClick = onCreateBooking,
             enabled = !state.isLoading &&
                 state.selectedServiceIds.isNotEmpty() &&

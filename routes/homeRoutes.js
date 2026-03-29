@@ -24,6 +24,8 @@
   buildReferralPayload,
   resolveBsTransferRecipient,
   transferBsBalance,
+  applyBsToBookingAppointment,
+  refundBsForCancelledAppointment,
   buildHomeAppPayload,
   TELEGRAM_BOT_USERNAME,
   markExpiredTelegramAuthRequests,
@@ -1497,6 +1499,29 @@
       if (!selectedServices.length) {
         return res.status(400).json({ error: "У выбранного барбера нет такой услуги." });
       }
+      const totalPriceRub = Math.max(
+        0,
+        Math.round(
+          selectedServices.reduce(
+            (sum, service) => sum + Math.max(0, Number(service.price) || 0),
+            0,
+          ),
+        ),
+      );
+      const requestedCoverBs = Math.max(0, Math.trunc(Number(req.body?.coverBsAmount) || 0));
+      const referralPayload = requestedCoverBs > 0 ? await buildReferralPayload(homeUser) : null;
+      const bsToRubRate = Math.max(1, Number(referralPayload?.program?.bsToRubRate) || 1);
+      const maxCoverByPrice = Math.max(0, Math.floor(totalPriceRub / bsToRubRate));
+      const availableBalanceBs = Math.max(0, Math.trunc(Number(referralPayload?.bsBalance) || 0));
+      const maxAllowedCoverBs = Math.min(maxCoverByPrice, availableBalanceBs);
+      if (requestedCoverBs > maxAllowedCoverBs) {
+        return res.status(400).json({
+          error:
+            maxAllowedCoverBs > 0
+              ? `Можно списать не больше ${maxAllowedCoverBs} BS для этой записи.`
+              : "Для этой записи баллы BS сейчас недоступны.",
+        });
+      }
       const totalDuration = Math.max(
         selectedServices.reduce(
           (sum, service) => sum + Math.max(0, Number(service.duration) || 0),
@@ -1541,6 +1566,36 @@
           return res
             .status(409)
             .json({ error: "Слот уже занят. Выберите другое время." });
+        }
+        throw error;
+      }
+      try {
+        if (requestedCoverBs > 0) {
+          await applyBsToBookingAppointment({
+            userId: homeUser.id,
+            appointmentId: createdAppointment.id,
+            amountBs: requestedCoverBs,
+            amountRub: requestedCoverBs * bsToRubRate,
+            serviceTotalRub: totalPriceRub,
+            bsToRubRate,
+            barberName: barber.name,
+            dateKey,
+            timeRange: createdAppointment.Time,
+          });
+        }
+      } catch (error) {
+        await prisma.appointments.delete({ where: { id: createdAppointment.id } }).catch((cleanupError) => {
+          console.error("Home booking rollback error:", cleanupError);
+        });
+        if (error?.message === "INSUFFICIENT_BS") {
+          return res.status(409).json({
+            error: "На балансе недостаточно BS. Проверьте сумму списания и попробуйте снова.",
+          });
+        }
+        if (error?.message === "BOOKING_BS_ALREADY_APPLIED") {
+          return res.status(409).json({
+            error: "BS для этой записи уже были применены. Обновите страницу и попробуйте снова.",
+          });
         }
         throw error;
       }
@@ -1595,6 +1650,25 @@
         where: { id: appointmentId },
         data: { Status: STATUS_CANCELLED },
       });
+      try {
+        await refundBsForCancelledAppointment({
+          userId: homeUser.id,
+          appointmentId,
+          barberName: existing.Barber,
+          dateKey: existing.Date,
+          timeRange: existing.Time,
+        });
+      } catch (error) {
+        await prisma.appointments
+          .update({
+            where: { id: appointmentId },
+            data: { Status: STATUS_ACTIVE },
+          })
+          .catch((rollbackError) => {
+            console.error("Home booking cancel rollback error:", rollbackError);
+          });
+        throw error;
+      }
       requestRealtimePush(true);
       return res.json({ appointment: updated });
     } catch (error) {

@@ -835,6 +835,8 @@ const {
   resolveBsTransferRecipient,
   adjustUserBsBalance,
   transferBsBalance,
+  applyBsToBookingAppointment,
+  refundBsForCancelledAppointment,
   buildHomeAppPayload,
   buildUserInsightsMap,
 } = createHomeClientStoreService({
@@ -1176,6 +1178,8 @@ registerHomeRoutes({
   buildReferralPayload,
   resolveBsTransferRecipient,
   transferBsBalance,
+  applyBsToBookingAppointment,
+  refundBsForCancelledAppointment,
   buildHomeAppPayload,
   TELEGRAM_BOT_USERNAME,
   markExpiredTelegramAuthRequests,

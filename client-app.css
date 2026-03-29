@@ -3196,6 +3196,8 @@ img.media-wave.is-ready {
 
 .booking-step[data-booking-step="barber"] .barber-card.is-selected::before {
   background: var(--primary);
+  opacity: 1;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--primary) 38%, transparent);
 }
 
 .booking-step[data-booking-step="barber"] .barber-card.is-selected {
@@ -3495,6 +3497,11 @@ img.media-wave.is-ready {
 
 .booking-comment-field textarea {
   min-height: 118px;
+  resize: none;
+}
+
+.booking-comment-field textarea::-webkit-resizer {
+  display: none;
 }
 
 .summary-note {
@@ -3572,6 +3579,104 @@ img.media-wave.is-ready {
 
 .booking-summary .service-chip-row {
   align-items: flex-start;
+}
+
+.booking-bs-cover-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 20px;
+  background: var(--md-sys-color-surface-container-low);
+  margin-top: 10px;
+  min-width: 0;
+}
+
+.booking-bs-cover-toggle {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.booking-bs-cover-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.booking-bs-cover-head .field-label {
+  display: block;
+  margin-bottom: 3px;
+  line-height: 1.15;
+}
+
+.booking-bs-cover-head .status-badge {
+  min-width: 0;
+  padding-inline: 10px;
+  align-self: start;
+}
+
+.booking-bs-cover-head strong {
+  display: block;
+  margin: 0;
+  font-size: 0.94rem;
+  line-height: 1.2;
+}
+
+.booking-bs-cover-side {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.booking-bs-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.booking-bs-chevron svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  fill: none;
+}
+
+.booking-bs-field,
+.booking-bs-note {
+  margin: 0;
+}
+
+.booking-bs-field .field-label {
+  margin-bottom: 6px;
+}
+
+.booking-bs-field input {
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 16px;
+  font-size: 1rem;
+}
+
+.booking-bs-note {
+  line-height: 1.35;
+}
+
+.booking-bs-note strong {
+  display: inline;
+  white-space: nowrap;
+}
+
+.booking-bs-cover-card.is-collapsed {
+  padding-bottom: 10px;
 }
 
 @media (min-width: 769px) {
@@ -5133,6 +5238,14 @@ img.media-wave.is-ready {
     border-radius: 24px;
   }
 
+  .booking-flow {
+    gap: 12px;
+  }
+
+  .booking-page > .booking-summary {
+    margin-top: 0;
+  }
+
   .booking-progress-line,
   .profile-summary-strip,
   .summary-master-row {
@@ -5226,7 +5339,7 @@ img.media-wave.is-ready {
     bottom: auto;
     z-index: 1;
     gap: 12px;
-    padding-bottom: 0;
+    padding-bottom: 18px;
   }
 
   .map-title {

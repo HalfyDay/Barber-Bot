@@ -3340,6 +3340,10 @@
     installDelegatedHandlers();
     state.session = loadSession();
     const normalizedPath = normalizeText(window.location.pathname).replace(/\/+$/, "") || "/";
+    if (isAuthenticated() && normalizedPath === "/") {
+      window.location.replace("/home/");
+      return;
+    }
     if (!isAuthenticated()) {
       if (state.currentPage === "home" && normalizedPath === "/") {
         window.history.replaceState(buildHistoryState(), "", `${window.location.pathname}${window.location.search}${window.location.hash}`);

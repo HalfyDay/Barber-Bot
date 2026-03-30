@@ -59,6 +59,7 @@ const runtimeFetch =
   globalThis.fetch ||
   ((...args) => import("node-fetch").then(({ default: nodeFetch }) => nodeFetch(...args)));
 const app = express();
+app.set("trust proxy", true);
 const prismaRuntimeConfig = validatePrismaRuntimeConfig(process.env);
 const prisma = createPrismaClient();
 const PORT = process.env.PORT || 3000;
@@ -112,6 +113,18 @@ const HEALTHCHECK_PATH_RAW = (process.env.HEALTHCHECK_PATH || "/api/health")
 const HEALTHCHECK_PATH = HEALTHCHECK_PATH_RAW.startsWith("/")
   ? HEALTHCHECK_PATH_RAW
   : `/${HEALTHCHECK_PATH_RAW}`;
+const SITE_ORIGIN = (process.env.SITE_ORIGIN || process.env.PUBLIC_SITE_URL || "")
+  .toString()
+  .trim()
+  .replace(/\/+$/, "");
+const getPublicBaseUrl = (req) => {
+  if (SITE_ORIGIN) return SITE_ORIGIN;
+  const forwardedProto = (req.get("x-forwarded-proto") || "").split(",")[0].trim();
+  const forwardedHost = (req.get("x-forwarded-host") || "").split(",")[0].trim();
+  const protocol = forwardedProto || req.protocol || "https";
+  const host = forwardedHost || req.get("host");
+  return `${protocol}://${host}`;
+};
 const POST_RESTART_HEALTHCHECK_ENABLED = parseEnvBoolean(
   process.env.POST_RESTART_HEALTHCHECK_ENABLED,
   true,
@@ -309,7 +322,7 @@ app.get("/robots.txt", (req, res) => {
       "Disallow: /panel",
       "Disallow: /panel/",
       "Disallow: /api/",
-      `Sitemap: ${req.protocol}://${req.get("host")}/sitemap.xml`,
+      `Sitemap: ${getPublicBaseUrl(req)}/sitemap.xml`,
       "",
     ].join("\n"),
   );
@@ -317,7 +330,7 @@ app.get("/robots.txt", (req, res) => {
 app.get("/sitemap.xml", (req, res) => {
   setNoStoreHeaders(res);
   res.type("application/xml");
-  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  const baseUrl = getPublicBaseUrl(req);
   const lastModified = new Date().toISOString();
   res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

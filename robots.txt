@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /home
+Allow: /home/
+Disallow: /booking
+Disallow: /booking/
+Disallow: /referral
+Disallow: /referral/
+Disallow: /shop
+Disallow: /shop/
+Disallow: /profile
+Disallow: /profile/
+Disallow: /panel
+Disallow: /panel/
+Disallow: /api/
+Sitemap: https://brothershop.website/sitemap.xml

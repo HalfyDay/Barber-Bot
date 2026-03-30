@@ -113,18 +113,6 @@ const HEALTHCHECK_PATH_RAW = (process.env.HEALTHCHECK_PATH || "/api/health")
 const HEALTHCHECK_PATH = HEALTHCHECK_PATH_RAW.startsWith("/")
   ? HEALTHCHECK_PATH_RAW
   : `/${HEALTHCHECK_PATH_RAW}`;
-const SITE_ORIGIN = (process.env.SITE_ORIGIN || process.env.PUBLIC_SITE_URL || "")
-  .toString()
-  .trim()
-  .replace(/\/+$/, "");
-const getPublicBaseUrl = (req) => {
-  if (SITE_ORIGIN) return SITE_ORIGIN;
-  const forwardedProto = (req.get("x-forwarded-proto") || "").split(",")[0].trim();
-  const forwardedHost = (req.get("x-forwarded-host") || "").split(",")[0].trim();
-  const protocol = forwardedProto || req.protocol || "https";
-  const host = forwardedHost || req.get("host");
-  return `${protocol}://${host}`;
-};
 const POST_RESTART_HEALTHCHECK_ENABLED = parseEnvBoolean(
   process.env.POST_RESTART_HEALTHCHECK_ENABLED,
   true,
@@ -305,42 +293,13 @@ app.get("/googlecfc334560efc95d7.html", (req, res) => {
 });
 app.get("/robots.txt", (req, res) => {
   setNoStoreHeaders(res);
-  res.type("text/plain");
-  res.send(
-    [
-      "User-agent: *",
-      "Allow: /home",
-      "Allow: /home/",
-      "Disallow: /booking",
-      "Disallow: /booking/",
-      "Disallow: /referral",
-      "Disallow: /referral/",
-      "Disallow: /shop",
-      "Disallow: /shop/",
-      "Disallow: /profile",
-      "Disallow: /profile/",
-      "Disallow: /panel",
-      "Disallow: /panel/",
-      "Disallow: /api/",
-      `Sitemap: ${getPublicBaseUrl(req)}/sitemap.xml`,
-      "",
-    ].join("\n"),
-  );
+  res.type("text/plain; charset=utf-8");
+  res.sendFile(path.join(__dirname, "robots.txt"));
 });
 app.get("/sitemap.xml", (req, res) => {
   setNoStoreHeaders(res);
-  res.type("application/xml");
-  const baseUrl = getPublicBaseUrl(req);
-  const lastModified = new Date().toISOString();
-  res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${baseUrl}/home/</loc>
-    <lastmod>${lastModified}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-</urlset>`);
+  res.type("application/xml; charset=utf-8");
+  res.sendFile(path.join(__dirname, "sitemap.xml"));
 });
 const CLIENT_APP_SHELL = path.join(__dirname, "home-page", "index.html");
 const sendClientAppShell = (req, res) => {

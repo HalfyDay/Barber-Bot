@@ -4677,6 +4677,15 @@ img.media-wave.is-ready {
   border: 1px solid transparent;
 }
 
+.profile-progress-trigger {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+}
+
 .profile-next-booking-card {
   display: grid;
   gap: 14px;

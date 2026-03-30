@@ -1,4 +1,4 @@
-﻿const { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, Fragment } = React;
+const { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, Fragment } = React;
 const { createPortal, createRoot } = ReactDOM;
 const sendClientLog = (data) => {
   try {
@@ -5764,11 +5764,6 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
                     )}
                   >
                     <span className="truncate">{option}</span>
-                    {isActive && (
-                      <span className="text-xs font-semibold text-indigo-300" aria-hidden="true">
-                        ?
-                      </span>
-                    )}
                   </button>
                 );
               })}

@@ -1078,7 +1078,7 @@
         </div>
         <div class="topbar-side">
           ${authenticated
-            ? `<div class="chip">${avatarMarkup(user, 44)}<span>${normalizeText(user.displayName || "Клиент")}</span></div>`
+            ? `<button class="chip" type="button" data-action="navigate" data-href="/profile/">${avatarMarkup(user, 44)}<span>${normalizeText(user.displayName || "Клиент")}</span></button>`
             : `<a class="ghost-btn" href="${buildLoginUrl("/booking/")}">Войти</a>`}
         </div>
       </header>
@@ -1977,7 +1977,7 @@
         </div>
         <div class="booking-grid booking-flow">
           <article class="booking-panel booking-step ${bookingStepClass}" data-booking-step="barber">
-            <div class="booking-step-head"><div class="section-eyebrow">1. Барбер</div><div class="step-badge">${selectedBarber ? "Выбран" : "Шаг"}</div></div>
+            <div class="booking-step-head"><div class="section-eyebrow">1. Барбер</div></div>
             <div class="barber-grid">
               ${barbers
                 .map(
@@ -2006,7 +2006,7 @@
           </article>
           ${showServicesStep ? `
           <article class="booking-panel booking-step ${bookingStepClass}" data-booking-step="services">
-            <div class="booking-step-head"><div class="section-eyebrow">2. Услуги</div><div class="step-badge">${booking.selectedServices.length || 0}</div></div>
+            <div class="booking-step-head"><div class="section-eyebrow">2. Услуги</div></div>
             ${isBookingBlocked && bookingLimitMessage ? `<div class="booking-step-alert status-red"><p class="list-title">Лимит активных записей достигнут</p><p class="subtitle">${bookingLimitMessage}</p></div>` : ""}
             <div class="list">
               ${booking.services.length
@@ -2022,7 +2022,7 @@
           ` : ""}
           ${showDateStep ? `
           <article class="booking-panel booking-step ${bookingStepClass}" data-booking-step="date">
-            <div class="booking-step-head"><div class="section-eyebrow">3. Дата</div><div class="step-badge">${booking.selectedDate ? "Выбрана" : "Шаг"}</div></div>
+            <div class="booking-step-head"><div class="section-eyebrow">3. Дата</div></div>
             <div class="list">
               ${booking.dates.length
                 ? booking.dates
@@ -2034,7 +2034,7 @@
           ` : ""}
           ${showTimeStep ? `
           <article class="booking-panel booking-step ${bookingStepClass}" data-booking-step="time">
-            <div class="booking-step-head"><div class="section-eyebrow">4. Время</div><div class="step-badge">${booking.selectedTime ? "Выбрано" : "Шаг"}</div></div>
+            <div class="booking-step-head"><div class="section-eyebrow">4. Время</div></div>
             <div class="list">
               ${booking.times.length
                 ? booking.times
@@ -2046,7 +2046,7 @@
           ` : ""}
           ${showCommentStep ? `
           <article class="booking-panel booking-step ${bookingStepClass}" data-booking-step="comment">
-            <div class="booking-step-head"><div class="section-eyebrow">5. Комментарий</div><div class="step-badge">${normalizeText(booking.comment) ? "Добавлен" : "Необязательно"}</div></div>
+            <div class="booking-step-head"><div class="section-eyebrow">5. Комментарий</div></div>
             <label class="field booking-comment-field">
               <span class="field-label">Комментарий для мастера</span>
               <textarea id="booking-comment-input" placeholder="Например: хочу покороче по бокам, оставить длину сверху или удобно после 18:00.">${normalizeText(booking.comment)}</textarea>
@@ -2152,7 +2152,7 @@
               <div class="profile-hero-phone-line">${formatPhone(user.phone)}</div>
             </div>
           </div>
-          ${profileCompletion < 100 ? `<div class="profile-progress-card"><div class="section-head"><div><div class="section-eyebrow">Прогресс профиля</div><h2 class="section-title">Профиль заполнен на ${profileCompletion}%</h2></div><span class="status-badge status-green">${completionFields.filter(Boolean).length}/${completionFields.length}</span></div><div class="progress-track"><div class="progress-bar" style="width:${profileCompletion}%"></div></div></div>` : ""}
+          ${profileCompletion < 100 ? `<button class="profile-progress-card profile-progress-trigger" type="button" data-action="open-sheet" data-sheet="profile-edit"><div class="section-head"><div><div class="section-eyebrow">Прогресс профиля</div><h2 class="section-title">Профиль заполнен на ${profileCompletion}%</h2></div><span class="status-badge status-green">${completionFields.filter(Boolean).length}/${completionFields.length}</span></div><div class="progress-track"><div class="progress-bar" style="width:${profileCompletion}%"></div></div></button>` : ""}
           <div class="profile-summary-strip">
             <div class="profile-summary-cell"><span class="field-label">Визиты</span><strong>${visitHistory.length}</strong></div>
             <div class="profile-summary-cell"><span class="field-label">Замечания</span><button class="metric-trigger" type="button" data-action="open-sheet" data-sheet="profile-notices"><strong>${noticeLabel}</strong></button></div>

@@ -58,12 +58,12 @@ CREATE TABLE "public"."Schedules" (
 -- CreateTable
 CREATE TABLE "public"."Cost" (
     "id" TEXT NOT NULL,
-    "РЈСЃР»СѓРіРё" TEXT,
-    "РўРёРјСѓСЂ" DOUBLE PRECISION,
-    "Р’Р»Р°РґРёРјРёСЂ" DOUBLE PRECISION,
-    "РђР»РёРЅР°" DOUBLE PRECISION,
-    "РђР»РµРєСЃРµР№" DOUBLE PRECISION,
-    "Р”Р»РёС‚РµР»СЊРЅРѕСЃС‚СЊ" TEXT,
+    "Услуги" TEXT,
+    "Тимур" DOUBLE PRECISION,
+    "Владимир" DOUBLE PRECISION,
+    "Алина" DOUBLE PRECISION,
+    "Алексей" DOUBLE PRECISION,
+    "Длительность" TEXT,
 
     CONSTRAINT "Cost_pkey" PRIMARY KEY ("id")
 );
@@ -217,4 +217,3 @@ ALTER TABLE "public"."ServicePrices" ADD CONSTRAINT "ServicePrices_serviceId_fke
 
 -- AddForeignKey
 ALTER TABLE "public"."ServicePrices" ADD CONSTRAINT "ServicePrices_barberId_fkey" FOREIGN KEY ("barberId") REFERENCES "public"."Barbers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-

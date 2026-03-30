@@ -1,4 +1,4 @@
-﻿const createHomeClientStoreService = ({
+const createHomeClientStoreService = ({
   fs,
   dataFilePath,
   randomUUID,
@@ -65,7 +65,7 @@
       mapLink: "https://go.2gis.com/fPKd6",
       mapCaption: "Гагарина 10, центральный вход, повернуть направо",
       contactsTitle: "Контакты",
-      phone: "+7 908 669-00-94",
+      phone: "+7 964 659-92-96",
       telegramUrl: "",
       whatsappUrl: "",
       email: "",
@@ -1132,8 +1132,8 @@
       ...visitHistory.map((visit) => ({
         id: `visit-${visit.id}`,
         type: "visit",
-        title: "Р’РёР·РёС‚",
-        description: `${visit.barber || "Р‘Р°СЂР±РµСЂ"}${visit.services.length ? `, ${visit.services.join(", ")}` : ""}`,
+        title: "Визит",
+        description: `${visit.barber || "Барбер"}${visit.services.length ? `, ${visit.services.join(", ")}` : ""}`,
         amountRub: -Math.abs(visit.amountRub || 0),
         amountBs: 0,
         createdAt: visit.when || (visit.date ? `${visit.date}T00:00:00.000Z` : new Date().toISOString()),
@@ -1151,7 +1151,7 @@
     return {
       user: {
         id: user.id,
-        displayName: normalizeText(user.Name) || normalizePhone(user.Phone || "") || "РљР»РёРµРЅС‚",
+        displayName: normalizeText(user.Name) || normalizePhone(user.Phone || "") || "Клиент",
         phone: normalizePhone(user.Phone || "") || null,
         telegramId: normalizeText(user.TelegramID) || null,
         preferredBarber: normalizeText(user.Barber) || "",
@@ -1198,7 +1198,7 @@
               normalizeText(barber.cardTitle) ||
               normalizeText(barber.nickname) ||
               normalizeText(barber.name) ||
-              "Р‘Р°СЂР±РµСЂ";
+              "Барбер";
             return {
               id: barber.id,
               name: displayName,
@@ -1227,6 +1227,48 @@
     };
   };
 
+  const buildPublicHomePayload = async () => {
+    const store = await readStore();
+    const site = sanitizeSiteSettings(store.site || {});
+    const { barbers, services } = await buildCatalogHelpers();
+    await writeStore(store);
+    return {
+      booking: {
+        activeAppointments: [],
+        barbers: (Array.isArray(barbers) ? barbers : [])
+          .filter((barber) => barber?.isActive !== false)
+          .map((barber) => {
+            const servicesCount = (Array.isArray(services) ? services : []).reduce((count, service) => {
+              const price = Number(getServicePriceForBarber(service, barber.id));
+              return Number.isFinite(price) && price > 0 ? count + 1 : count;
+            }, 0);
+            const displayName =
+              normalizeText(barber.cardTitle) ||
+              normalizeText(barber.nickname) ||
+              normalizeText(barber.name) ||
+              "Барбер";
+            return {
+              id: barber.id,
+              name: displayName,
+              fullName: normalizeText(barber.name) || displayName,
+              nickname: normalizeText(barber.nickname),
+              description: normalizeText(barber.description),
+              color: normalizeText(barber.color),
+              rating: normalizeText(barber.rating),
+              avatarUrl: normalizeText(barber.avatarUrl),
+              cardImageUrl: normalizeText(barber.cardImageUrl),
+              cardTitle: normalizeText(barber.cardTitle),
+              cardDescription: normalizeText(barber.cardDescription),
+              cardPhrase: normalizeText(barber.cardPhrase),
+              phrase: normalizeText(barber.cardPhrase) || normalizeText(barber.description),
+              servicesCount,
+            };
+          }),
+      },
+      site,
+    };
+  };
+
   return {
     getUserMeta,
     updateUserMeta,
@@ -1240,6 +1282,7 @@
     applyBsToBookingAppointment,
     refundBsForCancelledAppointment,
     buildHomeAppPayload,
+    buildPublicHomePayload,
     buildUserInsightsMap,
   };
 };
@@ -1247,5 +1290,4 @@
 module.exports = {
   createHomeClientStoreService,
 };
-
 

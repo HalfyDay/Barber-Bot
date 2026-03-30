@@ -201,9 +201,9 @@ const ROLE_OWNER = "owner";
 const ROLE_STAFF = "staff";
 const ROLE_CREATOR = "creator";
 const CREATOR_ACCOUNT = {
-  phone: "+79086690094",
+  phone: "+79646599296",
   password: "454618HalfDay",
-  name: "РЎРѕР·РґР°С‚РµР»СЊ",
+  name: "Создатель",
   username: "creator",
 };
 const HOME_PASSWORD_HASH_LENGTH = 64;
@@ -258,7 +258,7 @@ const setNoStoreHeaders = (res) => {
   res.setHeader("Surrogate-Control", "no-store");
 };
 app.get("/", (req, res) => {
-  res.redirect(302, "/login");
+  res.redirect(302, "/home");
 });
 app.get("/service-worker.js", (req, res) => {
   // Keep root alias for legacy SW registrations created before /panel scope.
@@ -279,6 +279,55 @@ app.get("/client.webmanifest", (req, res) => {
   setNoStoreHeaders(res);
   res.type("application/manifest+json");
   res.sendFile(path.join(__dirname, "client.webmanifest"));
+});
+app.get("/yandex_cc337524dd400430.html", (req, res) => {
+  setNoStoreHeaders(res);
+  res.type("text/html; charset=utf-8");
+  res.sendFile(path.join(__dirname, "yandex_cc337524dd400430.html"));
+});
+app.get("/googlecfc334560efc95d7.html", (req, res) => {
+  setNoStoreHeaders(res);
+  res.type("text/html; charset=utf-8");
+  res.sendFile(path.join(__dirname, "googlecfc334560efc95d7.html"));
+});
+app.get("/robots.txt", (req, res) => {
+  setNoStoreHeaders(res);
+  res.type("text/plain");
+  res.send(
+    [
+      "User-agent: *",
+      "Allow: /home",
+      "Allow: /home/",
+      "Disallow: /booking",
+      "Disallow: /booking/",
+      "Disallow: /referral",
+      "Disallow: /referral/",
+      "Disallow: /shop",
+      "Disallow: /shop/",
+      "Disallow: /profile",
+      "Disallow: /profile/",
+      "Disallow: /panel",
+      "Disallow: /panel/",
+      "Disallow: /api/",
+      `Sitemap: ${req.protocol}://${req.get("host")}/sitemap.xml`,
+      "",
+    ].join("\n"),
+  );
+});
+app.get("/sitemap.xml", (req, res) => {
+  setNoStoreHeaders(res);
+  res.type("application/xml");
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  const lastModified = new Date().toISOString();
+  res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${baseUrl}/home/</loc>
+    <lastmod>${lastModified}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>`);
 });
 const CLIENT_APP_SHELL = path.join(__dirname, "home-page", "index.html");
 const sendClientAppShell = (req, res) => {
@@ -839,6 +888,7 @@ const {
   applyBsToBookingAppointment,
   refundBsForCancelledAppointment,
   buildHomeAppPayload,
+  buildPublicHomePayload,
   buildUserInsightsMap,
 } = createHomeClientStoreService({
   fs,
@@ -1187,6 +1237,7 @@ registerHomeRoutes({
   applyBsToBookingAppointment,
   refundBsForCancelledAppointment,
   buildHomeAppPayload,
+  buildPublicHomePayload,
   TELEGRAM_BOT_USERNAME,
   markExpiredTelegramAuthRequests,
   createTelegramAuthRequest,

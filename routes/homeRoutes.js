@@ -1,4 +1,4 @@
-﻿const registerHomeRoutes = ({
+const registerHomeRoutes = ({
   app,
   authenticateHomeToken,
   prisma,
@@ -27,6 +27,7 @@
   applyBsToBookingAppointment,
   refundBsForCancelledAppointment,
   buildHomeAppPayload,
+  buildPublicHomePayload,
   TELEGRAM_BOT_USERNAME,
   markExpiredTelegramAuthRequests,
   createTelegramAuthRequest,
@@ -875,6 +876,25 @@
       return res.status(500).json({
         success: false,
         message: "Не удалось загрузить данные приложения.",
+      });
+    }
+  });
+
+  app.get("/api/home/public", async (req, res) => {
+    try {
+      const payload = await buildPublicHomePayload();
+      return res.json({
+        success: true,
+        ...payload,
+      });
+    } catch (error) {
+      console.error("Public home payload error:", {
+        message: error?.message || error,
+        stack: error?.stack || null,
+      });
+      return res.status(500).json({
+        success: false,
+        message: "Не удалось загрузить публичную страницу.",
       });
     }
   });

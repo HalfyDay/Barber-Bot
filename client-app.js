@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const ROOT = document.getElementById("app");
   const API_ROOT = `${window.location.origin}/api/home`;
   const LOGIN_PAGE_URL = "/login/";
@@ -6,7 +6,12 @@
   const LOGOUT_MARKER_STORAGE_KEY = "home-user-logout-marker";
   const SITE_PRESENCE_SESSION_KEY = "home-site-presence-session-id";
   const SITE_PRESENCE_PING_INTERVAL_MS = 30000;
-  const CONTACT_PHONE = "+7 908 669-00-94";
+  const CONTACT_PHONE = "+7 964 659-92-96";
+  const SEO_HOME_TITLE = "BrotherShop | Барбершоп в Братске, мужские стрижки и оформление бороды";
+  const SEO_HOME_DESCRIPTION =
+    "BrotherShop, барбершоп в Братске. Мужские стрижки, оформление бороды и онлайн-запись. Адрес: улица Гагарина, 10, 1 этаж, Центральный район, Братск. Телефон: +7 964 659-92-96.";
+  const SEO_HOME_OG_DESCRIPTION =
+    "BrotherShop в Братске: мужские стрижки, оформление бороды, удобная онлайн-запись и барберы в Центральном районе.";
   const IS_ANDROID_APP_SHELL = /BrotherShopAndroidApp/i.test(window.navigator?.userAgent || "");
   const IS_DESKTOP_SHEET_DISMISS = Boolean(window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches);
   const REFERRAL_TRANSFER_QUICK_AMOUNTS = [10, 25, 50, 100];
@@ -370,15 +375,16 @@
   };
   const getPageFromPath = (pathname) => {
     const normalized = normalizeText(pathname || window.location.pathname).replace(/\/+$/, "") || "/";
+    if (normalized === "/" || normalized === "/home") return "home";
     if (normalized === "/referral") return "referral";
     if (normalized === "/booking") return "booking";
     if (normalized === "/shop") return "shop";
     if (normalized === "/achievements") return "achievements";
     if (normalized === "/profile") return "profile";
-    return "home";
+    return "";
   };
   const syncPageFromLocation = () => {
-    state.currentPage = getPageFromPath(window.location.pathname);
+    state.currentPage = getPageFromPath(window.location.pathname) || "home";
   };
 
   const getStorage = (type) => {
@@ -411,6 +417,15 @@
     } catch {
       // ignore
     }
+  };
+
+  const isAuthenticated = () => Boolean(normalizeText(state.session?.token));
+
+  const buildLoginUrl = (nextPath = "") => {
+    const loginUrl = new URL(LOGIN_PAGE_URL, window.location.origin);
+    const safeNextPath = normalizeText(nextPath);
+    if (safeNextPath) loginUrl.searchParams.set("next", safeNextPath);
+    return `${loginUrl.pathname}${loginUrl.search}${loginUrl.hash}`;
   };
 
   const buildSessionPayload = (payload = {}) => ({
@@ -450,7 +465,10 @@
     removeStorage(getStorage("session"), SESSION_STORAGE_KEY);
   };
 
-  const redirectToLogin = () => window.location.replace(LOGIN_PAGE_URL);
+  const redirectToLogin = (nextPath = "") => {
+    const fallbackPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.location.replace(buildLoginUrl(normalizeText(nextPath) || fallbackPath));
+  };
 
   const setLogoutMarker = () => {
     const marker = String(Date.now());
@@ -858,6 +876,18 @@
     return payload;
   };
 
+  const publicApiRequest = async (path) => {
+    const response = await fetch(`${API_ROOT}${path}`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(normalizeText(payload.message || payload.error) || "Ошибка запроса.");
+    return payload;
+  };
+
   const ensureSitePresenceSessionId = () => {
     const existing = normalizeText(window.sessionStorage.getItem(SITE_PRESENCE_SESSION_KEY));
     if (existing) return existing;
@@ -1034,19 +1064,23 @@
   const renderTopbar = () => {
     const user = state.payload?.user || {};
     const siteHome = state.payload?.site?.home || {};
-    return memoizeRenderedFragment("topbar", [user, siteHome], () => `
+    const authenticated = isAuthenticated();
+    return memoizeRenderedFragment("topbar", [user, siteHome, authenticated], () => `
       <header class="topbar">
         <div class="brand">
           <span class="brand-title">${normalizeText(siteHome.logoText || "BrotherShop")}</span>
         </div>
         <div class="topbar-side">
-          <div class="chip">${avatarMarkup(user, 44)}<span>${normalizeText(user.displayName || "Клиент")}</span></div>
+          ${authenticated
+            ? `<div class="chip">${avatarMarkup(user, 44)}<span>${normalizeText(user.displayName || "Клиент")}</span></div>`
+            : `<a class="ghost-btn" href="${buildLoginUrl("/booking/")}">Войти</a>`}
         </div>
       </header>
     `);
   };
 
   const renderBottomNav = () => {
+    if (!isAuthenticated()) return "";
     const items = [
       {
         id: "home",
@@ -1219,6 +1253,37 @@
             ${normalizeText(siteHome.email) ? `<a class="ghost-btn square-btn icon-btn" href="mailto:${normalizeText(siteHome.email)}" aria-label="Email">${iconMarkup("mail")}<span>Email</span></a>` : ""}
           </div>
           ${!normalizeText(siteHome.telegramUrl) && !normalizeText(siteHome.whatsappUrl) && !normalizeText(siteHome.email) ? `<p class="app-note">Сейчас доступен звонок по телефону. Остальные способы связи можно добавить в CRM.</p>` : ""}
+        </article>
+        <article class="content-card">
+          <div class="section-head">
+            <div>
+              <div class="section-eyebrow">Услуги</div>
+              <h2 class="section-title">Мужские стрижки и оформление бороды в Братске</h2>
+            </div>
+          </div>
+          <p class="section-text">BrotherShop это барбершоп в Братске для мужских стрижек, оформления бороды и удобной онлайн-записи. Страница помогает быстро посмотреть мастеров, открыть запись и выбрать подходящее время визита.</p>
+          <p class="section-text">Адрес барбершопа: улица Гагарина, 10, 1 этаж, Центральный район, Братск. Телефон для связи: <a href="tel:${normalizePhone(siteHome.phone || CONTACT_PHONE)}">${normalizeText(siteHome.phone || CONTACT_PHONE)}</a>.</p>
+        </article>
+        <article class="content-card">
+          <div class="section-head">
+            <div>
+              <div class="section-eyebrow">Почему мы</div>
+              <h2 class="section-title">Почему BrotherShop выбирают в Центральном районе</h2>
+            </div>
+          </div>
+          <p class="section-text">Барбершоп удобно расположен в Центральном районе Братска. На сайте можно перейти к записи, выбрать барбера и подобрать свободный слот без звонков и долгого ожидания.</p>
+          <p class="section-text">Публичная главная страница показывает актуальную информацию о BrotherShop, а оформление записи остается доступным после авторизации, чтобы личные данные клиента были защищены.</p>
+        </article>
+        <article class="content-card">
+          <div class="section-head">
+            <div>
+              <div class="section-eyebrow">FAQ</div>
+              <h2 class="section-title">Частые вопросы</h2>
+            </div>
+          </div>
+          <p class="section-text"><strong>Где находится барбершоп?</strong> Улица Гагарина, 10, 1 этаж, Центральный район, Братск, Иркутская область.</p>
+          <p class="section-text"><strong>Как записаться?</strong> Нажмите на кнопку записи, авторизуйтесь и выберите барбера, услугу, дату и время.</p>
+          <p class="section-text"><strong>Какой номер у BrotherShop?</strong> <a href="tel:${normalizePhone(siteHome.phone || CONTACT_PHONE)}">${normalizeText(siteHome.phone || CONTACT_PHONE)}</a>.</p>
         </article>
         <article class="content-card">
           <div class="section-head">
@@ -2178,13 +2243,14 @@
           <p class="list-title">Не удалось загрузить приложение</p>
           <p>${normalizeText(state.bootstrapError)}</p>
           <div class="sheet-actions app-bootstrap-error-actions">
-            <button class="secondary-btn" type="button" data-action="logout">Выйти</button>
+            ${isAuthenticated() ? `<button class="secondary-btn" type="button" data-action="logout">Выйти</button>` : ""}
             <button class="primary-btn" type="button" data-action="reload-app">Повторить</button>
           </div>
         </section>
       `;
     }
     if (!state.payload) return `<div class="loading-state">Загрузка приложения...</div>`;
+    if (!isAuthenticated() && state.currentPage !== "home") return renderHomePage();
     if (state.currentPage === "referral") return renderReferralPage();
     if (state.currentPage === "booking") return renderBookingPage();
     if (state.currentPage === "shop") return renderShopPage();
@@ -2195,7 +2261,7 @@
 
   const syncDocumentMeta = () => {
     const titles = {
-      home: "BrotherShop",
+      home: SEO_HOME_TITLE,
       referral: "BrotherShop • Бонусы",
       booking: "BrotherShop • Запись",
       shop: "BrotherShop • Магазин",
@@ -2203,6 +2269,47 @@
       profile: "BrotherShop • Профиль",
     };
     document.title = titles[state.currentPage] || "BrotherShop";
+    const ensureHeadTag = (selector, factory) => {
+      let node = document.head.querySelector(selector);
+      if (!node) {
+        node = factory();
+        document.head.appendChild(node);
+      }
+      return node;
+    };
+    const setMetaContent = (selector, attributeName, attributeValue, content) => {
+      const node = ensureHeadTag(selector, () => {
+        const meta = document.createElement("meta");
+        meta.setAttribute(attributeName, attributeValue);
+        return meta;
+      });
+      node.setAttribute("content", content);
+    };
+    const canonicalHref =
+      state.currentPage === "home"
+        ? `${window.location.origin}/home/`
+        : `${window.location.origin}${window.location.pathname}`;
+    const canonical = ensureHeadTag("link[rel='canonical']", () => {
+      const link = document.createElement("link");
+      link.setAttribute("rel", "canonical");
+      return link;
+    });
+    canonical.setAttribute("href", canonicalHref);
+    setMetaContent("meta[name='description']", "name", "description", state.currentPage === "home" ? SEO_HOME_DESCRIPTION : "BrotherShop");
+    setMetaContent(
+      "meta[name='robots']",
+      "name",
+      "robots",
+      state.currentPage === "home" ? "index,follow,max-image-preview:large" : "noindex,nofollow",
+    );
+    setMetaContent("meta[property='og:title']", "property", "og:title", state.currentPage === "home" ? SEO_HOME_TITLE : document.title);
+    setMetaContent(
+      "meta[property='og:description']",
+      "property",
+      "og:description",
+      state.currentPage === "home" ? SEO_HOME_OG_DESCRIPTION : "BrotherShop",
+    );
+    setMetaContent("meta[property='og:url']", "property", "og:url", canonicalHref);
   };
 
   const navigateTo = (href, options = {}) => {
@@ -2212,6 +2319,14 @@
       return;
     }
     const nextPage = getPageFromPath(url.pathname);
+    if (!nextPage) {
+      window.location.assign(url.toString());
+      return;
+    }
+    if (!isAuthenticated() && nextPage !== "home") {
+      redirectToLogin(`${url.pathname}${url.search}${url.hash}`);
+      return;
+    }
     if (!options.replace && `${url.pathname}${url.search}${url.hash}` === `${window.location.pathname}${window.location.search}${window.location.hash}`) {
       return;
     }
@@ -3208,36 +3323,52 @@
     syncPageFromLocation();
     installDelegatedHandlers();
     state.session = loadSession();
-    if (!state.session?.token) {
-      redirectToLogin();
+    if (!isAuthenticated() && state.currentPage !== "home") {
+      navigateTo("/home/", { replace: true });
+      return;
+    }
+    window.history.replaceState(buildHistoryState(), "", `${window.location.pathname}${window.location.search}${window.location.hash}`);
+    window.addEventListener("popstate", (event) => {
+      suppressSheetHistoryBack = true;
+      stopReferralQrScanner();
+      state.navIndicatorIndex = Math.max(0, ["home", "referral", "booking", "shop", "profile"].findIndex((item) => item === state.currentPage));
+      syncPageFromLocation();
+      if (!isAuthenticated() && state.currentPage !== "home") {
+        state.currentPage = "home";
+        window.history.replaceState(buildHistoryState(), "", "/home/");
+      }
+      state.booking.stepAnimationsEnabled = state.currentPage === "booking";
+      state.routeTransitionActive = true;
+      if (event.state?.sheet && isAuthenticated()) {
+        state.sheet = {
+          title: normalizeText(event.state.sheet.title),
+          bodyHtml: event.state.sheet.bodyHtml || "",
+          footerHtml: event.state.sheet.footerHtml || "",
+          className: normalizeText(event.state.sheet.className),
+        };
+        state.sheetState = "open";
+      } else {
+        state.sheet = null;
+        state.sheetState = "closed";
+      }
+      render();
+      suppressSheetHistoryBack = false;
+    });
+    if (!isAuthenticated()) {
+      try {
+        state.payload = await publicApiRequest("/public");
+        state.bootstrapError = "";
+        render();
+      } catch (error) {
+        state.bootstrapError =
+          normalizeText(error?.message) || "Не удалось загрузить данные приложения.";
+        render();
+      }
       return;
     }
     try {
       state.payload = await apiRequest("/app");
       state.bootstrapError = "";
-      window.history.replaceState(buildHistoryState(), "", `${window.location.pathname}${window.location.search}${window.location.hash}`);
-      window.addEventListener("popstate", (event) => {
-        suppressSheetHistoryBack = true;
-        stopReferralQrScanner();
-        state.navIndicatorIndex = Math.max(0, ["home", "referral", "booking", "shop", "profile"].findIndex((item) => item === state.currentPage));
-        syncPageFromLocation();
-        state.booking.stepAnimationsEnabled = state.currentPage === "booking";
-        state.routeTransitionActive = true;
-        if (event.state?.sheet) {
-          state.sheet = {
-            title: normalizeText(event.state.sheet.title),
-            bodyHtml: event.state.sheet.bodyHtml || "",
-            footerHtml: event.state.sheet.footerHtml || "",
-            className: normalizeText(event.state.sheet.className),
-          };
-          state.sheetState = "open";
-        } else {
-          state.sheet = null;
-          state.sheetState = "closed";
-        }
-        render();
-        suppressSheetHistoryBack = false;
-      });
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") {
           void sendSitePresence("online");

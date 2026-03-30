@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const HOME_API_BASE_URL = `${window.location.origin}/api/home/auth`;
   const HOME_TELEGRAM_AUTH_START_API_URL = `${HOME_API_BASE_URL}/telegram/start`;
   const HOME_TELEGRAM_AUTH_STATUS_API_URL = `${HOME_API_BASE_URL}/telegram/status`;
@@ -389,8 +389,24 @@
     }
   };
 
+  const getPostLoginRedirectUrl = () => {
+    const fallbackUrl = new URL(HOME_PAGE_URL, window.location.origin);
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      const nextValue = normalizeText(params.get("next"));
+      if (!nextValue.startsWith("/")) return fallbackUrl.pathname + fallbackUrl.search + fallbackUrl.hash;
+      const nextUrl = new URL(nextValue, window.location.origin);
+      if (nextUrl.origin !== window.location.origin) {
+        return fallbackUrl.pathname + fallbackUrl.search + fallbackUrl.hash;
+      }
+      return `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+    } catch {
+      return fallbackUrl.pathname + fallbackUrl.search + fallbackUrl.hash;
+    }
+  };
+
   const redirectToHome = () => {
-    window.location.replace(HOME_PAGE_URL);
+    window.location.replace(getPostLoginRedirectUrl());
   };
 
   const tryRestoreSession = async () => {
@@ -549,7 +565,7 @@
       }
       setStatus(
         normalizeText(homePayload?.message) ||
-          "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ РІС…РѕРґ.",
+          "Не удалось выполнить вход.",
         "error",
       );
       setPending(loginForm, false);
@@ -591,7 +607,7 @@
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.success || !payload?.token || !payload?.user) {
-        setStatus(payload?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°С‚СЊСЃСЏ.", "error");
+        setStatus(payload?.message || "Не удалось зарегистрироваться.", "error");
         setPending(registerForm, false);
         return;
       }
@@ -664,7 +680,7 @@
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || !payload?.success || !payload?.token || !payload?.user) {
           setStatus(
-            payload?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РІРµСЂС€РёС‚СЊ РІС…РѕРґ С‡РµСЂРµР· Telegram.",
+            payload?.message || "Не удалось завершить вход через Telegram.",
             "error",
           );
           setPending(registerForm, false);
@@ -696,7 +712,7 @@
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.success || !payload?.token || !payload?.user) {
-        setStatus(payload?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°С‚СЊСЃСЏ.", "error");
+        setStatus(payload?.message || "Не удалось зарегистрироваться.", "error");
         setPending(registerForm, false);
         return;
       }
@@ -835,7 +851,7 @@
         return;
       }
       setStatus(
-        normalizeText(payload?.message) || "Telegram-Р°РІС‚РѕСЂРёР·Р°С†РёСЏ РЅРµ Р·Р°РІРµСЂС€РµРЅР°.",
+        normalizeText(payload?.message) || "Telegram-авторизация не завершена.",
         "error",
       );
       finishTelegramFlow();
@@ -870,7 +886,7 @@
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.success || !payload?.requestId || !payload?.code) {
         setStatus(
-          normalizeText(payload?.message) || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ Telegram-Р°РІС‚РѕСЂРёР·Р°С†РёСЋ.",
+          normalizeText(payload?.message) || "Не удалось запустить Telegram-авторизацию.",
           "error",
         );
         setTelegramPending(false);

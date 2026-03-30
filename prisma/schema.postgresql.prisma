@@ -60,12 +60,12 @@ model Schedules {
 
 model Cost {
   id         String  @id
-  Uslugi     String? @map("РЈСЃР»СѓРіРё")
-  Timur      Float?  @map("РўРёРјСѓСЂ")
-  Vladimir   Float?  @map("Р’Р»Р°РґРёРјРёСЂ")
-  Alina      Float?  @map("РђР»РёРЅР°")
-  Aleksey    Float?  @map("РђР»РµРєСЃРµР№")
-  Dlitelnost String? @map("Р”Р»РёС‚РµР»СЊРЅРѕСЃС‚СЊ")
+  Uslugi     String? @map("Услуги")
+  Timur      Float?  @map("Тимур")
+  Vladimir   Float?  @map("Владимир")
+  Alina      Float?  @map("Алина")
+  Aleksey    Float?  @map("Алексей")
+  Dlitelnost String? @map("Длительность")
 
   @@map("Cost")
 }

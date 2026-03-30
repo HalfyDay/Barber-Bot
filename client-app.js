@@ -67,6 +67,7 @@
   let referralQrScannerSession = 0;
   let delegatedHandlersBound = false;
   let sitePresenceTimer = null;
+  let promoMarqueeAutoScroll = null;
   const derivedDataCache = {
     profileHistory: { visitHistoryRef: null, operationsRef: null, items: [] },
     filteredProfileHistory: { itemsRef: null, filter: "", filtered: [] },
@@ -120,6 +121,168 @@
   const extractBackgroundImageUrl = (value) => {
     const match = /url\((['"]?)(.*?)\1\)/.exec(normalizeText(value));
     return normalizeText(match?.[2]);
+  };
+  const teardownPromoMarqueeAutoScroll = () => {
+    if (!promoMarqueeAutoScroll) return;
+    if (promoMarqueeAutoScroll.frame) window.cancelAnimationFrame(promoMarqueeAutoScroll.frame);
+    if (Array.isArray(promoMarqueeAutoScroll.cleanupHandlers)) {
+      promoMarqueeAutoScroll.cleanupHandlers.forEach((cleanup) => {
+        try {
+          cleanup();
+        } catch {}
+      });
+    }
+    promoMarqueeAutoScroll = null;
+  };
+  const setupPromoMarqueeAutoScroll = (scope = ROOT) => {
+    const marquee = scope.querySelector(".promo-marquee.is-animated");
+    if (!marquee) {
+      teardownPromoMarqueeAutoScroll();
+      return;
+    }
+    const track = marquee.querySelector(".promo-track.is-animated");
+    const firstLane = marquee.querySelector(".promo-lane");
+    if (!track || !firstLane) {
+      teardownPromoMarqueeAutoScroll();
+      return;
+    }
+    if (promoMarqueeAutoScroll?.marquee === marquee) return;
+    teardownPromoMarqueeAutoScroll();
+    const isTouchDevice = "ontouchstart" in window || Number(window.navigator?.maxTouchPoints || 0) > 0;
+    const hasScrollableOverflow = track.scrollWidth > marquee.clientWidth + 8;
+    if (!isTouchDevice || !hasScrollableOverflow) return;
+    const autoScrollState = {
+      marquee,
+      track,
+      frame: null,
+      lastTimestamp: window.performance.now(),
+      pauseUntil: 0,
+      isDragging: false,
+      dragStartX: 0,
+      dragStartOffset: 0,
+      dragLastX: 0,
+      dragLastTime: 0,
+      recentMoves: [],
+      velocity: 0,
+      offset: 0,
+      cleanupHandlers: [],
+    };
+    const getLoopWidth = () => {
+      const trackGap = Number.parseFloat(window.getComputedStyle(track).gap || "0") || 0;
+      return firstLane.scrollWidth + trackGap;
+    };
+    const applyOffset = () => {
+      track.style.transform = `translate3d(${-autoScrollState.offset}px, 0, 0)`;
+    };
+    const pauseAutoScroll = (duration = 2200) => {
+      autoScrollState.pauseUntil = window.performance.now() + duration;
+    };
+    const normalizeOffset = () => {
+      const loopWidth = getLoopWidth();
+      if (!loopWidth) return;
+      while (autoScrollState.offset >= loopWidth) autoScrollState.offset -= loopWidth;
+      while (autoScrollState.offset < 0) autoScrollState.offset += loopWidth;
+    };
+    const tick = (timestamp) => {
+      if (promoMarqueeAutoScroll !== autoScrollState) return;
+      if (!document.body.contains(marquee)) {
+        teardownPromoMarqueeAutoScroll();
+        return;
+      }
+      const now = Number.isFinite(timestamp) ? timestamp : window.performance.now();
+      const delta = Math.min(34, Math.max(0, now - autoScrollState.lastTimestamp));
+      autoScrollState.lastTimestamp = now;
+      if (!autoScrollState.isDragging) {
+        if (Math.abs(autoScrollState.velocity) > 0.001) {
+          autoScrollState.offset += autoScrollState.velocity * delta;
+          autoScrollState.velocity *= Math.pow(0.996, delta);
+        } else if (now >= autoScrollState.pauseUntil) {
+          autoScrollState.velocity = 0;
+          autoScrollState.offset += delta * 0.05;
+        }
+        normalizeOffset();
+        applyOffset();
+      }
+      autoScrollState.frame = window.requestAnimationFrame(tick);
+    };
+    const bindEvent = (target, eventName, handler, options) => {
+      target.addEventListener(eventName, handler, options);
+      autoScrollState.cleanupHandlers.push(() => target.removeEventListener(eventName, handler, options));
+    };
+    const startDrag = (clientX) => {
+      autoScrollState.isDragging = true;
+      autoScrollState.dragStartX = clientX;
+      autoScrollState.dragStartOffset = autoScrollState.offset;
+      autoScrollState.dragLastX = clientX;
+      autoScrollState.dragLastTime = window.performance.now();
+      autoScrollState.recentMoves = [{ x: clientX, time: autoScrollState.dragLastTime }];
+      autoScrollState.velocity = 0;
+      pauseAutoScroll(2600);
+    };
+    const moveDrag = (clientX) => {
+      if (!autoScrollState.isDragging) return;
+      const now = window.performance.now();
+      const timeDelta = Math.max(1, now - autoScrollState.dragLastTime);
+      const positionDelta = clientX - autoScrollState.dragLastX;
+      autoScrollState.velocity = (-positionDelta / timeDelta) * 0.9;
+      autoScrollState.dragLastX = clientX;
+      autoScrollState.dragLastTime = now;
+      autoScrollState.recentMoves.push({ x: clientX, time: now });
+      autoScrollState.recentMoves = autoScrollState.recentMoves.filter((item) => now - item.time <= 120);
+      autoScrollState.offset = autoScrollState.dragStartOffset - (clientX - autoScrollState.dragStartX);
+      normalizeOffset();
+      applyOffset();
+    };
+    const endDrag = () => {
+      if (!autoScrollState.isDragging) return;
+      autoScrollState.isDragging = false;
+      const recentMoves = autoScrollState.recentMoves;
+      if (recentMoves.length >= 2) {
+        const firstMove = recentMoves[0];
+        const lastMove = recentMoves[recentMoves.length - 1];
+        const elapsed = Math.max(1, lastMove.time - firstMove.time);
+        autoScrollState.velocity = (-(lastMove.x - firstMove.x) / elapsed) * 1.15;
+      }
+      if (Math.abs(autoScrollState.velocity) < 0.002) autoScrollState.velocity = 0;
+      autoScrollState.recentMoves = [];
+      pauseAutoScroll(1800);
+    };
+    bindEvent(marquee, "pointerdown", (event) => {
+      startDrag(event.clientX);
+    }, { passive: true });
+    bindEvent(window, "pointermove", (event) => {
+      moveDrag(event.clientX);
+    }, { passive: true });
+    bindEvent(window, "pointerup", () => {
+      endDrag();
+    }, { passive: true });
+    bindEvent(window, "pointercancel", () => {
+      endDrag();
+    }, { passive: true });
+    bindEvent(marquee, "touchstart", (event) => {
+      const touch = event.touches?.[0];
+      if (!touch) return;
+      startDrag(touch.clientX);
+    }, { passive: true });
+    bindEvent(window, "touchmove", (event) => {
+      const touch = event.touches?.[0];
+      if (!touch) return;
+      moveDrag(touch.clientX);
+    }, { passive: true });
+    bindEvent(window, "touchend", () => {
+      endDrag();
+    }, { passive: true });
+    bindEvent(window, "touchcancel", () => {
+      endDrag();
+    }, { passive: true });
+    promoMarqueeAutoScroll = autoScrollState;
+    track.style.willChange = "transform";
+    autoScrollState.cleanupHandlers.push(() => {
+      track.style.transform = "";
+      track.style.willChange = "";
+    });
+    applyOffset();
+    autoScrollState.frame = window.requestAnimationFrame(tick);
   };
   const resolveMediaAssetUrl = (value) => {
     const safeValue = normalizeText(value);
@@ -2100,6 +2263,7 @@
     const sheetScope = sheetHost.querySelector(".sheet-backdrop");
     if (appChanged) setupMediaWaveLoading(renderScope);
     if (sheetChanged && sheetScope) setupMediaWaveLoading(sheetScope);
+    setupPromoMarqueeAutoScroll(renderScope);
     if (
       state.currentPage === "referral" ||
       ["Быстрый перевод", "Перевести BS"].includes(normalizeText(state.sheet?.title))
@@ -2533,7 +2697,7 @@
     openSheet(
       normalizeText(promo.title || "Акция"),
       `<article class="promo-sheet-card">
-        ${normalizeText(promo.imageUrl) ? `<div class="promo-sheet-hero" style="background-image:url('${normalizeText(promo.imageUrl)}');"><div class="promo-sheet-hero-glow"></div><div class="promo-sheet-hero-copy"><strong>${normalizeText(promo.title)}</strong>${normalizeText(promo.subtitle) ? `<p>${normalizeText(promo.subtitle)}</p>` : ""}</div></div>` : `<div class="promo-sheet-hero promo-sheet-hero-empty"><div class="promo-sheet-hero-copy"><strong>${normalizeText(promo.title)}</strong>${normalizeText(promo.subtitle) ? `<p>${normalizeText(promo.subtitle)}</p>` : ""}</div></div>`}
+        ${normalizeText(promo.imageUrl) ? `<div class="promo-sheet-hero" style="background-image:url('${normalizeText(promo.imageUrl)}');"><div class="promo-sheet-hero-glow"></div><div class="promo-sheet-hero-copy"><strong>${normalizeText(promo.title)}</strong></div></div>` : `<div class="promo-sheet-hero promo-sheet-hero-empty"><div class="promo-sheet-hero-copy"><strong>${normalizeText(promo.title)}</strong></div></div>`}
         <div class="promo-sheet-body">
           ${normalizeText(promo.subtitle) ? `<div class="promo-sheet-summary"><p class="list-title">${normalizeText(promo.subtitle)}</p></div>` : ""}
           <div class="promo-sheet-copy">
@@ -3079,6 +3243,9 @@
           void sendSitePresence("online");
         }
       });
+      window.addEventListener("resize", () => {
+        setupPromoMarqueeAutoScroll();
+      }, { passive: true });
       window.addEventListener("beforeunload", () => {
         void sendSitePresence("offline");
       });

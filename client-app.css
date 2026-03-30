@@ -136,6 +136,7 @@ a {
   text-decoration: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 button,
@@ -161,6 +162,9 @@ video,
 a,
 button {
   -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 button {
@@ -629,7 +633,7 @@ textarea:focus-visible {
 .home-frame.home-promo-strip {
   width: 100%;
   max-width: 100%;
-  padding: 8px 0;
+  padding: 0;
   background: transparent;
   border: 0;
   box-shadow: none;
@@ -750,7 +754,7 @@ img.media-wave.is-ready {
   overflow: hidden;
   margin: 0;
   border-radius: 0;
-  padding: 12px 16px 18px;
+  padding: 2px 0;
   background: transparent;
   border: 0;
   box-shadow: none;
@@ -1121,6 +1125,8 @@ img.media-wave.is-ready {
 .promo-sheet-copy p {
   color: rgba(229, 236, 235, 0.9);
   line-height: 1.6;
+  text-align: justify;
+  text-justify: inter-word;
 }
 
 .promo-sheet-close {
@@ -5390,7 +5396,7 @@ img.media-wave.is-ready {
   }
 
   .promo-marquee {
-    padding: 10px 10px 14px;
+    padding: 2px 0;
     overflow-x: auto;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
@@ -5402,6 +5408,7 @@ img.media-wave.is-ready {
   .promo-marquee.is-animated {
     overflow: hidden;
     -webkit-overflow-scrolling: auto;
+    touch-action: pan-y;
   }
 
   .promo-marquee::-webkit-scrollbar {
@@ -5419,8 +5426,8 @@ img.media-wave.is-ready {
 
   .promo-marquee.is-animated .promo-track {
     width: max-content;
-    min-width: 0;
-    animation: promo-marquee 28s linear infinite;
+    min-width: max-content;
+    animation: none;
   }
 
   .promo-lane {

@@ -1,6 +1,5 @@
 User-agent: *
-Allow: /home
-Allow: /home/
+Allow: /
 Disallow: /booking
 Disallow: /booking/
 Disallow: /referral
@@ -9,6 +8,8 @@ Disallow: /shop
 Disallow: /shop/
 Disallow: /profile
 Disallow: /profile/
+Disallow: /home
+Disallow: /home/
 Disallow: /panel
 Disallow: /panel/
 Disallow: /api/

@@ -258,8 +258,10 @@ const setNoStoreHeaders = (res) => {
   res.setHeader("Expires", "0");
   res.setHeader("Surrogate-Control", "no-store");
 };
+const PUBLIC_HOME_LANDING = path.join(__dirname, "home-page", "index.html");
 app.get("/", (req, res) => {
-  res.redirect(302, "/home");
+  setNoStoreHeaders(res);
+  res.sendFile(PUBLIC_HOME_LANDING);
 });
 app.get("/service-worker.js", (req, res) => {
   // Keep root alias for legacy SW registrations created before /panel scope.
@@ -301,7 +303,7 @@ app.get("/sitemap.xml", (req, res) => {
   res.type("application/xml; charset=utf-8");
   res.sendFile(path.join(__dirname, "sitemap.xml"));
 });
-const CLIENT_APP_SHELL = path.join(__dirname, "home-page", "index.html");
+const CLIENT_APP_SHELL = path.join(__dirname, "home-page", "app-shell.html");
 const sendClientAppShell = (req, res) => {
   setNoStoreHeaders(res);
   res.sendFile(CLIENT_APP_SHELL);

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BrotherShop • Главная</title>
+  <meta name="description" content="Клиентское приложение BrotherShop." />
+  <meta name="robots" content="noindex,nofollow" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="ru_RU" />
+  <meta property="og:title" content="BrotherShop • Главная" />
+  <meta property="og:description" content="Клиентское приложение BrotherShop." />
+  <meta property="og:url" content="https://brothershop.website/home/" />
+  <link rel="canonical" href="https://brothershop.website/home/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Unbounded:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="/client.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="/Image/site/login/orig_logo.svg" />
+  <link rel="shortcut icon" href="/Image/site/login/orig_logo.svg" />
+  <link rel="apple-touch-icon" href="/Image/site/login/orig_logo.svg" />
+  <link rel="stylesheet" href="/client-app.css" />
+  <meta name="theme-color" content="#0a1414" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <script>
+    (function () {
+      try {
+        var localValue = window.localStorage && window.localStorage.getItem("home-user-session");
+        var sessionValue = window.sessionStorage && window.sessionStorage.getItem("home-user-session");
+        var raw = localValue || sessionValue || "";
+        var parsed = raw ? JSON.parse(raw) : null;
+        var token = parsed && typeof parsed.token === "string" ? parsed.token.trim() : "";
+        if (!token) {
+          window.location.replace("/login/?next=/home/");
+        }
+      } catch {
+        window.location.replace("/login/?next=/home/");
+      }
+    })();
+  </script>
+</head>
+<body data-page="app">
+  <main id="app"></main>
+  <script src="/client-app.js" defer></script>
+</body>
+</html>

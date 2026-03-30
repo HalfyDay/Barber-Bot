@@ -8,6 +8,7 @@
   const SITE_PRESENCE_PING_INTERVAL_MS = 30000;
   const CONTACT_PHONE = "+7 964 659-92-96";
   const SEO_HOME_TITLE = "BrotherShop | Барбершоп в Братске, мужские стрижки и оформление бороды";
+  const APP_HOME_TITLE = "BrotherShop • Главная";
   const SEO_HOME_DESCRIPTION =
     "BrotherShop, барбершоп в Братске. Мужские стрижки, оформление бороды и онлайн-запись. Адрес: улица Гагарина, 10, 1 этаж, Центральный район, Братск. Телефон: +7 964 659-92-96.";
   const SEO_HOME_OG_DESCRIPTION =
@@ -465,9 +466,14 @@
     removeStorage(getStorage("session"), SESSION_STORAGE_KEY);
   };
 
-  const redirectToLogin = (nextPath = "") => {
+  const redirectToLogin = (nextPath = "", options = {}) => {
     const fallbackPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    window.location.replace(buildLoginUrl(normalizeText(nextPath) || fallbackPath));
+    const targetUrl = buildLoginUrl(normalizeText(nextPath) || fallbackPath);
+    if (options.replace === false) {
+      window.location.assign(targetUrl);
+      return;
+    }
+    window.location.replace(targetUrl);
   };
 
   const setLogoutMarker = () => {
@@ -1253,37 +1259,6 @@
             ${normalizeText(siteHome.email) ? `<a class="ghost-btn square-btn icon-btn" href="mailto:${normalizeText(siteHome.email)}" aria-label="Email">${iconMarkup("mail")}<span>Email</span></a>` : ""}
           </div>
           ${!normalizeText(siteHome.telegramUrl) && !normalizeText(siteHome.whatsappUrl) && !normalizeText(siteHome.email) ? `<p class="app-note">Сейчас доступен звонок по телефону. Остальные способы связи можно добавить в CRM.</p>` : ""}
-        </article>
-        <article class="content-card">
-          <div class="section-head">
-            <div>
-              <div class="section-eyebrow">Услуги</div>
-              <h2 class="section-title">Мужские стрижки и оформление бороды в Братске</h2>
-            </div>
-          </div>
-          <p class="section-text">BrotherShop это барбершоп в Братске для мужских стрижек, оформления бороды и удобной онлайн-записи. Страница помогает быстро посмотреть мастеров, открыть запись и выбрать подходящее время визита.</p>
-          <p class="section-text">Адрес барбершопа: улица Гагарина, 10, 1 этаж, Центральный район, Братск. Телефон для связи: <a href="tel:${normalizePhone(siteHome.phone || CONTACT_PHONE)}">${normalizeText(siteHome.phone || CONTACT_PHONE)}</a>.</p>
-        </article>
-        <article class="content-card">
-          <div class="section-head">
-            <div>
-              <div class="section-eyebrow">Почему мы</div>
-              <h2 class="section-title">Почему BrotherShop выбирают в Центральном районе</h2>
-            </div>
-          </div>
-          <p class="section-text">Барбершоп удобно расположен в Центральном районе Братска. На сайте можно перейти к записи, выбрать барбера и подобрать свободный слот без звонков и долгого ожидания.</p>
-          <p class="section-text">Публичная главная страница показывает актуальную информацию о BrotherShop, а оформление записи остается доступным после авторизации, чтобы личные данные клиента были защищены.</p>
-        </article>
-        <article class="content-card">
-          <div class="section-head">
-            <div>
-              <div class="section-eyebrow">FAQ</div>
-              <h2 class="section-title">Частые вопросы</h2>
-            </div>
-          </div>
-          <p class="section-text"><strong>Где находится барбершоп?</strong> Улица Гагарина, 10, 1 этаж, Центральный район, Братск, Иркутская область.</p>
-          <p class="section-text"><strong>Как записаться?</strong> Нажмите на кнопку записи, авторизуйтесь и выберите барбера, услугу, дату и время.</p>
-          <p class="section-text"><strong>Какой номер у BrotherShop?</strong> <a href="tel:${normalizePhone(siteHome.phone || CONTACT_PHONE)}">${normalizeText(siteHome.phone || CONTACT_PHONE)}</a>.</p>
         </article>
         <article class="content-card">
           <div class="section-head">
@@ -2250,7 +2225,6 @@
       `;
     }
     if (!state.payload) return `<div class="loading-state">Загрузка приложения...</div>`;
-    if (!isAuthenticated() && state.currentPage !== "home") return renderHomePage();
     if (state.currentPage === "referral") return renderReferralPage();
     if (state.currentPage === "booking") return renderBookingPage();
     if (state.currentPage === "shop") return renderShopPage();
@@ -2261,7 +2235,10 @@
 
   const syncDocumentMeta = () => {
     const titles = {
-      home: SEO_HOME_TITLE,
+      home:
+        normalizeText(window.location.pathname).replace(/\/+$/, "") === "/home"
+          ? APP_HOME_TITLE
+          : SEO_HOME_TITLE,
       referral: "BrotherShop • Бонусы",
       booking: "BrotherShop • Запись",
       shop: "BrotherShop • Магазин",
@@ -2286,8 +2263,8 @@
       node.setAttribute("content", content);
     };
     const canonicalHref =
-      state.currentPage === "home"
-        ? `${window.location.origin}/home/`
+      state.currentPage === "home" && normalizeText(window.location.pathname).replace(/\/+$/, "") === ""
+        ? `${window.location.origin}/`
         : `${window.location.origin}${window.location.pathname}`;
     const canonical = ensureHeadTag("link[rel='canonical']", () => {
       const link = document.createElement("link");
@@ -2295,19 +2272,43 @@
       return link;
     });
     canonical.setAttribute("href", canonicalHref);
-    setMetaContent("meta[name='description']", "name", "description", state.currentPage === "home" ? SEO_HOME_DESCRIPTION : "BrotherShop");
+    setMetaContent(
+      "meta[name='description']",
+      "name",
+      "description",
+      state.currentPage === "home"
+        ? normalizeText(window.location.pathname).replace(/\/+$/, "") === "/home"
+          ? "Клиентское приложение BrotherShop."
+          : SEO_HOME_DESCRIPTION
+        : "BrotherShop",
+    );
     setMetaContent(
       "meta[name='robots']",
       "name",
       "robots",
-      state.currentPage === "home" ? "index,follow,max-image-preview:large" : "noindex,nofollow",
+      state.currentPage === "home" && normalizeText(window.location.pathname).replace(/\/+$/, "") === ""
+        ? "index,follow,max-image-preview:large"
+        : "noindex,nofollow",
     );
-    setMetaContent("meta[property='og:title']", "property", "og:title", state.currentPage === "home" ? SEO_HOME_TITLE : document.title);
+    setMetaContent(
+      "meta[property='og:title']",
+      "property",
+      "og:title",
+      state.currentPage === "home"
+        ? normalizeText(window.location.pathname).replace(/\/+$/, "") === "/home"
+          ? APP_HOME_TITLE
+          : SEO_HOME_TITLE
+        : document.title,
+    );
     setMetaContent(
       "meta[property='og:description']",
       "property",
       "og:description",
-      state.currentPage === "home" ? SEO_HOME_OG_DESCRIPTION : "BrotherShop",
+      state.currentPage === "home"
+        ? normalizeText(window.location.pathname).replace(/\/+$/, "") === "/home"
+          ? "Клиентское приложение BrotherShop."
+          : SEO_HOME_OG_DESCRIPTION
+        : "BrotherShop",
     );
     setMetaContent("meta[property='og:url']", "property", "og:url", canonicalHref);
   };
@@ -2323,8 +2324,23 @@
       window.location.assign(url.toString());
       return;
     }
-    if (!isAuthenticated() && nextPage !== "home") {
-      redirectToLogin(`${url.pathname}${url.search}${url.hash}`);
+    if (!isAuthenticated()) {
+      const normalizedPath = normalizeText(url.pathname).replace(/\/+$/, "") || "/";
+      if (nextPage === "home" && normalizedPath === "/") {
+        if (options.replace) {
+          window.history.replaceState(buildHistoryState(), "", url.pathname + url.search + url.hash);
+        } else if (`${url.pathname}${url.search}${url.hash}` !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+          window.history.pushState(buildHistoryState(), "", url.pathname + url.search + url.hash);
+        }
+        state.currentPage = "home";
+        state.routeTransitionActive = true;
+        render();
+        window.scrollTo({ top: 0, behavior: "auto" });
+        return;
+      }
+      redirectToLogin(`${url.pathname}${url.search}${url.hash}`, {
+        replace: !(state.currentPage === "home" && (normalizeText(window.location.pathname).replace(/\/+$/, "") || "/") === "/"),
+      });
       return;
     }
     if (!options.replace && `${url.pathname}${url.search}${url.hash}` === `${window.location.pathname}${window.location.search}${window.location.hash}`) {
@@ -3323,19 +3339,29 @@
     syncPageFromLocation();
     installDelegatedHandlers();
     state.session = loadSession();
-    if (!isAuthenticated() && state.currentPage !== "home") {
-      navigateTo("/home/", { replace: true });
-      return;
+    const normalizedPath = normalizeText(window.location.pathname).replace(/\/+$/, "") || "/";
+    if (!isAuthenticated()) {
+      if (state.currentPage === "home" && normalizedPath === "/") {
+        window.history.replaceState(buildHistoryState(), "", `${window.location.pathname}${window.location.search}${window.location.hash}`);
+      } else {
+        redirectToLogin(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+        return;
+      }
     }
-    window.history.replaceState(buildHistoryState(), "", `${window.location.pathname}${window.location.search}${window.location.hash}`);
+    if (isAuthenticated()) {
+      window.history.replaceState(buildHistoryState(), "", `${window.location.pathname}${window.location.search}${window.location.hash}`);
+    }
     window.addEventListener("popstate", (event) => {
       suppressSheetHistoryBack = true;
       stopReferralQrScanner();
       state.navIndicatorIndex = Math.max(0, ["home", "referral", "booking", "shop", "profile"].findIndex((item) => item === state.currentPage));
       syncPageFromLocation();
-      if (!isAuthenticated() && state.currentPage !== "home") {
-        state.currentPage = "home";
-        window.history.replaceState(buildHistoryState(), "", "/home/");
+      if (!isAuthenticated()) {
+        const normalizedPath = normalizeText(window.location.pathname).replace(/\/+$/, "") || "/";
+        if (!(state.currentPage === "home" && normalizedPath === "/")) {
+          redirectToLogin(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+          return;
+        }
       }
       state.booking.stepAnimationsEnabled = state.currentPage === "booking";
       state.routeTransitionActive = true;
@@ -3355,6 +3381,10 @@
       suppressSheetHistoryBack = false;
     });
     if (!isAuthenticated()) {
+      if (!(state.currentPage === "home" && normalizedPath === "/")) {
+        redirectToLogin(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+        return;
+      }
       try {
         state.payload = await publicApiRequest("/public");
         state.bootstrapError = "";

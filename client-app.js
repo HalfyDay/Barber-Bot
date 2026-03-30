@@ -941,18 +941,19 @@
     return memoizeRenderedFragment("page-home", [siteHome, activeAppointments, barbers], () => {
       const promos = Array.isArray(siteHome.promos) ? siteHome.promos : [];
       const promoLaneItems = (() => {
-        if (promos.length <= 1) return promos;
+        const indexedPromos = promos.map((promo, index) => ({ ...promo, _promoIndex: index }));
+        if (indexedPromos.length <= 1) return indexedPromos;
         const repeated = [];
-        while (repeated.length < Math.max(6, promos.length * 2)) {
-          repeated.push(...promos);
+        while (repeated.length < Math.max(6, indexedPromos.length * 2)) {
+          repeated.push(...indexedPromos);
         }
-        return repeated.slice(0, Math.max(6, promos.length * 2));
+        return repeated.slice(0, Math.max(6, indexedPromos.length * 2));
       })();
       const promoCards = promoLaneItems.length
         ? promoLaneItems
             .map(
               (promo) => `
-                <button class="promo-thumb" data-action="open-promo" data-id="${normalizeText(promo.id)}" style="${normalizeText(promo.imageUrl) ? `background-image:url('${normalizeText(promo.imageUrl)}');` : ""}">
+                <button class="promo-thumb" data-action="open-promo" data-id="${normalizeText(promo.id)}" data-index="${Number.isInteger(promo._promoIndex) ? promo._promoIndex : ""}" style="${normalizeText(promo.imageUrl) ? `background-image:url('${normalizeText(promo.imageUrl)}');` : ""}">
                   <span class="promo-thumb-overlay">
                     <strong>${normalizeText(promo.title)}</strong>
                     <small>${normalizeText(promo.subtitle)}</small>
@@ -2003,7 +2004,8 @@
     const sheetStateClass = state.sheetState === "closing" ? "is-closing" : state.sheetState === "open" ? "is-open" : "is-entering";
     const className = normalizeText(state.sheet.className);
     const isSuccessSheet = className.includes("sheet-success");
-    return `<div class="sheet-backdrop ${sheetStateClass}" id="sheet-backdrop"><div class="sheet ${sheetStateClass} ${className}">${isSuccessSheet ? `<button class="ghost-btn icon-only-btn sheet-close-btn sheet-success-close" type="button" data-action="dismiss-sheet" aria-label="Закрыть">${iconMarkup("close")}</button>` : `<div class="sheet-head"><h3 class="section-title sheet-title">${state.sheet.title}</h3><button class="ghost-btn icon-only-btn sheet-close-btn" type="button" data-action="dismiss-sheet" aria-label="Закрыть">${iconMarkup("close")}</button></div>`}<div>${state.sheet.bodyHtml || ""}</div>${state.sheet.footerHtml ? `<div style="margin-top:16px;">${state.sheet.footerHtml}</div>` : ""}</div></div>`;
+    const isPromoSheet = className.includes("promo-sheet-shell");
+    return `<div class="sheet-backdrop ${sheetStateClass}" id="sheet-backdrop"><div class="sheet ${sheetStateClass} ${className}">${isSuccessSheet || isPromoSheet ? `<button class="ghost-btn icon-only-btn sheet-close-btn ${isSuccessSheet ? "sheet-success-close" : "promo-sheet-close"}" type="button" data-action="dismiss-sheet" aria-label="Закрыть">${iconMarkup("close")}</button>` : `<div class="sheet-head"><h3 class="section-title sheet-title">${state.sheet.title}</h3><button class="ghost-btn icon-only-btn sheet-close-btn" type="button" data-action="dismiss-sheet" aria-label="Закрыть">${iconMarkup("close")}</button></div>`}<div>${state.sheet.bodyHtml || ""}</div>${state.sheet.footerHtml ? `<div style="margin-top:16px;">${state.sheet.footerHtml}</div>` : ""}</div></div>`;
   };
 
   const renderCurrentPage = () => {
@@ -2519,13 +2521,28 @@
     });
   };
 
-  const openPromoSheet = (promoId) => {
+  const openPromoSheet = (promoId, promoIndex) => {
     const promos = Array.isArray(state.payload?.site?.home?.promos) ? state.payload.site.home.promos : [];
-    const promo = promos.find((item) => normalizeText(item.id) === normalizeText(promoId));
+    const numericPromoIndex = Number.parseInt(promoIndex, 10);
+    const promo =
+      (Number.isInteger(numericPromoIndex) && numericPromoIndex >= 0 && numericPromoIndex < promos.length
+        ? promos[numericPromoIndex]
+        : null) ||
+      promos.find((item) => normalizeText(item.id) === normalizeText(promoId));
     if (!promo) return;
     openSheet(
       normalizeText(promo.title || "Акция"),
-      `<div class="list-item"><p class="list-title">${normalizeText(promo.subtitle)}</p><p class="subtitle">${normalizeText(promo.details)}</p></div>${normalizeText(promo.imageUrl) ? `<div class="promo-sheet-image" style="background-image:url('${normalizeText(promo.imageUrl)}');"></div>` : ""}`,
+      `<article class="promo-sheet-card">
+        ${normalizeText(promo.imageUrl) ? `<div class="promo-sheet-hero" style="background-image:url('${normalizeText(promo.imageUrl)}');"><div class="promo-sheet-hero-glow"></div><div class="promo-sheet-hero-copy"><strong>${normalizeText(promo.title)}</strong>${normalizeText(promo.subtitle) ? `<p>${normalizeText(promo.subtitle)}</p>` : ""}</div></div>` : `<div class="promo-sheet-hero promo-sheet-hero-empty"><div class="promo-sheet-hero-copy"><strong>${normalizeText(promo.title)}</strong>${normalizeText(promo.subtitle) ? `<p>${normalizeText(promo.subtitle)}</p>` : ""}</div></div>`}
+        <div class="promo-sheet-body">
+          ${normalizeText(promo.subtitle) ? `<div class="promo-sheet-summary"><p class="list-title">${normalizeText(promo.subtitle)}</p></div>` : ""}
+          <div class="promo-sheet-copy">
+            <p>${normalizeText(promo.details) || "Подробности акции скоро появятся."}</p>
+          </div>
+        </div>
+      </article>`,
+      "",
+      "sheet-wide promo-sheet-shell",
     );
   };
 
@@ -2641,7 +2658,7 @@
           return;
         case "open-promo":
           event.preventDefault();
-          openPromoSheet(actionNode.dataset.id);
+          openPromoSheet(actionNode.dataset.id, actionNode.dataset.index);
           return;
         case "copy-referral":
           event.preventDefault();

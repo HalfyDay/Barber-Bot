@@ -9237,6 +9237,7 @@ const SITE_PAGE_TABS = Object.freeze([
 ]);
 
 const createSitePromoDraft = () => ({
+  id: `promo-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
   title: '',
   subtitle: '',
   imageUrl: '',
@@ -9589,6 +9590,10 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_240px]">
                 <div className="grid gap-4">
                   <div className="grid gap-4 lg:grid-cols-2">
+                    <label className="space-y-2 text-sm text-slate-300">
+                      <span>Код акции</span>
+                      <input value={promo.id || ''} onChange={(event) => updatePromoField(index, 'id', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                    </label>
                     <label className="space-y-2 text-sm text-slate-300">
                       <span>Заголовок</span>
                       <input value={promo.title || ''} onChange={(event) => updatePromoField(index, 'title', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />

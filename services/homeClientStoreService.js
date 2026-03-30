@@ -23,6 +23,7 @@ const createHomeClientStoreService = ({
     users: {},
     site: {},
   };
+  const SITE_SETTINGS_ROW_ID = "client-site";
   const BS_THRESHOLDS = [10, 25, 50, 100];
   const ACTIVITY_GREEN_DAYS = 90;
   const ACTIVITY_YELLOW_DAYS = 180;
@@ -305,6 +306,74 @@ const createHomeClientStoreService = ({
     return nextStore;
   };
 
+  const hasLegacySiteSettings = (store = {}) =>
+    Boolean(store?.site && typeof store.site === "object" && Object.keys(store.site).length > 0);
+
+  const normalizeDatabaseSitePayload = (payload) => {
+    if (!payload) return {};
+    if (typeof payload === "string") {
+      try {
+        return JSON.parse(payload);
+      } catch {
+        return {};
+      }
+    }
+    return payload && typeof payload === "object" ? payload : {};
+  };
+
+  const ensureSiteSettingsTable = async () => {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "SiteSettings" (
+        "id" TEXT PRIMARY KEY,
+        "payload" JSONB NOT NULL DEFAULT '{}'::jsonb,
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+  };
+
+  const readSiteSettingsRow = async () => {
+    await ensureSiteSettingsTable();
+    const rows = await prisma.$queryRawUnsafe(
+      'SELECT "payload" FROM "SiteSettings" WHERE "id" = $1 LIMIT 1',
+      SITE_SETTINGS_ROW_ID,
+    );
+    return Array.isArray(rows) && rows[0] ? rows[0] : null;
+  };
+
+  const writeSiteSettingsRow = async (site) => {
+    const payload = sanitizeSiteSettings(site || {});
+    await ensureSiteSettingsTable();
+    await prisma.$executeRawUnsafe(
+      `
+        INSERT INTO "SiteSettings" ("id", "payload", "createdAt", "updatedAt")
+        VALUES ($1, $2::jsonb, NOW(), NOW())
+        ON CONFLICT ("id")
+        DO UPDATE SET
+          "payload" = EXCLUDED."payload",
+          "updatedAt" = NOW()
+      `,
+      SITE_SETTINGS_ROW_ID,
+      JSON.stringify(payload),
+    );
+    return payload;
+  };
+
+  const getPersistedSiteSettings = async () => {
+    const row = await readSiteSettingsRow();
+    if (row) {
+      return sanitizeSiteSettings(normalizeDatabaseSitePayload(row.payload));
+    }
+    const store = await readStore();
+    const site = sanitizeSiteSettings(hasLegacySiteSettings(store) ? store.site : {});
+    await writeSiteSettingsRow(site);
+    if (hasLegacySiteSettings(store)) {
+      store.site = {};
+      await writeStore(store);
+    }
+    return site;
+  };
+
   const sanitizeTransaction = (transaction = {}) => {
     const amountBs = Number(transaction.amountBs);
     const safeCreatedAt = toIsoString(transaction.createdAt) || new Date().toISOString();
@@ -374,16 +443,11 @@ const createHomeClientStoreService = ({
   };
 
   const getSiteSettings = async () => {
-    const store = await readStore();
-    const site = sanitizeSiteSettings(store.site || {});
-    store.site = site;
-    await writeStore(store);
-    return site;
+    return getPersistedSiteSettings();
   };
 
   const updateSiteSettings = async (patch = {}) => {
-    const store = await readStore();
-    const current = sanitizeSiteSettings(store.site || {});
+    const current = await getPersistedSiteSettings();
     const nextSite = sanitizeSiteSettings({
       ...current,
       ...patch,
@@ -408,8 +472,7 @@ const createHomeClientStoreService = ({
         ...(patch.profile && typeof patch.profile === "object" ? patch.profile : {}),
       },
     });
-    store.site = nextSite;
-    await writeStore(store);
+    await writeSiteSettingsRow(nextSite);
     return nextSite;
   };
 
@@ -609,13 +672,13 @@ const createHomeClientStoreService = ({
   const buildReferralPayload = async (user) => {
     const safeUserId = normalizeText(user?.id);
     if (!safeUserId) return null;
-    const [store, users, appointmentsRaw, settings] = await Promise.all([
+    const [store, users, appointmentsRaw, settings, site] = await Promise.all([
       readStore(),
       prisma.users.findMany(),
       prisma.appointments.findMany(),
       getBotSettings().catch(() => null),
+      getPersistedSiteSettings(),
     ]);
-    const site = sanitizeSiteSettings(store.site || {});
     const referralProgram = site.referral || DEFAULT_SITE_CONFIG.referral;
     const referralLevels = Array.isArray(referralProgram.levels) ? referralProgram.levels : [];
     const appointments = appointmentsRaw.map(mapAppointment);
@@ -1092,11 +1155,12 @@ const createHomeClientStoreService = ({
   const buildHomeAppPayload = async (userId) => {
     const safeUserId = normalizeText(userId);
     if (!safeUserId) return null;
-    const [user, store, blockedUsers, appointmentsRaw] = await Promise.all([
+    const [user, store, blockedUsers, appointmentsRaw, site] = await Promise.all([
       prisma.users.findUnique({ where: { id: safeUserId } }),
       readStore(),
       readBlockedUsers(),
       prisma.appointments.findMany(),
+      getPersistedSiteSettings(),
     ]);
     if (!user) return null;
     const appointments = appointmentsRaw.map(mapAppointment);
@@ -1127,7 +1191,6 @@ const createHomeClientStoreService = ({
       };
     });
     const referral = await buildReferralPayload(user);
-    const site = sanitizeSiteSettings(store.site || {});
     const operations = [
       ...visitHistory.map((visit) => ({
         id: `visit-${visit.id}`,
@@ -1228,10 +1291,8 @@ const createHomeClientStoreService = ({
   };
 
   const buildPublicHomePayload = async () => {
-    const store = await readStore();
-    const site = sanitizeSiteSettings(store.site || {});
+    const site = await getPersistedSiteSettings();
     const { barbers, services } = await buildCatalogHelpers();
-    await writeStore(store);
     return {
       booking: {
         activeAppointments: [],
@@ -1290,4 +1351,3 @@ const createHomeClientStoreService = ({
 module.exports = {
   createHomeClientStoreService,
 };
-

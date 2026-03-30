@@ -164,6 +164,13 @@ model BotMessages {
   updatedAt DateTime @updatedAt
 }
 
+model SiteSettings {
+  id        String   @id
+  payload   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model TelegramAuthRequests {
   id           String  @id
   code         String  @unique

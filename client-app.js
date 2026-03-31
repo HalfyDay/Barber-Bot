@@ -35,11 +35,18 @@
     sheet: null,
     sheetState: "closed",
     pendingBookingCancellationId: "",
+    homeAboutExpanded: false,
+    activeBarberProfileId: "",
     referralTransferDraft: null,
     referralQuickAmount: null,
     referralLinkCopied: false,
     transferHistoryFilter: "all",
     profileHistoryFilter: "all",
+    profileCover: {
+      source: "",
+      status: "idle",
+      palette: null,
+    },
     telegramLinkRequestId: "",
     booking: {
       barberId: "",
@@ -87,6 +94,187 @@
   };
 
   const normalizeText = (value) => (value == null ? "" : String(value).trim());
+  const clampNumber = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
+  const toRgbString = (rgb, alpha = 1) => {
+    const safeRgb = Array.isArray(rgb) ? rgb : [0, 0, 0];
+    const [r, g, b] = safeRgb.map((value) => Math.round(clampNumber(value, 0, 255)));
+    return alpha >= 1 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${clampNumber(alpha, 0, 1)})`;
+  };
+  const rgbToHsl = (rgb) => {
+    const [r, g, b] = (Array.isArray(rgb) ? rgb : [0, 0, 0]).map((value) => clampNumber(value, 0, 255) / 255);
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const lightness = (max + min) / 2;
+    if (max === min) return [0, 0, lightness];
+    const delta = max - min;
+    const saturation = lightness > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+    let hue = 0;
+    if (max === r) hue = (g - b) / delta + (g < b ? 6 : 0);
+    else if (max === g) hue = (b - r) / delta + 2;
+    else hue = (r - g) / delta + 4;
+    return [hue / 6, saturation, lightness];
+  };
+  const hslToRgb = (hsl) => {
+    const [h, s, l] = Array.isArray(hsl) ? hsl : [0, 0, 0];
+    if (!s) {
+      const gray = Math.round(clampNumber(l, 0, 1) * 255);
+      return [gray, gray, gray];
+    }
+    const hueToRgb = (p, q, t) => {
+      let safeT = t;
+      if (safeT < 0) safeT += 1;
+      if (safeT > 1) safeT -= 1;
+      if (safeT < 1 / 6) return p + (q - p) * 6 * safeT;
+      if (safeT < 1 / 2) return q;
+      if (safeT < 2 / 3) return p + (q - p) * (2 / 3 - safeT) * 6;
+      return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    return [
+      Math.round(hueToRgb(p, q, h + 1 / 3) * 255),
+      Math.round(hueToRgb(p, q, h) * 255),
+      Math.round(hueToRgb(p, q, h - 1 / 3) * 255),
+    ];
+  };
+  const shiftRgbLightness = (rgb, delta, saturationBoost = 0) => {
+    const [h, s, l] = rgbToHsl(rgb);
+    return hslToRgb([h, clampNumber(s + saturationBoost, 0, 1), clampNumber(l + delta, 0, 1)]);
+  };
+  const mixRgb = (left, right, weight = 0.5) => {
+    const safeWeight = clampNumber(weight, 0, 1);
+    const safeLeft = Array.isArray(left) ? left : [0, 0, 0];
+    const safeRight = Array.isArray(right) ? right : [0, 0, 0];
+    return [0, 1, 2].map((index) => Math.round(safeLeft[index] * (1 - safeWeight) + safeRight[index] * safeWeight));
+  };
+  const getRgbLuminance = (rgb) => {
+    const [r, g, b] = (Array.isArray(rgb) ? rgb : [0, 0, 0]).map((value) => clampNumber(value, 0, 255) / 255);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const getRgbDistance = (left, right) => {
+    const safeLeft = Array.isArray(left) ? left : [0, 0, 0];
+    const safeRight = Array.isArray(right) ? right : [0, 0, 0];
+    const deltaR = safeLeft[0] - safeRight[0];
+    const deltaG = safeLeft[1] - safeRight[1];
+    const deltaB = safeLeft[2] - safeRight[2];
+    return Math.sqrt(deltaR * deltaR + deltaG * deltaG + deltaB * deltaB);
+  };
+  const buildProfileCoverTheme = (palette) => {
+    const sitePalette = {
+      accent: [0, 130, 118],
+      base: [15, 24, 24],
+      line: [3, 7, 8],
+    };
+    const resolvedPalette = palette || sitePalette;
+    const accent = shiftRgbLightness(resolvedPalette.accent || sitePalette.accent, 0.08, 0.06);
+    const base = mixRgb(shiftRgbLightness(resolvedPalette.base || sitePalette.base, -0.04), [7, 10, 11], 0.28);
+    const line = shiftRgbLightness(resolvedPalette.line || resolvedPalette.base || sitePalette.line, -0.18, -0.02);
+    const glow = mixRgb(accent, [255, 255, 255], 0.14);
+    return {
+      accent: toRgbString(accent),
+      base: toRgbString(base),
+      line: toRgbString(line, 0.96),
+      glow: toRgbString(glow, 0.34),
+    };
+  };
+  const applyProfileCoverTheme = (scope = ROOT) => {
+    const cover = scope?.querySelector?.(".profile-cover");
+    if (!cover) return;
+    const theme = buildProfileCoverTheme(
+      state.profileCover.source === normalizeText(state.payload?.user?.avatarUrl) && state.profileCover.status === "ready"
+        ? state.profileCover.palette
+        : null,
+    );
+    cover.style.setProperty("--profile-cover-accent", theme.accent);
+    cover.style.setProperty("--profile-cover-base", theme.base);
+    cover.style.setProperty("--profile-cover-line", theme.line);
+    cover.style.setProperty("--profile-cover-glow", theme.glow);
+  };
+  const extractProfilePaletteFromImage = (source) =>
+    new Promise((resolve, reject) => {
+      const imageSource = normalizeText(source);
+      if (!imageSource) {
+        reject(new Error("missing-image"));
+        return;
+      }
+      const image = new Image();
+      if (!imageSource.startsWith("data:")) image.crossOrigin = "anonymous";
+      image.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d", { willReadFrequently: true });
+          if (!context) {
+            reject(new Error("palette-context-unavailable"));
+            return;
+          }
+          const size = 48;
+          canvas.width = size;
+          canvas.height = size;
+          context.drawImage(image, 0, 0, size, size);
+          const pixels = context.getImageData(0, 0, size, size).data;
+          const buckets = new Map();
+          for (let index = 0; index < pixels.length; index += 16) {
+            const alpha = pixels[index + 3];
+            if (alpha < 180) continue;
+            const rgb = [pixels[index], pixels[index + 1], pixels[index + 2]];
+            const luminance = getRgbLuminance(rgb);
+            if (luminance < 0.03 || luminance > 0.97) continue;
+            const bucket = rgb.map((value) => Math.round(value / 32) * 32).join(",");
+            const entry = buckets.get(bucket) || { count: 0, sum: [0, 0, 0] };
+            entry.count += 1;
+            entry.sum = entry.sum.map((sumValue, channel) => sumValue + rgb[channel]);
+            buckets.set(bucket, entry);
+          }
+          const colors = [...buckets.values()]
+            .map((entry) => ({
+              count: entry.count,
+              rgb: entry.sum.map((sumValue) => Math.round(sumValue / Math.max(1, entry.count))),
+            }))
+            .sort((left, right) => right.count - left.count);
+          if (!colors.length) {
+            reject(new Error("palette-not-found"));
+            return;
+          }
+          const primary = colors[0].rgb;
+          const secondary =
+            colors.find((entry) => getRgbDistance(primary, entry.rgb) >= 72)?.rgb ||
+            colors.find((entry) => getRgbDistance(primary, entry.rgb) >= 36)?.rgb ||
+            shiftRgbLightness(primary, getRgbLuminance(primary) > 0.45 ? -0.24 : 0.24, 0.04);
+          const ordered = [primary, secondary].sort((left, right) => getRgbLuminance(right) - getRgbLuminance(left));
+          resolve({
+            accent: ordered[0],
+            base: ordered[1],
+            line: getRgbLuminance(ordered[1]) < getRgbLuminance(ordered[0]) ? ordered[1] : ordered[0],
+          });
+        } catch (error) {
+          reject(error);
+        }
+      };
+      image.onerror = () => reject(new Error("palette-image-load-failed"));
+      image.src = imageSource;
+    });
+  const ensureProfileCoverPalette = async () => {
+    const avatarUrl = normalizeText(state.payload?.user?.avatarUrl);
+    if (!avatarUrl) {
+      if (state.profileCover.source || state.profileCover.status !== "idle" || state.profileCover.palette) {
+        state.profileCover = { source: "", status: "idle", palette: null };
+        render();
+      }
+      return;
+    }
+    if (state.profileCover.source === avatarUrl && ["pending", "ready", "error"].includes(state.profileCover.status)) return;
+    state.profileCover = { source: avatarUrl, status: "pending", palette: null };
+    try {
+      const palette = await extractProfilePaletteFromImage(avatarUrl);
+      if (state.profileCover.source !== avatarUrl) return;
+      state.profileCover = { source: avatarUrl, status: "ready", palette };
+      render();
+    } catch {
+      if (state.profileCover.source !== avatarUrl) return;
+      state.profileCover = { source: avatarUrl, status: "error", palette: null };
+      render();
+    }
+  };
   const areMemoDepsEqual = (left = [], right = []) =>
     left.length === right.length && left.every((value, index) => value === right[index]);
   const memoizeRenderedFragment = (key, deps, renderFactory) => {
@@ -377,6 +565,7 @@
   const getPageFromPath = (pathname) => {
     const normalized = normalizeText(pathname || window.location.pathname).replace(/\/+$/, "") || "/";
     if (normalized === "/" || normalized === "/home") return "home";
+    if (/^\/barber\/[^/]+$/i.test(normalized)) return "barber";
     if (normalized === "/referral") return "referral";
     if (normalized === "/booking") return "booking";
     if (normalized === "/shop") return "shop";
@@ -384,8 +573,14 @@
     if (normalized === "/profile") return "profile";
     return "";
   };
+  const getBarberIdFromPath = (pathname) => {
+    const normalized = normalizeText(pathname || window.location.pathname).replace(/\/+$/, "");
+    const match = normalized.match(/^\/barber\/([^/]+)$/i);
+    return match ? decodeURIComponent(match[1]) : "";
+  };
   const syncPageFromLocation = () => {
     state.currentPage = getPageFromPath(window.location.pathname) || "home";
+    state.activeBarberProfileId = state.currentPage === "barber" ? getBarberIdFromPath(window.location.pathname) : "";
   };
 
   const getStorage = (type) => {
@@ -611,6 +806,149 @@
     const parsed = new Date(safeValue);
     if (Number.isNaN(parsed.getTime())) return safeValue;
     return parsed.toLocaleString("ru-RU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  };
+
+  const parseAppointmentStart = (dateValue, timeValue) => {
+    const safeDate = normalizeText(dateValue);
+    if (!safeDate) return null;
+    const safeTime = normalizeText(timeValue);
+    const matchedTime = safeTime.match(/(\d{1,2}:\d{2})/);
+    const startTime = matchedTime ? matchedTime[1] : "00:00";
+    const parsed = new Date(`${safeDate}T${startTime}:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const formatAppointmentEta = (dateValue, timeValue) => {
+    const startAt = parseAppointmentStart(dateValue, timeValue);
+    if (!startAt) return "";
+    const diffMs = startAt.getTime() - Date.now();
+    if (diffMs <= 0) return "Сейчас";
+    const totalMinutes = Math.max(1, Math.round(diffMs / 60000));
+    const days = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    const minutes = totalMinutes % 60;
+    if (days > 0) return `Через ${days} д ${hours} ч`;
+    if (hours > 0) return `Через ${hours} ч ${minutes} мин`;
+    return `Через ${minutes} мин`;
+  };
+
+  const parseAppointmentEnd = (dateValue, timeValue) => {
+    const startAt = parseAppointmentStart(dateValue, timeValue);
+    if (!startAt) return null;
+    const safeTime = normalizeText(timeValue);
+    const matchedTimes = safeTime.match(/\d{1,2}:\d{2}/g);
+    if (matchedTimes && matchedTimes.length > 1) {
+      const parsed = new Date(`${normalizeText(dateValue)}T${matchedTimes[1]}:00`);
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+    return new Date(startAt.getTime() + 60 * 60 * 1000);
+  };
+
+  const escapeIcsText = (value) =>
+    normalizeText(value)
+      .replace(/\\/g, "\\\\")
+      .replace(/\n/g, "\\n")
+      .replace(/,/g, "\\,")
+      .replace(/;/g, "\\;");
+
+  const formatIcsDateTime = (value) => {
+    const parsed = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "";
+    return parsed.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  };
+
+  const downloadAppointmentReminder = (appointment) => {
+    const safeAppointment = appointment || {};
+    const startAt = parseAppointmentStart(safeAppointment.date, safeAppointment.time);
+    if (!startAt) {
+      openSheet("Напоминание", `<div class="list-item"><p class="list-title">Не удалось подготовить напоминание.</p><p class="subtitle">У записи не найдены дата или время.</p></div>`);
+      return;
+    }
+    const endAt = parseAppointmentEnd(safeAppointment.date, safeAppointment.time) || new Date(startAt.getTime() + 60 * 60 * 1000);
+    const siteHome = state.payload?.site?.home || {};
+    const location = normalizeText(siteHome.address || "BrotherShop");
+    const servicesLabel = Array.isArray(safeAppointment.services) ? safeAppointment.services.filter(Boolean).join(", ") : "";
+    const title = `BrotherShop - ${normalizeText(safeAppointment.barber || "Запись")}`;
+    const description = [servicesLabel, "Напоминание создано с сайта BrotherShop."].filter(Boolean).join("\\n");
+    const icsBody = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//BrotherShop//Booking Reminder//RU",
+      "BEGIN:VEVENT",
+      `UID:${Date.now()}-${normalizeText(safeAppointment.id || "booking")}@brothershop`,
+      `DTSTAMP:${formatIcsDateTime(new Date())}`,
+      `DTSTART:${formatIcsDateTime(startAt)}`,
+      `DTEND:${formatIcsDateTime(endAt)}`,
+      `SUMMARY:${escapeIcsText(title)}`,
+      `DESCRIPTION:${escapeIcsText(description)}`,
+      `LOCATION:${escapeIcsText(location)}`,
+      "BEGIN:VALARM",
+      "TRIGGER:-PT90M",
+      "ACTION:DISPLAY",
+      `DESCRIPTION:${escapeIcsText(title)}`,
+      "END:VALARM",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    const blob = new Blob([icsBody], { type: "text/calendar;charset=utf-8" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = `brothershop-reminder-${normalizeText(safeAppointment.date || "booking")}.ics`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const syncHomeAboutCardState = (toggleButton, expanded) => {
+    if (!toggleButton) return;
+    const wrap = toggleButton.querySelector(".home-about-text-wrap");
+    const text = toggleButton.querySelector(".home-about-text");
+    const more = toggleButton.querySelector(".home-about-more");
+    if (!wrap || !text) return;
+    const computedStyle = window.getComputedStyle(text);
+    const lineHeight = parseFloat(computedStyle.lineHeight) || 24;
+    const collapsedHeight = Math.ceil(lineHeight * 4);
+    toggleButton.classList.toggle("is-expanded", expanded);
+    toggleButton.classList.toggle("is-collapsed", !expanded);
+    toggleButton.setAttribute("aria-expanded", expanded ? "true" : "false");
+    if (more) more.textContent = expanded ? "Свернуть" : "Показать еще";
+    wrap.style.maxHeight = expanded ? `${text.scrollHeight}px` : `${Math.min(text.scrollHeight, collapsedHeight)}px`;
+  };
+
+  const animateHomeAboutCard = (toggleButton, expanded) => {
+    if (!toggleButton) return;
+    const wrap = toggleButton.querySelector(".home-about-text-wrap");
+    const text = toggleButton.querySelector(".home-about-text");
+    const more = toggleButton.querySelector(".home-about-more");
+    if (!wrap || !text) return;
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    const computedStyle = window.getComputedStyle(text);
+    const lineHeight = parseFloat(computedStyle.lineHeight) || 24;
+    const collapsedHeight = Math.ceil(lineHeight * 4);
+    if (reducedMotion) {
+      syncHomeAboutCardState(toggleButton, expanded);
+      return;
+    }
+    const currentHeight = wrap.getBoundingClientRect().height;
+    toggleButton.classList.add("is-animating");
+    wrap.style.maxHeight = `${currentHeight}px`;
+    wrap.getBoundingClientRect();
+    toggleButton.classList.toggle("is-expanded", expanded);
+    toggleButton.classList.toggle("is-collapsed", !expanded);
+    toggleButton.setAttribute("aria-expanded", expanded ? "true" : "false");
+    if (more) more.textContent = expanded ? "Свернуть" : "Показать еще";
+    const targetHeight = expanded ? text.scrollHeight : Math.min(text.scrollHeight, collapsedHeight);
+    window.requestAnimationFrame(() => {
+      wrap.style.maxHeight = `${targetHeight}px`;
+    });
+    const cleanup = () => {
+      toggleButton.classList.remove("is-animating");
+      wrap.removeEventListener("transitionend", cleanup);
+      wrap.style.maxHeight = expanded ? `${text.scrollHeight}px` : `${Math.min(text.scrollHeight, collapsedHeight)}px`;
+    };
+    wrap.addEventListener("transitionend", cleanup);
   };
 
   const readFileAsDataUrl = (file) =>
@@ -852,6 +1190,16 @@
     return "";
   };
 
+  const appointmentMetaIcon = (name) => {
+    if (name === "calendar") {
+      return '<span class="appointment-label-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"></rect><path d="M7.5 3.5v4"></path><path d="M16.5 3.5v4"></path><path d="M3.5 9.5h17"></path><path d="M8 13h.01"></path><path d="M12 13h.01"></path><path d="M16 13h.01"></path><path d="M8 17h.01"></path><path d="M12 17h.01"></path></svg></span>';
+    }
+    if (name === "clock") {
+      return '<span class="appointment-label-icon appointment-label-icon-clock" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5v5l3 2"></path></svg></span>';
+    }
+    return "";
+  };
+
   const apiRequest = async (path, options) => {
     const token = normalizeText(state.session?.token);
     if (!token) {
@@ -949,6 +1297,52 @@
       <div class="booking-status-title">${normalizeText(label)}</div>
     </div>
   `;
+
+  const buildManageBookingSheet = (appointment) => {
+    const safeAppointment = appointment || {};
+    const etaLabel = formatAppointmentEta(safeAppointment.date, safeAppointment.time);
+    const services = Array.isArray(safeAppointment.services) ? safeAppointment.services.filter(Boolean) : [];
+    const barberAvatar = normalizeText(safeAppointment.barberAvatarUrl || safeAppointment.avatarUrl || "");
+    const targetId = normalizeText(state.pendingBookingCancellationId || safeAppointment.id || "");
+    const primaryActionHtml = IS_DESKTOP_SHEET_DISMISS
+      ? `<button class="primary-btn manage-booking-primary" type="button" data-action="book-another">Записаться еще</button>`
+      : `<button class="primary-btn manage-booking-primary" type="button" data-action="download-booking-reminder" data-id="${targetId}">В календарь</button>`;
+    return `
+      <div class="manage-booking-sheet">
+        <article class="appointment-card has-booking manage-booking-card">
+          <div class="section-head appointment-head manage-booking-head">
+            <div>
+              <div class="section-eyebrow">Моя запись</div>
+            </div>
+            <div class="appointment-head-eta">${normalizeText(etaLabel || "Скоро")}</div>
+          </div>
+          <div class="manage-booking-overview">
+            <div class="appointment-grid manage-booking-grid">
+              <div class="appointment-meta">
+                <span class="field-label">${appointmentMetaIcon("calendar")}Дата</span>
+                <strong>${safeAppointment.date ? formatDateOnly(safeAppointment.date) : "Дата уточняется"}</strong>
+              </div>
+              <div class="appointment-meta appointment-meta-time">
+                <span class="field-label">${appointmentMetaIcon("clock")}Время</span>
+                <strong>${normalizeText(safeAppointment.time || "Время уточняется")}</strong>
+              </div>
+            </div>
+            <div class="appointment-barber manage-booking-barber">
+              ${avatarMarkup({ avatarUrl: barberAvatar, displayName: safeAppointment.barber || "BS" }, 60)}
+              <div>
+                <p class="list-title">${normalizeText(safeAppointment.barber || "Текущая запись")}</p>
+                <p class="subtitle">${services.length ? normalizeText(services.join(", ")) : "Детали записи доступны в booking."}</p>
+              </div>
+            </div>
+          </div>
+        </article>
+        <div class="manage-booking-actions">
+          ${primaryActionHtml}
+          <button class="ghost-btn manage-booking-cancel-btn" type="button" data-action="open-sheet" data-sheet="cancel-booking" data-id="${targetId}">Отменить запись</button>
+        </div>
+      </div>
+    `;
+  };
 
   const stopReferralQrScanner = () => {
     referralQrScannerSession += 1;
@@ -1177,8 +1571,16 @@
         nextAppointment?.avatarUrl ||
         appointmentBarber?.avatarUrl,
       );
+      const appointmentEtaLabel = nextAppointment ? formatAppointmentEta(nextAppointment.date, nextAppointment.time) : "";
       const mapLink = normalizeText(siteHome.mapLink) || "https://go.2gis.com/fPKd6";
       const bookingButtonText = normalizeText(siteHome.bookingButtonText) || "Записаться";
+      const aboutTitle = normalizeText(siteHome.aboutTitle || "BrotherShop");
+      const aboutText = normalizeText(siteHome.aboutText || "");
+      const aboutExpandable = aboutText.length > 110;
+      const aboutCardTag = aboutExpandable ? "button" : "article";
+      const aboutCardAttrs = aboutExpandable
+        ? `class="content-card home-about-card home-about-toggle ${state.homeAboutExpanded ? "is-expanded" : "is-collapsed"}" type="button" data-action="toggle-home-about" aria-expanded="${state.homeAboutExpanded ? "true" : "false"}"`
+        : `class="content-card home-about-card"`;
       return `
       <section class="page home-page home-mobile-layout">
         <section class="home-frame home-promo-strip">
@@ -1192,21 +1594,22 @@
             </div>
           </section>
         </section>
-        <article class="appointment-card">
+        <article class="appointment-card${nextAppointment ? " has-booking" : ""}">
           ${nextAppointment ? `
-            <div class="section-head">
+            <div class="section-head appointment-head">
               <div>
                 <div class="section-eyebrow">Моя запись</div>
               </div>
+              <div class="appointment-head-eta">${normalizeText(appointmentEtaLabel || "Скоро")}</div>
             </div>
             <button class="appointment-overview" type="button" data-action="open-sheet" data-sheet="manage-booking" data-id="${normalizeText(nextAppointment?.id)}">
               <div class="appointment-grid">
                 <div class="appointment-meta">
-                  <span class="field-label">Дата</span>
+                  <span class="field-label">${appointmentMetaIcon("calendar")}Дата</span>
                   <strong>${nextAppointment ? formatDateOnly(nextAppointment.date) : "Выберите день"}</strong>
                 </div>
-                <div class="appointment-meta">
-                  <span class="field-label">Время</span>
+                <div class="appointment-meta appointment-meta-time">
+                  <span class="field-label">${appointmentMetaIcon("clock")}Время</span>
                   <strong>${nextAppointment ? normalizeText(nextAppointment.time) : "Выберите слот"}</strong>
                 </div>
               </div>
@@ -1226,13 +1629,13 @@
           ` : ``}
           ${nextAppointment ? "" : `<div class="appointment-cta-wrap"><a class="primary-btn booking-cta" href="/booking/">${bookingButtonText}</a></div>`}
         </article>
-        <article class="content-card home-about-card">
+        <${aboutCardTag} ${aboutCardAttrs}>
           <div>
-            <h2 class="section-title">${normalizeText(siteHome.aboutTitle || "BrotherShop")}</h2>
-            <p class="section-text">${normalizeText(siteHome.aboutText || "")}</p>
+            <h2 class="section-title">${aboutTitle}</h2>
+            <div class="home-about-text-wrap"><p class="section-text home-about-text">${aboutText}</p></div>
+            ${aboutExpandable ? `<span class="home-about-more">${state.homeAboutExpanded ? "Свернуть" : "Показать еще"}</span>` : ""}
           </div>
-          <div class="about-image-frame" style="${normalizeText(siteHome.aboutImageUrl) ? `background-image:url('${normalizeText(siteHome.aboutImageUrl)}');` : ""}"></div>
-        </article>
+        </${aboutCardTag}>
         <section class="home-map-contacts-row">
           <article class="content-card map-card">
           <h2 class="map-title">${normalizeText(siteHome.mapTitle || "Карта")}</h2>
@@ -1274,7 +1677,7 @@
               ? barbers
               .map(
                 (barber) => `
-                  <div class="barber-card home-barber-card">
+                  <button class="barber-card home-barber-card" type="button" data-action="open-barber-profile" data-id="${normalizeText(barber.id)}">
                     <div class="booking-barber-surface home-barber-surface">
                       <div class="home-barber-head">
                         <p class="barber-name">${normalizeText(barber.name)}</p>
@@ -1291,7 +1694,7 @@
                         </div>
                       </div>
                     </div>
-                  </div>`,
+                  </button>`,
               )
               .join("")
               : `<div class="empty-state">Список мастеров скоро обновится. Откройте запись, чтобы увидеть доступных специалистов.</div>`}
@@ -2109,6 +2512,89 @@
     return `<section class="page shop-page"><article class="soon-card clean-soon-card shop-coming-card"><div class="shop-coming-shell"><div class="hero-eyebrow">Магазин</div><h1 class="hero-title">${normalizeText(shop.teaserTitle || "Скоро.")}</h1><div class="shop-teaser-grid"><div class="teaser-block"></div><div class="teaser-block"></div><div class="teaser-block"></div></div></div></article></section>`;
   };
 
+  const renderBarberProfilePage = () => {
+    const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+    const activeBarberId = normalizeText(state.activeBarberProfileId || getBarberIdFromPath(window.location.pathname));
+    const barber = barbers.find((item) => normalizeText(item.id) === activeBarberId) || null;
+    if (!barber) {
+      return `
+      <section class="page barber-profile-page">
+        <article class="hero-card barber-profile-hero barber-profile-empty">
+          <div class="hero-eyebrow">Барбер</div>
+          <h1 class="hero-title">Мастер не найден</h1>
+          <p class="section-text">Вернитесь на главную и выберите барбера из актуального списка.</p>
+          <div class="hero-actions">
+            <a class="primary-btn" href="/">На главную</a>
+          </div>
+        </article>
+      </section>
+    `;
+    }
+    const reviews = Array.isArray(barber.reviews) ? barber.reviews.filter(Boolean) : [];
+    const ratingValue = Math.max(0, Math.min(5, Number.parseFloat(normalizeText(barber.rating || "5").replace(",", ".")) || 5));
+    const filledStars = Math.round(ratingValue);
+      return `
+      <section class="page barber-profile-page">
+        <article class="hero-card barber-profile-hero">
+          <div class="barber-profile-cover"></div>
+          <div class="barber-profile-orbit barber-profile-orbit-a"></div>
+          <div class="barber-profile-orbit barber-profile-orbit-b"></div>
+          <div class="barber-profile-topbar">
+            <button class="ghost-btn icon-only-btn barber-profile-back" type="button" data-action="navigate" data-href="/" aria-label="Назад">${iconMarkup("chevron-left")}</button>
+          </div>
+          <div class="barber-profile-hero-grid">
+            <div class="barber-profile-photo-shell">
+              <div class="barber-profile-photo-accent barber-profile-photo-accent-a"></div>
+              <div class="barber-profile-photo-accent barber-profile-photo-accent-b"></div>
+              <div class="barber-profile-photo-frame">
+                ${normalizeText(barber.avatarUrl)
+                  ? `<img class="barber-profile-photo" src="${normalizeText(barber.avatarUrl)}" alt="${normalizeText(barber.name)}" />`
+                  : avatarMarkup({ avatarUrl: barber.avatarUrl, displayName: barber.name }, 220)}
+              </div>
+            </div>
+            <div class="barber-profile-copy">
+              <div class="hero-eyebrow">Барбер BrotherShop</div>
+              <h1 class="hero-title barber-profile-title">${normalizeText(barber.name)}</h1>
+              <div class="barber-profile-rating" aria-label="Рейтинг ${ratingValue.toFixed(1)} из 5">
+                <div class="barber-profile-stars">${Array.from({ length: 5 }, (_, index) => `<span class="barber-profile-star ${index < filledStars ? "is-filled" : ""}">★</span>`).join("")}</div>
+                <strong>${ratingValue.toFixed(1)}</strong>
+                <span>${reviews.length ? `${reviews.length} отзывов` : "Отзывы появятся позже"}</span>
+              </div>
+              ${normalizeText(barber.phrase) ? `<div class="barber-profile-quote"><span class="barber-profile-quote-mark">“</span><p class="barber-profile-phrase">${normalizeText(barber.phrase)}</p></div>` : ""}
+              ${normalizeText(barber.description) ? `<p class="section-text barber-profile-description">${normalizeText(barber.description)}</p>` : ""}
+              <div class="hero-actions barber-profile-actions">
+                <a class="primary-btn" href="/booking/">Записаться</a>
+                <a class="ghost-btn" href="/">К списку барберов</a>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="content-card barber-reviews-card">
+          <div class="section-head">
+            <div>
+              <div class="section-eyebrow">Отзывы</div>
+              <h2 class="section-title">Что говорят клиенты</h2>
+            </div>
+          </div>
+          ${reviews.length
+            ? `<div class="barber-reviews-list">${reviews
+                .map((review) => `
+                  <article class="timeline-item barber-review-item">
+                    <div class="barber-review-head">
+                      <strong>${normalizeText(review.author || review.name || "Клиент")}</strong>
+                      <span class="subtitle">${normalizeText(review.date || "")}</span>
+                    </div>
+                    ${normalizeText(review.rating) ? `<div class="barber-review-rating">${"★".repeat(Math.max(1, Math.min(5, Math.round(Number(review.rating) || 0))))}</div>` : ""}
+                    <p class="section-text">${normalizeText(review.text || review.comment || "")}</p>
+                  </article>
+                `)
+                .join("")}</div>`
+            : `<div class="empty-state barber-reviews-empty">Пока отзывов на сайте нет. После первых публикаций они появятся здесь.</div>`}
+        </article>
+      </section>
+    `;
+  };
+
   const renderProfilePage = () => {
     const user = state.payload?.user || {};
     const profile = state.payload?.profile || {};
@@ -2117,7 +2603,7 @@
     const operations = Array.isArray(profile.operations) ? profile.operations : [];
     const notices = Array.isArray(profile.notices) ? profile.notices : [];
     const activeAppointments = Array.isArray(booking.activeAppointments) ? booking.activeAppointments : [];
-    return memoizeRenderedFragment("page-profile", [user, profile, booking, state.profileHistoryFilter], () => {
+    return memoizeRenderedFragment("page-profile", [user, profile, booking, state.profileHistoryFilter, state.profileCover.status, state.profileCover.source], () => {
       const historyItems = getProfileHistoryItems(visitHistory, operations);
       const filteredHistory = getFilteredProfileHistoryItems(historyItems, state.profileHistoryFilter);
       const historyPreview = filteredHistory.slice(0, 3);
@@ -2230,12 +2716,17 @@
     if (state.currentPage === "referral") return renderReferralPage();
     if (state.currentPage === "booking") return renderBookingPage();
     if (state.currentPage === "shop") return renderShopPage();
+    if (state.currentPage === "barber") return renderBarberProfilePage();
     if (state.currentPage === "achievements") return renderAchievementsPage();
     if (state.currentPage === "profile") return renderProfilePage();
     return renderHomePage();
   };
 
   const syncDocumentMeta = () => {
+    const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+    const activeBarber = state.currentPage === "barber"
+      ? barbers.find((item) => normalizeText(item.id) === normalizeText(state.activeBarberProfileId || getBarberIdFromPath(window.location.pathname))) || null
+      : null;
     const titles = {
       home:
         normalizeText(window.location.pathname).replace(/\/+$/, "") === "/home"
@@ -2244,6 +2735,7 @@
       referral: "BrotherShop • Бонусы",
       booking: "BrotherShop • Запись",
       shop: "BrotherShop • Магазин",
+      barber: activeBarber ? `BrotherShop • ${normalizeText(activeBarber.name)}` : "BrotherShop • Барбер",
       achievements: "BrotherShop • Достижения",
       profile: "BrotherShop • Профиль",
     };
@@ -2355,6 +2847,7 @@
     }
     state.navIndicatorIndex = Math.max(0, ["home", "referral", "booking", "shop", "profile"].findIndex((item) => item === state.currentPage));
     state.currentPage = nextPage;
+    state.activeBarberProfileId = nextPage === "barber" ? getBarberIdFromPath(url.pathname) : "";
     state.booking.stepAnimationsEnabled = nextPage === "booking";
     state.routeTransitionActive = true;
     render();
@@ -2396,6 +2889,7 @@
     const sheetScope = sheetHost.querySelector(".sheet-backdrop");
     if (appChanged) setupMediaWaveLoading(renderScope);
     if (sheetChanged && sheetScope) setupMediaWaveLoading(sheetScope);
+    applyProfileCoverTheme(renderScope);
     setupPromoMarqueeAutoScroll(renderScope);
     if (
       state.currentPage === "referral" ||
@@ -2414,6 +2908,7 @@
     if (state.currentPage === "booking" && state.booking.stepAnimationsEnabled) {
       state.booking.stepAnimationsEnabled = false;
     }
+    ensureProfileCoverPalette().catch(() => {});
   };
 
   const render = (options = {}) => {
@@ -2660,10 +3155,11 @@
       const appointment = Array.isArray(state.payload?.booking?.activeAppointments)
         ? state.payload.booking.activeAppointments.find((item) => normalizeText(item.id) === normalizeText(state.pendingBookingCancellationId))
         : null;
-      const targetId = normalizeText(state.pendingBookingCancellationId || appointment?.id || "");
       openSheet(
         "Управление записью",
-        `<div class="list appointment-sheet-list"><div class="list-item"><p class="list-title">${normalizeText(appointment?.barber || "Текущая запись")}</p><p class="subtitle">${appointment?.date ? formatDateOnly(appointment.date) : ""}${appointment?.time ? ` · ${normalizeText(appointment.time)}` : ""}</p></div><div class="list-item"><p class="list-title">Услуги</p><p class="subtitle">${normalizeText((appointment?.services || []).join(", ") || "Детали доступны в booking.")}</p></div></div><div class="inline-actions"><button class="ghost-btn danger-surface" type="button" data-action="open-sheet" data-sheet="cancel-booking" data-id="${targetId}">Отменить запись</button></div>`,
+        buildManageBookingSheet(appointment),
+        "",
+        "sheet-wide",
       );
       return;
     }
@@ -2674,7 +3170,7 @@
       const targetId = normalizeText(state.pendingBookingCancellationId || appointment?.id || "");
       openSheet(
         "Отменить запись",
-        `<div class="list-item"><p class="list-title">Отменить текущую запись?</p><p class="subtitle">Запись будет отменена без возможности вернуть её автоматически.${appointment?.date ? ` · ${formatDateOnly(appointment.date)}` : ""}${appointment?.time ? ` · ${normalizeText(appointment.time)}` : ""}</p></div><div class="inline-actions"><button class="danger-btn" type="button" data-action="confirm-cancel-booking" data-id="${targetId}">Отменить запись</button><button class="ghost-btn" type="button" data-action="close-sheet">Назад</button></div>`,
+        `<div class="list-item"><p class="list-title">Отменить текущую запись?</p><p class="subtitle">Запись будет отменена без возможности её вернуть.${appointment?.date ? ` · ${formatDateOnly(appointment.date)}` : ""}${appointment?.time ? ` · ${normalizeText(appointment.time)}` : ""}</p></div><div class="inline-actions"><button class="danger-btn" type="button" data-action="confirm-cancel-booking" data-id="${targetId}">Отменить запись</button><button class="ghost-btn" type="button" data-action="close-sheet">Назад</button></div>`,
       );
       return;
     }
@@ -2925,6 +3421,27 @@
           navigateTo(href);
           return;
         }
+        case "open-barber-profile": {
+          event.preventDefault();
+          const barberId = normalizeText(actionNode.dataset.id);
+          if (!barberId) return;
+          navigateTo(`/barber/${encodeURIComponent(barberId)}/`);
+          return;
+        }
+        case "book-another":
+          event.preventDefault();
+          closeSheet();
+          window.setTimeout(() => navigateTo("/booking/"), 180);
+          return;
+        case "download-booking-reminder": {
+          event.preventDefault();
+          const appointmentId = normalizeText(actionNode.dataset.id || state.pendingBookingCancellationId);
+          const appointment = Array.isArray(state.payload?.booking?.activeAppointments)
+            ? state.payload.booking.activeAppointments.find((item) => normalizeText(item.id) === appointmentId)
+            : null;
+          downloadAppointmentReminder(appointment);
+          return;
+        }
         case "set-history-filter":
           event.preventDefault();
           event.stopPropagation();
@@ -3072,6 +3589,11 @@
           event.preventDefault();
           state.booking.bsCoverExpanded = !state.booking.bsCoverExpanded;
           render();
+          return;
+        case "toggle-home-about":
+          event.preventDefault();
+          state.homeAboutExpanded = !state.homeAboutExpanded;
+          animateHomeAboutCard(actionNode, state.homeAboutExpanded);
           return;
         case "submit-booking":
           event.preventDefault();

@@ -1233,7 +1233,8 @@
           </div>
           <div class="about-image-frame" style="${normalizeText(siteHome.aboutImageUrl) ? `background-image:url('${normalizeText(siteHome.aboutImageUrl)}');` : ""}"></div>
         </article>
-        <article class="content-card map-card">
+        <section class="home-map-contacts-row">
+          <article class="content-card map-card">
           <h2 class="map-title">${normalizeText(siteHome.mapTitle || "Карта")}</h2>
           <a class="map-link-card" href="${mapLink}" target="_blank" rel="noopener noreferrer">
             <div class="map-image" style="${normalizeText(siteHome.mapImageUrl) ? `background-image:url('${normalizeText(siteHome.mapImageUrl)}');` : ""}">
@@ -1250,7 +1251,7 @@
             </div>
           </a>
         </article>
-        <article class="content-card contacts-card">
+          <article class="content-card contacts-card">
           <h2 class="section-title">${normalizeText(siteHome.contactsTitle || "Контакты")}</h2>
           <div class="contact-actions">
             <a class="ghost-btn square-btn icon-btn contacts-phone phone-link" href="tel:${normalizePhone(siteHome.phone || CONTACT_PHONE)}" aria-label="Телефон">${iconMarkup("phone")}<span>${normalizeText(siteHome.phone || CONTACT_PHONE)}</span></a>
@@ -1260,7 +1261,8 @@
           </div>
           ${!normalizeText(siteHome.telegramUrl) && !normalizeText(siteHome.whatsappUrl) && !normalizeText(siteHome.email) ? `<p class="app-note">Сейчас доступен звонок по телефону. Остальные способы связи можно добавить в CRM.</p>` : ""}
         </article>
-        <article class="content-card">
+        </section>
+        <article class="content-card home-barbers-card">
           <div class="section-head">
             <div>
               <div class="section-eyebrow">Барберы</div>

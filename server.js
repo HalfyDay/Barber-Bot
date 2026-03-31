@@ -320,6 +320,7 @@ app.use(
   }),
 );
 app.get(["/home", "/home/", "/booking", "/booking/", "/referral", "/referral/", "/shop", "/shop/", "/profile", "/profile/"], sendClientAppShell);
+app.get(/^\/barber\/[^/]+\/?$/, sendClientAppShell);
 app.use("/panel", express.static(path.join(__dirname)));
 app.get(/^\/panel(?:\/.*)?$/, (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));

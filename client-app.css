@@ -4055,16 +4055,28 @@ img.media-wave.is-ready {
 .barber-profile-surface::before {
   inset: 0;
   border-radius: inherit;
-  background: none;
+  background:
+    linear-gradient(112deg, transparent 18%, rgba(255, 255, 255, 0.03) 34%, rgba(255, 255, 255, 0.14) 49%, rgba(255, 255, 255, 0.04) 58%, transparent 72%),
+    radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.09), transparent 24%);
+  background-size: 160% 160%, 140% 140%;
+  background-position:
+    calc(50% + (var(--sheen-x) * 0.22)) calc(50% + (var(--sheen-y) * 0.18)),
+    calc(20% + (var(--sheen-x) * 0.1)) calc(18% + (var(--sheen-y) * 0.08));
+  background-repeat: no-repeat;
   mix-blend-mode: screen;
-  opacity: 0;
-  transform: translate3d(calc(var(--sheen-x) * 0.18), calc(var(--sheen-y) * 0.18), 0);
-  transition: transform 0.18s ease-out, opacity 0.18s ease-out;
+  opacity: 0.58;
+  transition: background-position 0.18s ease-out, opacity 0.18s ease-out;
 }
 
 .barber-profile-surface::after {
-  background: none;
-  opacity: 0;
+  background-image:
+    repeating-linear-gradient(112deg, rgba(255, 255, 255, 0.016) 0 1px, transparent 1px 15px),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.02) 0 1px, transparent 1px 18px),
+    radial-gradient(circle at 16% 12%, rgba(255, 255, 255, 0.04), transparent 18%);
+  background-size: auto, auto, auto;
+  opacity: 0.26;
+  transform: translate3d(calc(var(--sheen-x) * -0.08), calc(var(--sheen-y) * -0.08), 0);
+  transition: transform 0.18s ease-out, opacity 0.18s ease-out;
 }
 
 .barber-profile-backdrop,

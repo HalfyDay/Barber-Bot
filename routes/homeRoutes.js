@@ -796,6 +796,9 @@ const registerHomeRoutes = ({
         patch.homePasswordHash = hashHex;
         patch.homePasswordSalt = saltHex;
       }
+      const hasBirthDate = Object.prototype.hasOwnProperty.call(req.body || {}, "birthDate");
+      const hasGender = Object.prototype.hasOwnProperty.call(req.body || {}, "gender");
+      const hasAvatarUrl = Object.prototype.hasOwnProperty.call(req.body || {}, "avatarUrl");
       const birthDate = normalizeText(req.body?.birthDate);
       const gender = normalizeText(req.body?.gender);
       const avatarUrl = normalizeText(req.body?.avatarUrl);
@@ -814,9 +817,9 @@ const registerHomeRoutes = ({
       });
       const currentMeta = await getUserMeta(userId);
       const meta = await updateUserMeta(userId, {
-        birthDate: birthDate || null,
-        gender: gender || "",
-        avatarUrl: avatarUrl || currentMeta?.avatarUrl || "",
+        birthDate: hasBirthDate ? birthDate || null : currentMeta?.birthDate || null,
+        gender: hasGender ? gender || "" : currentMeta?.gender || "",
+        avatarUrl: hasAvatarUrl ? avatarUrl : currentMeta?.avatarUrl || "",
         ...(bookingNotificationsEnabled === undefined ? {} : { bookingNotificationsEnabled }),
       });
       const user = toPublicHomeProfile(updated);

@@ -634,6 +634,7 @@ textarea:focus-visible {
   position: relative;
   overflow: visible;
   margin: 0;
+  padding: 0;
   --barber-display-font: "Oxanium", "Unbounded", var(--font-display);
   --barber-ui-font: "Chakra Petch", "Manrope", var(--font-body);
 }
@@ -5528,7 +5529,8 @@ img.media-wave.is-ready {
 }
 
 .profile-summary-strip {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: stretch;
   margin: 14px 0 2px;
   position: relative;
   z-index: 1;
@@ -5541,8 +5543,9 @@ img.media-wave.is-ready {
 }
 
 .profile-hero {
-  overflow: hidden;
+  overflow: visible;
   position: relative;
+  z-index: 8;
   padding-top: 0;
 }
 
@@ -5592,14 +5595,95 @@ img.media-wave.is-ready {
   margin-top: -68px;
   padding: 0 4px 10px;
   position: relative;
-  z-index: 1;
+  z-index: 4;
 }
 
 .profile-avatar-trigger {
   display: grid;
   justify-items: center;
   gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: center;
   color: var(--muted);
+}
+
+.profile-avatar-panel-shell {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-self: start;
+}
+
+.profile-avatar-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 24;
+  display: grid;
+  gap: 6px;
+  width: max-content;
+  min-width: 208px;
+  max-width: min(248px, calc(100vw - 40px));
+  padding: 12px;
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0)),
+    color-mix(in srgb, var(--md-sys-color-surface-container-high) 94%, rgba(8, 13, 14, 0.88));
+  box-shadow:
+    0 24px 40px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(18px) saturate(1.08);
+  transform-origin: top left;
+  transform: translateY(-18px) scale(0.92);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 280ms ease, transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.profile-avatar-panel.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+  animation: profile-avatar-panel-reveal 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.profile-avatar-panel.is-closing {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-18px) scale(0.92);
+}
+
+.profile-avatar-panel-action {
+  width: 100%;
+  min-height: 44px;
+  padding-inline: 16px;
+  border: 0;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--md-sys-color-surface-container) 72%, transparent);
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.profile-avatar-panel-action:hover,
+.profile-avatar-panel-action:focus-visible {
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-highest) 62%, transparent);
+}
+
+.profile-avatar-panel-remove {
+  color: var(--text);
+}
+
+@keyframes profile-avatar-panel-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-22px) scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .profile-avatar-trigger .profile-avatar {
@@ -5617,6 +5701,16 @@ img.media-wave.is-ready {
 .profile-social-copy {
   min-width: 0;
   padding: 10px 0 2px;
+}
+
+.profile-social-copy .hero-title {
+  display: -webkit-box;
+  max-width: min(100%, 12ch);
+  overflow: hidden;
+  text-wrap: pretty;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .profile-title-row {
@@ -5737,24 +5831,50 @@ img.media-wave.is-ready {
 
 .profile-next-booking-surface {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   width: 100%;
-  padding: 16px;
-  border: 1px solid transparent;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 24px;
-  background: var(--md-sys-color-surface-container-low);
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-low) 82%, transparent);
   text-align: left;
+  transition: background-color 180ms ease, transform 180ms ease;
+}
+
+.profile-next-booking-surface:hover,
+.profile-next-booking-surface:focus-visible {
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high) 58%, transparent);
 }
 
 .profile-next-booking-main {
   display: grid;
-  gap: 4px;
+  gap: 6px;
+}
+
+.profile-next-booking-head {
+  display: grid;
+  gap: 2px;
 }
 
 .profile-next-booking-meta {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.profile-next-booking-date,
+.profile-next-booking-time {
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.profile-next-booking-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .telegram-card {
@@ -5827,12 +5947,18 @@ img.media-wave.is-ready {
 
 .profile-summary-cell {
   flex: 1;
-  min-width: 160px;
+  min-width: 0;
   padding: 14px 16px;
   border-radius: 20px;
   background: var(--md-sys-color-surface-container-low);
   border: 1px solid transparent;
   box-shadow: none;
+}
+
+.profile-summary-cell .field-label,
+.profile-summary-cell strong,
+.metric-trigger {
+  white-space: nowrap;
 }
 
 .profile-summary-cell strong {
@@ -5896,15 +6022,41 @@ img.media-wave.is-ready {
 .profile-avatar-upload-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 14px;
+  gap: 16px;
   align-items: center;
-  padding: 16px;
-  border-radius: 20px;
+  padding: 18px;
+  border-radius: 24px;
   background: var(--md-sys-color-surface-container-low);
-  border: 1px solid transparent;
-  min-height: 140px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  min-height: 156px;
   position: relative;
   overflow: hidden;
+  transform-origin: top center;
+}
+
+.sheet.profile-edit-sheet.is-entering .profile-avatar-upload-card,
+.sheet.profile-edit-sheet.is-open .profile-avatar-upload-card {
+  animation: profile-avatar-edit-card-enter 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sheet.profile-edit-sheet.is-closing {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+.sheet.profile-edit-sheet.is-closing .profile-avatar-upload-card {
+  animation: profile-avatar-edit-card-exit 260ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.profile-avatar-upload-card.is-dragover {
+  border-color: color-mix(in srgb, var(--primary) 54%, transparent);
+  background: color-mix(in srgb, var(--primary) 10%, var(--md-sys-color-surface-container-low));
+}
+
+.profile-avatar-upload-preview-shell {
+  display: grid;
+  justify-items: center;
+  gap: 0;
 }
 
 .profile-avatar-upload-preview .profile-avatar {
@@ -5940,6 +6092,54 @@ img.media-wave.is-ready {
   display: grid;
   gap: 6px;
   align-content: center;
+}
+
+.profile-avatar-upload-subtitle {
+  margin: 0;
+  max-width: 34ch;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.profile-avatar-upload-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.profile-avatar-upload-action-main {
+  grid-column: 1 / -1;
+}
+
+.profile-avatar-upload-action-main,
+.profile-avatar-upload-action-secondary {
+  min-width: 0;
+  min-height: 40px;
+  padding-inline: 14px;
+  justify-content: center;
+}
+
+@keyframes profile-avatar-edit-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes profile-avatar-edit-card-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-18px) scale(0.96);
+  }
 }
 
 .avatar-preview-enter {
@@ -6618,6 +6818,10 @@ img.media-wave.is-ready {
     margin: 0;
   }
 
+  .home-barber-rotating-card {
+    padding: 0;
+  }
+
   .barber-profile-surface {
     transform: none;
   }
@@ -6795,6 +6999,12 @@ img.media-wave.is-ready {
     height: 100%;
     max-width: 100%;
     max-height: none;
+  }
+
+  .home-barber-rotating-card .barber-profile-art {
+    width: 42%;
+    height: 90%;
+    right: 2px;
   }
 
   .barber-profile-backdrop-orb-a {
@@ -7008,7 +7218,6 @@ img.media-wave.is-ready {
   }
 
   .booking-progress-line,
-  .profile-summary-strip,
   .summary-master-row {
     flex-wrap: wrap;
   }
@@ -7018,7 +7227,7 @@ img.media-wave.is-ready {
   }
 
   .profile-next-booking-meta {
-    grid-template-columns: 1fr;
+    gap: 6px;
   }
 
   .profile-title-row {
@@ -7041,14 +7250,41 @@ img.media-wave.is-ready {
     margin: -14px -14px 0;
     border-radius: 24px 24px 22px 22px;
     background:
-      radial-gradient(circle at 18% 24%, color-mix(in srgb, var(--md-sys-color-secondary-container) 28%, transparent), transparent 26%),
-      linear-gradient(180deg, color-mix(in srgb, var(--md-sys-color-secondary-container) 16%, var(--md-sys-color-surface-container-highest)) 0%, var(--md-sys-color-surface-container-highest) 56%, var(--md-sys-color-surface-container) 100%);
+      radial-gradient(circle at 18% 24%, color-mix(in srgb, var(--profile-cover-glow) 88%, transparent), transparent 30%),
+      linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--profile-cover-accent) 72%, var(--profile-cover-base) 28%) 0%,
+        color-mix(in srgb, var(--profile-cover-accent) 44%, var(--profile-cover-base) 56%) 44%,
+        var(--profile-cover-base) 100%
+      );
   }
 
   .profile-social-head {
     margin-top: -40px;
     gap: 14px;
     padding: 0 0 8px;
+  }
+
+  .profile-avatar-panel {
+    min-width: 184px;
+    max-width: calc(100vw - 32px);
+  }
+
+  .profile-summary-strip {
+    gap: 8px;
+  }
+
+  .profile-summary-cell {
+    padding: 12px 12px;
+  }
+
+  .profile-summary-cell .field-label {
+    font-size: 0.72rem;
+  }
+
+  .profile-summary-cell strong,
+  .metric-trigger strong {
+    font-size: 0.95rem;
   }
 
   .telegram-card-head {

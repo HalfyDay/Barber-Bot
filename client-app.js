@@ -45,6 +45,8 @@
     referralLinkCopied: false,
     transferHistoryFilter: "all",
     profileHistoryFilter: "all",
+    profileAvatarPanelState: "closed",
+    profileAvatarUploading: false,
     profileCover: {
       source: "",
       status: "idle",
@@ -88,6 +90,7 @@
   let homeBarberRotationTimer = null;
   let homeBarberTransitionSwapTimer = null;
   let homeBarberTransitionResetTimer = null;
+  let profileAvatarPanelCloseTimer = null;
   let homeBarberTiltSnapshot = {
     tiltX: "0deg",
     tiltY: "0deg",
@@ -109,6 +112,8 @@
   };
 
   const normalizeText = (value) => (value == null ? "" : String(value).trim());
+  const isDesktopLikeDevice = () =>
+    window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches === true;
   const getHomeBarberTiltSceneStyle = () =>
     `--tilt-x:${normalizeText(homeBarberTiltSnapshot?.tiltX || "0deg")};--tilt-y:${normalizeText(homeBarberTiltSnapshot?.tiltY || "0deg")};--sheen-x:${normalizeText(homeBarberTiltSnapshot?.sheenX || "0%")};--sheen-y:${normalizeText(homeBarberTiltSnapshot?.sheenY || "0%")};--text-shimmer:${normalizeText(homeBarberTiltSnapshot?.textShimmer || "50%")};`;
   const clampNumber = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
@@ -1365,6 +1370,39 @@
       return `<div class="profile-avatar" style="width:${size}px;height:${size}px;"><img src="${avatarUrl}" alt="${title}" /></div>`;
     }
     return `<div class="profile-avatar" style="width:${size}px;height:${size}px;display:grid;place-items:center;background:linear-gradient(135deg,var(--md-sys-color-primary),#0b6662);color:#fff;font:700 1rem/1 var(--font-display);">${initials}</div>`;
+  };
+  const PROFILE_AVATAR_DELETE_SENTINEL = "__DELETE__";
+  const getProfileAvatarUploadHint = () => "Файл до 5 МБ. Фото автоматически обрежется по центру.";
+  const renderProfileAvatarUploadControl = (user, options = {}) => {
+    const prefix = normalizeText(options.prefix || "profile-avatar");
+    const title = normalizeText(options.title || "Загрузить новое фото");
+    const currentAvatarUrl = normalizeText(user?.avatarUrl || "");
+    const showCameraButton = options.showCameraButton !== false;
+    return `
+      <div
+        class="profile-avatar-upload-card"
+        id="${prefix}-card"
+        tabindex="0"
+        data-current-avatar-url="${currentAvatarUrl}"
+        aria-label="Загрузка фото профиля"
+      >
+        <div class="profile-avatar-upload-preview-shell">
+          <div class="profile-avatar-upload-preview" id="${prefix}-preview">${avatarMarkup(user, 84)}</div>
+        </div>
+        <div class="profile-avatar-upload-copy">
+          <strong>${title}</strong>
+          <span class="muted-text" id="${prefix}-status">${getProfileAvatarUploadHint()}</span>
+          <div class="inline-actions profile-avatar-upload-actions">
+            <button class="ghost-btn file-select-btn profile-avatar-upload-action-main" type="button" id="${prefix}-choose-btn">Загрузить с устройства</button>
+            ${showCameraButton ? `<button class="ghost-btn profile-avatar-upload-action-secondary" type="button" id="${prefix}-camera-btn">Сделать снимок</button>` : ""}
+            <button class="ghost-btn profile-avatar-upload-action-secondary" type="button" id="${prefix}-delete-btn">Удалить</button>
+          </div>
+        </div>
+        <input id="${prefix}-input" class="visually-hidden-input" type="file" name="avatarFile" accept="image/*" />
+        <input id="${prefix}-camera-input" class="visually-hidden-input" type="file" accept="image/*" capture="environment" />
+        <input id="${prefix}-prepared" type="hidden" name="avatarPreparedUrl" value="" />
+      </div>
+    `;
   };
 
   const statusColorClass = (value) => (value === "green" ? "green" : value === "yellow" ? "yellow" : "red");
@@ -3090,13 +3128,21 @@
     const operations = Array.isArray(profile.operations) ? profile.operations : [];
     const notices = Array.isArray(profile.notices) ? profile.notices : [];
     const activeAppointments = Array.isArray(booking.activeAppointments) ? booking.activeAppointments : [];
-    return memoizeRenderedFragment("page-profile", [user, profile, booking, state.profileHistoryFilter, state.profileCover.status, state.profileCover.source], () => {
+    return memoizeRenderedFragment("page-profile", [user, profile, booking, state.profileHistoryFilter, state.profileCover.status, state.profileCover.source, state.profileAvatarPanelState, state.profileAvatarUploading], () => {
       const historyItems = getProfileHistoryItems(visitHistory, operations);
       const filteredHistory = getFilteredProfileHistoryItems(historyItems, state.profileHistoryFilter);
       const historyPreview = filteredHistory.slice(0, 3);
       const genderLabel = user.gender === "male" ? "Мужской" : user.gender === "female" ? "Женский" : user.gender === "other" ? "Другой" : "Не указан";
       const profileBio = [user.birthDate ? formatProfileDateOnly(user.birthDate) : "", normalizeText(user.gender) ? genderLabel : ""].filter(Boolean).join(" · ");
       const noticeLabel = user.noticeCount || 0;
+      const isDesktopDevice = isDesktopLikeDevice();
+      const isAvatarPanelVisible = state.profileAvatarPanelState !== "closed";
+      const avatarPanelClass =
+        state.profileAvatarPanelState === "open"
+          ? "is-open"
+          : state.profileAvatarPanelState === "closing"
+            ? "is-closing"
+            : "";
       const completionFields = [
         normalizeText(user.avatarUrl),
         normalizeText(user.displayName),
@@ -3106,6 +3152,7 @@
         normalizeText(user.telegramId),
       ];
       const profileCompletion = Math.round((completionFields.filter(Boolean).length / completionFields.length) * 100);
+      const hasAvatar = Boolean(normalizeText(user.avatarUrl));
       return `
       <section class="page profile-page">
         <article class="hero-card page-hero profile-hero">
@@ -3115,7 +3162,18 @@
             <button class="ghost-btn profile-cover-action profile-cover-settings icon-only-btn" type="button" data-action="open-sheet" data-sheet="profile-menu" aria-label="Настройки">${iconMarkup("settings")}</button>
           </div>
           <div class="profile-social-head">
-            <div class="profile-avatar-trigger">${avatarMarkup(user, 108)}</div>
+            <div class="profile-avatar-panel-shell">
+              <button class="profile-avatar-trigger" type="button" data-action="toggle-profile-avatar-panel" aria-label="Сменить фото профиля" aria-expanded="${state.profileAvatarPanelState === "open" ? "true" : "false"}">
+                ${avatarMarkup(user, 108)}
+              </button>
+              <div class="profile-avatar-panel ${avatarPanelClass}" aria-hidden="${isAvatarPanelVisible ? "false" : "true"}">
+                <button class="ghost-btn profile-avatar-panel-action" type="button" data-action="profile-avatar-upload-device" ${state.profileAvatarUploading ? "disabled" : ""}>Загрузить с устройства</button>
+                ${isDesktopDevice ? "" : `<button class="ghost-btn profile-avatar-panel-action" type="button" data-action="profile-avatar-open-camera" ${state.profileAvatarUploading ? "disabled" : ""}>Сделать снимок</button>`}
+                <button class="ghost-btn profile-avatar-panel-action profile-avatar-panel-remove" type="button" data-action="profile-avatar-remove" ${hasAvatar && !state.profileAvatarUploading ? "" : "disabled"}>Удалить</button>
+                <input id="profile-avatar-device-input" class="visually-hidden-input" type="file" accept="image/*" />
+                ${isDesktopDevice ? "" : `<input id="profile-avatar-camera-input" class="visually-hidden-input" type="file" accept="image/*" capture="environment" />`}
+              </div>
+            </div>
             <div class="profile-social-copy">
               <div class="profile-title-row">
                 <div>
@@ -3135,24 +3193,20 @@
         </article>
         <article class="list-card profile-next-booking-card">
           <div class="section-head">
-            <div><div class="section-eyebrow">Активные записи</div><h2 class="section-title">${activeAppointments.length ? `Всего ${activeAppointments.length}` : "Записей пока нет"}</h2></div>
+            <div><div class="section-eyebrow">Активные записи</div><h2 class="section-title">${activeAppointments.length ? "Ближайшие визиты" : "Записей пока нет"}</h2></div>
           </div>
           ${activeAppointments.length
             ? `<div class="profile-active-bookings-list">${activeAppointments
                 .map(
                   (appointment) => `<button class="profile-next-booking-surface" type="button" data-action="open-sheet" data-sheet="manage-booking" data-id="${normalizeText(appointment.id)}">
                     <div class="profile-next-booking-main">
-                      <p class="list-title">${normalizeText(appointment.barber || "BrotherShop")}</p>
-                      <p class="subtitle">${normalizeText((appointment.services || []).join(", ") || "Детали доступны в booking")}</p>
-                    </div>
-                    <div class="profile-next-booking-meta">
-                      <div class="profile-summary-cell">
-                        <span class="field-label">Дата</span>
-                        <strong>${formatDateOnly(appointment.date)}</strong>
+                      <div class="profile-next-booking-head">
+                        <p class="list-title">${normalizeText((appointment.services || []).join(", ") || "Детали доступны в booking")}</p>
                       </div>
-                      <div class="profile-summary-cell">
-                        <span class="field-label">Время</span>
-                        <strong>${normalizeText(appointment.time)}</strong>
+                      <div class="profile-next-booking-meta">
+                        <strong class="profile-next-booking-date">${formatDateOnly(appointment.date)}</strong>
+                        <span class="profile-next-booking-dot" aria-hidden="true"></span>
+                        <strong class="profile-next-booking-time">${normalizeText(appointment.time)}</strong>
                       </div>
                     </div>
                   </button>`,
@@ -3714,7 +3768,7 @@
     }
     if (sheetId === "profile-edit") {
       const user = state.payload?.user || {};
-      openSheet("Редактировать профиль", `<form class="form-grid profile-edit-form-layout" id="profile-edit-form"><label class="field"><span class="field-label">ФИО</span><input name="displayName" value="${normalizeText(user.displayName)}" required /></label><label class="field"><span class="field-label">Телефон</span><input name="phone" value="${normalizeText(user.phone)}" required /></label><label class="field"><span class="field-label">Дата рождения</span><input type="date" name="birthDate" value="${normalizeText(user.birthDate)}" /></label><label class="field"><span class="field-label">Пол</span><select name="gender"><option value="">Не указан</option><option value="male" ${user.gender === "male" ? "selected" : ""}>Мужской</option><option value="female" ${user.gender === "female" ? "selected" : ""}>Женский</option><option value="other" ${user.gender === "other" ? "selected" : ""}>Другой</option></select></label><div class="field profile-avatar-field"><span class="field-label">Фото профиля</span><div class="profile-avatar-upload-card" id="profile-avatar-upload-card"><div class="profile-avatar-upload-preview" id="profile-avatar-upload-preview">${avatarMarkup(user, 84)}</div><div class="profile-avatar-upload-copy"><strong>Загрузить новое фото</strong><span class="muted-text" id="profile-avatar-upload-status">Файл до 5 МБ. Изображение автоматически обрежется по центру.</span><div class="inline-actions"><label class="ghost-btn file-select-btn" for="profile-avatar-input">Выбрать фото</label></div></div><input id="profile-avatar-input" class="visually-hidden-input" type="file" name="avatarFile" accept="image/*" /></div></div><div class="inline-actions profile-edit-submit"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`, "", "sheet-wide");
+      openSheet("Редактировать профиль", `<form class="form-grid profile-edit-form-layout" id="profile-edit-form"><label class="field"><span class="field-label">ФИО</span><input name="displayName" value="${normalizeText(user.displayName)}" required /></label><label class="field"><span class="field-label">Телефон</span><input name="phone" value="${normalizeText(user.phone)}" required /></label><label class="field"><span class="field-label">Дата рождения</span><input type="date" name="birthDate" value="${normalizeText(user.birthDate)}" /></label><label class="field"><span class="field-label">Пол</span><select name="gender"><option value="">Не указан</option><option value="male" ${user.gender === "male" ? "selected" : ""}>Мужской</option><option value="female" ${user.gender === "female" ? "selected" : ""}>Женский</option><option value="other" ${user.gender === "other" ? "selected" : ""}>Другой</option></select></label><div class="field profile-avatar-field"><span class="field-label">Фото</span>${renderProfileAvatarUploadControl(user, { prefix: "profile-avatar-edit", title: "Загрузить фото", showCameraButton: !isDesktopLikeDevice() })}</div><div class="inline-actions profile-edit-submit"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`, "", "sheet-wide profile-edit-sheet");
       return;
     }
     if (sheetId === "profile-security") {
@@ -3752,10 +3806,6 @@
       openSheet("Пол", `<form class="form-grid" id="profile-gender-form"><label class="field"><span class="field-label">Пол</span><select name="gender"><option value="">Не указан</option><option value="male" ${user.gender === "male" ? "selected" : ""}>Мужской</option><option value="female" ${user.gender === "female" ? "selected" : ""}>Женский</option><option value="other" ${user.gender === "other" ? "selected" : ""}>Другой</option></select></label><div class="inline-actions"><button class="primary-btn" type="submit">Сохранить</button><button class="ghost-btn" type="button" data-action="close-sheet">Отмена</button></div></form>`);
       return;
     }
-    if (sheetId === "profile-avatar") {
-      openSheet("Фото профиля", `<form class="form-grid" id="profile-avatar-form"><label class="field"><span class="field-label">Загрузить фото</span><input type="file" name="avatarFile" accept="image/*" /></label><div class="inline-actions"><button class="primary-btn" type="submit">Сохранить</button><button class="ghost-btn" type="button" data-action="close-sheet">Отмена</button></div></form>`);
-      return;
-    }
     if (sheetId === "profile-password") {
       openSheet("Новый пароль", `<form class="form-grid" id="profile-password-form"><label class="field"><span class="field-label">Новый пароль</span><input type="password" name="password" required /></label><div class="inline-actions"><button class="primary-btn" type="submit">Сохранить</button><button class="ghost-btn" type="button" data-action="close-sheet">Отмена</button></div></form>`);
       return;
@@ -3774,11 +3824,14 @@
   const saveProfilePatch = async (patch) => {
     const safePatch = patch || {};
     if (state.payload?.user) {
+      const nextUserPatch = Object.fromEntries(
+        Object.entries(safePatch).filter(([key, value]) => value !== undefined && (value !== "" || key === "avatarUrl")),
+      );
       state.payload = {
         ...state.payload,
         user: {
           ...state.payload.user,
-          ...Object.fromEntries(Object.entries(safePatch).filter(([, value]) => value !== undefined && value !== "")),
+          ...nextUserPatch,
         },
       };
     }
@@ -3795,6 +3848,76 @@
       render();
       throw error;
     }
+  };
+  const handleProfileAvatarFileSelection = async (file) => {
+    if (!(file instanceof File) || !file.name) {
+      throw new Error("Выберите изображение.");
+    }
+    if (!normalizeText(file.type).startsWith("image/")) {
+      throw new Error("Нужен файл изображения.");
+    }
+    if (Number(file.size) > 5 * 1024 * 1024) {
+      throw new Error("Файл должен быть не больше 5 МБ.");
+    }
+    state.profileAvatarUploading = true;
+    render();
+    try {
+      const avatarUrl = await cropImageFileToSquareDataUrl(file);
+      await saveProfilePatch({ avatarUrl });
+      state.profileAvatarPanelState = "closed";
+    } finally {
+      state.profileAvatarUploading = false;
+      render();
+    }
+  };
+  const removeProfileAvatar = async () => {
+    state.profileAvatarUploading = true;
+    render();
+    try {
+      await saveProfilePatch({ avatarUrl: "" });
+      state.profileAvatarPanelState = "closed";
+    } finally {
+      state.profileAvatarUploading = false;
+      render();
+    }
+  };
+  const openProfileAvatarPanel = () => {
+    if (profileAvatarPanelCloseTimer) {
+      window.clearTimeout(profileAvatarPanelCloseTimer);
+      profileAvatarPanelCloseTimer = null;
+    }
+    state.profileAvatarPanelState = "open";
+    render();
+  };
+  const closeProfileAvatarPanel = () => {
+    if (state.profileAvatarPanelState === "closed" || state.profileAvatarPanelState === "closing") return;
+    if (profileAvatarPanelCloseTimer) {
+      window.clearTimeout(profileAvatarPanelCloseTimer);
+      profileAvatarPanelCloseTimer = null;
+    }
+    state.profileAvatarPanelState = "closing";
+    const panel = ROOT.querySelector(".profile-avatar-panel");
+    const trigger = ROOT.querySelector(".profile-avatar-trigger");
+    if (panel) {
+      panel.classList.remove("is-open");
+      panel.classList.add("is-closing");
+      panel.setAttribute("aria-hidden", "false");
+    }
+    if (trigger) {
+      trigger.setAttribute("aria-expanded", "false");
+    }
+    profileAvatarPanelCloseTimer = window.setTimeout(() => {
+      state.profileAvatarPanelState = "closed";
+      profileAvatarPanelCloseTimer = null;
+      render();
+    }, 240);
+  };
+  const toggleProfileAvatarPanel = () => {
+    if (state.profileAvatarPanelState === "open") {
+      closeProfileAvatarPanel();
+      return;
+    }
+    openProfileAvatarPanel();
   };
 
   const startTelegramLink = async () => {
@@ -3892,6 +4015,14 @@
         }
       }
 
+      if (
+        state.currentPage === "profile" &&
+        state.profileAvatarPanelState === "open" &&
+        !event.target.closest(".profile-avatar-panel-shell")
+      ) {
+        closeProfileAvatarPanel();
+      }
+
       const actionNode = event.target.closest("[data-action]");
       if (!actionNode || !ROOT.contains(actionNode)) return;
       const action = normalizeText(actionNode.dataset.action);
@@ -3939,10 +4070,43 @@
           return;
         case "open-sheet":
           event.preventDefault();
+          closeProfileAvatarPanel();
           if (["cancel-booking", "manage-booking"].includes(normalizeText(actionNode.dataset.sheet))) {
             state.pendingBookingCancellationId = normalizeText(actionNode.dataset.id);
           }
           openNamedSheet(actionNode.dataset.sheet);
+          return;
+        case "toggle-profile-avatar-panel":
+          event.preventDefault();
+          toggleProfileAvatarPanel();
+          return;
+        case "profile-avatar-upload-device": {
+          event.preventDefault();
+          const input = document.getElementById("profile-avatar-device-input");
+          try {
+            if (typeof input?.showPicker === "function") input.showPicker();
+            else input?.click();
+          } catch {
+            input?.click();
+          }
+          return;
+        }
+        case "profile-avatar-open-camera": {
+          event.preventDefault();
+          const input = document.getElementById("profile-avatar-camera-input");
+          try {
+            if (typeof input?.showPicker === "function") input.showPicker();
+            else input?.click();
+          } catch {
+            input?.click();
+          }
+          return;
+        }
+        case "profile-avatar-remove":
+          event.preventDefault();
+          void removeProfileAvatar().catch((error) => {
+            openSheet("Ошибка изображения", `<div class="list-item"><p class="list-title">${normalizeText(error?.message || "Не удалось удалить фото.")}</p></div>`);
+          });
           return;
         case "navigate": {
           event.preventDefault();
@@ -4171,6 +4335,15 @@
         closeSheet();
       }
     });
+    ROOT.addEventListener("pointerdown", (event) => {
+      if (
+        state.currentPage === "profile" &&
+        state.profileAvatarPanelState === "open" &&
+        !event.target.closest(".profile-avatar-panel-shell")
+      ) {
+        closeProfileAvatarPanel();
+      }
+    });
   };
 
   const bindEvents = ({ appRoot = null, sheetRoot = null } = {}) => {
@@ -4220,6 +4393,32 @@
         render();
       });
     }
+    const profileAvatarDeviceInput = queryById(appRoot, "profile-avatar-device-input");
+    if (profileAvatarDeviceInput) {
+      profileAvatarDeviceInput.addEventListener("change", async () => {
+        const file = profileAvatarDeviceInput.files && profileAvatarDeviceInput.files[0];
+        profileAvatarDeviceInput.value = "";
+        if (!file) return;
+        try {
+          await handleProfileAvatarFileSelection(file);
+        } catch (error) {
+          openSheet("Ошибка изображения", `<div class="list-item"><p class="list-title">${normalizeText(error?.message || "Не удалось обработать изображение.")}</p></div>`);
+        }
+      });
+    }
+    const profileAvatarCameraInput = queryById(appRoot, "profile-avatar-camera-input");
+    if (profileAvatarCameraInput) {
+      profileAvatarCameraInput.addEventListener("change", async () => {
+        const file = profileAvatarCameraInput.files && profileAvatarCameraInput.files[0];
+        profileAvatarCameraInput.value = "";
+        if (!file) return;
+        try {
+          await handleProfileAvatarFileSelection(file);
+        } catch (error) {
+          openSheet("Ошибка изображения", `<div class="list-item"><p class="list-title">${normalizeText(error?.message || "Не удалось обработать изображение.")}</p></div>`);
+        }
+      });
+    }
     const setupProfileFormDirtyState = (form, hasChanges) => {
       if (!form || typeof hasChanges !== "function") return;
       const submitButton = form.querySelector("button[type='submit']");
@@ -4245,6 +4444,208 @@
         }
       });
     };
+    const getClipboardImageFile = async () => {
+      if (!navigator.clipboard?.read) {
+        throw new Error("Вставка из буфера недоступна в этом браузере. Используйте Ctrl+V или выбор файла.");
+      }
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find((type) => normalizeText(type).startsWith("image/"));
+        if (!imageType) continue;
+        const blob = await item.getType(imageType);
+        return new File([blob], `avatar-${Date.now()}.png`, { type: blob.type || imageType });
+      }
+      throw new Error("В буфере не найдено изображение.");
+    };
+    const bindProfileAvatarUploader = (root, options = {}) => {
+      const prefix = normalizeText(options.prefix);
+      const form = queryById(root, normalizeText(options.formId));
+      const avatarInput = queryById(root, `${prefix}-input`);
+      const avatarPreview = queryById(root, `${prefix}-preview`);
+      const avatarCard = queryById(root, `${prefix}-card`);
+      const avatarStatus = queryById(root, `${prefix}-status`);
+      const avatarPrepared = queryById(root, `${prefix}-prepared`);
+      const avatarChooseButton = queryById(root, `${prefix}-choose-btn`);
+      const avatarCameraButton = queryById(root, `${prefix}-camera-btn`);
+      const avatarDeleteButton = queryById(root, `${prefix}-delete-btn`);
+      const avatarCameraInput = queryById(root, `${prefix}-camera-input`);
+      const currentAvatarUrl = normalizeText(options.currentAvatarUrl || state.payload?.user?.avatarUrl || "");
+      if (!form || !avatarInput || !avatarPreview || !avatarCard || !avatarStatus || !avatarPrepared) return;
+
+      const syncAvatarDirtyState = () => {
+        form.dataset.avatarChanged = avatarPrepared.value ? "true" : "false";
+        form.dispatchEvent(new Event("input", { bubbles: true }));
+        form.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      const resetAvatarSelection = () => {
+        avatarInput.value = "";
+        if (avatarCameraInput) avatarCameraInput.value = "";
+        avatarPrepared.value = "";
+        avatarPreview.classList.remove("avatar-preview-ready");
+        avatarPreview.innerHTML = avatarMarkup({ ...(state.payload?.user || {}), avatarUrl: currentAvatarUrl }, 84);
+        avatarCard.classList.remove("is-loading", "is-ready", "is-dragover");
+        avatarStatus.textContent = getProfileAvatarUploadHint();
+        if (avatarDeleteButton) avatarDeleteButton.disabled = !currentAvatarUrl;
+        syncAvatarDirtyState();
+      };
+      const markAvatarForDelete = () => {
+        avatarInput.value = "";
+        if (avatarCameraInput) avatarCameraInput.value = "";
+        avatarPrepared.value = PROFILE_AVATAR_DELETE_SENTINEL;
+        avatarPreview.classList.remove("avatar-preview-ready");
+        avatarPreview.innerHTML = avatarMarkup({ ...(state.payload?.user || {}), avatarUrl: "" }, 84);
+        avatarCard.classList.remove("is-loading", "is-dragover");
+        avatarCard.classList.add("is-ready");
+        avatarStatus.textContent = "Фото будет удалено после сохранения.";
+        if (avatarDeleteButton) avatarDeleteButton.disabled = false;
+        syncAvatarDirtyState();
+      };
+      const applyAvatarPreview = (avatarUrl, statusText) => {
+        avatarPrepared.value = avatarUrl;
+        avatarPreview.classList.remove("avatar-preview-ready");
+        avatarPreview.innerHTML = `<div class="profile-avatar avatar-preview-enter" style="width:84px;height:84px;"><img src="${avatarUrl}" alt="Новое фото профиля" /></div>`;
+        requestAnimationFrame(() => avatarPreview.classList.add("avatar-preview-ready"));
+        avatarCard.classList.remove("is-loading", "is-dragover");
+        avatarCard.classList.add("is-ready");
+        avatarStatus.textContent = statusText;
+        if (avatarDeleteButton) avatarDeleteButton.disabled = false;
+        syncAvatarDirtyState();
+      };
+      const processAvatarFile = async (file, sourceLabel = "") => {
+        if (!(file instanceof File) || !file.name) {
+          throw new Error("Выберите изображение.");
+        }
+        if (!normalizeText(file.type).startsWith("image/")) {
+          throw new Error("Нужен файл изображения.");
+        }
+        if (Number(file.size) > 5 * 1024 * 1024) {
+          throw new Error("Файл должен быть не больше 5 МБ.");
+        }
+        avatarCard.classList.add("is-loading");
+        avatarCard.classList.remove("is-ready");
+        avatarStatus.textContent = "Подготавливаем новое фото...";
+        const preparedUrl = await cropImageFileToSquareDataUrl(file);
+        applyAvatarPreview(
+          preparedUrl,
+          sourceLabel
+            ? `Фото ${sourceLabel}. Сохраните профиль, чтобы применить изменения.`
+            : "Новое фото готово. Сохраните профиль, чтобы применить изменения.",
+        );
+      };
+      const handleAvatarError = (error) => {
+        avatarCard.classList.remove("is-loading", "is-dragover");
+        avatarStatus.textContent = getProfileAvatarUploadHint();
+        openSheet("Ошибка изображения", `<div class="list-item"><p class="list-title">${normalizeText(error?.message || "Не удалось обработать изображение.")}</p></div>`);
+      };
+      const tryProcessAvatarFile = async (file, sourceLabel = "") => {
+        try {
+          await processAvatarFile(file, sourceLabel);
+        } catch (error) {
+          handleAvatarError(error);
+        }
+      };
+      const getImageFileFromClipboardEvent = (event) => {
+        const items = Array.from(event.clipboardData?.items || []);
+        for (const item of items) {
+          if (!normalizeText(item.type).startsWith("image/")) continue;
+          const file = item.getAsFile();
+          if (file) return file;
+        }
+        return null;
+      };
+      const openAvatarFilePicker = async () => {
+        if (typeof window.showOpenFilePicker === "function" && window.isSecureContext) {
+          try {
+            const [handle] = await window.showOpenFilePicker({
+              multiple: false,
+              excludeAcceptAllOption: false,
+              types: [
+                {
+                  description: "Изображения",
+                  accept: {
+                    "image/*": [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"],
+                  },
+                },
+              ],
+            });
+            if (!handle) return;
+            const file = await handle.getFile();
+            await tryProcessAvatarFile(file, "выбрано");
+            return;
+          } catch (error) {
+            if (normalizeText(error?.name) === "AbortError") return;
+          }
+        }
+        try {
+          if (typeof avatarInput.showPicker === "function") avatarInput.showPicker();
+          else avatarInput.click();
+        } catch {
+          avatarInput.click();
+        }
+      };
+
+      avatarInput.addEventListener("change", async () => {
+        const file = avatarInput.files && avatarInput.files[0];
+        if (!file) {
+          resetAvatarSelection();
+          return;
+        }
+        await tryProcessAvatarFile(file, "выбрано");
+      });
+      if (avatarCameraInput) {
+        avatarCameraInput.addEventListener("change", async () => {
+          const file = avatarCameraInput.files && avatarCameraInput.files[0];
+          if (!file) return;
+          await tryProcessAvatarFile(file, "снято");
+        });
+      }
+      avatarCard.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        avatarCard.classList.add("is-dragover");
+      });
+      avatarCard.addEventListener("dragleave", () => {
+        avatarCard.classList.remove("is-dragover");
+      });
+      avatarCard.addEventListener("drop", async (event) => {
+        event.preventDefault();
+        avatarCard.classList.remove("is-dragover");
+        const file = Array.from(event.dataTransfer?.files || []).find((item) => normalizeText(item.type).startsWith("image/"));
+        if (!file) {
+          handleAvatarError(new Error("Перетащите файл изображения."));
+          return;
+        }
+        await tryProcessAvatarFile(file, "перетащено");
+      });
+      const handlePaste = async (event) => {
+        const file = getImageFileFromClipboardEvent(event);
+        if (!file) return;
+        event.preventDefault();
+        await tryProcessAvatarFile(file, "вставлено из буфера");
+      };
+      avatarCard.addEventListener("paste", handlePaste);
+      form.addEventListener("paste", handlePaste);
+      if (avatarChooseButton) {
+        avatarChooseButton.addEventListener("click", () => {
+          void openAvatarFilePicker();
+        });
+      }
+      if (avatarCameraButton && avatarCameraInput) {
+        avatarCameraButton.addEventListener("click", () => {
+          try {
+            if (typeof avatarCameraInput.showPicker === "function") avatarCameraInput.showPicker();
+            else avatarCameraInput.click();
+          } catch {
+            avatarCameraInput.click();
+          }
+        });
+      }
+      if (avatarDeleteButton) {
+        avatarDeleteButton.addEventListener("click", () => {
+          markAvatarForDelete();
+        });
+      }
+      resetAvatarSelection();
+    };
     bindProfileForm(sheetRoot, "profile-name-form", async (formData) => ({ displayName: normalizeText(formData.get("displayName")) }));
     bindProfileForm(sheetRoot, "profile-phone-form", async (formData) => ({ phone: normalizeText(formData.get("phone")) }));
     bindProfileForm(sheetRoot, "profile-birthdate-form", async (formData) => ({ birthDate: normalizeText(formData.get("birthDate")) }));
@@ -4265,6 +4666,12 @@
         const currentValue = profileNotificationsForm.elements?.bookingNotificationsEnabled?.checked === true;
         return currentValue !== initialNotificationsEnabled;
       });
+    }
+    const profilePhoneForm = queryById(sheetRoot, "profile-phone-form");
+    const profilePhoneInput = profilePhoneForm?.elements?.phone;
+    if (profilePhoneInput) {
+      applyPhoneMask(profilePhoneInput);
+      attachPhoneMask(profilePhoneInput);
     }
     const referralTransferForm = queryById(sheetRoot, "referral-transfer-form");
     if (referralTransferForm) {
@@ -4308,6 +4715,15 @@
         gender: normalizeText(formData.get("gender")),
         avatarUrl: normalizeText(state.payload?.user?.avatarUrl || ""),
       };
+      const preparedAvatarUrl = normalizeText(formData.get("avatarPreparedUrl"));
+      if (preparedAvatarUrl === PROFILE_AVATAR_DELETE_SENTINEL) {
+        patch.avatarUrl = "";
+        return patch;
+      }
+      if (preparedAvatarUrl) {
+        patch.avatarUrl = preparedAvatarUrl;
+        return patch;
+      }
       const file = formData.get("avatarFile");
       if (file instanceof File && file.name) {
         if (!normalizeText(file.type).startsWith("image/")) {
@@ -4322,77 +4738,31 @@
     });
     const profileEditForm = queryById(sheetRoot, "profile-edit-form");
     if (profileEditForm) {
+      const profileEditPhoneInput = profileEditForm.elements?.phone;
+      if (profileEditPhoneInput) {
+        applyPhoneMask(profileEditPhoneInput);
+        attachPhoneMask(profileEditPhoneInput);
+      }
       const initialUser = state.payload?.user || {};
       setupProfileFormDirtyState(profileEditForm, () => {
         const currentDisplayName = normalizeText(profileEditForm.elements?.displayName?.value);
         const currentPhone = normalizeText(profileEditForm.elements?.phone?.value);
         const currentBirthDate = normalizeText(profileEditForm.elements?.birthDate?.value);
         const currentGender = normalizeText(profileEditForm.elements?.gender?.value);
-        const hasAvatarFile = Boolean(profileEditForm.elements?.avatarFile?.files?.length);
+        const hasAvatarChange = profileEditForm.dataset.avatarChanged === "true";
         return (
           currentDisplayName !== normalizeText(initialUser.displayName) ||
           currentPhone !== normalizeText(initialUser.phone) ||
           currentBirthDate !== normalizeText(initialUser.birthDate) ||
           currentGender !== normalizeText(initialUser.gender) ||
-          hasAvatarFile
+          hasAvatarChange
         );
       });
     }
-    const avatarInput = queryById(sheetRoot, "profile-avatar-input");
-    const avatarPreview = queryById(sheetRoot, "profile-avatar-upload-preview");
-    const avatarCard = queryById(sheetRoot, "profile-avatar-upload-card");
-    const avatarStatus = queryById(sheetRoot, "profile-avatar-upload-status");
-    if (avatarInput && avatarPreview && avatarCard && avatarStatus) {
-      avatarInput.addEventListener("change", async () => {
-        const file = avatarInput.files && avatarInput.files[0];
-        if (!file) {
-          avatarCard.classList.remove("is-loading", "is-ready");
-          avatarStatus.textContent = "Файл до 5 МБ. Изображение автоматически обрежется по центру.";
-          return;
-        }
-        if (!normalizeText(file.type).startsWith("image/")) {
-          openSheet("Ошибка изображения", `<div class="list-item"><p class="list-title">Нужен файл изображения.</p></div>`);
-          avatarInput.value = "";
-          return;
-        }
-        if (Number(file.size) > 5 * 1024 * 1024) {
-          openSheet("Ошибка изображения", `<div class="list-item"><p class="list-title">Файл должен быть не больше 5 МБ.</p></div>`);
-          avatarInput.value = "";
-          return;
-        }
-        avatarCard.classList.add("is-loading");
-        avatarCard.classList.remove("is-ready");
-        avatarStatus.textContent = "Подготавливаем новое фото...";
-        try {
-          const previewUrl = await cropImageFileToSquareDataUrl(file, 320);
-          avatarPreview.classList.remove("avatar-preview-ready");
-          avatarPreview.innerHTML = `<div class="profile-avatar avatar-preview-enter" style="width:84px;height:84px;"><img src="${previewUrl}" alt="Новое фото профиля" /></div>`;
-          requestAnimationFrame(() => {
-            avatarPreview.classList.add("avatar-preview-ready");
-          });
-          avatarStatus.textContent = "Новое фото готово. Сохраните профиль, чтобы применить изменения.";
-          avatarCard.classList.remove("is-loading");
-          avatarCard.classList.add("is-ready");
-        } catch (error) {
-          avatarCard.classList.remove("is-loading", "is-ready");
-          avatarStatus.textContent = "Файл до 5 МБ. Изображение автоматически обрежется по центру.";
-          openSheet("Ошибка изображения", `<div class="list-item"><p class="list-title">${normalizeText(error.message || "Не удалось обработать изображение.")}</p></div>`);
-        }
-      });
-    }
-    bindProfileForm(sheetRoot, "profile-avatar-form", async (formData) => {
-      const file = formData.get("avatarFile");
-      if (!(file instanceof File) || !file.name) {
-        throw new Error("Выберите изображение.");
-      }
-      if (!normalizeText(file.type).startsWith("image/")) {
-        throw new Error("Нужен файл изображения.");
-      }
-      if (Number(file.size) > 5 * 1024 * 1024) {
-        throw new Error("Файл должен быть не больше 5 МБ.");
-      }
-      const avatarUrl = await cropImageFileToSquareDataUrl(file);
-      return { avatarUrl };
+    bindProfileAvatarUploader(sheetRoot, {
+      formId: "profile-edit-form",
+      prefix: "profile-avatar-edit",
+      currentAvatarUrl: normalizeText(state.payload?.user?.avatarUrl || ""),
     });
   };
 

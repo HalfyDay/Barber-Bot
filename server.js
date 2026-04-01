@@ -283,6 +283,11 @@ app.get("/client.webmanifest", (req, res) => {
   res.type("application/manifest+json");
   res.sendFile(path.join(__dirname, "client.webmanifest"));
 });
+app.get("/panel/manifest.webmanifest", (req, res) => {
+  setNoStoreHeaders(res);
+  res.type("application/manifest+json");
+  res.sendFile(path.join(__dirname, "manifest.webmanifest"));
+});
 app.get("/yandex_cc337524dd400430.html", (req, res) => {
   setNoStoreHeaders(res);
   res.type("text/html; charset=utf-8");
@@ -1370,9 +1375,11 @@ registerOwnerAssetsRoutes({
 app.get("/api/events/stream", authenticateStream, (req, res) => {
   res.set({
     "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
+    "Cache-Control": "no-cache, no-transform",
     Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
   });
+  req.socket?.setKeepAlive?.(true);
   if (typeof res.flushHeaders === "function") {
     res.flushHeaders();
   } else {

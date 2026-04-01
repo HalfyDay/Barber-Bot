@@ -2,6 +2,7 @@ import logging
 import json
 import datetime
 import io
+import pickle
 import re
 import uuid
 import time
@@ -1929,8 +1930,31 @@ async def book_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Запускает бота."""
+    persistence_path = BASE_DIR / "bot_persistence.pickle"
+    if persistence_path.exists():
+        try:
+            with persistence_path.open("rb") as persistence_file:
+                first_bytes = persistence_file.read(3)
+                persistence_file.seek(0)
+                if first_bytes.startswith(b"\xef\xbb\xbf"):
+                    raise ValueError("utf-8-bom-detected")
+                pickle.load(persistence_file)
+        except Exception as exc:
+            backup_path = persistence_path.with_name(
+                f"{persistence_path.stem}.broken-{int(time.time())}{persistence_path.suffix}"
+            )
+            try:
+                persistence_path.replace(backup_path)
+                logger.warning(
+                    "Invalid bot persistence file detected and moved to %s: %s",
+                    backup_path.name,
+                    exc,
+                )
+            except Exception:
+                logger.exception("Failed to move invalid persistence file %s", persistence_path)
+                raise
     # Создаем объект для сохранения состояния, чтобы кнопки работали после перезапуска
-    persistence = PicklePersistence(filepath=BASE_DIR / "bot_persistence.pickle")
+    persistence = PicklePersistence(filepath=persistence_path)
     # Передаем его в ApplicationBuilder
     app = ApplicationBuilder().token(TOKEN).persistence(persistence).build()
     logger.info("Reminder processing is delegated to server internal API.")

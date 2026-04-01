@@ -47,6 +47,7 @@
       status: "idle",
       palette: null,
     },
+    barberProfileServices: {},
     telegramLinkRequestId: "",
     booking: {
       barberId: "",
@@ -529,6 +530,43 @@
       preload.onload = markReady;
       preload.onerror = () => node.classList.add("is-ready");
       preload.src = backgroundUrl || url;
+    });
+  };
+  const setupInteractiveBarberCards = (scope = ROOT) => {
+    const container = scope instanceof Element ? scope : ROOT;
+    if (!container || !window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches) return;
+    container.querySelectorAll("[data-tilt-card='barber-profile']").forEach((card) => {
+      if (card.dataset.tiltBound === "1") return;
+      card.dataset.tiltBound = "1";
+      let frame = null;
+      let pointerRatioX = 0.5;
+      let pointerRatioY = 0.5;
+      const applyTilt = () => {
+        frame = null;
+        const rotateY = (pointerRatioX - 0.5) * 10;
+        const rotateX = (0.5 - pointerRatioY) * 8;
+        card.style.setProperty("--tilt-x", `${rotateX.toFixed(2)}deg`);
+        card.style.setProperty("--tilt-y", `${rotateY.toFixed(2)}deg`);
+        card.style.setProperty("--sheen-x", `${((pointerRatioX - 0.5) * 18).toFixed(2)}%`);
+        card.style.setProperty("--sheen-y", `${((pointerRatioY - 0.5) * 14).toFixed(2)}%`);
+        card.style.setProperty("--text-shimmer", `${(pointerRatioX * 100).toFixed(2)}%`);
+      };
+      const schedule = () => {
+        if (frame) return;
+        frame = window.requestAnimationFrame(applyTilt);
+      };
+      card.addEventListener("pointermove", (event) => {
+        const rect = card.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        pointerRatioX = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+        pointerRatioY = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
+        schedule();
+      });
+      card.addEventListener("pointerleave", () => {
+        pointerRatioX = 0.5;
+        pointerRatioY = 0.5;
+        schedule();
+      });
     });
   };
   const setupTransferRecipientCarousels = (scope = ROOT) => {
@@ -2558,146 +2596,117 @@
     const accentColor = resolveBarberAccentColor(barber.color, "#ff8a2a");
     const displayName = normalizeText(barber.name || barber.fullName || "Барбер");
     const fullName = normalizeText(barber.fullName || barber.name || displayName);
-    const alias =
-      [normalizeText(barber.nickname), fullName]
-        .find((value) => value && value.toLowerCase() !== displayName.toLowerCase()) || "";
-    const signature = normalizeText(barber.cardPhrase || barber.phrase || barber.description);
+    const alias = normalizeText(barber.nickname);
+    const normalizeIdentityLabel = (value) =>
+      normalizeText(value)
+        .replace(/[^\p{L}\p{N}]+/gu, "")
+        .toLowerCase();
     const description = normalizeText(barber.cardDescription || barber.description);
-    const serviceCount = Math.max(0, Number.parseInt(barber.servicesCount, 10) || 0);
-    const barberCode = `BS-${String(activeBarberIndex + 1).padStart(2, "0")}`;
+    const rawSignature = normalizeText(barber.cardPhrase || barber.phrase);
+    const signature =
+      rawSignature && rawSignature.toLowerCase() !== description.toLowerCase() ? rawSignature : "";
+    const cachedBarberServices = Array.isArray(state.barberProfileServices?.[activeBarberId]?.items)
+      ? state.barberProfileServices[activeBarberId].items
+      : [];
+    const barberServices = (Array.isArray(barber.services) && barber.services.length ? barber.services : cachedBarberServices)
+      .map((service) => (typeof service === "string" ? service : normalizeText(service?.name || service?.title || service?.label)))
+      .filter(Boolean);
+    const visibleServices = barberServices.slice(0, 4);
+    const servicesSummary = visibleServices.length ? visibleServices.join(" • ") : "Загрузка услуг...";
+    const servicesMarkup = visibleServices.length
+      ? visibleServices.map((service) => `<span class="barber-profile-service-chip">${service}</span>`).join("")
+      : `<span class="barber-profile-service-chip is-placeholder">Загрузка услуг...</span>`;
     const portraitUrl = normalizeText(barber.avatarUrl || barber.cardImageUrl);
-    const reviewLabel = reviews.length ? `${reviews.length} отзывов` : "Отзывы появятся позже";
+    const reviewLabel = reviews.length ? `${reviews.length} отзывов` : "Первые отзывы появятся позже";
+    const introText = description || rawSignature || "Барбер доступен для онлайн-записи в BrotherShop.";
+    const identityLine = [alias, fullName]
+      .filter((value, index, items) => value && normalizeIdentityLabel(value) !== normalizeIdentityLabel(displayName) && items.indexOf(value) === index)
+      .join(" • ");
     return `
       <section class="page barber-profile-page">
-        <article class="hero-card barber-profile-hero" style="--barber-accent:${accentColor};">
-          <div class="barber-profile-noise" aria-hidden="true"></div>
-          <div class="barber-profile-grid">
-            <div class="barber-profile-stage-wrap">
-              <div class="barber-profile-stage-topbar">
-                <button class="ghost-btn icon-only-btn barber-profile-back" type="button" data-action="navigate" data-href="/" aria-label="Назад">${iconMarkup("chevron-left")}</button>
-                <span class="barber-profile-chip">Agent file</span>
+        <article class="barber-profile-hero" style="--barber-accent:${accentColor};">
+          <div class="barber-profile-scene" data-tilt-card="barber-profile">
+            <div class="barber-profile-surface">
+            <div class="barber-profile-backdrop" aria-hidden="true">
+              <div class="barber-profile-backdrop-glow"></div>
+              <div class="barber-profile-backdrop-orb barber-profile-backdrop-orb-a"></div>
+              <div class="barber-profile-backdrop-orb barber-profile-backdrop-orb-b"></div>
+              <div class="barber-profile-backdrop-wave"></div>
+              <div class="barber-profile-backdrop-grid"></div>
+              <div class="barber-profile-backdrop-name">BROTHERSHOP</div>
+            </div>
+            <div class="barber-profile-layout">
+              <div class="barber-profile-copy">
+                <div class="barber-profile-copy-head">
+                  <span class="barber-profile-kicker">Барбер BrotherShop</span>
+                </div>
+                <h1 class="barber-profile-title">${displayName}</h1>
+                ${identityLine ? `<p class="barber-profile-subtitle">${identityLine}</p>` : ""}
+                ${signature ? `<p class="barber-profile-signature">${signature}</p>` : ""}
+                <p class="barber-profile-description">${introText}</p>
+                <div class="barber-profile-services">
+                  <span class="barber-profile-services-label">Услуги</span>
+                  <div class="barber-profile-services-list">${servicesMarkup}</div>
+                </div>
+                <div class="hero-actions barber-profile-action-row">
+                  <a class="primary-btn barber-profile-primary-btn" href="/booking/">Записаться</a>
+                  <a class="ghost-btn barber-profile-secondary-btn" href="/">Все барберы</a>
+                </div>
               </div>
-              <div class="barber-profile-stage">
-                <div class="barber-profile-stage-copy">
-                  <span class="barber-profile-poster-kicker">BrotherShop // Urban Barber Unit</span>
-                  <span class="barber-profile-poster-id">${barberCode}</span>
-                  <strong class="barber-profile-poster-title">${displayName}</strong>
-                  <span class="barber-profile-poster-shadow" aria-hidden="true">${displayName}</span>
-                  <div class="barber-profile-poster-tags">
-                    <span class="barber-profile-tag">рейтинг ${ratingValue.toFixed(1)}</span>
-                    <span class="barber-profile-tag">${serviceCount} услуг</span>
-                    <span class="barber-profile-tag">online ready</span>
-                  </div>
+              <div class="barber-profile-meta">
+                <div class="barber-profile-meta-item" aria-label="Рейтинг ${ratingValue.toFixed(1)} из 5">
+                  <span class="barber-profile-meta-label">Рейтинг</span>
+                  <span class="barber-profile-meta-note">${Array.from({ length: 5 }, (_, index) => `<span class="barber-profile-star ${index < filledStars ? "is-filled" : ""}">★</span>`).join("")}</span>
+                  <strong>${ratingValue.toFixed(1)}</strong>
                 </div>
-                <div class="barber-profile-stage-figure">
-                  <div class="barber-profile-stage-badge">
-                    <span>BrotherShop</span>
-                    <strong>${barberCode}</strong>
-                  </div>
-                  ${portraitUrl
-                    ? `<img class="barber-profile-poster-art" src="${portraitUrl}" alt="${displayName}" />`
-                    : `<div class="barber-profile-poster-fallback">${avatarMarkup({ avatarUrl: "", displayName }, 188)}</div>`}
+                <div class="barber-profile-meta-item">
+                  <span class="barber-profile-meta-label">Услуги</span>
+                  <strong class="barber-profile-meta-services">${servicesSummary}</strong>
+                  <span class="barber-profile-meta-note">доступно для записи</span>
                 </div>
+              </div>
+              <div class="barber-profile-art">
+                ${portraitUrl
+                  ? `
+                    <div class="barber-profile-art-stack">
+                      <img class="barber-profile-art-outline" src="${portraitUrl}" alt="" aria-hidden="true" />
+                      <img class="barber-profile-art-image" src="${portraitUrl}" alt="${displayName}" />
+                    </div>
+                  `
+                  : `<div class="barber-profile-poster-fallback">${avatarMarkup({ avatarUrl: "", displayName }, 188)}</div>`}
               </div>
             </div>
-            <div class="barber-profile-dossier">
-              <div class="barber-profile-dossier-head">
-                <div>
-                  <div class="hero-eyebrow barber-profile-eyebrow">Профиль мастера</div>
-                  <h1 class="hero-title barber-profile-title">${displayName}</h1>
-                  ${alias ? `<p class="barber-profile-subtitle">${alias}</p>` : ""}
-                </div>
-                <div class="barber-profile-rank">
-                  <span>Status</span>
-                  <strong>Live</strong>
-                </div>
-              </div>
-              <div class="barber-profile-stat-strip">
-                <div class="barber-profile-stat" aria-label="Рейтинг ${ratingValue.toFixed(1)} из 5">
-                  <span class="barber-profile-data-label">Рейтинг</span>
-                  <div class="barber-profile-rating-line">
-                    <div class="barber-profile-stars">${Array.from({ length: 5 }, (_, index) => `<span class="barber-profile-star ${index < filledStars ? "is-filled" : ""}">★</span>`).join("")}</div>
-                    <strong class="barber-profile-stat-value">${ratingValue.toFixed(1)}</strong>
-                  </div>
-                  <span class="barber-profile-data-note">${reviewLabel}</span>
-                </div>
-                <div class="barber-profile-stat">
-                  <span class="barber-profile-data-label">Услуги</span>
-                  <strong class="barber-profile-stat-value">${serviceCount}</strong>
-                  <span class="barber-profile-data-note">доступно для записи</span>
-                </div>
-                <div class="barber-profile-stat">
-                  <span class="barber-profile-data-label">Каталог</span>
-                  <strong class="barber-profile-stat-value">${barberCode}</strong>
-                  <span class="barber-profile-data-note">${fullName}</span>
-                </div>
-              </div>
-              ${signature ? `<div class="barber-profile-quote-card"><span class="barber-profile-quote-label">Signature line</span><p class="barber-profile-phrase">${signature}</p></div>` : ""}
-              <p class="section-text barber-profile-description">${description || "Барбер доступен для онлайн-записи в BrotherShop."}</p>
-              <div class="hero-actions barber-profile-action-row">
-                <a class="primary-btn" href="/booking/">Записаться</a>
-                <a class="ghost-btn barber-profile-secondary-btn" href="/">Все барберы</a>
-              </div>
             </div>
           </div>
         </article>
-        <div class="barber-profile-grid-panels">
-          <article class="content-card barber-profile-panel">
-            <div class="section-head barber-profile-panel-head">
-              <div>
-                <div class="section-eyebrow">Character data</div>
-                <h2 class="section-title">Короткое досье</h2>
-              </div>
+        <article class="content-card barber-profile-mobile-sheet">
+          <div class="hero-actions barber-profile-mobile-actions">
+            <a class="primary-btn barber-profile-primary-btn" href="/booking/">Записаться</a>
+            <a class="ghost-btn barber-profile-secondary-btn" href="/">Все барберы</a>
+          </div>
+          <div class="barber-profile-mobile-meta">
+            <div class="barber-profile-meta-item" aria-label="Рейтинг ${ratingValue.toFixed(1)} из 5">
+              <span class="barber-profile-meta-label">Рейтинг</span>
+              <span class="barber-profile-meta-note">${Array.from({ length: 5 }, (_, index) => `<span class="barber-profile-star ${index < filledStars ? "is-filled" : ""}">★</span>`).join("")}</span>
+              <strong>${ratingValue.toFixed(1)}</strong>
             </div>
-            <div class="barber-profile-data-grid">
-              <div class="barber-profile-data-card">
-                <span class="barber-profile-data-label">Отображаемое имя</span>
-                <strong class="barber-profile-data-value">${displayName}</strong>
-                <span class="barber-profile-data-note">именно так мастер показан в каталоге</span>
-              </div>
-              <div class="barber-profile-data-card">
-                <span class="barber-profile-data-label">Полное имя</span>
-                <strong class="barber-profile-data-value">${fullName}</strong>
-                <span class="barber-profile-data-note">${alias || barberCode}</span>
-              </div>
-              <div class="barber-profile-data-card">
-                <span class="barber-profile-data-label">Рейтинг</span>
-                <strong class="barber-profile-data-value">${ratingValue.toFixed(1)} / 5</strong>
-                <span class="barber-profile-data-note">${reviewLabel}</span>
-              </div>
-              <div class="barber-profile-data-card">
-                <span class="barber-profile-data-label">Услуг в каталоге</span>
-                <strong class="barber-profile-data-value">${serviceCount}</strong>
-                <span class="barber-profile-data-note">можно выбрать при онлайн-записи</span>
-              </div>
-            </div>
-          </article>
-          <article class="content-card barber-profile-panel barber-profile-signal-card">
-            <div class="section-head barber-profile-panel-head">
-              <div>
-                <div class="section-eyebrow">Booking mission</div>
-                <h2 class="section-title">Переход в запись</h2>
-              </div>
-            </div>
-            <div class="barber-profile-signal-list">
-              <div class="barber-profile-signal-item"><span>01</span><strong>Выберите услуги у ${displayName}, которые нужны именно вам.</strong></div>
-              <div class="barber-profile-signal-item"><span>02</span><strong>Подберите дату и свободный слот без звонков и переписки.</strong></div>
-              <div class="barber-profile-signal-item"><span>03</span><strong>Подтвердите запись и вернитесь сюда по прямой ссылке в любой момент.</strong></div>
-            </div>
-            <div class="hero-actions barber-profile-action-row">
-              <a class="ghost-btn barber-profile-secondary-btn" href="/booking/">Открыть запись</a>
-            </div>
-          </article>
-        </div>
-        <article class="content-card barber-profile-panel barber-reviews-card">
-          <div class="section-head barber-profile-panel-head">
-            <div>
-              <div class="section-eyebrow">Feedback deck</div>
-              <h2 class="section-title">Что говорят клиенты</h2>
+            <div class="barber-profile-meta-item">
+              <span class="barber-profile-meta-label">Услуги</span>
+                    <strong class="barber-profile-meta-services">${servicesSummary}</strong>
+              <span class="barber-profile-meta-note">доступно для записи</span>
             </div>
           </div>
-          ${reviews.length
-            ? `<div class="barber-reviews-list">${reviews
+        </article>
+        ${reviews.length
+          ? `
+            <article class="content-card barber-profile-panel barber-reviews-card">
+              <div class="section-head barber-profile-panel-head">
+                <div>
+                  <div class="section-eyebrow">Отзывы</div>
+                  <h2 class="section-title">Что говорят клиенты</h2>
+                </div>
+              </div>
+              <div class="barber-reviews-list">${reviews
                 .map((review) => `
                   <article class="barber-review-item">
                     <div class="barber-review-head">
@@ -2708,9 +2717,20 @@
                     <p class="section-text">${normalizeText(review.text || review.comment || "")}</p>
                   </article>
                 `)
-                .join("")}</div>`
-            : `<div class="barber-profile-review-placeholder"><div class="section-eyebrow">Feedback pending</div><p class="list-title">Отзывы появятся здесь позже</p><p class="subtitle">Когда на сайте накопится клиентский фидбек по этому мастеру, этот блок автоматически станет полноценной лентой отзывов.</p></div>`}
-        </article>
+                .join("")}</div>
+            </article>
+          `
+          : `
+            <article class="content-card barber-profile-panel barber-reviews-card">
+              <div class="section-head barber-profile-panel-head">
+                <div>
+                  <div class="section-eyebrow">Комментарии</div>
+                  <h2 class="section-title">Что пишут о барбере</h2>
+                </div>
+              </div>
+              <div class="barber-review-empty"><p class="section-text">Пока комментариев нет. Первые отзывы клиентов появятся здесь.</p></div>
+            </article>
+          `}
       </section>
     `;
   };
@@ -3009,6 +3029,7 @@
     const sheetScope = sheetHost.querySelector(".sheet-backdrop");
     if (appChanged) setupMediaWaveLoading(renderScope);
     if (sheetChanged && sheetScope) setupMediaWaveLoading(sheetScope);
+    if (appChanged) setupInteractiveBarberCards(renderScope);
     applyProfileCoverTheme(renderScope);
     setupPromoMarqueeAutoScroll(renderScope);
     if (
@@ -3027,6 +3048,9 @@
     }
     if (state.currentPage === "booking" && state.booking.stepAnimationsEnabled) {
       state.booking.stepAnimationsEnabled = false;
+    }
+    if (state.currentPage === "barber") {
+      ensureBarberProfileServices().catch(() => {});
     }
     ensureProfileCoverPalette().catch(() => {});
   };
@@ -3057,6 +3081,28 @@
     state.booking.comment = "";
     state.booking.loading = false;
     render();
+  };
+
+  const ensureBarberProfileServices = async () => {
+    const barberId = normalizeText(state.activeBarberProfileId || getBarberIdFromPath(window.location.pathname));
+    if (!barberId) return;
+    const existing = state.barberProfileServices?.[barberId];
+    if (existing?.status === "loading" || existing?.status === "ready") return;
+    state.barberProfileServices[barberId] = { status: "loading", items: [] };
+    try {
+      const payload = await apiRequest(`/booking/services?barberId=${encodeURIComponent(barberId)}`);
+      const items = Array.isArray(payload?.services)
+        ? payload.services
+            .map((service) => normalizeText(service?.name || service?.title || service?.label || service))
+            .filter(Boolean)
+        : [];
+      state.barberProfileServices[barberId] = { status: "ready", items };
+    } catch (error) {
+      state.barberProfileServices[barberId] = { status: "error", items: [] };
+    }
+    if (state.currentPage === "barber" && normalizeText(state.activeBarberProfileId || getBarberIdFromPath(window.location.pathname)) === barberId) {
+      render({ sheet: false });
+    }
   };
 
   const loadDates = async () => {

@@ -558,20 +558,20 @@
       const isHomeRotatingCard = Boolean(card.closest(".home-barber-rotating-card"));
       const initialTiltY = Number.parseFloat(normalizeText(homeBarberTiltSnapshot?.tiltY).replace("deg", "")) || 0;
       const initialTiltX = Number.parseFloat(normalizeText(homeBarberTiltSnapshot?.tiltX).replace("deg", "")) || 0;
-      let pointerRatioX = isHomeRotatingCard ? Math.min(1, Math.max(0, 0.5 + initialTiltY / 10)) : 0.5;
-      let pointerRatioY = isHomeRotatingCard ? Math.min(1, Math.max(0, 0.5 - initialTiltX / 8)) : 0.5;
-      let frame = null;
-      let pointerInside = false;
+      let currentRatioX = isHomeRotatingCard ? Math.min(1, Math.max(0, 0.5 + initialTiltY / 7)) : 0.5;
+      let currentRatioY = isHomeRotatingCard ? Math.min(1, Math.max(0, 0.5 - initialTiltX / 5.5)) : 0.5;
+      let targetRatioX = currentRatioX;
+      let targetRatioY = currentRatioY;
+      let pointerInside = supportsPointerTilt && card.matches(":hover");
       let autoTiltResumeAt = 0;
-      const applyTilt = () => {
-        frame = null;
-        const rotateY = (pointerRatioX - 0.5) * 10;
-        const rotateX = (0.5 - pointerRatioY) * 8;
+      const applyTilt = (ratioX, ratioY) => {
+        const rotateY = (ratioX - 0.5) * 7;
+        const rotateX = (0.5 - ratioY) * 5.5;
         const tiltX = `${rotateX.toFixed(2)}deg`;
         const tiltY = `${rotateY.toFixed(2)}deg`;
-        const sheenX = `${((pointerRatioX - 0.5) * 18).toFixed(2)}%`;
-        const sheenY = `${((pointerRatioY - 0.5) * 14).toFixed(2)}%`;
-        const textShimmer = `${(pointerRatioX * 100).toFixed(2)}%`;
+        const sheenX = `${((ratioX - 0.5) * 28).toFixed(2)}%`;
+        const sheenY = `${((ratioY - 0.5) * 20).toFixed(2)}%`;
+        const textShimmer = `${(ratioX * 100).toFixed(2)}%`;
         card.style.setProperty("--tilt-x", tiltX);
         card.style.setProperty("--tilt-y", tiltY);
         card.style.setProperty("--sheen-x", sheenX);
@@ -587,19 +587,19 @@
           };
         }
       };
-      const scheduleTilt = () => {
-        if (frame !== null) return;
-        frame = window.requestAnimationFrame(applyTilt);
-      };
-      const tickAutoTilt = (timestamp) => {
+      const tickTilt = (timestamp) => {
         if (!card.isConnected) return;
+        if (supportsPointerTilt) pointerInside = card.matches(":hover");
         if (isHomeRotatingCard && !pointerInside && timestamp >= autoTiltResumeAt) {
           const elapsed = (timestamp - homeBarberAutoTiltStartedAt) / 1000;
-          pointerRatioX = 0.5 + Math.sin(elapsed * 1.05) * 0.22;
-          pointerRatioY = 0.5 + Math.cos(elapsed * 0.8 + 0.35) * 0.15;
-          scheduleTilt();
+          targetRatioX = 0.5 + Math.sin(elapsed * 0.92) * 0.28;
+          targetRatioY = 0.5 + Math.cos(elapsed * 0.7 + 0.35) * 0.18;
         }
-        if (isHomeRotatingCard) window.requestAnimationFrame(tickAutoTilt);
+        const smoothing = pointerInside ? 0.16 : isHomeRotatingCard ? 0.085 : 0.12;
+        currentRatioX += (targetRatioX - currentRatioX) * smoothing;
+        currentRatioY += (targetRatioY - currentRatioY) * smoothing;
+        applyTilt(currentRatioX, currentRatioY);
+        window.requestAnimationFrame(tickTilt);
       };
       const pauseAutoTilt = (delayMs = 2200) => {
         autoTiltResumeAt = window.performance.now() + delayMs;
@@ -608,29 +608,31 @@
         card.addEventListener("pointerenter", () => {
           pointerInside = true;
           card.classList.add("is-tilt-active");
-          pauseAutoTilt(4000);
         });
         card.addEventListener("pointermove", (event) => {
           const rect = card.getBoundingClientRect();
           if (!rect.width || !rect.height) return;
           pointerInside = true;
           card.classList.add("is-tilt-active");
-          pauseAutoTilt(4000);
-          pointerRatioX = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-          pointerRatioY = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
-          scheduleTilt();
+          targetRatioX = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+          targetRatioY = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
         });
         card.addEventListener("pointerleave", () => {
           pointerInside = false;
           card.classList.remove("is-tilt-active");
-          pauseAutoTilt(900);
+          if (!isHomeRotatingCard) {
+            targetRatioX = 0.5;
+            targetRatioY = 0.5;
+          } else {
+            pauseAutoTilt(260);
+          }
         });
       }
       card.addEventListener("pointerdown", () => {
-        pauseAutoTilt(2800);
+        pauseAutoTilt(450);
       }, { passive: true });
-      scheduleTilt();
-      if (isHomeRotatingCard) window.requestAnimationFrame(tickAutoTilt);
+      applyTilt(currentRatioX, currentRatioY);
+      window.requestAnimationFrame(tickTilt);
     });
   };
   const stopHomeBarberRotation = () => {
@@ -680,19 +682,19 @@
     }
     state.homeBarberIncomingIndex = nextIndex;
     state.homeBarberTransitionStage = "is-transitioning";
-    render();
+    updateHomeBarberRotationDom();
     homeBarberTransitionSwapTimer = window.setTimeout(() => {
       const currentBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
       if (state.currentPage !== "home" || currentBarbers.length <= 1) {
         state.homeBarberIncomingIndex = -1;
         state.homeBarberTransitionStage = "idle";
-        render();
+        updateHomeBarberRotationDom();
         return;
       }
       state.homeBarberRotationIndex = state.homeBarberIncomingIndex >= 0 ? state.homeBarberIncomingIndex : (state.homeBarberRotationIndex + 1) % currentBarbers.length;
       state.homeBarberIncomingIndex = -1;
       state.homeBarberTransitionStage = "idle";
-      render();
+      updateHomeBarberRotationDom();
     }, 900);
   };
   const setupHomeBarberRotation = () => {
@@ -1745,19 +1747,93 @@
     `);
   };
 
+  const renderHomeBarberRotation = (barbers = []) => {
+    const safeBarbers = Array.isArray(barbers) ? barbers : [];
+    const safeHomeBarberIndex = safeBarbers.length ? ((state.homeBarberRotationIndex % safeBarbers.length) + safeBarbers.length) % safeBarbers.length : 0;
+    const safeIncomingHomeBarberIndex = safeBarbers.length && state.homeBarberIncomingIndex >= 0
+      ? ((state.homeBarberIncomingIndex % safeBarbers.length) + safeBarbers.length) % safeBarbers.length
+      : -1;
+    const activeHomeBarber = safeBarbers.length ? safeBarbers[safeHomeBarberIndex] : null;
+    const incomingHomeBarber = safeIncomingHomeBarberIndex >= 0 ? safeBarbers[safeIncomingHomeBarberIndex] : null;
+    const activeServicesRef = activeHomeBarber?.id ? state.barberProfileServices?.[normalizeText(activeHomeBarber.id)] : null;
+    const incomingServicesRef = incomingHomeBarber?.id ? state.barberProfileServices?.[normalizeText(incomingHomeBarber.id)] : null;
+    return memoizeRenderedFragment(
+      "page-home-rotation",
+      [
+        safeBarbers,
+        state.homeBarberRotationIndex,
+        state.homeBarberIncomingIndex,
+        state.homeBarberTransitionStage,
+        activeHomeBarber?.id,
+        incomingHomeBarber?.id,
+        activeServicesRef,
+        incomingServicesRef,
+        normalizeText(homeBarberTiltSnapshot?.tiltX),
+        normalizeText(homeBarberTiltSnapshot?.tiltY),
+        normalizeText(homeBarberTiltSnapshot?.sheenX),
+        normalizeText(homeBarberTiltSnapshot?.sheenY),
+        normalizeText(homeBarberTiltSnapshot?.textShimmer),
+      ],
+      () => {
+        if (!activeHomeBarber) {
+          return `<div class="empty-state home-barber-rotating-empty">Список мастеров скоро обновится. Откройте запись, чтобы увидеть доступных специалистов.</div>`;
+        }
+        const homeBarberSceneStyle = getHomeBarberTiltSceneStyle();
+        const renderDots = (activeIndex) => `<div class="home-barber-rotating-dots" aria-label="Барбер ${activeIndex + 1} из ${safeBarbers.length}">${safeBarbers
+          .map(
+            (_, index) =>
+              `<span class="home-barber-rotating-dot ${index === activeIndex ? "is-active" : ""}" aria-hidden="true"></span>`,
+          )
+          .join("")}</div>`;
+        return `
+          <div class="home-barber-rotating-wrap">
+            <div class="home-barber-rotating-stage ${normalizeText(state.homeBarberTransitionStage)}">
+              <div class="home-barber-rotating-layer is-current">
+                ${renderBarberProfileHeroCard(activeHomeBarber, {
+                  barberId: activeHomeBarber.id,
+                  articleClassName: "barber-profile-hero home-barber-rotating-card",
+                  articleAttributes: 'data-action="switch-home-barber"',
+                  sceneStyle: homeBarberSceneStyle,
+                  secondaryHref: `/barber/${encodeURIComponent(normalizeText(activeHomeBarber.id))}/`,
+                  secondaryLabel: "Профиль барбера",
+                  footerOverlay: renderDots(safeHomeBarberIndex),
+                })}
+              </div>
+              ${incomingHomeBarber
+                ? `<div class="home-barber-rotating-layer is-incoming">
+                    ${renderBarberProfileHeroCard(incomingHomeBarber, {
+                      barberId: incomingHomeBarber.id,
+                      articleClassName: "barber-profile-hero home-barber-rotating-card",
+                      articleAttributes: 'data-action="switch-home-barber"',
+                      sceneStyle: homeBarberSceneStyle,
+                      secondaryHref: `/barber/${encodeURIComponent(normalizeText(incomingHomeBarber.id))}/`,
+                      secondaryLabel: "Профиль барбера",
+                      footerOverlay: renderDots(safeIncomingHomeBarberIndex),
+                    })}
+                  </div>`
+                : ""}
+            </div>
+          </div>
+        `;
+      },
+    );
+  };
+  const updateHomeBarberRotationDom = () => {
+    if (state.currentPage !== "home") return;
+    const rotationRoot = ROOT.querySelector("[data-home-barber-rotation-root]");
+    if (!rotationRoot) return;
+    const homeBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+    const html = renderHomeBarberRotation(homeBarbers);
+    if (rotationRoot.innerHTML === html) return;
+    rotationRoot.innerHTML = html;
+    setupInteractiveBarberCards(rotationRoot);
+  };
+
   const renderHomePage = () => {
     const siteHome = state.payload?.site?.home || {};
     const activeAppointments = Array.isArray(state.payload?.booking?.activeAppointments) ? state.payload.booking.activeAppointments : [];
     const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
-    const safeHomeBarberIndex = barbers.length ? ((state.homeBarberRotationIndex % barbers.length) + barbers.length) % barbers.length : 0;
-    const safeIncomingHomeBarberIndex = barbers.length && state.homeBarberIncomingIndex >= 0
-      ? ((state.homeBarberIncomingIndex % barbers.length) + barbers.length) % barbers.length
-      : -1;
-    const activeHomeBarber = barbers.length ? barbers[safeHomeBarberIndex] : null;
-    const incomingHomeBarber = safeIncomingHomeBarberIndex >= 0
-      ? barbers[safeIncomingHomeBarberIndex]
-      : null;
-    return memoizeRenderedFragment("page-home", [siteHome, activeAppointments, barbers, state.homeBarberRotationIndex, state.homeBarberIncomingIndex, state.homeBarberTransitionStage, activeHomeBarber?.id, incomingHomeBarber?.id], () => {
+    return memoizeRenderedFragment("page-home", [siteHome, activeAppointments, barbers], () => {
       const promos = Array.isArray(siteHome.promos) ? siteHome.promos : [];
       const promoLaneItems = (() => {
         const indexedPromos = promos.map((promo, index) => ({ ...promo, _promoIndex: index }));
@@ -1798,7 +1874,6 @@
       const bookingButtonText = normalizeText(siteHome.bookingButtonText) || "Записаться";
       const aboutTitle = normalizeText(siteHome.aboutTitle || "BrotherShop");
       const aboutText = normalizeText(siteHome.aboutText || "");
-      const homeBarberSceneStyle = getHomeBarberTiltSceneStyle();
       const aboutExpandable = aboutText.length > 110;
       const aboutCardTag = aboutExpandable ? "button" : "article";
       const aboutCardAttrs = aboutExpandable
@@ -1923,48 +1998,7 @@
               : `<div class="empty-state">Список мастеров скоро обновится. Откройте запись, чтобы увидеть доступных специалистов.</div>`}
           </div>
         </article>
-        ${activeHomeBarber
-          ? `
-            <div class="home-barber-rotating-wrap">
-              <div class="home-barber-rotating-stage ${normalizeText(state.homeBarberTransitionStage)}">
-                <div class="home-barber-rotating-layer is-current">
-                  ${renderBarberProfileHeroCard(activeHomeBarber, {
-                    barberId: activeHomeBarber.id,
-                    articleClassName: "barber-profile-hero home-barber-rotating-card",
-                    articleAttributes: 'data-action="switch-home-barber"',
-                    sceneStyle: homeBarberSceneStyle,
-                    secondaryHref: `/barber/${encodeURIComponent(normalizeText(activeHomeBarber.id))}/`,
-                    secondaryLabel: "Профиль барбера",
-                    footerOverlay: `<div class="home-barber-rotating-dots" aria-label="Барбер ${safeHomeBarberIndex + 1} из ${barbers.length}">${barbers
-                      .map(
-                        (_, index) =>
-                          `<span class="home-barber-rotating-dot ${index === safeHomeBarberIndex ? "is-active" : ""}" aria-hidden="true"></span>`,
-                      )
-                      .join("")}</div>`,
-                  })}
-                </div>
-                ${incomingHomeBarber
-                  ? `<div class="home-barber-rotating-layer is-incoming">
-                      ${renderBarberProfileHeroCard(incomingHomeBarber, {
-                        barberId: incomingHomeBarber.id,
-                        articleClassName: "barber-profile-hero home-barber-rotating-card",
-                        articleAttributes: 'data-action="switch-home-barber"',
-                        sceneStyle: homeBarberSceneStyle,
-                        secondaryHref: `/barber/${encodeURIComponent(normalizeText(incomingHomeBarber.id))}/`,
-                        secondaryLabel: "Профиль барбера",
-                        footerOverlay: `<div class="home-barber-rotating-dots" aria-label="Барбер ${safeIncomingHomeBarberIndex + 1} из ${barbers.length}">${barbers
-                          .map(
-                            (_, index) =>
-                              `<span class="home-barber-rotating-dot ${index === safeIncomingHomeBarberIndex ? "is-active" : ""}" aria-hidden="true"></span>`,
-                          )
-                          .join("")}</div>`,
-                      })}
-                    </div>`
-                  : ""}
-              </div>
-            </div>
-          `
-          : `<div class="empty-state home-barber-rotating-empty">Список мастеров скоро обновится. Откройте запись, чтобы увидеть доступных специалистов.</div>`}
+        <div data-home-barber-rotation-root>${renderHomeBarberRotation(barbers)}</div>
       </section>
     `;
     });
@@ -3389,7 +3423,8 @@
       (state.currentPage === "barber" && normalizeText(state.activeBarberProfileId || getBarberIdFromPath(window.location.pathname)) === barberId) ||
       (state.currentPage === "home" && Array.isArray(state.payload?.booking?.barbers) && normalizeText(state.payload.booking.barbers[((state.homeBarberRotationIndex % state.payload.booking.barbers.length) + state.payload.booking.barbers.length) % state.payload.booking.barbers.length]?.id) === barberId)
     )) {
-      render({ sheet: false });
+      if (state.currentPage === "home") updateHomeBarberRotationDom();
+      else render({ sheet: false });
     }
   };
 

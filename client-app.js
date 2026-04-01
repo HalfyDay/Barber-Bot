@@ -551,22 +551,28 @@
   const setupInteractiveBarberCards = (scope = ROOT) => {
     const container = scope instanceof Element ? scope : ROOT;
     if (!container) return;
-    const supportsPointerTilt = Boolean(window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches);
+    const hasCoarsePointer = Boolean(window.matchMedia?.("(pointer: coarse)")?.matches);
+    const hasTouchPoints = Number(window.navigator?.maxTouchPoints || 0) > 0;
+    const supportsPointerTilt = Boolean(window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches) && !hasCoarsePointer && !hasTouchPoints;
     container.querySelectorAll("[data-tilt-card='barber-profile']").forEach((card) => {
       if (card.dataset.tiltBound === "1") return;
       card.dataset.tiltBound = "1";
       const isHomeRotatingCard = Boolean(card.closest(".home-barber-rotating-card"));
+      const restoreRotateYStrength = supportsPointerTilt ? 7 : 10.5;
+      const restoreRotateXStrength = supportsPointerTilt ? 5.5 : 8;
       const initialTiltY = Number.parseFloat(normalizeText(homeBarberTiltSnapshot?.tiltY).replace("deg", "")) || 0;
       const initialTiltX = Number.parseFloat(normalizeText(homeBarberTiltSnapshot?.tiltX).replace("deg", "")) || 0;
-      let currentRatioX = isHomeRotatingCard ? Math.min(1, Math.max(0, 0.5 + initialTiltY / 7)) : 0.5;
-      let currentRatioY = isHomeRotatingCard ? Math.min(1, Math.max(0, 0.5 - initialTiltX / 5.5)) : 0.5;
+      let currentRatioX = isHomeRotatingCard ? Math.min(1, Math.max(0, 0.5 + initialTiltY / restoreRotateYStrength)) : 0.5;
+      let currentRatioY = isHomeRotatingCard ? Math.min(1, Math.max(0, 0.5 - initialTiltX / restoreRotateXStrength)) : 0.5;
       let targetRatioX = currentRatioX;
       let targetRatioY = currentRatioY;
       let pointerInside = supportsPointerTilt && card.matches(":hover");
       let autoTiltResumeAt = 0;
       const applyTilt = (ratioX, ratioY) => {
-        const rotateY = (ratioX - 0.5) * 7;
-        const rotateX = (0.5 - ratioY) * 5.5;
+        const rotateYStrength = supportsPointerTilt ? 7 : 10.5;
+        const rotateXStrength = supportsPointerTilt ? 5.5 : 8;
+        const rotateY = (ratioX - 0.5) * rotateYStrength;
+        const rotateX = (0.5 - ratioY) * rotateXStrength;
         const tiltX = `${rotateX.toFixed(2)}deg`;
         const tiltY = `${rotateY.toFixed(2)}deg`;
         const sheenX = `${((ratioX - 0.5) * 28).toFixed(2)}%`;
@@ -592,8 +598,10 @@
         if (supportsPointerTilt) pointerInside = card.matches(":hover");
         if (isHomeRotatingCard && !pointerInside && timestamp >= autoTiltResumeAt) {
           const elapsed = (timestamp - homeBarberAutoTiltStartedAt) / 1000;
-          targetRatioX = 0.5 + Math.sin(elapsed * 0.92) * 0.28;
-          targetRatioY = 0.5 + Math.cos(elapsed * 0.7 + 0.35) * 0.18;
+          const autoTiltAmplitudeX = supportsPointerTilt ? 0.28 : 0.42;
+          const autoTiltAmplitudeY = supportsPointerTilt ? 0.18 : 0.28;
+          targetRatioX = 0.5 + Math.sin(elapsed * 0.92) * autoTiltAmplitudeX;
+          targetRatioY = 0.5 + Math.cos(elapsed * 0.7 + 0.35) * autoTiltAmplitudeY;
         }
         const smoothing = pointerInside ? 0.16 : isHomeRotatingCard ? 0.085 : 0.12;
         currentRatioX += (targetRatioX - currentRatioX) * smoothing;
@@ -1824,7 +1832,7 @@
                   sceneStyle: homeBarberSceneStyle,
                   hideActions: !isAuthenticated(),
                   secondaryHref: `/barber/${encodeURIComponent(normalizeText(activeHomeBarber.id))}/`,
-                  secondaryLabel: "Профиль барбера",
+                  secondaryLabel: "Подробнее",
                   footerOverlay: renderDots(safeHomeBarberIndex),
                 })}
               </div>
@@ -1837,7 +1845,7 @@
                       sceneStyle: homeBarberSceneStyle,
                       hideActions: !isAuthenticated(),
                       secondaryHref: `/barber/${encodeURIComponent(normalizeText(incomingHomeBarber.id))}/`,
-                      secondaryLabel: "Профиль барбера",
+                      secondaryLabel: "Подробнее",
                       footerOverlay: renderDots(safeIncomingHomeBarberIndex),
                     })}
                   </div>`

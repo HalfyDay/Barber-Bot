@@ -622,15 +622,17 @@ textarea:focus-visible {
 
 .home-barber-rotating-stage {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   isolation: isolate;
   width: 100%;
   border-radius: 34px;
+  padding-inline: 14px;
+  margin-inline: -14px;
 }
 
 .home-barber-rotating-card {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   margin: 0;
   --barber-display-font: "Oxanium", "Unbounded", var(--font-display);
   --barber-ui-font: "Chakra Petch", "Manrope", var(--font-body);
@@ -662,6 +664,7 @@ textarea:focus-visible {
 .home-barber-rotating-wrap {
   order: 3;
   width: 100%;
+  overflow: visible;
 }
 
 .home-barber-rotating-dots {
@@ -694,6 +697,7 @@ textarea:focus-visible {
   grid-area: 1 / 1;
   transition: opacity 0.9s cubic-bezier(0.22, 0.61, 0.36, 1);
   will-change: opacity;
+  overflow: visible;
 }
 
 .home-barber-rotating-stage {
@@ -5035,7 +5039,7 @@ img.media-wave.is-ready {
   .home-mobile-layout {
     width: 100%;
     max-width: 100%;
-    overflow-x: clip;
+    overflow-x: visible;
   }
 
   .booking-page {
@@ -6343,6 +6347,18 @@ img.media-wave.is-ready {
     box-sizing: border-box;
   }
 
+  .home-barber-rotating-wrap {
+    width: calc(100% + 20px);
+    max-width: calc(100% + 20px);
+    margin-inline: -10px;
+  }
+
+  .home-barber-rotating-stage {
+    width: 100%;
+    margin-inline: 0;
+    padding-inline: 10px;
+  }
+
   .topbar {
     padding: 10px 12px;
     border-radius: 18px;
@@ -6405,7 +6421,7 @@ img.media-wave.is-ready {
 
   .home-page {
     gap: 12px;
-    overflow-x: clip;
+    overflow-x: visible;
   }
 
   .home-page > *,
@@ -6417,6 +6433,15 @@ img.media-wave.is-ready {
     min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
+  }
+
+  .home-page [data-home-barber-rotation-root],
+  .home-page .home-barber-rotating-wrap,
+  .home-page .home-barber-rotating-stage,
+  .home-page .home-barber-rotating-layer,
+  .home-page .home-barber-rotating-card {
+    max-width: none;
+    overflow: visible;
   }
 
   .home-frame,
@@ -6558,7 +6583,7 @@ img.media-wave.is-ready {
   }
 
   .appointment-card.has-booking .appointment-barber {
-    padding: 14px;
+    padding: 6px 14px;
     border-radius: 18px;
   }
 
@@ -6712,6 +6737,38 @@ img.media-wave.is-ready {
 
   .barber-profile-action-row {
     display: none;
+  }
+
+  .home-barber-rotating-card .barber-profile-description {
+    display: none;
+  }
+
+  .home-barber-rotating-card .barber-profile-copy {
+    position: relative;
+    align-self: stretch;
+    padding-bottom: 68px;
+  }
+
+  .home-barber-rotating-card .barber-profile-action-row {
+    display: flex;
+    position: absolute;
+    left: 0;
+    bottom: 16px;
+    margin-top: 0;
+    justify-content: flex-start;
+    align-self: auto;
+  }
+
+  .home-barber-rotating-card .barber-profile-primary-btn {
+    display: none;
+  }
+
+  .home-barber-rotating-card .barber-profile-secondary-btn {
+    min-width: 0;
+    padding-inline: 16px;
+    background: rgba(255, 255, 255, 0.92);
+    color: #121617;
+    border-color: rgba(255, 255, 255, 0.16);
   }
 
   .barber-profile-art {

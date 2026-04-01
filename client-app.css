@@ -4168,11 +4168,13 @@ img.media-wave.is-ready {
   background: #303031;
   box-shadow: none;
   isolation: isolate;
+  contain: layout paint;
   will-change: transform;
   transform-origin: center center;
   transform: perspective(1600px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
   transform-style: preserve-3d;
   transition: transform 0.18s ease-out;
+  backface-visibility: hidden;
 }
 
 .barber-profile-surface {
@@ -4181,6 +4183,7 @@ img.media-wave.is-ready {
   border-radius: inherit;
   overflow: hidden;
   transform-style: preserve-3d;
+  backface-visibility: hidden;
 }
 
 .barber-profile-surface::before,
@@ -4217,6 +4220,12 @@ img.media-wave.is-ready {
   opacity: 0.26;
   transform: translate3d(calc(var(--sheen-x) * -0.08), calc(var(--sheen-y) * -0.08), 0);
   transition: transform 0.18s ease-out, opacity 0.18s ease-out;
+}
+
+.barber-profile-scene.is-tilt-active,
+.barber-profile-scene.is-tilt-active .barber-profile-surface::before,
+.barber-profile-scene.is-tilt-active .barber-profile-surface::after {
+  transition: none;
 }
 
 .barber-profile-backdrop,

@@ -95,6 +95,7 @@
     sheenY: "0%",
     textShimmer: "50%",
   };
+  const homeBarberAutoTiltStartedAt = window.performance.now();
   const derivedDataCache = {
     profileHistory: { visitHistoryRef: null, operationsRef: null, items: [] },
     filteredProfileHistory: { itemsRef: null, filter: "", filtered: [] },
@@ -549,13 +550,19 @@
   };
   const setupInteractiveBarberCards = (scope = ROOT) => {
     const container = scope instanceof Element ? scope : ROOT;
-    if (!container || !window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches) return;
+    if (!container) return;
+    const supportsPointerTilt = Boolean(window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches);
     container.querySelectorAll("[data-tilt-card='barber-profile']").forEach((card) => {
       if (card.dataset.tiltBound === "1") return;
       card.dataset.tiltBound = "1";
+      const isHomeRotatingCard = Boolean(card.closest(".home-barber-rotating-card"));
+      const initialTiltY = Number.parseFloat(normalizeText(homeBarberTiltSnapshot?.tiltY).replace("deg", "")) || 0;
+      const initialTiltX = Number.parseFloat(normalizeText(homeBarberTiltSnapshot?.tiltX).replace("deg", "")) || 0;
+      let pointerRatioX = isHomeRotatingCard ? Math.min(1, Math.max(0, 0.5 + initialTiltY / 10)) : 0.5;
+      let pointerRatioY = isHomeRotatingCard ? Math.min(1, Math.max(0, 0.5 - initialTiltX / 8)) : 0.5;
       let frame = null;
-      let pointerRatioX = 0.5;
-      let pointerRatioY = 0.5;
+      let pointerInside = false;
+      let autoTiltResumeAt = 0;
       const applyTilt = () => {
         frame = null;
         const rotateY = (pointerRatioX - 0.5) * 10;
@@ -580,28 +587,60 @@
           };
         }
       };
-      const schedule = () => {
-        if (frame) return;
+      const scheduleTilt = () => {
+        if (frame !== null) return;
         frame = window.requestAnimationFrame(applyTilt);
       };
-      card.addEventListener("pointermove", (event) => {
-        const rect = card.getBoundingClientRect();
-        if (!rect.width || !rect.height) return;
-        pointerRatioX = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-        pointerRatioY = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
-        schedule();
-      });
-      card.addEventListener("pointerleave", () => {
-        pointerRatioX = 0.5;
-        pointerRatioY = 0.5;
-        schedule();
-      });
+      const tickAutoTilt = (timestamp) => {
+        if (!card.isConnected) return;
+        if (isHomeRotatingCard && !pointerInside && timestamp >= autoTiltResumeAt) {
+          const elapsed = (timestamp - homeBarberAutoTiltStartedAt) / 1000;
+          pointerRatioX = 0.5 + Math.sin(elapsed * 1.05) * 0.22;
+          pointerRatioY = 0.5 + Math.cos(elapsed * 0.8 + 0.35) * 0.15;
+          scheduleTilt();
+        }
+        if (isHomeRotatingCard) window.requestAnimationFrame(tickAutoTilt);
+      };
+      const pauseAutoTilt = (delayMs = 2200) => {
+        autoTiltResumeAt = window.performance.now() + delayMs;
+      };
+      if (supportsPointerTilt) {
+        card.addEventListener("pointerenter", () => {
+          pointerInside = true;
+          card.classList.add("is-tilt-active");
+          pauseAutoTilt(4000);
+        });
+        card.addEventListener("pointermove", (event) => {
+          const rect = card.getBoundingClientRect();
+          if (!rect.width || !rect.height) return;
+          pointerInside = true;
+          card.classList.add("is-tilt-active");
+          pauseAutoTilt(4000);
+          pointerRatioX = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+          pointerRatioY = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
+          scheduleTilt();
+        });
+        card.addEventListener("pointerleave", () => {
+          pointerInside = false;
+          card.classList.remove("is-tilt-active");
+          pauseAutoTilt(900);
+        });
+      }
+      card.addEventListener("pointerdown", () => {
+        pauseAutoTilt(2800);
+      }, { passive: true });
+      scheduleTilt();
+      if (isHomeRotatingCard) window.requestAnimationFrame(tickAutoTilt);
     });
   };
   const stopHomeBarberRotation = () => {
     if (!homeBarberRotationTimer) return;
     window.clearInterval(homeBarberRotationTimer);
     homeBarberRotationTimer = null;
+  };
+  const restartHomeBarberRotation = () => {
+    stopHomeBarberRotation();
+    setupHomeBarberRotation();
   };
   const clearHomeBarberTransitionTimers = () => {
     if (homeBarberTransitionSwapTimer) {
@@ -613,7 +652,7 @@
       homeBarberTransitionResetTimer = null;
     }
   };
-  const triggerHomeBarberRotationStep = (direction = 1) => {
+  const triggerHomeBarberRotationStep = async (direction = 1) => {
     const activeBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
     if (state.currentPage !== "home" || activeBarbers.length <= 1) {
       state.homeBarberIncomingIndex = -1;
@@ -623,7 +662,23 @@
     }
     clearHomeBarberTransitionTimers();
     const step = direction < 0 ? -1 : 1;
-    state.homeBarberIncomingIndex = (state.homeBarberRotationIndex + step + activeBarbers.length) % activeBarbers.length;
+    const nextIndex = (state.homeBarberRotationIndex + step + activeBarbers.length) % activeBarbers.length;
+    const nextBarber = activeBarbers[nextIndex] || null;
+    state.homeBarberTransitionStage = "is-preparing";
+    if (nextBarber?.id) {
+      try {
+        await ensureBarberProfileServices(nextBarber.id, { suppressRender: true });
+      } catch {
+        // ignore prefetch errors and continue with transition fallback content
+      }
+    }
+    if (state.currentPage !== "home") {
+      state.homeBarberIncomingIndex = -1;
+      state.homeBarberTransitionStage = "idle";
+      clearHomeBarberTransitionTimers();
+      return;
+    }
+    state.homeBarberIncomingIndex = nextIndex;
     state.homeBarberTransitionStage = "is-transitioning";
     render();
     homeBarberTransitionSwapTimer = window.setTimeout(() => {
@@ -671,7 +726,7 @@
         clearHomeBarberTransitionTimers();
         return;
       }
-      triggerHomeBarberRotationStep();
+      void triggerHomeBarberRotationStep();
     }, 6500);
   };
   const setupTransferRecipientCarousels = (scope = ROOT) => {
@@ -3312,9 +3367,10 @@
     render();
   };
 
-  const ensureBarberProfileServices = async (explicitBarberId = "") => {
+  const ensureBarberProfileServices = async (explicitBarberId = "", options = {}) => {
     const barberId = normalizeText(explicitBarberId || state.activeBarberProfileId || getBarberIdFromPath(window.location.pathname));
     if (!barberId) return;
+    const suppressRender = options?.suppressRender === true;
     const existing = state.barberProfileServices?.[barberId];
     if (existing?.status === "loading" || existing?.status === "ready") return;
     state.barberProfileServices[barberId] = { status: "loading", items: [] };
@@ -3329,10 +3385,10 @@
     } catch (error) {
       state.barberProfileServices[barberId] = { status: "error", items: [] };
     }
-    if (
+    if (!suppressRender && (
       (state.currentPage === "barber" && normalizeText(state.activeBarberProfileId || getBarberIdFromPath(window.location.pathname)) === barberId) ||
       (state.currentPage === "home" && Array.isArray(state.payload?.booking?.barbers) && normalizeText(state.payload.booking.barbers[((state.homeBarberRotationIndex % state.payload.booking.barbers.length) + state.payload.booking.barbers.length) % state.payload.booking.barbers.length]?.id) === barberId)
-    ) {
+    )) {
       render({ sheet: false });
     }
   };
@@ -3954,7 +4010,8 @@
           if (event.target.closest("a, button, input, textarea, select, label") && !actionNode.matches("a, button")) return;
           event.preventDefault();
           if (state.homeBarberTransitionStage !== "idle") return;
-          triggerHomeBarberRotationStep(1);
+          restartHomeBarberRotation();
+          void triggerHomeBarberRotationStep(1);
           return;
         case "toggle-service":
           event.preventDefault();
@@ -4331,6 +4388,15 @@
     try {
       state.payload = await apiRequest("/app");
       state.bootstrapError = "";
+      if (state.currentPage === "home") {
+        const homeBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+        const activeHomeBarber = homeBarbers.length
+          ? homeBarbers[((state.homeBarberRotationIndex % homeBarbers.length) + homeBarbers.length) % homeBarbers.length]
+          : null;
+        if (activeHomeBarber?.id) {
+          await ensureBarberProfileServices(activeHomeBarber.id, { suppressRender: true });
+        }
+      }
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") {
           void sendSitePresence("online");

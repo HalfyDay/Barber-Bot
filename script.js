@@ -65,6 +65,28 @@ const VIEW_TABS_BY_ROLE = {
     { id: 'system', label: 'Система' },
   ],
 };
+ROLE_OPTIONS.splice(0, ROLE_OPTIONS.length, {
+  value: ROLE_OWNER,
+  label: 'Владелец',
+}, {
+  value: ROLE_STAFF,
+  label: 'Сотрудник',
+});
+VIEW_TABS_BY_ROLE[ROLE_OWNER] = [
+  { id: 'dashboard', label: 'Главная' },
+  { id: 'tables', label: 'Данные' },
+  { id: 'system', label: 'Система' },
+];
+VIEW_TABS_BY_ROLE[ROLE_STAFF] = [
+  { id: 'dashboard', label: 'Главная' },
+  { id: 'tables', label: 'Данные' },
+  { id: 'profile', label: 'Профиль' },
+];
+VIEW_TABS_BY_ROLE[ROLE_CREATOR] = [
+  { id: 'dashboard', label: 'Главная' },
+  { id: 'tables', label: 'Данные' },
+  { id: 'system', label: 'Система' },
+];
 const TABLE_ORDER = ['Appointments', 'Schedules', 'Users', 'Barbers', 'Services', 'Positions', 'Revenue'];
 const DATA_TABLES_BY_ROLE = {
   [ROLE_OWNER]: ['Appointments', 'Schedules', 'Users', 'Positions'],
@@ -123,6 +145,30 @@ const TABLE_COLUMNS = {
     { key: 'Barber', label: 'Любимый мастер', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-40' },
   ],
 };
+TABLE_CONFIG.Appointments.label = 'Записи';
+TABLE_CONFIG.Schedules.label = 'Расписание';
+TABLE_CONFIG.Users.label = 'Клиенты';
+TABLE_CONFIG.Barbers.label = 'Барберы';
+TABLE_CONFIG.Services.label = 'Услуги';
+TABLE_CONFIG.Positions.label = 'Должности';
+TABLE_CONFIG.Revenue.label = 'Доходы';
+TABLE_COLUMNS.Appointments[0].label = 'Клиент';
+TABLE_COLUMNS.Appointments[1].label = 'Телефон';
+TABLE_COLUMNS.Appointments[2].label = 'Барбер';
+TABLE_COLUMNS.Appointments[3].label = 'Дата';
+TABLE_COLUMNS.Appointments[4].label = 'Время';
+TABLE_COLUMNS.Appointments[5].label = 'Статус';
+TABLE_COLUMNS.Appointments[6].label = 'Услуги';
+TABLE_COLUMNS.Appointments[7].label = 'ID клиента';
+TABLE_COLUMNS.Appointments[8].label = 'Напоминание клиенту';
+TABLE_COLUMNS.Appointments[9].label = 'Напоминание барберу';
+TABLE_COLUMNS.Schedules[0].label = 'Барбер';
+TABLE_COLUMNS.Schedules[1].label = 'День недели';
+TABLE_COLUMNS.Schedules[2].label = 'Дата';
+TABLE_COLUMNS.Schedules[3].label = 'Слоты';
+TABLE_COLUMNS.Users[0].label = 'Имя';
+TABLE_COLUMNS.Users[1].label = 'Телефон';
+TABLE_COLUMNS.Users[3].label = 'Любимый мастер';
 const BOT_SUPPORTED_STATUS_OPTIONS = ['\u0410\u043a\u0442\u0438\u0432\u043d\u0430\u044f', '\u0412\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430', '\u041e\u0442\u043c\u0435\u043d\u0430', '\u041d\u0435\u044f\u0432\u043a\u0430'];
 const [STATUS_ACTIVE, STATUS_DONE, STATUS_CANCELLED, STATUS_NO_SHOW] = BOT_SUPPORTED_STATUS_OPTIONS;
 const CLIENT_BLOCK_THRESHOLD = 3;
@@ -247,6 +293,8 @@ const defaultConfirmState = {
   cancelLabel: 'Отмена',
   tone: 'neutral',
 };
+defaultConfirmState.confirmLabel = 'Подтвердить';
+defaultConfirmState.cancelLabel = 'Отмена';
 const buildAppointmentModalState = () => ({
   open: false,
   data: null,
@@ -289,6 +337,21 @@ const EyeIcon = ({ open = false, className = "h-5 w-5" }) =>
       <path d="m3 3 18 18" />
     </svg>
   );
+const IconCheckSmall = ({ className = 'h-4 w-4' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 10 3.5 3.5L15.5 6" />
+  </svg>
+);
+const IconX = ({ className = 'h-4 w-4' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l8 8M14 6l-8 8" />
+  </svg>
+);
+const IconStar = ({ className = 'h-4 w-4' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={className}>
+    <path d="m10 2.2 2.4 4.86 5.36.78-3.88 3.78.92 5.34L10 14.48 5.2 17l.92-5.34-3.88-3.78 5.36-.78L10 2.2Z" />
+  </svg>
+);
 const useLocalStorage = (key, initialValue) => {
   const [value, setValue] = useState(() => {
     try {
@@ -2238,6 +2301,7 @@ const DashboardView = ({
   );
 };
 const MAX_AVATAR_UPLOAD_BYTES = 5 * 1024 * 1024;
+const TARGET_IMAGE_UPLOAD_BYTES = 700 * 1024;
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -2245,111 +2309,50 @@ const readFileAsDataUrl = (file) =>
     reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
     reader.readAsDataURL(file);
   });
-const rgbToHsl = (r, g, b) => {
-  const rn = r / 255;
-  const gn = g / 255;
-  const bn = b / 255;
-  const max = Math.max(rn, gn, bn);
-  const min = Math.min(rn, gn, bn);
-  const delta = max - min;
-  let h = 0;
-  let s = 0;
-  const l = (max + min) / 2;
-  if (delta !== 0) {
-    s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
-    switch (max) {
-      case rn:
-        h = (gn - bn) / delta + (gn < bn ? 6 : 0);
-        break;
-      case gn:
-        h = (bn - rn) / delta + 2;
-        break;
-      default:
-        h = (rn - gn) / delta + 4;
-        break;
-    }
-    h *= 60;
-  }
-  return { h, s, l };
+const estimateDataUrlBytes = (dataUrl) => {
+  const normalized = typeof dataUrl === 'string' ? dataUrl : '';
+  const [, base64Payload = ''] = normalized.split(',', 2);
+  if (!base64Payload) return 0;
+  const padding = (base64Payload.match(/=+$/) || [''])[0].length;
+  return Math.max(0, Math.floor((base64Payload.length * 3) / 4) - padding);
 };
-const stripGreenBackground = async (dataUrl, options = {}) => {
-  if (!dataUrl || typeof document === 'undefined') return dataUrl;
-  const {
-    keyHue,
-    hueTolerance = 24,
-    feather = 12,
-    satThreshold = 0.25,
-    greenBias = 16,
-    edgeBandRatio = 0.08,
-    sampleStep = 4,
-  } = options;
-  try {
-    const image = await loadImageElement(dataUrl);
-    const canvas = document.createElement('canvas');
-    canvas.width = image.width || 1;
-    canvas.height = image.height || 1;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const { data } = imageData;
-    const w = canvas.width;
-    const h = canvas.height;
-    const band = Math.max(1, Math.round(Math.min(w, h) * edgeBandRatio));
-    const step = Math.max(1, sampleStep);
-    const greenHues = [];
-    const pushSample = (x, y) => {
-      const idx = (y * w + x) * 4;
-      const r = data[idx];
-      const g = data[idx + 1];
-      const b = data[idx + 2];
-      if (g <= Math.max(r, b) + greenBias) return;
-      const { h: sampleHue, s } = rgbToHsl(r, g, b);
-      if (s < satThreshold) return;
-      greenHues.push(sampleHue);
-    };
-    if (!Number.isFinite(keyHue)) {
-      for (let y = 0; y < band; y += step) {
-        for (let x = 0; x < w; x += step) pushSample(x, y);
-      }
-      for (let y = h - band; y < h; y += step) {
-        for (let x = 0; x < w; x += step) pushSample(x, y);
-      }
-      for (let x = 0; x < band; x += step) {
-        for (let y = 0; y < h; y += step) pushSample(x, y);
-      }
-      for (let x = w - band; x < w; x += step) {
-        for (let y = 0; y < h; y += step) pushSample(x, y);
-      }
-    }
-    const detectedHue =
-      Number.isFinite(keyHue) || !greenHues.length
-        ? Number.isFinite(keyHue) ? keyHue : 110
-        : greenHues.reduce((sum, hue) => sum + hue, 0) / greenHues.length;
-    const hueFeatherStart = Math.max(0, hueTolerance - feather);
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      const a = data[i + 3];
-      if (g <= Math.max(r, b) + greenBias) continue;
-      const { h: pixelHue, s } = rgbToHsl(r, g, b);
-      if (s < satThreshold) continue;
-      const hueDiff = Math.min(Math.abs(pixelHue - detectedHue), 360 - Math.abs(pixelHue - detectedHue));
-      if (hueDiff > hueTolerance + feather) continue;
-      if (hueDiff <= hueFeatherStart) {
-        data[i + 3] = 0;
-      } else {
-        const factor = Math.min(1, (hueDiff - hueFeatherStart) / Math.max(feather, 1));
-        data[i + 3] = Math.round(a * factor);
-      }
-    }
-    ctx.putImageData(imageData, 0, 0);
-    return canvas.toDataURL('image/png');
-  } catch (error) {
-    console.warn('Chroma removal failed', error);
-    return dataUrl;
-  }
+const getDataUrlMimeType = (dataUrl) => {
+  const normalized = typeof dataUrl === 'string' ? dataUrl : '';
+  const match = normalized.match(/^data:([^;,]+)[;,]/i);
+  return match?.[1]?.toLowerCase() || '';
 };
+const replaceFileExtension = (name, extension) => {
+  const normalizedName = normalizeText(name || '');
+  const safeExtension = extension.startsWith('.') ? extension : `.${extension}`;
+  if (!normalizedName) return `image-${Date.now()}${safeExtension}`;
+  const nextName = normalizedName.replace(/\.[^./\\]+$/, '');
+  return `${nextName || `image-${Date.now()}`}${safeExtension}`;
+};
+const createCanvasDataUrl = (canvas, mimeType, quality) =>
+  new Promise((resolve, reject) => {
+    if (!canvas?.toBlob) {
+      try {
+        resolve(canvas.toDataURL(mimeType, quality));
+      } catch (error) {
+        reject(error);
+      }
+      return;
+    }
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error('РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРіРѕС‚РѕРІРёС‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ.'));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ РѕРїС‚РёРјРёР·РёСЂРѕРІР°РЅРЅРѕРµ РёР·РѕР±СЂР°Р¶РµРЅРёРµ.'));
+        reader.readAsDataURL(blob);
+      },
+      mimeType,
+      quality,
+    );
+  });
 const CARD_CANVAS_WIDTH = 1360;
 const CARD_CANVAS_HEIGHT = 768;
 const CARD_BACKGROUND_IMAGE = resolveAssetUrl('card/background.jpg');
@@ -2381,6 +2384,62 @@ const loadImageElement = (src) =>
     image.onerror = () => reject(new Error('Не удалось загрузить изображение.'));
     image.src = src;
   });
+const optimizeImageForUpload = async (
+  dataUrl,
+  {
+    name = '',
+    maxBytes = TARGET_IMAGE_UPLOAD_BYTES,
+    maxDimension = 1600,
+    preserveAlpha = true,
+  } = {},
+) => {
+  if (!dataUrl || typeof document === 'undefined') {
+    return { dataUrl, name };
+  }
+  try {
+    if (estimateDataUrlBytes(dataUrl) <= maxBytes) {
+      const mimeType = getDataUrlMimeType(dataUrl) || 'image/png';
+      const extension =
+        mimeType === 'image/webp' ? '.webp' : mimeType === 'image/jpeg' ? '.jpg' : '.png';
+      return { dataUrl, name: replaceFileExtension(name, extension) };
+    }
+    const image = await loadImageElement(dataUrl);
+    const canvas = document.createElement('canvas');
+    const ratio = Math.min(1, maxDimension / Math.max(image.width || 1, image.height || 1));
+    let width = Math.max(1, Math.round((image.width || 1) * ratio));
+    let height = Math.max(1, Math.round((image.height || 1) * ratio));
+    let quality = 0.9;
+    let attempts = 0;
+    const preferredMime = preserveAlpha ? 'image/webp' : 'image/jpeg';
+    let best = dataUrl;
+    while (attempts < 7) {
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(image, 0, 0, width, height);
+      const candidate = await createCanvasDataUrl(canvas, preferredMime, quality);
+      best = candidate;
+      if (estimateDataUrlBytes(candidate) <= maxBytes) {
+        return {
+          dataUrl: candidate,
+          name: replaceFileExtension(name, preferredMime === 'image/jpeg' ? '.jpg' : '.webp'),
+        };
+      }
+      quality = Math.max(0.55, quality - 0.1);
+      width = Math.max(480, Math.round(width * 0.85));
+      height = Math.max(480, Math.round(height * 0.85));
+      attempts += 1;
+    }
+    return {
+      dataUrl: best,
+      name: replaceFileExtension(name, preferredMime === 'image/jpeg' ? '.jpg' : '.webp'),
+    };
+  } catch (error) {
+    console.warn('Image upload optimization skipped', error);
+    return { dataUrl, name };
+  }
+};
 const drawCoverImage = (ctx, image, x, y, width, height) => {
   if (!image || !width || !height) return;
   const ratio = Math.max(width / image.width, height / image.height);
@@ -2674,8 +2733,11 @@ const BarberAvatarPicker = ({
       setActionBusy(true);
       try {
         const dataUrl = await readFileAsDataUrl(file);
-        const cleanedDataUrl = await stripGreenBackground(dataUrl);
-        const result = await onUpload({ name: file.name, data: cleanedDataUrl });
+        const optimizedUpload = await optimizeImageForUpload(dataUrl, {
+          name: file.name,
+          preserveAlpha: true,
+        });
+        const result = await onUpload({ name: optimizedUpload.name, data: optimizedUpload.dataUrl });
         await refreshAvatarOptions();
         const uploadedPath = normalizeImagePath(result?.path || result?.image || '');
         applyAvatarValue(uploadedPath);
@@ -2717,12 +2779,15 @@ const BarberAvatarPicker = ({
       let busy = false;
       try {
         const dataUrl = await readFileAsDataUrl(file);
-        const cleanedDataUrl = await stripGreenBackground(dataUrl);
-        let normalized = normalizeImagePath(cleanedDataUrl);
+        const optimizedUpload = await optimizeImageForUpload(dataUrl, {
+          name: file.name,
+          preserveAlpha: true,
+        });
+        let normalized = normalizeImagePath(optimizedUpload.dataUrl);
         if (typeof onUpload === 'function') {
           setActionBusy(true);
           busy = true;
-          const result = await onUpload({ name: file.name, data: cleanedDataUrl });
+          const result = await onUpload({ name: optimizedUpload.name, data: optimizedUpload.dataUrl });
           const uploadedPath = normalizeImagePath(result?.path || result?.image || '');
           if (uploadedPath) {
             normalized = uploadedPath;
@@ -3383,6 +3448,40 @@ const RatingSlider = ({ value, onChange, dense = false, disabled = false }) => {
     </div>
   );
 };
+const FixedRatingSlider = ({ value, onChange, dense = false, disabled = false }) => {
+  const ratingValue = clampRatingValue(value ?? RATING_MAX);
+  const sliderId = useMemo(() => `rating-slider-fixed-${Math.random().toString(36).slice(2, 8)}`, []);
+  const wrapperClass = dense
+    ? 'space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-1.5'
+    : 'space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2';
+  const labelClass = dense
+    ? 'flex items-center justify-between text-xs text-slate-300'
+    : 'flex items-center justify-between text-sm text-slate-300';
+  return (
+    <div className={classNames(wrapperClass, disabled ? 'opacity-60' : '')}>
+      <label className={labelClass} htmlFor={sliderId}>
+        <span className="inline-flex items-center gap-1.5">
+          <IconStar className="h-4 w-4 text-amber-300" />
+          <span>Рейтинг</span>
+        </span>
+        <span className="font-semibold text-white">{ratingValue}</span>
+      </label>
+      <input
+        id={sliderId}
+        name="rating"
+        type="range"
+        min={RATING_MIN}
+        max={RATING_MAX}
+        step={RATING_STEP}
+        value={ratingValue}
+        onChange={disabled ? undefined : onChange}
+        disabled={disabled}
+        aria-label="Рейтинг"
+        className={classNames('w-full accent-indigo-500', disabled ? 'cursor-not-allowed' : '')}
+      />
+    </div>
+  );
+};
 const BarbersView = ({
   barbers = [],
   positions = [],
@@ -3627,7 +3726,7 @@ const BarbersView = ({
                     </div>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 sm:text-sm">
                       <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-200">
-                        ? {ratingLabel}
+                        <IconStar className="mr-1 inline h-3.5 w-3.5 text-amber-300" /> {ratingLabel}
                       </span>
                       {positionName && (
                         <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-200">
@@ -3708,7 +3807,7 @@ const BarbersView = ({
                   className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
                 />
                 <div className="w-full">
-                  <RatingSlider dense value={workingBarber.rating} onChange={(event) => handleFieldChange('rating', event.target.value)} />
+                  <FixedRatingSlider dense value={workingBarber.rating} onChange={(event) => handleFieldChange('rating', event.target.value)} />
                 </div>
                 <div className="relative w-full">
                   <input
@@ -3748,7 +3847,7 @@ const BarbersView = ({
                         : 'border-slate-600 text-slate-500'
                     )}
                   >
-                    {workingBarber.isActive !== false ? '\u2713' : '\u2715'}
+                    {workingBarber.isActive !== false ? <IconCheck className="h-3.5 w-3.5" /> : <IconX className="h-3.5 w-3.5" />}
                   </span>
                 </button>
                 <div className="col-span-2 grid gap-3 md:grid-cols-2">
@@ -3938,7 +4037,7 @@ const BarberProfileView = ({
                 className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
               />
               <div className="w-full">
-                <RatingSlider
+                <FixedRatingSlider
                   dense
                   value={barber.rating}
                   onChange={allowRatingEdit ? (event) => handleFieldChange('rating', event.target.value) : undefined}
@@ -3983,7 +4082,7 @@ const BarberProfileView = ({
                       : 'border-slate-600 text-slate-500'
                   )}
                 >
-                  {barber.isActive !== false ? '\u2713' : '\u2715'}
+                  {barber.isActive !== false ? <IconCheck className="h-3.5 w-3.5" /> : <IconX className="h-3.5 w-3.5" />}
                 </span>
               </button>
               <div className="col-span-2 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3">
@@ -4279,7 +4378,7 @@ const ServicesView = ({
                       workingService.isActive !== false ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100' : 'border-slate-600 text-slate-500'
                     )}
                   >
-                    {workingService.isActive !== false ? '\u2713' : ''}
+                    {workingService.isActive !== false ? <IconCheck className="h-3.5 w-3.5" /> : <IconX className="h-3.5 w-3.5" />}
                   </span>
                 </button>
               ) : (
@@ -9270,7 +9369,11 @@ const SiteImageUploadField = ({ label, value = '', onChange, onUploadImage = nul
     setError('');
     try {
       const data = await readFileAsDataUrl(file);
-      const result = await onUploadImage({ name: file.name, data });
+      const optimizedUpload = await optimizeImageForUpload(data, {
+        name: file.name,
+        preserveAlpha: false,
+      });
+      const result = await onUploadImage({ name: optimizedUpload.name, data: optimizedUpload.dataUrl });
       const nextValue = normalizeImagePath(result?.path || result?.image || '');
       onChange?.(nextValue);
     } catch (uploadError) {
@@ -10967,9 +11070,13 @@ const handleBarberFieldChange = (id, field, value) => {
       if (!canAccessBot || !file) return null;
       try {
         const dataUrl = await readFileAsDataUrl(file);
+        const optimizedUpload = await optimizeImageForUpload(dataUrl, {
+          name: file.name,
+          preserveAlpha: false,
+        });
         const response = await apiRequest('/bot/menu/images', {
           method: 'POST',
-          body: JSON.stringify({ name: file.name, data: dataUrl }),
+          body: JSON.stringify({ name: optimizedUpload.name, data: optimizedUpload.dataUrl }),
         });
         return response || null;
       } catch (error) {

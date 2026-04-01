@@ -4199,15 +4199,15 @@ img.media-wave.is-ready {
   inset: 0;
   border-radius: inherit;
   background:
-    linear-gradient(112deg, transparent 16%, rgba(255, 255, 255, 0.04) 30%, rgba(255, 255, 255, 0.22) 48%, rgba(255, 255, 255, 0.06) 61%, transparent 76%),
-    radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.1), transparent 24%);
+    linear-gradient(112deg, transparent 16%, rgba(255, 255, 255, 0.025) 30%, rgba(255, 255, 255, 0.14) 48%, rgba(255, 255, 255, 0.035) 61%, transparent 76%),
+    radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.065), transparent 24%);
   background-size: 182% 182%, 146% 146%;
   background-position:
     calc(50% + (var(--sheen-x) * 0.42)) calc(50% + (var(--sheen-y) * 0.28)),
     calc(20% + (var(--sheen-x) * 0.16)) calc(18% + (var(--sheen-y) * 0.12));
   background-repeat: no-repeat;
   mix-blend-mode: screen;
-  opacity: 0.72;
+  opacity: 0.48;
   transition: background-position 0.14s ease-out, opacity 0.14s ease-out;
 }
 

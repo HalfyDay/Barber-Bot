@@ -1299,6 +1299,13 @@ const createHomeClientStoreService = ({
         barbers: (Array.isArray(barbers) ? barbers : [])
           .filter((barber) => barber?.isActive !== false)
           .map((barber) => {
+            const barberServices = (Array.isArray(services) ? services : [])
+              .filter((service) => {
+                const price = Number(getServicePriceForBarber(service, barber.id));
+                return Number.isFinite(price) && price > 0;
+              })
+              .map((service) => normalizeText(service?.name || service?.title || service?.label))
+              .filter(Boolean);
             const servicesCount = (Array.isArray(services) ? services : []).reduce((count, service) => {
               const price = Number(getServicePriceForBarber(service, barber.id));
               return Number.isFinite(price) && price > 0 ? count + 1 : count;
@@ -1322,6 +1329,7 @@ const createHomeClientStoreService = ({
               cardDescription: normalizeText(barber.cardDescription),
               cardPhrase: normalizeText(barber.cardPhrase),
               phrase: normalizeText(barber.cardPhrase) || normalizeText(barber.description),
+              services: barberServices,
               servicesCount,
             };
           }),

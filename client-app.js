@@ -667,7 +667,7 @@
     const nextIndex = (state.homeBarberRotationIndex + step + activeBarbers.length) % activeBarbers.length;
     const nextBarber = activeBarbers[nextIndex] || null;
     state.homeBarberTransitionStage = "is-preparing";
-    if (nextBarber?.id) {
+    if (isAuthenticated() && nextBarber?.id) {
       try {
         await ensureBarberProfileServices(nextBarber.id, { suppressRender: true });
       } catch {
@@ -860,6 +860,10 @@
     removeStorage(getStorage("local"), SESSION_STORAGE_KEY);
     removeStorage(getStorage("session"), SESSION_STORAGE_KEY);
   };
+  const clearLogoutMarker = () => {
+    removeStorage(getStorage("local"), LOGOUT_MARKER_STORAGE_KEY);
+    removeStorage(getStorage("session"), LOGOUT_MARKER_STORAGE_KEY);
+  };
 
   const redirectToLogin = (nextPath = "", options = {}) => {
     const fallbackPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -875,6 +879,28 @@
     const marker = String(Date.now());
     writeStorage(getStorage("local"), LOGOUT_MARKER_STORAGE_KEY, marker);
     writeStorage(getStorage("session"), LOGOUT_MARKER_STORAGE_KEY, marker);
+  };
+  const validateStoredHomeSession = async () => {
+    const token = normalizeText(state.session?.token);
+    if (!token) return false;
+    try {
+      const response = await fetch(`${API_ROOT}/auth/me`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+      if (!response.ok) return false;
+      const refreshedToken = normalizeText(response.headers.get("x-home-session-token"));
+      if (refreshedToken) {
+        state.session.token = refreshedToken;
+        persistSession(state.session);
+      }
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const formatPhone = (value) => {
@@ -1674,7 +1700,9 @@
   const logout = () => {
     setLogoutMarker();
     clearSession();
-    redirectToLogin();
+    const landingUrl = new URL("/", window.location.origin);
+    landingUrl.searchParams.set("logout", Date.now().toString());
+    window.location.replace(landingUrl.toString());
   };
 
   const renderTopbar = () => {
@@ -1794,6 +1822,7 @@
                   articleClassName: "barber-profile-hero home-barber-rotating-card",
                   articleAttributes: 'data-action="switch-home-barber"',
                   sceneStyle: homeBarberSceneStyle,
+                  hideActions: !isAuthenticated(),
                   secondaryHref: `/barber/${encodeURIComponent(normalizeText(activeHomeBarber.id))}/`,
                   secondaryLabel: "Профиль барбера",
                   footerOverlay: renderDots(safeHomeBarberIndex),
@@ -1806,6 +1835,7 @@
                       articleClassName: "barber-profile-hero home-barber-rotating-card",
                       articleAttributes: 'data-action="switch-home-barber"',
                       sceneStyle: homeBarberSceneStyle,
+                      hideActions: !isAuthenticated(),
                       secondaryHref: `/barber/${encodeURIComponent(normalizeText(incomingHomeBarber.id))}/`,
                       secondaryLabel: "Профиль барбера",
                       footerOverlay: renderDots(safeIncomingHomeBarberIndex),
@@ -2864,6 +2894,7 @@
     const articleAttributes = normalizeText(options.articleAttributes);
     const footerOverlay = normalizeText(options.footerOverlay);
     const sceneStyle = normalizeText(options.sceneStyle);
+    const hideActions = options.hideActions === true;
     return `
       <article class="${articleClassName}" style="--barber-accent:${accentColor};"${articleAttributes ? ` ${articleAttributes}` : ""}>
         <div class="barber-profile-scene" data-tilt-card="barber-profile"${sceneStyle ? ` style="${sceneStyle}"` : ""}>
@@ -2890,10 +2921,12 @@
                 <span class="barber-profile-services-label">Услуги</span>
                 <div class="barber-profile-services-list">${servicesMarkup}</div>
               </div>
-              <div class="hero-actions barber-profile-action-row">
-                <a class="primary-btn barber-profile-primary-btn" href="${primaryHref}">${primaryLabel}</a>
-                <a class="ghost-btn barber-profile-secondary-btn" href="${secondaryHref}">${secondaryLabel}</a>
-              </div>
+              ${hideActions
+                ? ""
+                : `<div class="hero-actions barber-profile-action-row">
+                    <a class="primary-btn barber-profile-primary-btn" href="${primaryHref}">${primaryLabel}</a>
+                    <a class="ghost-btn barber-profile-secondary-btn" href="${secondaryHref}">${secondaryLabel}</a>
+                  </div>`}
             </div>
             <div class="barber-profile-meta">
               <div class="barber-profile-meta-item" aria-label="Рейтинг ${ratingValue.toFixed(1)} из 5">
@@ -3339,7 +3372,7 @@
     applyProfileCoverTheme(renderScope);
     setupPromoMarqueeAutoScroll(renderScope);
     setupHomeBarberRotation();
-    if (state.currentPage === "home") {
+    if (state.currentPage === "home" && isAuthenticated()) {
       const homeBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
       const activeHomeBarber = homeBarbers.length
         ? homeBarbers[((state.homeBarberRotationIndex % homeBarbers.length) + homeBarbers.length) % homeBarbers.length]
@@ -4360,12 +4393,18 @@
     installDelegatedHandlers();
     state.session = loadSession();
     const normalizedPath = normalizeText(window.location.pathname).replace(/\/+$/, "") || "/";
-    if (isAuthenticated() && normalizedPath === "/") {
-      window.location.replace("/home/");
-      return;
+    if (normalizedPath === "/" && isAuthenticated()) {
+      const hasValidStoredSession = await validateStoredHomeSession();
+      if (hasValidStoredSession) {
+        window.location.replace("/home/");
+        return;
+      }
+      clearSession();
+      state.session = null;
     }
     if (!isAuthenticated()) {
       if (state.currentPage === "home" && normalizedPath === "/") {
+        clearLogoutMarker();
         window.history.replaceState(buildHistoryState(), "", `${window.location.pathname}${window.location.search}${window.location.hash}`);
       } else {
         redirectToLogin(`${window.location.pathname}${window.location.search}${window.location.hash}`);
@@ -4386,6 +4425,7 @@
           redirectToLogin(`${window.location.pathname}${window.location.search}${window.location.hash}`);
           return;
         }
+        clearLogoutMarker();
       }
       state.booking.stepAnimationsEnabled = state.currentPage === "booking";
       state.routeTransitionActive = true;
@@ -4409,6 +4449,7 @@
         redirectToLogin(`${window.location.pathname}${window.location.search}${window.location.hash}`);
         return;
       }
+      clearLogoutMarker();
       try {
         state.payload = await publicApiRequest("/public");
         state.bootstrapError = "";

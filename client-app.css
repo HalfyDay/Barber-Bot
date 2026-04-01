@@ -612,6 +612,151 @@ textarea:focus-visible {
 
 .home-barbers-card {
   order: 3;
+  display: none;
+}
+
+.home-barber-rotating-card,
+.home-barber-rotating-empty {
+  order: 3;
+}
+
+.home-barber-rotating-stage {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  width: 100%;
+  border-radius: 34px;
+}
+
+.home-barber-rotating-card {
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  --barber-display-font: "Oxanium", "Unbounded", var(--font-display);
+  --barber-ui-font: "Chakra Petch", "Manrope", var(--font-body);
+}
+
+.home-barber-rotating-glint {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 22%;
+  z-index: 12;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-160%) skewX(-18deg);
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.12) 22%, rgba(255, 255, 255, 0.88) 50%, rgba(255, 255, 255, 0.16) 78%, transparent 100%);
+  filter: none;
+  box-shadow: none;
+}
+
+.home-barber-rotating-card .barber-profile-layout {
+  position: relative;
+  overflow: hidden;
+  border-radius: inherit;
+  cursor: pointer;
+}
+
+.home-barber-rotating-wrap {
+  order: 3;
+  width: 100%;
+}
+
+.home-barber-rotating-dots {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  z-index: 13;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.home-barber-rotating-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.34);
+  transition: background-color 0.28s ease, transform 0.28s ease;
+}
+
+.home-barber-rotating-dot.is-active {
+  background: rgba(255, 255, 255, 0.96);
+  transform: scale(1.05);
+}
+
+.home-barber-rotating-layer {
+  position: relative;
+  grid-area: 1 / 1;
+  transition: opacity 0.9s cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: opacity;
+}
+
+.home-barber-rotating-stage {
+  display: grid;
+}
+
+.home-barber-rotating-layer.is-current {
+  opacity: 1;
+  z-index: 1;
+}
+
+.home-barber-rotating-layer.is-incoming {
+  opacity: 0;
+  z-index: 2;
+}
+
+.home-barber-rotating-stage.is-transitioning .home-barber-rotating-glint {
+  opacity: 1;
+  animation: home-barber-card-sheen 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+.home-barber-rotating-stage.is-transitioning .home-barber-rotating-layer.is-current {
+  opacity: 0;
+}
+
+.home-barber-rotating-stage.is-transitioning .home-barber-rotating-layer.is-incoming {
+  opacity: 1;
+}
+
+@keyframes home-barber-card-sheen {
+  0% {
+    opacity: 0;
+    transform: translateX(-160%) skewX(-18deg);
+  }
+
+  14% {
+    opacity: 0.96;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(560%) skewX(-18deg);
+  }
+}
+
+.home-barber-rotating-card .barber-profile-meta-item:last-child {
+  display: none;
+}
+
+.home-barber-rotating-card .barber-profile-meta-item .barber-profile-meta-label {
+  display: block;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 0.66rem;
+  width: 4.9rem;
+  letter-spacing: 0.1em;
+  text-align: right;
+}
+
+.home-barber-rotating-card .barber-profile-meta-item strong {
+  display: inline;
+  color: #ffffff;
+  font-size: 1.12rem;
+  letter-spacing: 0.08em;
 }
 
 .home-map-contacts-row {

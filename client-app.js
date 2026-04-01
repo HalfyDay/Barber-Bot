@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const ROOT = document.getElementById("app");
   const API_ROOT = `${window.location.origin}/api/home`;
   const LOGIN_PAGE_URL = "/login/";
@@ -36,6 +36,9 @@
     sheetState: "closed",
     pendingBookingCancellationId: "",
     homeAboutExpanded: false,
+    homeBarberRotationIndex: 0,
+    homeBarberIncomingIndex: -1,
+    homeBarberTransitionStage: "idle",
     activeBarberProfileId: "",
     referralTransferDraft: null,
     referralQuickAmount: null,
@@ -82,6 +85,16 @@
   let delegatedHandlersBound = false;
   let sitePresenceTimer = null;
   let promoMarqueeAutoScroll = null;
+  let homeBarberRotationTimer = null;
+  let homeBarberTransitionSwapTimer = null;
+  let homeBarberTransitionResetTimer = null;
+  let homeBarberTiltSnapshot = {
+    tiltX: "0deg",
+    tiltY: "0deg",
+    sheenX: "0%",
+    sheenY: "0%",
+    textShimmer: "50%",
+  };
   const derivedDataCache = {
     profileHistory: { visitHistoryRef: null, operationsRef: null, items: [] },
     filteredProfileHistory: { itemsRef: null, filter: "", filtered: [] },
@@ -95,6 +108,8 @@
   };
 
   const normalizeText = (value) => (value == null ? "" : String(value).trim());
+  const getHomeBarberTiltSceneStyle = () =>
+    `--tilt-x:${normalizeText(homeBarberTiltSnapshot?.tiltX || "0deg")};--tilt-y:${normalizeText(homeBarberTiltSnapshot?.tiltY || "0deg")};--sheen-x:${normalizeText(homeBarberTiltSnapshot?.sheenX || "0%")};--sheen-y:${normalizeText(homeBarberTiltSnapshot?.sheenY || "0%")};--text-shimmer:${normalizeText(homeBarberTiltSnapshot?.textShimmer || "50%")};`;
   const clampNumber = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
   const toRgbString = (rgb, alpha = 1) => {
     const safeRgb = Array.isArray(rgb) ? rgb : [0, 0, 0];
@@ -545,11 +560,25 @@
         frame = null;
         const rotateY = (pointerRatioX - 0.5) * 10;
         const rotateX = (0.5 - pointerRatioY) * 8;
-        card.style.setProperty("--tilt-x", `${rotateX.toFixed(2)}deg`);
-        card.style.setProperty("--tilt-y", `${rotateY.toFixed(2)}deg`);
-        card.style.setProperty("--sheen-x", `${((pointerRatioX - 0.5) * 18).toFixed(2)}%`);
-        card.style.setProperty("--sheen-y", `${((pointerRatioY - 0.5) * 14).toFixed(2)}%`);
-        card.style.setProperty("--text-shimmer", `${(pointerRatioX * 100).toFixed(2)}%`);
+        const tiltX = `${rotateX.toFixed(2)}deg`;
+        const tiltY = `${rotateY.toFixed(2)}deg`;
+        const sheenX = `${((pointerRatioX - 0.5) * 18).toFixed(2)}%`;
+        const sheenY = `${((pointerRatioY - 0.5) * 14).toFixed(2)}%`;
+        const textShimmer = `${(pointerRatioX * 100).toFixed(2)}%`;
+        card.style.setProperty("--tilt-x", tiltX);
+        card.style.setProperty("--tilt-y", tiltY);
+        card.style.setProperty("--sheen-x", sheenX);
+        card.style.setProperty("--sheen-y", sheenY);
+        card.style.setProperty("--text-shimmer", textShimmer);
+        if (card.closest(".home-barber-rotating-card")) {
+          homeBarberTiltSnapshot = {
+            tiltX,
+            tiltY,
+            sheenX,
+            sheenY,
+            textShimmer,
+          };
+        }
       };
       const schedule = () => {
         if (frame) return;
@@ -568,6 +597,82 @@
         schedule();
       });
     });
+  };
+  const stopHomeBarberRotation = () => {
+    if (!homeBarberRotationTimer) return;
+    window.clearInterval(homeBarberRotationTimer);
+    homeBarberRotationTimer = null;
+  };
+  const clearHomeBarberTransitionTimers = () => {
+    if (homeBarberTransitionSwapTimer) {
+      window.clearTimeout(homeBarberTransitionSwapTimer);
+      homeBarberTransitionSwapTimer = null;
+    }
+    if (homeBarberTransitionResetTimer) {
+      window.clearTimeout(homeBarberTransitionResetTimer);
+      homeBarberTransitionResetTimer = null;
+    }
+  };
+  const triggerHomeBarberRotationStep = (direction = 1) => {
+    const activeBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+    if (state.currentPage !== "home" || activeBarbers.length <= 1) {
+      state.homeBarberIncomingIndex = -1;
+      state.homeBarberTransitionStage = "idle";
+      clearHomeBarberTransitionTimers();
+      return;
+    }
+    clearHomeBarberTransitionTimers();
+    const step = direction < 0 ? -1 : 1;
+    state.homeBarberIncomingIndex = (state.homeBarberRotationIndex + step + activeBarbers.length) % activeBarbers.length;
+    state.homeBarberTransitionStage = "is-transitioning";
+    render();
+    homeBarberTransitionSwapTimer = window.setTimeout(() => {
+      const currentBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+      if (state.currentPage !== "home" || currentBarbers.length <= 1) {
+        state.homeBarberIncomingIndex = -1;
+        state.homeBarberTransitionStage = "idle";
+        render();
+        return;
+      }
+      state.homeBarberRotationIndex = state.homeBarberIncomingIndex >= 0 ? state.homeBarberIncomingIndex : (state.homeBarberRotationIndex + 1) % currentBarbers.length;
+      state.homeBarberIncomingIndex = -1;
+      state.homeBarberTransitionStage = "idle";
+      render();
+    }, 900);
+  };
+  const setupHomeBarberRotation = () => {
+    if (state.currentPage !== "home") {
+      stopHomeBarberRotation();
+      clearHomeBarberTransitionTimers();
+      state.homeBarberIncomingIndex = -1;
+      state.homeBarberTransitionStage = "idle";
+      return;
+    }
+    const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+    if (barbers.length <= 1) {
+      stopHomeBarberRotation();
+      clearHomeBarberTransitionTimers();
+      state.homeBarberIncomingIndex = -1;
+      state.homeBarberTransitionStage = "idle";
+      return;
+    }
+    if (state.homeBarberRotationIndex >= barbers.length) state.homeBarberRotationIndex = 0;
+    if (homeBarberRotationTimer) return;
+    homeBarberRotationTimer = window.setInterval(() => {
+      if (state.currentPage !== "home") {
+        stopHomeBarberRotation();
+        clearHomeBarberTransitionTimers();
+        return;
+      }
+      if (state.homeBarberTransitionStage !== "idle") return;
+      const activeBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+      if (activeBarbers.length <= 1) {
+        stopHomeBarberRotation();
+        clearHomeBarberTransitionTimers();
+        return;
+      }
+      triggerHomeBarberRotationStep();
+    }, 6500);
   };
   const setupTransferRecipientCarousels = (scope = ROOT) => {
     const container = scope instanceof Element ? scope : ROOT;
@@ -1588,8 +1693,16 @@
   const renderHomePage = () => {
     const siteHome = state.payload?.site?.home || {};
     const activeAppointments = Array.isArray(state.payload?.booking?.activeAppointments) ? state.payload.booking.activeAppointments : [];
-    const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers.slice(0, 4) : [];
-    return memoizeRenderedFragment("page-home", [siteHome, activeAppointments, barbers], () => {
+    const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+    const safeHomeBarberIndex = barbers.length ? ((state.homeBarberRotationIndex % barbers.length) + barbers.length) % barbers.length : 0;
+    const safeIncomingHomeBarberIndex = barbers.length && state.homeBarberIncomingIndex >= 0
+      ? ((state.homeBarberIncomingIndex % barbers.length) + barbers.length) % barbers.length
+      : -1;
+    const activeHomeBarber = barbers.length ? barbers[safeHomeBarberIndex] : null;
+    const incomingHomeBarber = safeIncomingHomeBarberIndex >= 0
+      ? barbers[safeIncomingHomeBarberIndex]
+      : null;
+    return memoizeRenderedFragment("page-home", [siteHome, activeAppointments, barbers, state.homeBarberRotationIndex, state.homeBarberIncomingIndex, state.homeBarberTransitionStage, activeHomeBarber?.id, incomingHomeBarber?.id], () => {
       const promos = Array.isArray(siteHome.promos) ? siteHome.promos : [];
       const promoLaneItems = (() => {
         const indexedPromos = promos.map((promo, index) => ({ ...promo, _promoIndex: index }));
@@ -1630,6 +1743,7 @@
       const bookingButtonText = normalizeText(siteHome.bookingButtonText) || "Записаться";
       const aboutTitle = normalizeText(siteHome.aboutTitle || "BrotherShop");
       const aboutText = normalizeText(siteHome.aboutText || "");
+      const homeBarberSceneStyle = getHomeBarberTiltSceneStyle();
       const aboutExpandable = aboutText.length > 110;
       const aboutCardTag = aboutExpandable ? "button" : "article";
       const aboutCardAttrs = aboutExpandable
@@ -1754,6 +1868,48 @@
               : `<div class="empty-state">Список мастеров скоро обновится. Откройте запись, чтобы увидеть доступных специалистов.</div>`}
           </div>
         </article>
+        ${activeHomeBarber
+          ? `
+            <div class="home-barber-rotating-wrap">
+              <div class="home-barber-rotating-stage ${normalizeText(state.homeBarberTransitionStage)}">
+                <div class="home-barber-rotating-layer is-current">
+                  ${renderBarberProfileHeroCard(activeHomeBarber, {
+                    barberId: activeHomeBarber.id,
+                    articleClassName: "barber-profile-hero home-barber-rotating-card",
+                    articleAttributes: 'data-action="switch-home-barber"',
+                    sceneStyle: homeBarberSceneStyle,
+                    secondaryHref: `/barber/${encodeURIComponent(normalizeText(activeHomeBarber.id))}/`,
+                    secondaryLabel: "Профиль барбера",
+                    footerOverlay: `<div class="home-barber-rotating-dots" aria-label="Барбер ${safeHomeBarberIndex + 1} из ${barbers.length}">${barbers
+                      .map(
+                        (_, index) =>
+                          `<span class="home-barber-rotating-dot ${index === safeHomeBarberIndex ? "is-active" : ""}" aria-hidden="true"></span>`,
+                      )
+                      .join("")}</div>`,
+                  })}
+                </div>
+                ${incomingHomeBarber
+                  ? `<div class="home-barber-rotating-layer is-incoming">
+                      ${renderBarberProfileHeroCard(incomingHomeBarber, {
+                        barberId: incomingHomeBarber.id,
+                        articleClassName: "barber-profile-hero home-barber-rotating-card",
+                        articleAttributes: 'data-action="switch-home-barber"',
+                        sceneStyle: homeBarberSceneStyle,
+                        secondaryHref: `/barber/${encodeURIComponent(normalizeText(incomingHomeBarber.id))}/`,
+                        secondaryLabel: "Профиль барбера",
+                        footerOverlay: `<div class="home-barber-rotating-dots" aria-label="Барбер ${safeIncomingHomeBarberIndex + 1} из ${barbers.length}">${barbers
+                          .map(
+                            (_, index) =>
+                              `<span class="home-barber-rotating-dot ${index === safeIncomingHomeBarberIndex ? "is-active" : ""}" aria-hidden="true"></span>`,
+                          )
+                          .join("")}</div>`,
+                      })}
+                    </div>`
+                  : ""}
+              </div>
+            </div>
+          `
+          : `<div class="empty-state home-barber-rotating-empty">Список мастеров скоро обновится. Откройте запись, чтобы увидеть доступных специалистов.</div>`}
       </section>
     `;
     });
@@ -2570,6 +2726,115 @@
     const safeValue = normalizeText(value);
     return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(safeValue) ? safeValue : fallback;
   };
+  const renderBarberProfileHeroCard = (barber, options = {}) => {
+    if (!barber) return "";
+    const barberId = normalizeText(options.barberId || barber.id);
+    const reviews = Array.isArray(barber.reviews) ? barber.reviews.filter(Boolean) : [];
+    const ratingValue = Math.max(0, Math.min(5, Number.parseFloat(normalizeText(barber.rating || "5").replace(",", ".")) || 5));
+    const filledStars = Math.round(ratingValue);
+    const accentColor = resolveBarberAccentColor(barber.color, "#ff8a2a");
+    const displayName = normalizeText(barber.name || barber.fullName || "Барбер");
+    const fullName = normalizeText(barber.fullName || barber.name || displayName);
+    const alias = normalizeText(barber.nickname);
+    const normalizeIdentityLabel = (value) =>
+      normalizeText(value)
+        .replace(/[^\p{L}\p{N}]+/gu, "")
+        .toLowerCase();
+    const description = normalizeText(barber.cardDescription || barber.description);
+    const rawSignature = normalizeText(barber.cardPhrase || barber.phrase);
+    const signature =
+      rawSignature && rawSignature.toLowerCase() !== description.toLowerCase() ? rawSignature : "";
+    const cachedBarberServices = Array.isArray(options.cachedServices)
+      ? options.cachedServices
+      : Array.isArray(state.barberProfileServices?.[barberId]?.items)
+        ? state.barberProfileServices[barberId].items
+        : [];
+    const barberServices = (Array.isArray(barber.services) && barber.services.length ? barber.services : cachedBarberServices)
+      .map((service) => (typeof service === "string" ? service : normalizeText(service?.name || service?.title || service?.label)))
+      .filter(Boolean);
+    const visibleServices = barberServices.slice(0, 4);
+    const servicesSummary = visibleServices.length
+      ? visibleServices.join(" • ")
+      : Number.isFinite(Number(barber.servicesCount)) && Number(barber.servicesCount) > 0
+        ? `Услуг: ${Number(barber.servicesCount)}`
+        : "Загрузка услуг...";
+    const servicesMarkup = visibleServices.length
+      ? visibleServices.map((service) => `<span class="barber-profile-service-chip">${service}</span>`).join("")
+      : `<span class="barber-profile-service-chip is-placeholder">${servicesSummary}</span>`;
+    const portraitUrl = normalizeText(barber.avatarUrl || barber.cardImageUrl);
+    const reviewLabel = reviews.length ? `${reviews.length} отзывов` : "Первые отзывы появятся позже";
+    const introText = description || rawSignature || "Барбер доступен для онлайн-записи в BrotherShop.";
+    const identityLine = [alias, fullName]
+      .filter((value, index, items) => value && normalizeIdentityLabel(value) !== normalizeIdentityLabel(displayName) && items.indexOf(value) === index)
+      .join(" • ");
+    const primaryHref = normalizeText(options.primaryHref || "/booking/");
+    const primaryLabel = normalizeText(options.primaryLabel || "Записаться");
+    const secondaryHref = normalizeText(options.secondaryHref || "/");
+    const secondaryLabel = normalizeText(options.secondaryLabel || "Все барберы");
+    const articleClassName = normalizeText(options.articleClassName || "barber-profile-hero");
+    const articleAttributes = normalizeText(options.articleAttributes);
+    const footerOverlay = normalizeText(options.footerOverlay);
+    const sceneStyle = normalizeText(options.sceneStyle);
+    return `
+      <article class="${articleClassName}" style="--barber-accent:${accentColor};"${articleAttributes ? ` ${articleAttributes}` : ""}>
+        <div class="barber-profile-scene" data-tilt-card="barber-profile"${sceneStyle ? ` style="${sceneStyle}"` : ""}>
+          <div class="barber-profile-surface">
+          <div class="barber-profile-backdrop" aria-hidden="true">
+            <div class="barber-profile-backdrop-glow"></div>
+            <div class="barber-profile-backdrop-orb barber-profile-backdrop-orb-a"></div>
+            <div class="barber-profile-backdrop-orb barber-profile-backdrop-orb-b"></div>
+            <div class="barber-profile-backdrop-wave"></div>
+            <div class="barber-profile-backdrop-grid"></div>
+            <div class="barber-profile-backdrop-name">BROTHERSHOP</div>
+          </div>
+          <div class="barber-profile-layout">
+            <div class="home-barber-rotating-glint" aria-hidden="true"></div>
+            <div class="barber-profile-copy">
+              <div class="barber-profile-copy-head">
+                <span class="barber-profile-kicker">Барбер BrotherShop</span>
+              </div>
+              <h1 class="barber-profile-title">${displayName}</h1>
+              ${identityLine ? `<p class="barber-profile-subtitle">${identityLine}</p>` : ""}
+              ${signature ? `<p class="barber-profile-signature">${signature}</p>` : ""}
+              <p class="barber-profile-description">${introText}</p>
+              <div class="barber-profile-services">
+                <span class="barber-profile-services-label">Услуги</span>
+                <div class="barber-profile-services-list">${servicesMarkup}</div>
+              </div>
+              <div class="hero-actions barber-profile-action-row">
+                <a class="primary-btn barber-profile-primary-btn" href="${primaryHref}">${primaryLabel}</a>
+                <a class="ghost-btn barber-profile-secondary-btn" href="${secondaryHref}">${secondaryLabel}</a>
+              </div>
+            </div>
+            <div class="barber-profile-meta">
+              <div class="barber-profile-meta-item" aria-label="Рейтинг ${ratingValue.toFixed(1)} из 5">
+                <span class="barber-profile-meta-label">Рейтинг</span>
+                <span class="barber-profile-meta-note">${Array.from({ length: 5 }, (_, index) => `<span class="barber-profile-star ${index < filledStars ? "is-filled" : ""}">★</span>`).join("")}</span>
+                <strong>${ratingValue.toFixed(1)}</strong>
+              </div>
+              <div class="barber-profile-meta-item">
+                <span class="barber-profile-meta-label">Услуги</span>
+                <strong class="barber-profile-meta-services">${servicesSummary}</strong>
+                <span class="barber-profile-meta-note">доступно для записи</span>
+              </div>
+            </div>
+            <div class="barber-profile-art">
+              ${portraitUrl
+                ? `
+                  <div class="barber-profile-art-stack">
+                    <img class="barber-profile-art-outline" src="${portraitUrl}" alt="" aria-hidden="true" />
+                    <img class="barber-profile-art-image" src="${portraitUrl}" alt="${displayName}" />
+                  </div>
+                `
+                : `<div class="barber-profile-poster-fallback">${avatarMarkup({ avatarUrl: "", displayName }, 188)}</div>`}
+            </div>
+            ${footerOverlay}
+          </div>
+          </div>
+        </div>
+      </article>
+    `;
+  };
 
   const renderBarberProfilePage = () => {
     const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
@@ -2624,61 +2889,13 @@
       .join(" • ");
     return `
       <section class="page barber-profile-page">
-        <article class="barber-profile-hero" style="--barber-accent:${accentColor};">
-          <div class="barber-profile-scene" data-tilt-card="barber-profile">
-            <div class="barber-profile-surface">
-            <div class="barber-profile-backdrop" aria-hidden="true">
-              <div class="barber-profile-backdrop-glow"></div>
-              <div class="barber-profile-backdrop-orb barber-profile-backdrop-orb-a"></div>
-              <div class="barber-profile-backdrop-orb barber-profile-backdrop-orb-b"></div>
-              <div class="barber-profile-backdrop-wave"></div>
-              <div class="barber-profile-backdrop-grid"></div>
-              <div class="barber-profile-backdrop-name">BROTHERSHOP</div>
-            </div>
-            <div class="barber-profile-layout">
-              <div class="barber-profile-copy">
-                <div class="barber-profile-copy-head">
-                  <span class="barber-profile-kicker">Барбер BrotherShop</span>
-                </div>
-                <h1 class="barber-profile-title">${displayName}</h1>
-                ${identityLine ? `<p class="barber-profile-subtitle">${identityLine}</p>` : ""}
-                ${signature ? `<p class="barber-profile-signature">${signature}</p>` : ""}
-                <p class="barber-profile-description">${introText}</p>
-                <div class="barber-profile-services">
-                  <span class="barber-profile-services-label">Услуги</span>
-                  <div class="barber-profile-services-list">${servicesMarkup}</div>
-                </div>
-                <div class="hero-actions barber-profile-action-row">
-                  <a class="primary-btn barber-profile-primary-btn" href="/booking/">Записаться</a>
-                  <a class="ghost-btn barber-profile-secondary-btn" href="/">Все барберы</a>
-                </div>
-              </div>
-              <div class="barber-profile-meta">
-                <div class="barber-profile-meta-item" aria-label="Рейтинг ${ratingValue.toFixed(1)} из 5">
-                  <span class="barber-profile-meta-label">Рейтинг</span>
-                  <span class="barber-profile-meta-note">${Array.from({ length: 5 }, (_, index) => `<span class="barber-profile-star ${index < filledStars ? "is-filled" : ""}">★</span>`).join("")}</span>
-                  <strong>${ratingValue.toFixed(1)}</strong>
-                </div>
-                <div class="barber-profile-meta-item">
-                  <span class="barber-profile-meta-label">Услуги</span>
-                  <strong class="barber-profile-meta-services">${servicesSummary}</strong>
-                  <span class="barber-profile-meta-note">доступно для записи</span>
-                </div>
-              </div>
-              <div class="barber-profile-art">
-                ${portraitUrl
-                  ? `
-                    <div class="barber-profile-art-stack">
-                      <img class="barber-profile-art-outline" src="${portraitUrl}" alt="" aria-hidden="true" />
-                      <img class="barber-profile-art-image" src="${portraitUrl}" alt="${displayName}" />
-                    </div>
-                  `
-                  : `<div class="barber-profile-poster-fallback">${avatarMarkup({ avatarUrl: "", displayName }, 188)}</div>`}
-              </div>
-            </div>
-            </div>
-          </div>
-        </article>
+        ${renderBarberProfileHeroCard(barber, {
+          barberId: activeBarberId,
+          cachedServices: cachedBarberServices,
+          articleClassName: "barber-profile-hero",
+          secondaryHref: "/",
+          secondaryLabel: "Все барберы",
+        })}
         <article class="content-card barber-profile-mobile-sheet">
           <div class="hero-actions barber-profile-mobile-actions">
             <a class="primary-btn barber-profile-primary-btn" href="/booking/">Записаться</a>
@@ -3032,6 +3249,18 @@
     if (appChanged) setupInteractiveBarberCards(renderScope);
     applyProfileCoverTheme(renderScope);
     setupPromoMarqueeAutoScroll(renderScope);
+    setupHomeBarberRotation();
+    if (state.currentPage === "home") {
+      const homeBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+      const activeHomeBarber = homeBarbers.length
+        ? homeBarbers[((state.homeBarberRotationIndex % homeBarbers.length) + homeBarbers.length) % homeBarbers.length]
+        : null;
+      if (activeHomeBarber?.id) ensureBarberProfileServices(activeHomeBarber.id).catch(() => {});
+      const incomingHomeBarber = homeBarbers.length && state.homeBarberIncomingIndex >= 0
+        ? homeBarbers[((state.homeBarberIncomingIndex % homeBarbers.length) + homeBarbers.length) % homeBarbers.length]
+        : null;
+      if (incomingHomeBarber?.id) ensureBarberProfileServices(incomingHomeBarber.id).catch(() => {});
+    }
     if (
       state.currentPage === "referral" ||
       ["Быстрый перевод", "Перевести BS"].includes(normalizeText(state.sheet?.title))
@@ -3083,8 +3312,8 @@
     render();
   };
 
-  const ensureBarberProfileServices = async () => {
-    const barberId = normalizeText(state.activeBarberProfileId || getBarberIdFromPath(window.location.pathname));
+  const ensureBarberProfileServices = async (explicitBarberId = "") => {
+    const barberId = normalizeText(explicitBarberId || state.activeBarberProfileId || getBarberIdFromPath(window.location.pathname));
     if (!barberId) return;
     const existing = state.barberProfileServices?.[barberId];
     if (existing?.status === "loading" || existing?.status === "ready") return;
@@ -3100,7 +3329,10 @@
     } catch (error) {
       state.barberProfileServices[barberId] = { status: "error", items: [] };
     }
-    if (state.currentPage === "barber" && normalizeText(state.activeBarberProfileId || getBarberIdFromPath(window.location.pathname)) === barberId) {
+    if (
+      (state.currentPage === "barber" && normalizeText(state.activeBarberProfileId || getBarberIdFromPath(window.location.pathname)) === barberId) ||
+      (state.currentPage === "home" && Array.isArray(state.payload?.booking?.barbers) && normalizeText(state.payload.booking.barbers[((state.homeBarberRotationIndex % state.payload.booking.barbers.length) + state.payload.booking.barbers.length) % state.payload.booking.barbers.length]?.id) === barberId)
+    ) {
       render({ sheet: false });
     }
   };
@@ -3717,6 +3949,12 @@
             await loadServices();
             scrollToBookingStep("services");
           })();
+          return;
+        case "switch-home-barber":
+          if (event.target.closest("a, button, input, textarea, select, label") && !actionNode.matches("a, button")) return;
+          event.preventDefault();
+          if (state.homeBarberTransitionStage !== "idle") return;
+          triggerHomeBarberRotationStep(1);
           return;
         case "toggle-service":
           event.preventDefault();

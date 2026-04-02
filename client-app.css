@@ -2097,7 +2097,7 @@ img.media-wave.is-ready {
   backdrop-filter: blur(30px) saturate(1.2);
   box-shadow:
     0 18px 42px rgba(0, 0, 0, 0.32);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .bottom-nav-indicator {
@@ -2185,6 +2185,20 @@ img.media-wave.is-ready {
 .bottom-nav .nav-pill.nav-pill-booking img {
   width: 60px;
   height: 60px;
+}
+
+.bottom-nav .nav-pill.nav-pill-booking {
+  transform: translateY(-16px);
+}
+
+.bottom-nav .nav-pill.nav-pill-booking:hover,
+.bottom-nav .nav-pill.nav-pill-booking:active,
+.bottom-nav .nav-pill.nav-pill-booking.active {
+  transform: translateY(-16px);
+}
+
+.bottom-nav[data-active-page="booking"] .bottom-nav-indicator {
+  opacity: 0;
 }
 
 .bottom-nav .nav-pill.active .nav-icon-wrap {
@@ -7917,5 +7931,12 @@ img.media-wave.is-ready {
 
   .nav-pill {
     min-height: 48px;
+  }
+
+  .bottom-nav .nav-pill.nav-pill-booking,
+  .bottom-nav .nav-pill.nav-pill-booking:hover,
+  .bottom-nav .nav-pill.nav-pill-booking:active,
+  .bottom-nav .nav-pill.nav-pill-booking.active {
+    transform: translateY(-12px);
   }
 }

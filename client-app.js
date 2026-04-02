@@ -2027,7 +2027,7 @@
     const activeIndex = Math.max(0, items.findIndex((item) => item.id === navPage));
     const indicatorIndex = Number.isFinite(Number(state.navIndicatorIndex)) ? Number(state.navIndicatorIndex) : activeIndex;
     return memoizeRenderedFragment("bottom-nav", [state.currentPage, activeIndex, indicatorIndex], () => `
-      <nav class="bottom-nav" data-active-index="${activeIndex}" style="--indicator-index:${indicatorIndex}; --nav-count:${items.length};">
+      <nav class="bottom-nav" data-active-index="${activeIndex}" data-active-page="${navPage}" style="--indicator-index:${indicatorIndex}; --nav-count:${items.length};">
         <div class="bottom-nav-indicator" aria-hidden="true"></div>
         ${items
           .map(

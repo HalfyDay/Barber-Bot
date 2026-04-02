@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Файлы cookie и локальное хранение данных | BrotherShop</title>
+  <meta
+    name="description"
+    content="Информация об использовании файлов cookie, localStorage и sessionStorage на сайте BrotherShop."
+  />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #081010;
+      --surface: rgba(12, 18, 18, 0.9);
+      --text: #f2f7f6;
+      --muted: rgba(226, 232, 240, 0.78);
+      --accent: #79d9c9;
+      --accent-strong: #b6f3ea;
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+      --radius: 28px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Manrope", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(121, 217, 201, 0.18), transparent 28%),
+        radial-gradient(circle at top right, rgba(121, 217, 201, 0.1), transparent 20%),
+        linear-gradient(180deg, #050808 0%, #081010 46%, #091212 100%);
+    }
+
+    a { color: var(--accent); }
+    a:hover, a:focus-visible { color: var(--accent-strong); }
+
+    .page {
+      width: min(980px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    .hero, .section {
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 28px;
+      background:
+        linear-gradient(140deg, rgba(121, 217, 201, 0.12), rgba(12, 18, 18, 0.92)),
+        var(--surface);
+    }
+
+    .hero h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 1.02;
+    }
+
+    .hero p, .section p, .section li {
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 1rem;
+    }
+
+    .hero p { margin: 0; max-width: 58rem; }
+    .grid { display: grid; gap: 18px; margin-top: 20px; }
+    .section { padding: 24px 26px; }
+    .section h2 { margin: 0 0 14px; font-size: 1.2rem; }
+    .section ul { margin: 0; padding-left: 20px; }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 18px;
+      text-decoration: none;
+      font-weight: 700;
+      max-width: 100%;
+      padding: 12px 16px;
+      border-radius: 999px;
+      background: rgba(121, 217, 201, 0.12);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+    }
+
+    @media (max-width: 640px) {
+      .page { width: min(100% - 20px, 980px); padding-top: 20px; padding-bottom: 32px; }
+      .hero, .section { border-radius: 22px; }
+      .hero, .section { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <a class="back-link" href="/">← На сайт BrotherShop</a>
+
+    <section class="hero">
+      <h1>Файлы cookie и локальное хранение данных</h1>
+      <p>
+        Сайт BrotherShop использует технические cookie и локальное хранение данных браузера для
+        корректной работы сайта, входа в аккаунт, сохранения сессии пользователя и отображения
+        основных функций сервиса.
+      </p>
+    </section>
+
+    <div class="grid">
+      <section class="section">
+        <h2>1. Что используется на сайте</h2>
+        <ul>
+          <li>технические cookie браузера, если они необходимы для работы сайта;</li>
+          <li>localStorage и sessionStorage для хранения данных текущей сессии и входа в аккаунт;</li>
+          <li>временные технические данные, необходимые для работы интерфейса записи и личного кабинета.</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>2. Для чего это нужно</h2>
+        <ul>
+          <li>для входа и сохранения авторизации пользователя;</li>
+          <li>для корректной работы личного кабинета и онлайн-записи;</li>
+          <li>для защиты от сбоев и сохранения технического состояния интерфейса.</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>3. Аналитика и рекламные технологии</h2>
+        <p>
+          На момент публикации данной страницы на сайте BrotherShop не заявлено использование
+          рекламных рассылок, маркетинговых cookie или внешних рекламных пикселей. Если такие
+          инструменты будут подключены в дальнейшем, информация об этом будет опубликована
+          дополнительно.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>4. Управление хранением данных</h2>
+        <p>
+          Пользователь может ограничить использование cookie и локального хранения данных через
+          настройки своего браузера. При этом часть функций сайта, включая вход в аккаунт и работу
+          личного кабинета, может стать недоступной или работать некорректно.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>5. Связь с другими документами</h2>
+        <p>
+          Использование cookie и локального хранения данных связано с
+          <a href="/legal/privacy">политикой обработки персональных данных</a> и другими
+          правовыми документами сайта BrotherShop.
+        </p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

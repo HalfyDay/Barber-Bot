@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Политика обработки персональных данных | BrotherShop</title>
+  <meta
+    name="description"
+    content="Политика обработки персональных данных сайта BrotherShop."
+  />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #081010;
+      --surface: rgba(12, 18, 18, 0.9);
+      --surface-strong: rgba(18, 28, 28, 0.95);
+      --line: rgba(130, 167, 160, 0.18);
+      --text: #f2f7f6;
+      --muted: rgba(226, 232, 240, 0.78);
+      --accent: #79d9c9;
+      --accent-strong: #b6f3ea;
+      --danger: #ffcf99;
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+      --radius: 28px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Manrope", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(121, 217, 201, 0.18), transparent 28%),
+        radial-gradient(circle at top right, rgba(121, 217, 201, 0.1), transparent 20%),
+        linear-gradient(180deg, #050808 0%, #081010 46%, #091212 100%);
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    a:hover,
+    a:focus-visible {
+      color: var(--accent-strong);
+    }
+
+    .page {
+      width: min(980px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    .hero,
+    .section,
+    .notice {
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 28px;
+      background:
+        linear-gradient(140deg, rgba(121, 217, 201, 0.12), rgba(12, 18, 18, 0.92)),
+        var(--surface);
+    }
+
+    .hero h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 1.02;
+    }
+
+    .hero p,
+    .section p,
+    .section li,
+    .notice p {
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 1rem;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 58rem;
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+      margin-top: 20px;
+    }
+
+    .section {
+      padding: 24px 26px;
+    }
+
+    .section h2 {
+      margin: 0 0 14px;
+      font-size: 1.2rem;
+    }
+
+    .section ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .notice {
+      margin-top: 20px;
+      padding: 20px 22px;
+      background: var(--surface-strong);
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 18px;
+      text-decoration: none;
+      font-weight: 700;
+      max-width: 100%;
+      padding: 12px 16px;
+      border-radius: 999px;
+      background: rgba(121, 217, 201, 0.12);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+    }
+
+    .meta {
+      display: grid;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .meta-item {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .meta-item strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .contact-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+    }
+
+    .contact-list a,
+    .contact-list span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 0 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .contact-list a:hover,
+    .contact-list a:focus-visible {
+      color: var(--accent-strong);
+    }
+
+    @media (max-width: 640px) {
+      .page {
+        width: min(100% - 20px, 980px);
+        padding-top: 20px;
+        padding-bottom: 32px;
+      }
+
+      .hero,
+      .section,
+      .notice {
+        border-radius: 22px;
+      }
+
+      .hero,
+      .section {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <a class="back-link" href="/">← На сайт BrotherShop</a>
+
+    <section class="hero">
+      <h1>Политика обработки персональных данных</h1>
+      <p>
+        Настоящая политика действует в отношении персональных данных, которые сайт BrotherShop
+        получает при использовании форм записи, обратной связи, авторизации и иных сервисов сайта.
+      </p>
+      <div class="meta">
+        <div class="meta-item">
+          <strong>Оператор персональных данных</strong>
+          <span>Гуторов Тимур Сергеевич, плательщик налога на профессиональный доход (самозанятый). ИНН: 380415073157.</span>
+        </div>
+        <div class="meta-item">
+          <strong>Контакт для обращений</strong>
+          <div class="contact-list" id="legal-contact-list">
+            <a id="legal-contact-phone" href="tel:+79646599296">+7 964 659-92-96</a>
+            <span id="legal-contact-email-fallback">Контактные данные публикуются в разделе контактов сайта.</span>
+            <a id="legal-contact-email" href="#" hidden>Email</a>
+          </div>
+        </div>
+        <div class="meta-item">
+          <strong>Дата актуализации</strong>
+          <span>02 апреля 2026 года.</span>
+        </div>
+        <div class="meta-item">
+          <strong>Адрес оказания услуг</strong>
+          <span>ул. Гагарина, 10, 1 этаж, Братск.</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="section">
+        <h2>1. Какие данные обрабатываются</h2>
+        <p>Оператор может обрабатывать следующие категории персональных данных:</p>
+        <ul>
+          <li>фамилия, имя, отчество, если они указываются пользователем;</li>
+          <li>номер телефона;</li>
+          <li>адрес электронной почты;</li>
+          <li>дата и время записи;</li>
+          <li>предпочтения по услугам и комментарии к записи;</li>
+          <li>технические данные: IP-адрес, cookie, сведения о браузере и устройстве, данные аналитики и логов.</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>2. Цели обработки персональных данных</h2>
+        <ul>
+          <li>оформление и подтверждение онлайн-записи;</li>
+          <li>обратная связь с клиентом по вопросам записи и оказания услуг;</li>
+          <li>ведение клиентской истории и внутренних записей салона;</li>
+          <li>исполнение требований законодательства Российской Федерации;</li>
+          <li>улучшение работы сайта, аналитика, защита от ошибок и злоупотреблений.</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>3. Правовые основания обработки</h2>
+        <ul>
+          <li>согласие субъекта персональных данных;</li>
+          <li>заключение и исполнение договора на оказание услуг;</li>
+          <li>исполнение обязанностей, установленных законодательством РФ.</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>4. Порядок и условия обработки</h2>
+        <p>
+          Обработка персональных данных осуществляется с использованием средств автоматизации и без
+          их использования. Оператор принимает необходимые правовые, организационные и технические
+          меры для защиты персональных данных от неправомерного или случайного доступа, изменения,
+          раскрытия, блокирования, копирования, предоставления и иных неправомерных действий.
+        </p>
+        <p>
+          Персональные данные обрабатываются только в объеме, необходимом для достижения заявленных
+          целей. Доступ к ним предоставляется только уполномоченным лицам и подрядчикам, участвующим
+          в работе сайта, CRM, телефонии, рассылок и аналитики, в пределах заключенных договоров и
+          поручений на обработку.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>5. Хранение и локализация</h2>
+        <p>
+          При сборе персональных данных граждан Российской Федерации их запись, систематизация,
+          накопление, хранение, уточнение и извлечение должны осуществляться с использованием баз
+          данных, находящихся на территории Российской Федерации.
+        </p>
+        <p>
+          Сроки хранения определяются целью обработки и требованиями закона. После достижения целей
+          обработки или отзыва согласия персональные данные подлежат удалению либо обезличиванию,
+          если иное не требуется по закону.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>6. Права субъекта персональных данных</h2>
+        <ul>
+          <li>получать сведения об обработке своих персональных данных;</li>
+          <li>требовать уточнения, блокирования или уничтожения персональных данных;</li>
+          <li>отозвать согласие на обработку персональных данных;</li>
+          <li>обжаловать действия оператора в Роскомнадзор или в судебном порядке.</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>7. Порядок обращения</h2>
+        <p>
+          Для реализации своих прав субъект персональных данных может направить обращение оператору
+          по контактам, указанным в настоящей политике и в разделе контактов сайта.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>8. Использование cookie и аналитики</h2>
+        <p>
+          Сайт может использовать cookie, технические логи и сервисы аналитики для корректной работы,
+          улучшения интерфейса и оценки посещаемости. Информация об использовании таких сервисов
+          публикуется на сайте в составе соответствующих правовых документов и уведомлений.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>9. Заключительные положения</h2>
+        <p>
+          Оператор вправе вносить изменения в настоящую политику. Актуальная версия документа всегда
+          должна быть доступна по постоянному адресу на сайте.
+        </p>
+      </section>
+    </div>
+  </main>
+  <script>
+    (function () {
+      const phoneNode = document.getElementById("legal-contact-phone");
+      const emailNode = document.getElementById("legal-contact-email");
+      const emailFallbackNode = document.getElementById("legal-contact-email-fallback");
+      const normalizeText = (value) => (value == null ? "" : String(value).trim());
+      const normalizePhone = (value) => normalizeText(value).replace(/[^\d+]/g, "");
+
+      fetch("/api/home/public", {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((payload) => {
+          const home = payload && payload.site && payload.site.home ? payload.site.home : {};
+          const phone = normalizeText(home.phone);
+          const email = normalizeText(home.email);
+
+          if (phone && phoneNode) {
+            phoneNode.textContent = phone;
+            phoneNode.href = `tel:${normalizePhone(phone)}`;
+          }
+
+          if (email && emailNode) {
+            emailNode.hidden = false;
+            emailNode.textContent = email;
+            emailNode.href = `mailto:${email}`;
+            if (emailFallbackNode) emailFallbackNode.hidden = true;
+          }
+        })
+        .catch(() => {});
+    })();
+  </script>
+</body>
+</html>

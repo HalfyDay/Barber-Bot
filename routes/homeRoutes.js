@@ -96,10 +96,17 @@ const registerHomeRoutes = ({
       const phoneInput = normalizeText(req.body?.phone);
       const safePhone = normalizePhone(phoneInput);
       const password = normalizeText(req.body?.password);
+      const privacyConsentAccepted = req.body?.privacyConsentAccepted === true;
       if (!safePhone || !password) {
         return res.status(400).json({
           success: false,
           message: "Введите номер телефона и пароль.",
+        });
+      }
+      if (!privacyConsentAccepted) {
+        return res.status(400).json({
+          success: false,
+          message: "Подтвердите согласие на обработку персональных данных.",
         });
       }
       const displayName = normalizeText(req.body?.displayName) || safePhone;
@@ -152,6 +159,12 @@ const registerHomeRoutes = ({
       await applyReferralCode({
         userId: user.id,
         referralCode: req.body?.referralCode,
+      });
+      await updateUserMeta(user.id, {
+        privacyConsentAcceptedAt: now,
+        privacyConsentIp: normalizeText(req.ip),
+        privacyConsentSource: "home-register",
+        privacyConsentVersion: "2026-04-02",
       });
       const identity = buildHomeIdentity({
         userId: user.id,
@@ -462,6 +475,7 @@ const registerHomeRoutes = ({
     const displayNameInput = normalizeText(req.body?.displayName);
     const phoneInput = normalizeText(req.body?.phone);
     const password = normalizeText(req.body?.password);
+    const privacyConsentAccepted = req.body?.privacyConsentAccepted === true;
     if (!requestId || !password) {
       return res.status(400).json({
         success: false,
@@ -540,6 +554,15 @@ const registerHomeRoutes = ({
           message: "Этот номер уже используется другим аккаунтом.",
         });
       }
+      if (!privacyConsentAccepted) {
+        const existingConsentMeta = userRow?.id ? await getUserMeta(userRow.id) : null;
+        if (!normalizeText(existingConsentMeta?.privacyConsentAcceptedAt)) {
+          return res.status(400).json({
+            success: false,
+            message: "Подтвердите согласие на обработку персональных данных.",
+          });
+        }
+      }
       const { hashHex, saltHex } = hashHomePassword(password);
       const now = new Date().toISOString();
       let persisted;
@@ -610,6 +633,17 @@ const registerHomeRoutes = ({
       await applyReferralCode({
         userId: user.id,
         referralCode: req.body?.referralCode,
+      });
+      const existingConsentMeta = await getUserMeta(user.id);
+      await updateUserMeta(user.id, {
+        privacyConsentAcceptedAt:
+          normalizeText(existingConsentMeta?.privacyConsentAcceptedAt) || now,
+        privacyConsentIp:
+          normalizeText(existingConsentMeta?.privacyConsentIp) || normalizeText(req.ip),
+        privacyConsentSource:
+          normalizeText(existingConsentMeta?.privacyConsentSource) || "home-telegram-register",
+        privacyConsentVersion:
+          normalizeText(existingConsentMeta?.privacyConsentVersion) || "2026-04-02",
       });
       const identity = buildHomeIdentity({
         userId: user.id,

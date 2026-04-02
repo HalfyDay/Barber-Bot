@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Условия оплаты и возврата | BrotherShop</title>
+  <meta
+    name="description"
+    content="Условия оплаты услуг, бонусной системы и возврата в BrotherShop."
+  />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #081010;
+      --surface: rgba(12, 18, 18, 0.9);
+      --surface-strong: rgba(18, 28, 28, 0.95);
+      --line: rgba(130, 167, 160, 0.18);
+      --text: #f2f7f6;
+      --muted: rgba(226, 232, 240, 0.78);
+      --accent: #79d9c9;
+      --accent-strong: #b6f3ea;
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+      --radius: 28px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Manrope", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(121, 217, 201, 0.18), transparent 28%),
+        radial-gradient(circle at top right, rgba(121, 217, 201, 0.1), transparent 20%),
+        linear-gradient(180deg, #050808 0%, #081010 46%, #091212 100%);
+    }
+
+    a { color: var(--accent); }
+    a:hover, a:focus-visible { color: var(--accent-strong); }
+
+    .page {
+      width: min(980px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    .hero, .section, .notice {
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 28px;
+      background:
+        linear-gradient(140deg, rgba(121, 217, 201, 0.12), rgba(12, 18, 18, 0.92)),
+        var(--surface);
+    }
+
+    .hero h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 1.02;
+    }
+
+    .hero p, .section p, .section li, .notice p {
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 1rem;
+    }
+
+    .hero p { margin: 0; max-width: 58rem; }
+    .grid { display: grid; gap: 18px; margin-top: 20px; }
+    .section { padding: 24px 26px; }
+    .section h2 { margin: 0 0 14px; font-size: 1.2rem; }
+    .section ul { margin: 0; padding-left: 20px; }
+    .notice { margin-top: 20px; padding: 20px 22px; background: var(--surface-strong); }
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 18px;
+      text-decoration: none;
+      font-weight: 700;
+      max-width: 100%;
+      padding: 12px 16px;
+      border-radius: 999px;
+      background: rgba(121, 217, 201, 0.12);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+    }
+
+    @media (max-width: 640px) {
+      .page { width: min(100% - 20px, 980px); padding-top: 20px; padding-bottom: 32px; }
+      .hero, .section, .notice { border-radius: 22px; }
+      .hero, .section { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <a class="back-link" href="/">← На сайт BrotherShop</a>
+
+    <section class="hero">
+      <h1>Условия оплаты и возврата</h1>
+      <p>
+        Настоящие условия применяются к услугам BrotherShop, оформляемым через сайт и при посещении
+        барбершопа. Документ также описывает использование бонусной системы BS.
+      </p>
+    </section>
+
+    <div class="grid">
+      <section class="section">
+        <h2>1. Оплата услуг</h2>
+        <ul>
+          <li>На сайте BrotherShop не используется онлайн-оплата.</li>
+          <li>Предоплата за запись не взимается.</li>
+          <li>Оплата услуг производится непосредственно при оказании услуги доступным в барбершопе способом.</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>2. Стоимость услуг</h2>
+        <ul>
+          <li>Актуальная стоимость услуг указывается в интерфейсе сайта и/или сообщается клиенту при записи.</li>
+          <li>Итоговая стоимость зависит от выбранной услуги, мастера и примененных бонусов, если такая возможность предусмотрена системой.</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>3. Бонусная система BS</h2>
+        <ul>
+          <li>В BrotherShop используется внутренняя бонусная система BS.</li>
+          <li>BS могут начисляться в рамках действующей программы лояльности и реферальной системы.</li>
+          <li>При использовании бонусов на записи применяется внутренний курс: 1 BS = 1 ₽.</li>
+          <li>BS не являются денежными средствами, электронными деньгами или самостоятельным платежным средством вне сервисов BrotherShop.</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>4. Возврат BS и отмена записи</h2>
+        <ul>
+          <li>Если при записи были использованы BS и запись была отменена в системе, использованные бонусы могут быть возвращены на бонусный баланс клиента.</li>
+          <li>Возврат BS осуществляется в объеме, предусмотренном внутренней логикой бонусной системы на момент отмены записи.</li>
+          <li>Поскольку предоплата и онлайн-оплата не используются, возврат денежных средств через сайт не осуществляется.</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>5. Возврат денежных средств</h2>
+        <p>
+          На сайте BrotherShop не принимаются платежи за услуги, поэтому отдельный возврат денежных
+          средств через сайт не производится.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>6. Контакты по вопросам оплаты</h2>
+        <p>
+          По вопросам стоимости услуг, применения бонусов BS и спорных ситуаций пользователь может
+          обратиться по контактам, указанным на сайте BrotherShop.
+        </p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

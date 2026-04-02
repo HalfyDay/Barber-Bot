@@ -259,6 +259,7 @@ const setNoStoreHeaders = (res) => {
   res.setHeader("Surrogate-Control", "no-store");
 };
 const PUBLIC_HOME_LANDING = path.join(__dirname, "home-page", "index.html");
+const LEGAL_DIR = path.join(__dirname, "legal");
 app.get("/", (req, res) => {
   setNoStoreHeaders(res);
   res.sendFile(PUBLIC_HOME_LANDING);
@@ -321,6 +322,13 @@ app.get("/login/login.css", (req, res) => {
 app.use(
   "/login",
   express.static(path.join(__dirname, "login"), {
+    setHeaders: setNoStoreHeaders,
+  }),
+);
+app.use(
+  "/legal",
+  express.static(LEGAL_DIR, {
+    extensions: ["html"],
     setHeaders: setNoStoreHeaders,
   }),
 );

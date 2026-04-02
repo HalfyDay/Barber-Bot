@@ -31,6 +31,7 @@
   const registerPhoneInput = document.getElementById("register-phone");
   const registerPasswordInput = document.getElementById("register-password");
   const registerPasswordRepeatInput = document.getElementById("register-password-repeat");
+  const registerPrivacyConsentInput = document.getElementById("register-privacy-consent");
   const registerSubmitButton = document.getElementById("register-submit");
   const loginPasswordInput = document.getElementById("login-password");
   const togglePasswordButton = document.getElementById("toggle-password");
@@ -54,6 +55,7 @@
     registerPhoneInput &&
     registerPasswordInput &&
     registerPasswordRepeatInput &&
+    registerPrivacyConsentInput &&
     registerSubmitButton &&
     loginPasswordInput &&
     togglePasswordButton &&
@@ -586,6 +588,7 @@
     );
     const password = normalizeText(registerPasswordInput?.value);
     const passwordRepeat = normalizeText(registerPasswordRepeatInput?.value);
+    const privacyConsentAccepted = registerPrivacyConsentInput?.checked === true;
     const referralCode = getPendingReferralCode();
 
     if (!fullName || !isPhoneComplete(registerPhoneInput.value) || !phone || !password || !passwordRepeat) {
@@ -599,11 +602,23 @@
       return;
     }
 
+    if (!privacyConsentAccepted) {
+      setStatus("Подтвердите согласие на обработку персональных данных.", "error");
+      setPending(registerForm, false);
+      return;
+    }
+
     try {
       const response = await fetch(`${HOME_API_BASE_URL}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, password, displayName: fullName, referralCode }),
+        body: JSON.stringify({
+          phone,
+          password,
+          displayName: fullName,
+          referralCode,
+          privacyConsentAccepted,
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.success || !payload?.token || !payload?.user) {
@@ -637,6 +652,7 @@
     );
     const password = normalizeText(registerPasswordInput?.value);
     const passwordRepeat = normalizeText(registerPasswordRepeatInput?.value);
+    const privacyConsentAccepted = registerPrivacyConsentInput?.checked === true;
     const referralCode = getPendingReferralCode();
 
     if (!password || !passwordRepeat) {
@@ -646,6 +662,12 @@
     }
     if (password !== passwordRepeat) {
       setStatus("Пароли не совпадают.", "error");
+      setPending(registerForm, false);
+      return;
+    }
+
+    if (!privacyConsentAccepted) {
+      setStatus("Подтвердите согласие на обработку персональных данных.", "error");
       setPending(registerForm, false);
       return;
     }
@@ -675,6 +697,7 @@
             phone,
             displayName: telegramSetupState.mode === "register" ? fullName : fullName || "",
             referralCode,
+            privacyConsentAccepted,
           }),
         });
         const payload = await response.json().catch(() => ({}));

@@ -2039,6 +2039,26 @@
           ${!normalizeText(siteHome.telegramUrl) && !normalizeText(siteHome.whatsappUrl) && !normalizeText(siteHome.email) ? `<p class="app-note">Сейчас доступен звонок по телефону. Остальные способы связи можно добавить в CRM.</p>` : ""}
         </article>
         </section>
+        <article class="content-card home-legal-card">
+          <div class="section-head">
+            <div>
+              <div class="section-eyebrow">Правовая информация</div>
+            </div>
+          </div>
+          <div class="home-legal-copy">
+            <details class="home-legal-disclosure">
+              <summary class="home-legal-summary">
+                Краткая правовая информация и документы сайта
+              </summary>
+              <p class="section-text home-legal-text">
+                На сайте действует
+                <a href="/legal/">страница с правовой информацией</a>,
+                где собраны документы по обработке персональных данных, правилам записи, оплате и использованию cookie.
+                Владелец: Гуторов Тимур Сергеевич, плательщик налога на профессиональный доход. ИНН: 380415073157.
+              </p>
+            </details>
+          </div>
+        </article>
         <article class="content-card home-barbers-card">
           <div class="section-head">
             <div>

@@ -408,6 +408,10 @@ const createHomeClientStoreService = ({
       referralCode: normalizeText(input.referralCode) || buildReferralCode(),
       referredByUserId: normalizeText(input.referredByUserId) || null,
       bookingNotificationsEnabled,
+      privacyConsentAcceptedAt: toIsoString(input.privacyConsentAcceptedAt),
+      privacyConsentIp: normalizeText(input.privacyConsentIp) || "",
+      privacyConsentSource: normalizeText(input.privacyConsentSource) || "",
+      privacyConsentVersion: normalizeText(input.privacyConsentVersion) || "",
       transactions,
     };
   };

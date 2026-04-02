@@ -266,6 +266,35 @@ body.authenticated .home-root {
   transition: background-color 9999s ease-out 0s;
 }
 
+.consent-check {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  margin: 8px 2px 2px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.consent-check input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.consent-check a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.consent-check a:hover,
+.consent-check a:focus-visible {
+  color: #b6f3ea;
+  text-decoration: underline;
+}
+
 .icon {
   position: absolute;
   left: 14px;

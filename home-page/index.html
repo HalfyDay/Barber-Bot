@@ -100,17 +100,110 @@
       ]
     }
   </script>
+  <style>
+    .cookie-notice {
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      z-index: 30;
+      display: none;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    .cookie-notice.is-visible {
+      display: flex;
+    }
+
+    .cookie-notice__card {
+      width: min(640px, 100%);
+      padding: 14px 16px;
+      border-radius: 22px;
+      background: rgba(12, 18, 18, 0.92);
+      box-shadow: 0 24px 50px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(16px);
+      pointer-events: auto;
+    }
+
+    .cookie-notice__text {
+      margin: 0;
+      color: rgba(226, 232, 240, 0.8);
+      font: 500 0.9rem/1.55 "Manrope", sans-serif;
+    }
+
+    .cookie-notice__text a {
+      color: #79d9c9;
+      text-decoration: none;
+    }
+
+    .cookie-notice__text a:hover,
+    .cookie-notice__text a:focus-visible {
+      color: #b6f3ea;
+      text-decoration: underline;
+    }
+
+    .cookie-notice__actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 10px;
+    }
+
+    .cookie-notice__button {
+      min-height: 38px;
+      padding: 0 14px;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(121, 217, 201, 0.16);
+      color: #dff8f3;
+      font: 700 0.88rem/1 "Manrope", sans-serif;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body data-page="public-home">
   <main id="app"></main>
+  <div class="cookie-notice" id="cookie-notice" aria-live="polite">
+    <div class="cookie-notice__card">
+      <p class="cookie-notice__text">
+        Сайт использует технические cookie, localStorage и sessionStorage для входа в аккаунт и корректной работы сервиса.
+        Подробнее:
+        <a href="/legal/cookies">информация о cookie и локальном хранении данных</a>.
+      </p>
+      <div class="cookie-notice__actions">
+        <button class="cookie-notice__button" id="cookie-notice-accept" type="button">Понятно</button>
+      </div>
+    </div>
+  </div>
   <noscript>
     <section>
       <h1>BrotherShop, барбершоп в Братске</h1>
       <p>Барбершоп BrotherShop в Центральном районе Братска. Мужские стрижки, оформление бороды и запись онлайн.</p>
       <p>Адрес: улица Гагарина, 10, 1 этаж, Центральный район, Братск, Иркутская область, 665717.</p>
       <p>Телефон: +7 964 659-92-96</p>
+      <p><a href="/legal/privacy">Политика обработки персональных данных</a></p>
     </section>
   </noscript>
+  <script>
+    (function () {
+      const storageKey = "brothershop-cookie-notice-accepted";
+      const notice = document.getElementById("cookie-notice");
+      const acceptButton = document.getElementById("cookie-notice-accept");
+      if (!notice || !acceptButton) return;
+      try {
+        if (window.localStorage && window.localStorage.getItem(storageKey) === "1") {
+          return;
+        }
+      } catch {}
+      notice.classList.add("is-visible");
+      acceptButton.addEventListener("click", function () {
+        try {
+          if (window.localStorage) window.localStorage.setItem(storageKey, "1");
+        } catch {}
+        notice.classList.remove("is-visible");
+      });
+    })();
+  </script>
   <script src="/client-app.js" defer></script>
 </body>
 </html>

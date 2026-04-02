@@ -41,8 +41,10 @@
     homeBarberTransitionStage: "idle",
     activeBarberProfileId: "",
     referralTransferDraft: null,
+    referralTransferError: "",
     referralQuickAmount: null,
     referralLinkCopied: false,
+    referralSection: "overview",
     transferHistoryFilter: "all",
     profileHistoryFilter: "all",
     profileAvatarPanelState: "closed",
@@ -87,6 +89,14 @@
   let delegatedHandlersBound = false;
   let sitePresenceTimer = null;
   let promoMarqueeAutoScroll = null;
+  const isEditableTarget = (target) => {
+    if (!(target instanceof HTMLElement)) return false;
+    return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+  };
+  const getProtectedAssetTarget = (target) => {
+    if (!(target instanceof Element)) return null;
+    return target.closest("a, img, picture, svg, video, .profile-avatar");
+  };
   let homeBarberRotationTimer = null;
   let homeBarberTransitionSwapTimer = null;
   let homeBarberTransitionResetTimer = null;
@@ -307,6 +317,51 @@
     return html;
   };
   const normalizePhone = (value) => normalizeText(value).replace(/[^\d+]/g, "");
+  const getBarberRatingValue = (barber = {}) => {
+    const parsed = Number.parseFloat(normalizeText(barber?.rating).replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const getSortedBookingBarbers = () => {
+    const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+    return [...barbers].sort((left, right) => {
+      const ratingDiff = getBarberRatingValue(right) - getBarberRatingValue(left);
+      if (Math.abs(ratingDiff) > 0.001) return ratingDiff;
+      return normalizeText(left?.name).localeCompare(normalizeText(right?.name), "ru");
+    });
+  };
+  const getBookingRouteBarberId = (location = window.location) => {
+    const pathname = normalizeText(location?.pathname).replace(/\/+$/, "") || "/";
+    if (pathname !== "/booking") return "";
+    try {
+      const params = new URLSearchParams(location?.search || "");
+      return normalizeText(params.get("barber"));
+    } catch {
+      return "";
+    }
+  };
+  const buildBookingBarberHref = (barberId = "") => {
+    const safeBarberId = normalizeText(barberId);
+    if (!safeBarberId) return "/booking/";
+    return `/booking/?barber=${encodeURIComponent(safeBarberId)}`;
+  };
+  const formatBookingTimeRange = (startTime = "", endTime = "") => {
+    const start = normalizeText(startTime);
+    const end = normalizeText(endTime);
+    if (start && end) return `${start} - ${end}`;
+    return start || end || "";
+  };
+  const getBookingSelectedTimeSlot = () => {
+    if (!state.booking.selectedTime) return null;
+    const bookingTimes = Array.isArray(state.booking.times) ? state.booking.times : [];
+    return bookingTimes.find((time) => normalizeText(time?.start) === normalizeText(state.booking.selectedTime)) || null;
+  };
+  const getBookingSelectedTimeLabel = () => {
+    const selectedSlot = getBookingSelectedTimeSlot();
+    if (selectedSlot) {
+      return normalizeText(selectedSlot.label) || formatBookingTimeRange(selectedSlot.start, selectedSlot.end);
+    }
+    return normalizeText(state.booking.selectedTime);
+  };
   const buildReferralQrPayload = (user = {}) => {
     const phone = normalizePhone(user.phone || "");
     if (!phone) return "";
@@ -668,7 +723,7 @@
     }
   };
   const triggerHomeBarberRotationStep = async (direction = 1) => {
-    const activeBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+    const activeBarbers = getSortedBookingBarbers();
     if (state.currentPage !== "home" || activeBarbers.length <= 1) {
       state.homeBarberIncomingIndex = -1;
       state.homeBarberTransitionStage = "idle";
@@ -697,7 +752,7 @@
     state.homeBarberTransitionStage = "is-transitioning";
     updateHomeBarberRotationDom();
     homeBarberTransitionSwapTimer = window.setTimeout(() => {
-      const currentBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+      const currentBarbers = getSortedBookingBarbers();
       if (state.currentPage !== "home" || currentBarbers.length <= 1) {
         state.homeBarberIncomingIndex = -1;
         state.homeBarberTransitionStage = "idle";
@@ -708,7 +763,7 @@
       state.homeBarberIncomingIndex = -1;
       state.homeBarberTransitionStage = "idle";
       updateHomeBarberRotationDom();
-    }, 900);
+    }, 420);
   };
   const setupHomeBarberRotation = () => {
     if (state.currentPage !== "home") {
@@ -718,7 +773,7 @@
       state.homeBarberTransitionStage = "idle";
       return;
     }
-    const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+    const barbers = getSortedBookingBarbers();
     if (barbers.length <= 1) {
       stopHomeBarberRotation();
       clearHomeBarberTransitionTimers();
@@ -735,7 +790,7 @@
         return;
       }
       if (state.homeBarberTransitionStage !== "idle") return;
-      const activeBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+      const activeBarbers = getSortedBookingBarbers();
       if (activeBarbers.length <= 1) {
         stopHomeBarberRotation();
         clearHomeBarberTransitionTimers();
@@ -1586,6 +1641,169 @@
     </div>
   `;
 
+  const buildTransferBsSheet = () => {
+    const draft = state.referralTransferDraft || {};
+    const selectedQuickAmount = Number(draft.amountBs || state.referralQuickAmount || 0);
+    const currentBalance = Number(state.payload?.referral?.bsBalance || 0);
+    const transferAmount = Math.max(0, Number(draft.amountBs || 0));
+    const balanceAfterTransfer = Math.max(0, currentBalance - transferAmount);
+    const transferError = normalizeText(state.referralTransferError);
+    const scanTransferAction = !IS_DESKTOP_SHEET_DISMISS
+      ? `<button
+          class="referral-wallet-action referral-wallet-action-scan referral-transfer-bank-scan-action"
+          type="button"
+          data-action="open-sheet"
+          data-sheet="scan-transfer-qr"
+          aria-label="Сканировать QR"
+          title="Сканировать QR"
+        >${iconMarkup("scan")}</button>`
+      : "";
+    return `<form class="referral-transfer-bank-sheet" id="referral-transfer-form">
+      <section class="referral-transfer-bank-hero">
+        <div class="referral-transfer-bank-hero-copy">
+          <span class="field-label">Баланс BS</span>
+          <strong>${currentBalance} BS</strong>
+        </div>
+      </section>
+      ${transferError ? `<div class="referral-transfer-bank-error" role="alert">${transferError}</div>` : ""}
+      <section class="referral-transfer-bank-section">
+        <div class="referral-transfer-bank-section-head">
+          <span class="field-label">Получатель</span>
+          <span class="referral-transfer-bank-section-note">Найдём клиента по номеру</span>
+        </div>
+        <div class="referral-transfer-bank-contact-row">
+          <label class="field referral-transfer-bank-field referral-transfer-bank-contact-field">
+            <input type="tel" inputmode="tel" autocomplete="tel" name="targetPhone" placeholder="+7 (999) 123-45-67" value="${formatPhoneInputValue(draft.targetPhone)}" required />
+          </label>
+          ${scanTransferAction}
+        </div>
+      </section>
+      <section class="referral-transfer-bank-section">
+        <div class="referral-transfer-bank-section-head">
+          <span class="field-label">Сумма перевода</span>
+          <span class="referral-transfer-bank-section-note">Без комиссии</span>
+        </div>
+        <label class="field referral-transfer-bank-field referral-transfer-bank-amount-field">
+          <input type="number" name="amountBs" min="1" step="1" value="${normalizeText(draft.amountBs)}" placeholder="0" required />
+          <span class="referral-transfer-bank-currency">BS</span>
+        </label>
+        <div class="referral-transfer-bank-presets">
+          ${REFERRAL_TRANSFER_QUICK_AMOUNTS
+            .map(
+              (amount) => `
+                <button
+                  class="referral-transfer-bank-preset ${selectedQuickAmount === amount ? "is-selected" : ""}"
+                  type="button"
+                  data-action="transfer-preset"
+                  data-amount="${amount}"
+                >
+                  ${amount} BS
+                </button>`,
+            )
+            .join("")}
+        </div>
+      </section>
+      <section class="referral-transfer-bank-section">
+        <div class="referral-transfer-bank-section-head">
+          <span class="field-label">Комментарий</span>
+          <span class="referral-transfer-bank-section-note">Необязательно</span>
+        </div>
+        <label class="field referral-transfer-bank-field">
+          <input name="comment" placeholder="Например: спасибо" value="${normalizeText(draft.comment)}" />
+        </label>
+      </section>
+      <section class="referral-transfer-bank-summary">
+        <div class="referral-transfer-bank-summary-row">
+          <span>Сейчас доступно</span>
+          <strong id="transfer-bs-current-balance">${currentBalance} BS</strong>
+        </div>
+        <div class="referral-transfer-bank-summary-row">
+          <span>После перевода</span>
+          <strong id="transfer-bs-balance-after">${balanceAfterTransfer} BS</strong>
+        </div>
+      </section>
+      <div class="referral-transfer-bank-actions">
+        <button class="primary-btn referral-transfer-bank-submit" type="submit">Продолжить</button>
+        <button class="ghost-btn referral-transfer-bank-cancel" type="button" data-action="close-sheet">Отмена</button>
+      </div>
+    </form>`;
+  };
+  const reopenTransferBsSheetWithError = (errorMessage) => {
+    state.referralTransferError = normalizeText(errorMessage);
+    openSheet("Перевести BS", buildTransferBsSheet(), "", "sheet-wide transfer-bs-sheet", { syncHistory: false });
+  };
+  const refreshTransferBsSheet = () => {
+    state.referralTransferError = "";
+    openSheet("Перевести BS", buildTransferBsSheet(), "", "sheet-wide transfer-bs-sheet", { syncHistory: false });
+  };
+  const syncTransferBsAmountUi = (form) => {
+    if (!form) return;
+    const amountInput = form.elements?.amountBs;
+    const normalizedAmount = Math.max(0, Number(amountInput?.value || 0));
+    const matchedPreset = REFERRAL_TRANSFER_QUICK_AMOUNTS.find((amount) => amount === normalizedAmount) || null;
+    state.referralQuickAmount = matchedPreset;
+    state.referralTransferDraft = {
+      ...(state.referralTransferDraft || {}),
+      amountBs: normalizedAmount,
+    };
+    form.querySelectorAll(".referral-transfer-bank-preset[data-amount]").forEach((button) => {
+      const isSelected = Number(button.dataset.amount || 0) === matchedPreset;
+      button.classList.toggle("is-selected", isSelected);
+    });
+    const balanceAfterNode = queryById(form, "transfer-bs-balance-after");
+    if (balanceAfterNode) {
+      const currentBalance = Number(state.payload?.referral?.bsBalance || 0);
+      balanceAfterNode.textContent = `${Math.max(0, currentBalance - normalizedAmount)} BS`;
+    }
+  };
+  const buildConfirmTransferBsSheet = () => {
+    const draft = state.referralTransferDraft || {};
+    const currentBalance = Number(state.payload?.referral?.bsBalance || 0);
+    const transferAmount = Math.max(0, Number(draft.amountBs || 0));
+    const balanceAfterTransfer = Math.max(0, currentBalance - transferAmount);
+    return `<div class="referral-transfer-bank-sheet referral-transfer-bank-confirm-sheet">
+      <section class="referral-transfer-bank-hero">
+        <div class="referral-transfer-bank-hero-copy">
+          <span class="field-label">Подтверждение</span>
+          <strong>${transferAmount} BS</strong>
+          <p class="subtitle">Проверьте данные получателя перед отправкой. Перевод зачислится сразу.</p>
+        </div>
+      </section>
+      <section class="referral-transfer-bank-section">
+        <div class="referral-transfer-bank-section-head">
+          <span class="field-label">Получатель</span>
+        </div>
+        <div class="referral-transfer-bank-counterparty">
+          <div class="referral-transfer-bank-counterparty-avatar">
+            ${avatarMarkup({ displayName: draft.recipientShortName || draft.fullName || "Клиент" }, 56)}
+          </div>
+          <div class="referral-transfer-bank-counterparty-copy">
+            <strong>${normalizeText(draft.recipientShortName || "Не найден")}</strong>
+            <span>${draft.targetPhone ? formatPhone(draft.targetPhone) : ""}</span>
+          </div>
+        </div>
+      </section>
+      <section class="referral-transfer-bank-summary">
+        <div class="referral-transfer-bank-summary-row">
+          <span>Сумма перевода</span>
+          <strong>${transferAmount} BS</strong>
+        </div>
+        <div class="referral-transfer-bank-summary-row">
+          <span>Комментарий</span>
+          <strong>${normalizeText(draft.comment) || "Без комментария"}</strong>
+        </div>
+        <div class="referral-transfer-bank-summary-row">
+          <span>После перевода</span>
+          <strong>${balanceAfterTransfer} BS</strong>
+        </div>
+      </section>
+      <div class="referral-transfer-bank-actions">
+        <button class="primary-btn referral-transfer-bank-submit" type="button" data-action="confirm-referral-transfer">Отправить</button>
+        <button class="ghost-btn referral-transfer-bank-cancel" type="button" data-action="open-sheet" data-sheet="transfer-bs">Назад</button>
+      </div>
+    </div>`;
+  };
+
   const buildManageBookingSheet = (appointment) => {
     const safeAppointment = appointment || {};
     const etaLabel = formatAppointmentEta(safeAppointment.date, safeAppointment.time);
@@ -1612,7 +1830,7 @@
               </div>
               <div class="appointment-meta appointment-meta-time">
                 <span class="field-label">${appointmentMetaIcon("clock")}Время</span>
-                <strong>${normalizeText(safeAppointment.time || "Время уточняется")}</strong>
+                <strong>${normalizeText(safeAppointment.timeLabel || safeAppointment.time || "Время уточняется")}</strong>
               </div>
             </div>
             <div class="appointment-barber manage-booking-barber">
@@ -1898,7 +2116,7 @@
     if (state.currentPage !== "home") return;
     const rotationRoot = ROOT.querySelector("[data-home-barber-rotation-root]");
     if (!rotationRoot) return;
-    const homeBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+    const homeBarbers = getSortedBookingBarbers();
     const html = renderHomeBarberRotation(homeBarbers);
     if (rotationRoot.innerHTML === html) return;
     rotationRoot.innerHTML = html;
@@ -1908,7 +2126,7 @@
   const renderHomePage = () => {
     const siteHome = state.payload?.site?.home || {};
     const activeAppointments = Array.isArray(state.payload?.booking?.activeAppointments) ? state.payload.booking.activeAppointments : [];
-    const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+    const barbers = getSortedBookingBarbers();
     return memoizeRenderedFragment("page-home", [siteHome, activeAppointments, barbers], () => {
       const promos = Array.isArray(siteHome.promos) ? siteHome.promos : [];
       const promoLaneItems = (() => {
@@ -1984,7 +2202,7 @@
                 </div>
                 <div class="appointment-meta appointment-meta-time">
                   <span class="field-label">${appointmentMetaIcon("clock")}Время</span>
-                  <strong>${nextAppointment ? normalizeText(nextAppointment.time) : "Выберите слот"}</strong>
+                  <strong>${nextAppointment ? normalizeText(nextAppointment.timeLabel || nextAppointment.time) : "Выберите слот"}</strong>
                 </div>
               </div>
               <div class="appointment-barber">
@@ -2107,7 +2325,7 @@
     const transferRecipients = Array.isArray(referral.recentTransferRecipients) ? referral.recentTransferRecipients : [];
     const levels = Array.isArray(referralProgram.levels) ? referralProgram.levels : [];
     const operations = Array.isArray(referral.operations) ? referral.operations : [];
-    return memoizeRenderedFragment("page-referral", [referral, state.transferHistoryFilter, state.referralLinkCopied], () => {
+    return memoizeRenderedFragment("page-referral", [referral, state.transferHistoryFilter, state.referralLinkCopied, state.referralSection], () => {
       const referralPreview = referrals.slice(0, 4);
       const { transferOut: transferOutOperations, transferIn: transferInOperations } = getReferralOperationGroups(operations);
       const filteredBsActivity = getFilteredReferralActivity(operations, state.transferHistoryFilter);
@@ -2120,6 +2338,13 @@
       const nextReferralTarget = Math.max(0, Number(referral.scale?.next || 0));
       const currentReferralCount = Math.max(0, Number(referral.program?.activeReferralsCount || referral.stats?.green || referral.scale?.current || 0));
       const referralLevelName = getReferralLevelName(referralProgram, currentReferralCount);
+      const isStatsSection = state.referralSection === "stats";
+      const activeReferralsCount = referrals.filter((item) => normalizeText(item.color) === "green").length;
+      const warmReferralsCount = referrals.filter((item) => normalizeText(item.color) === "yellow").length;
+      const inactiveReferralsCount = referrals.filter((item) => normalizeText(item.color) === "red" || !["green", "yellow"].includes(normalizeText(item.color))).length;
+      const totalReferralVisits = referrals.reduce((total, item) => total + Math.max(0, Number(item.completedVisits) || 0), 0);
+      const totalReferralBs = referrals.reduce((total, item) => total + Math.max(0, Number(item.rewardedVisits) || 0), 0);
+      const networkCoverage = referrals.length ? Math.round((activeReferralsCount / referrals.length) * 100) : 0;
       const now = new Date();
       const topReferralThisMonth =
         referrals
@@ -2166,6 +2391,81 @@
             </div>
           </div>
         </article>
+        <div class="filter-row referral-section-tabs">
+          <button class="nav-pill ${!isStatsSection ? "active" : ""}" type="button" data-action="set-referral-section" data-section="overview">Обзор</button>
+          <button class="nav-pill ${isStatsSection ? "active" : ""}" type="button" data-action="set-referral-section" data-section="stats">Статистика</button>
+        </div>
+        ${isStatsSection
+          ? `
+        <div class="referral-section-panel referral-stats-stack">
+        <article class="list-card referral-insights-card">
+          <div class="section-head">
+            <div>
+              <div class="section-eyebrow">Статистика переводов</div>
+              <h2 class="section-title">BS</h2>
+            </div>
+          </div>
+          <div class="referral-insights-grid">
+            <div class="referral-insight-tile">
+              <span class="field-label">Отправлено</span>
+              <strong>${sentTotal} BS</strong>
+              <span class="subtitle">${outgoingTransfers} переводов</span>
+            </div>
+            <div class="referral-insight-tile">
+              <span class="field-label">Получено</span>
+              <strong>${receivedTotal} BS</strong>
+              <span class="subtitle">${transferInOperations.length} входящих</span>
+            </div>
+            <div class="referral-insight-tile">
+              <span class="field-label">Средний перевод</span>
+              <strong>${averageTransfer} BS</strong>
+              <span class="subtitle">${transferRecipients.length} получателей</span>
+            </div>
+          </div>
+        </article>
+        <article class="list-card referral-insights-card">
+          <div class="section-head">
+            <div>
+              <div class="section-eyebrow">Реферальная сеть</div>
+              <h2 class="section-title">Рефералы</h2>
+            </div>
+          </div>
+          <div class="referral-insights-grid">
+            <div class="referral-insight-tile">
+              <span class="field-label">Всего рефералов</span>
+              <strong>${referrals.length}</strong>
+              <span class="subtitle">Текущий уровень: ${referralLevelName}</span>
+            </div>
+            <div class="referral-insight-tile">
+              <span class="field-label">Активные</span>
+              <strong>${activeReferralsCount}</strong>
+              <span class="subtitle">${networkCoverage}% сети активны</span>
+            </div>
+            <div class="referral-insight-tile">
+              <span class="field-label">Редкие</span>
+              <strong>${warmReferralsCount}</strong>
+              <span class="subtitle">Нужен новый визит</span>
+            </div>
+            <div class="referral-insight-tile">
+              <span class="field-label">Неактивные</span>
+              <strong>${inactiveReferralsCount}</strong>
+              <span class="subtitle">Без текущей активности</span>
+            </div>
+            <div class="referral-insight-tile">
+              <span class="field-label">Всего визитов</span>
+              <strong>${totalReferralVisits}</strong>
+              <span class="subtitle">По всем рефералам</span>
+            </div>
+            <div class="referral-insight-tile">
+              <span class="field-label">Принесли BS</span>
+              <strong>${totalReferralBs}</strong>
+              <span class="subtitle">${topReferralThisMonth ? `Лидер: ${normalizeText(topReferralThisMonth.fullName)}` : "Лидера пока нет"}</span>
+            </div>
+          </div>
+        </article>
+        </div>`
+          : `
+        <div class="referral-section-panel referral-overview-stack">
         <article class="list-card referral-transfer-card">
           <div class="section-head">
             <div>
@@ -2195,39 +2495,22 @@
                         data-name="${normalizeText(recipient.fullName)}"
                         data-short-name="${normalizeText(recipient.shortName || recipient.fullName)}"
                       >
-                        ${avatarMarkup({ displayName: recipient.shortName || recipient.fullName }, 56)}
+                        ${avatarMarkup({ avatarUrl: recipient.avatarUrl, displayName: recipient.shortName || recipient.fullName }, 56)}
                         <span class="referral-transfer-recipient-name">${normalizeText(recipient.shortName || recipient.fullName)}</span>
                       </button>`,
                   )
                   .join("")}
                 </div>
                 <button class="ghost-btn icon-only-btn referral-transfer-scroll-btn referral-transfer-scroll-btn-next" type="button" data-action="scroll-transfer-recipients" data-direction="next" aria-label="Прокрутить получателей вправо">${iconMarkup("chevron-right")}</button>
-              </div>`
+              </div>` 
             : ``}
-          <div class="referral-inline-insights">
-            <div class="referral-inline-insight">
-              <span class="field-label">Отправлено</span>
-              <strong>${sentTotal} BS</strong>
-              <span class="subtitle">${outgoingTransfers} переводов</span>
-            </div>
-            <div class="referral-inline-insight">
-              <span class="field-label">Получено</span>
-              <strong>${receivedTotal} BS</strong>
-              <span class="subtitle">${transferInOperations.length} входящих</span>
-            </div>
-            <div class="referral-inline-insight">
-              <span class="field-label">Средний перевод</span>
-              <strong>${averageTransfer} BS</strong>
-              <span class="subtitle">${transferRecipients.length} получателей</span>
-            </div>
-          </div>
         </article>
         <article class="list-card referral-transfer-history-card">
           <div class="referral-subsection">
             <div class="section-head">
               <div>
                 <div class="section-eyebrow">История переводов</div>
-                <h2 class="section-title">Последние движения BS</h2>
+                <h2 class="section-title">Последние переводы BS</h2>
               </div>
               <span class="status-badge">${filteredBsActivity.length}</span>
             </div>
@@ -2313,35 +2596,72 @@
           </div>
           <div class="profile-history-more referral-panel-more"><button class="ghost-btn history-more-btn" type="button" data-action="open-sheet" data-sheet="referrals">Показать все</button></div>
         </article>
+        </div>
+        `}
       </section>
     `;
     });
+  };
+  const refreshReferralSectionDom = () => {
+    if (state.currentPage !== "referral") return false;
+    const appHost = ROOT.querySelector("[data-render-host='app']");
+    const currentPageRoot = appHost?.querySelector(".referral-page");
+    if (!currentPageRoot) return false;
+    const template = document.createElement("template");
+    template.innerHTML = renderReferralPage().trim();
+    const nextPageRoot = template.content.querySelector(".referral-page");
+    const nextTabs = nextPageRoot?.querySelector(".referral-section-tabs");
+    const nextPanel = nextPageRoot?.querySelector(".referral-section-panel");
+    const currentTabs = currentPageRoot.querySelector(".referral-section-tabs");
+    const currentPanel = currentPageRoot.querySelector(".referral-section-panel");
+    if (!nextTabs || !nextPanel || !currentTabs || !currentPanel) return false;
+    currentTabs.replaceWith(nextTabs);
+    currentPanel.replaceWith(nextPanel);
+    return true;
   };
 
   const buildQuickTransferSheet = (recipient = {}) => {
     const fullName = normalizeText(recipient.fullName || recipient.shortName || "Клиент");
     const shortName = normalizeText(recipient.shortName || recipient.fullName || "Клиент");
     const phone = normalizeText(recipient.phone || recipient.targetPhone);
+    const currentBalance = Number(state.payload?.referral?.bsBalance || 0);
     return `
-      <form class="referral-quick-transfer" id="quick-transfer-form" data-phone="${phone}" data-name="${fullName}" data-short-name="${shortName}">
-        <div class="referral-transfer-confirm-card referral-quick-transfer-recipient">
-          <div class="referral-quick-transfer-user">
-            ${avatarMarkup({ displayName: shortName }, 62)}
-            <div>
-              <span class="field-label">Получатель</span>
+      <form class="referral-transfer-bank-sheet referral-quick-transfer-bank-sheet" id="quick-transfer-form" data-phone="${phone}" data-name="${fullName}" data-short-name="${shortName}">
+        <section class="referral-transfer-bank-hero">
+          <div class="referral-transfer-bank-hero-copy">
+            <span class="field-label">Баланс BS</span>
+            <strong>${currentBalance} BS</strong>
+          </div>
+        </section>
+        <section class="referral-transfer-bank-section">
+          <div class="referral-transfer-bank-section-head">
+            <span class="field-label">Получатель</span>
+          </div>
+          <div class="referral-transfer-bank-counterparty">
+            <div class="referral-transfer-bank-counterparty-avatar">
+              ${avatarMarkup({ displayName: shortName }, 62)}
+            </div>
+            <div class="referral-transfer-bank-counterparty-copy">
               <strong>${fullName}</strong>
-              <span class="subtitle">${phone ? formatPhone(phone) : "Телефон не указан"}</span>
+              <span>${phone ? formatPhone(phone) : "Телефон не указан"}</span>
             </div>
           </div>
-        </div>
-        <div class="referral-transfer-confirm-card">
-          <span class="field-label">Выберите сумму</span>
-          <div class="referral-quick-transfer-amounts">
-              ${REFERRAL_TRANSFER_QUICK_AMOUNTS
-                .map(
+        </section>
+        <section class="referral-transfer-bank-section">
+          <div class="referral-transfer-bank-section-head">
+            <span class="field-label">Сумма перевода</span>
+            <span class="referral-transfer-bank-section-note">Без комиссии</span>
+          </div>
+          <label class="field referral-transfer-bank-field referral-transfer-bank-amount-field">
+            <input type="number" name="amountBs" min="1" step="1" placeholder="0" required />
+            <span class="referral-transfer-bank-currency">BS</span>
+          </label>
+          <div class="referral-transfer-bank-presets">
+            ${REFERRAL_TRANSFER_QUICK_AMOUNTS
+              .map(
                 (amount) => `
                   <button
-                    class="referral-quick-amount"
+                    class="referral-transfer-bank-preset"
                     type="button"
                     data-action="quick-transfer-amount"
                     data-phone="${phone}"
@@ -2354,13 +2674,10 @@
               )
               .join("")}
           </div>
-          <label class="field referral-quick-transfer-manual">
-            <span class="field-label">Своя сумма</span>
-            <input type="number" name="amountBs" min="1" step="1" placeholder="Введите сумму BS" />
-          </label>
-          <div class="inline-actions">
-            <button class="primary-btn referral-quick-transfer-custom" type="submit">Продолжить</button>
-          </div>
+        </section>
+        <div class="referral-transfer-bank-actions">
+          <button class="primary-btn referral-transfer-bank-submit referral-quick-transfer-custom" type="submit">Продолжить</button>
+          <button class="ghost-btn referral-transfer-bank-cancel" type="button" data-action="close-sheet">Отмена</button>
         </div>
       </form>
     `;
@@ -2375,31 +2692,41 @@
     }
     const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=16&data=${encodeURIComponent(qrPayload)}`;
     return `
-      <div class="referral-qr-sheet">
-        <div class="referral-transfer-confirm-card referral-qr-card">
-          <span class="field-label">Получатель BS</span>
-          <strong>${normalizeText(user.displayName || "Клиент")}</strong>
-          <span class="subtitle">${formatPhone(phone)}</span>
-        </div>
-        <div class="referral-qr-image-wrap">
+      <div class="referral-transfer-bank-sheet referral-qr-bank-sheet">
+        <section class="referral-transfer-bank-hero">
+          <div class="referral-transfer-bank-hero-copy">
+            <strong>${normalizeText(user.displayName || "Клиент")}</strong>
+            <p class="subtitle">${formatPhone(phone)}</p>
+          </div>
+        </section>
+        <section class="referral-transfer-bank-section referral-qr-bank-frame">
           <img class="referral-qr-image" src="${qrImageUrl}" alt="QR для перевода BS" />
-        </div>
-        <p class="subtitle referral-qr-note">Покажите этот QR отправителю. После сканирования номер получателя подставится автоматически.</p>
+        </section>
+        <section class="referral-transfer-bank-summary">
+          <div class="referral-transfer-bank-summary-row referral-qr-bank-note">
+            <span>Покажите этот QR отправителю. После сканирования номер получателя подставится автоматически.</span>
+          </div>
+        </section>
       </div>
     `;
   };
 
   const buildReferralQrScannerSheet = () => `
-    <div class="referral-qr-sheet">
-      <div class="referral-transfer-confirm-card referral-qr-card">
-        <span class="field-label">Сканирование QR</span>
-        <strong>Наведите камеру на QR получателя</strong>
-        <span class="subtitle" id="referral-qr-scan-status">Ожидание доступа к камере...</span>
-      </div>
-      <div class="referral-qr-scanner-wrap">
+    <div class="referral-transfer-bank-sheet referral-qr-bank-sheet">
+      <section class="referral-transfer-bank-hero">
+        <div class="referral-transfer-bank-hero-copy">
+          <strong>Наведите камеру на QR</strong>
+          <p class="subtitle" id="referral-qr-scan-status">Ожидание доступа к камере...</p>
+        </div>
+      </section>
+      <section class="referral-transfer-bank-section referral-qr-bank-frame referral-qr-bank-scanner-frame">
         <video id="referral-qr-video" class="referral-qr-video" autoplay playsinline muted></video>
-      </div>
-      <p class="subtitle referral-qr-note">Если QR считан, форма перевода откроется автоматически с заполненным получателем.</p>
+      </section>
+      <section class="referral-transfer-bank-summary">
+        <div class="referral-transfer-bank-summary-row referral-qr-bank-note">
+          <span>Если QR считан, форма перевода откроется автоматически с заполненным получателем.</span>
+        </div>
+      </section>
     </div>
   `;
 
@@ -2453,6 +2780,7 @@
               fullName: match.name || "",
               recipientShortName: match.name || "",
             };
+            state.referralTransferError = "";
             openNamedSheet("transfer-bs");
             return;
           }
@@ -2519,12 +2847,23 @@
     }
     return "";
   };
+  const getReferralOperationAvatarUrl = (operation = {}) => {
+    const counterpartId = normalizeText(operation.counterpartId);
+    const counterpartPhone = normalizePhone(operation.counterpartPhone || "");
+    const referrals = Array.isArray(state.payload?.referral?.referrals) ? state.payload.referral.referrals : [];
+    const recentRecipients = Array.isArray(state.payload?.referral?.recentTransferRecipients) ? state.payload.referral.recentTransferRecipients : [];
+    const matchedRecipient =
+      referrals.find((item) => normalizeText(item.id) === counterpartId || normalizePhone(item.phone || "") === counterpartPhone) ||
+      recentRecipients.find((item) => normalizeText(item.id) === counterpartId || normalizePhone(item.phone || "") === counterpartPhone) ||
+      null;
+    return normalizeText(matchedRecipient?.avatarUrl || operation.counterpartAvatarUrl);
+  };
 
   const renderReferralOperationCard = (operation = {}) => `
     <div class="referral-activity-row ${getReferralOperationToneClass(operation)}">
-      <div class="referral-activity-icon ${normalizeText(operation.counterpartName) || normalizeText(operation.counterpartAvatarUrl) ? "has-avatar" : ""}">
-        ${normalizeText(operation.counterpartName) || normalizeText(operation.counterpartAvatarUrl)
-          ? avatarMarkup({ avatarUrl: normalizeText(operation.counterpartAvatarUrl), displayName: operation.counterpartName }, 46)
+      <div class="referral-activity-icon ${normalizeText(operation.counterpartName) || getReferralOperationAvatarUrl(operation) ? "has-avatar" : ""}">
+        ${normalizeText(operation.counterpartName) || getReferralOperationAvatarUrl(operation)
+          ? avatarMarkup({ avatarUrl: getReferralOperationAvatarUrl(operation), displayName: operation.counterpartName }, 46)
           : iconMarkup(getReferralOperationIconName(operation))}
       </div>
       <div class="referral-activity-copy">
@@ -2751,7 +3090,7 @@
   const renderBookingPage = () => {
     const booking = state.booking;
     const bookingStepClass = booking.stepAnimationsEnabled ? "booking-step-active" : "";
-    const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+    const barbers = getSortedBookingBarbers();
     const selectedBarber = barbers.find((item) => normalizeText(item.id) === normalizeText(booking.barberId)) || null;
     const isBookingBlocked = booking.canBook === false;
     const bookingLimitMessage = normalizeText(booking.limitMessage);
@@ -2763,7 +3102,6 @@
       Boolean(booking.selectedServices.length),
       Boolean(booking.selectedDate),
       Boolean(booking.selectedTime),
-      Boolean(normalizeText(booking.comment)),
     ].filter(Boolean).length;
     const showServicesStep = Boolean(selectedBarber);
     const showDateStep = Boolean(selectedBarber && booking.selectedServices.length && !isBookingBlocked);
@@ -2862,12 +3200,12 @@
               <span class="field-label">Готовность</span>
               <strong>${showSummaryStep ? "Можно подтверждать запись" : "Заполните шаги слева"}</strong>
             </div>
-            <span class="status-badge ${showSummaryStep ? "green" : "yellow"}">${completedSteps}/5</span>
+            <span class="status-badge ${showSummaryStep ? "green" : "yellow"}">${Math.min(completedSteps, 4)}/4</span>
           </div>
           ${selectedBarber ? `<div class="summary-master-row">${avatarMarkup({ avatarUrl: selectedBarber.avatarUrl, displayName: selectedBarber.name }, 68)}<div><p class="list-title">${normalizeText(selectedBarber.name)}</p><p class="subtitle">${normalizeText(selectedBarber.description || "Выбранный мастер")}</p></div></div>` : `<div class="summary-master-row summary-placeholder"><div><p class="list-title">Мастер еще не выбран</p><p class="subtitle">Сначала выберите барбера, чтобы начать запись.</p></div></div>`}
           <div class="summary-grid">
             <div class="summary-item"><span class="field-label">Дата</span><strong>${booking.selectedDate ? formatDateOnly(booking.selectedDate) : "не выбрана"}</strong></div>
-            <div class="summary-item"><span class="field-label">Время</span><strong>${booking.selectedTime || "не выбрано"}</strong></div>
+            <div class="summary-item"><span class="field-label">Время</span><strong>${getBookingSelectedTimeLabel() || "не выбрано"}</strong></div>
             <div class="summary-item"><span class="field-label">Сумма</span><strong>${formatRub(selectedTotal)}</strong></div>
           </div>
           ${bookingPricing.maxCoverBs > 0 ? `
@@ -2895,7 +3233,6 @@
             ${selectedServices.length ? selectedServices.map((service) => `<span class="service-chip">${normalizeText(service.name)}</span>`).join("") : `<span class="muted-text">Добавьте хотя бы одну услугу, чтобы увидеть итог записи.</span>`}
           </div>
           ${isBookingBlocked && bookingLimitMessage ? `<div class="booking-step-alert status-red"><p class="list-title">Новая запись пока недоступна</p><p class="subtitle">${bookingLimitMessage}</p></div>` : ""}
-          ${normalizeText(booking.comment) ? `<div class="summary-note"><span class="field-label">Комментарий</span><p class="subtitle">${normalizeText(booking.comment)}</p></div>` : `<div class="summary-note summary-note-muted"><span class="field-label">Комментарий</span><p class="subtitle">Комментарий не добавлен. Этот шаг необязателен.</p></div>`}
           <div class="hero-actions booking-submit-wrap"><button class="primary-btn" data-action="submit-booking" ${!selectedBarber || !booking.selectedServices.length || !booking.selectedDate || !booking.selectedTime || booking.submitting || isBookingBlocked ? "disabled" : ""}>${booking.submitting ? "Отправляем..." : "Подтвердить запись"}</button></div>
         </article>
       </section>
@@ -2952,7 +3289,7 @@
     const identityLine = [alias, fullName]
       .filter((value, index, items) => value && normalizeIdentityLabel(value) !== normalizeIdentityLabel(displayName) && items.indexOf(value) === index)
       .join(" • ");
-    const primaryHref = normalizeText(options.primaryHref || "/booking/");
+    const primaryHref = normalizeText(options.primaryHref || buildBookingBarberHref(barberId));
     const primaryLabel = normalizeText(options.primaryLabel || "Записаться");
     const secondaryHref = normalizeText(options.secondaryHref || "/");
     const secondaryLabel = normalizeText(options.secondaryLabel || "Все барберы");
@@ -3025,7 +3362,7 @@
   };
 
   const renderBarberProfilePage = () => {
-    const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+    const barbers = getSortedBookingBarbers();
     const activeBarberId = normalizeText(state.activeBarberProfileId || getBarberIdFromPath(window.location.pathname));
     const barber = barbers.find((item) => normalizeText(item.id) === activeBarberId) || null;
     if (!barber) {
@@ -3086,7 +3423,7 @@
         })}
         <article class="content-card barber-profile-mobile-sheet">
           <div class="hero-actions barber-profile-mobile-actions">
-            <a class="primary-btn barber-profile-primary-btn" href="/booking/">Записаться</a>
+            <a class="primary-btn barber-profile-primary-btn" href="${buildBookingBarberHref(activeBarberId)}">Записаться</a>
             <a class="ghost-btn barber-profile-secondary-btn" href="/">Все барберы</a>
           </div>
           <div class="barber-profile-mobile-meta">
@@ -3226,7 +3563,7 @@
                       <div class="profile-next-booking-meta">
                         <strong class="profile-next-booking-date">${formatDateOnly(appointment.date)}</strong>
                         <span class="profile-next-booking-dot" aria-hidden="true"></span>
-                        <strong class="profile-next-booking-time">${normalizeText(appointment.time)}</strong>
+                        <strong class="profile-next-booking-time">${normalizeText(appointment.timeLabel || appointment.time)}</strong>
                       </div>
                     </div>
                   </button>`,
@@ -3236,7 +3573,7 @@
         </article>
         <article class="list-card profile-history-card" data-action="open-sheet" data-sheet="profile-history">
           <div class="section-head">
-            <div><div class="section-eyebrow">История посещений</div><h2 class="section-title">Последние движения</h2></div>
+            <div><div class="section-eyebrow">История посещений</div><h2 class="section-title">Последние операции</h2></div>
           </div>
           <div class="filter-row">
             <button class="nav-pill ${state.profileHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="all">Все</button>
@@ -3284,7 +3621,7 @@
   };
 
   const syncDocumentMeta = () => {
-    const barbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+    const barbers = getSortedBookingBarbers();
     const activeBarber = state.currentPage === "barber"
       ? barbers.find((item) => normalizeText(item.id) === normalizeText(state.activeBarberProfileId || getBarberIdFromPath(window.location.pathname))) || null
       : null;
@@ -3412,7 +3749,21 @@
     state.booking.stepAnimationsEnabled = nextPage === "booking";
     state.routeTransitionActive = true;
     render();
+    if (nextPage === "booking") {
+      void syncBookingSelectionFromLocation();
+    }
     window.scrollTo({ top: 0, behavior: "auto" });
+  };
+
+  const syncBookingSelectionFromLocation = async () => {
+    if (state.currentPage !== "booking" || !isAuthenticated()) return;
+    const requestedBarberId = getBookingRouteBarberId(window.location);
+    if (!requestedBarberId) return;
+    const barbers = getSortedBookingBarbers();
+    if (!barbers.some((barber) => normalizeText(barber.id) === requestedBarberId)) return;
+    if (normalizeText(state.booking.barberId) === requestedBarberId && state.booking.services.length) return;
+    state.booking.barberId = requestedBarberId;
+    await loadServices();
   };
 
   const renderNow = () => {
@@ -3455,7 +3806,7 @@
     setupPromoMarqueeAutoScroll(renderScope);
     setupHomeBarberRotation();
     if (state.currentPage === "home" && isAuthenticated()) {
-      const homeBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+      const homeBarbers = getSortedBookingBarbers();
       const activeHomeBarber = homeBarbers.length
         ? homeBarbers[((state.homeBarberRotationIndex % homeBarbers.length) + homeBarbers.length) % homeBarbers.length]
         : null;
@@ -3650,6 +4001,7 @@
       }),
     });
     state.referralTransferDraft = null;
+    state.referralTransferError = "";
     if (payload?.referral) {
       state.payload = {
         ...(state.payload || {}),
@@ -3659,8 +4011,7 @@
       state.payload = await apiRequest("/app");
     }
     render({ sheet: false });
-    closeSheet();
-    openSheet("Перевод выполнен", buildBookingStatusSheet("Перевод выполнен"), "", "sheet-success");
+    dismissSheet();
   };
 
   const openNamedSheet = (sheetId) => {
@@ -3710,25 +4061,11 @@
       return;
     }
     if (sheetId === "transfer-bs") {
-      const draft = state.referralTransferDraft || {};
-      const selectedQuickAmount = Number(draft.amountBs || state.referralQuickAmount || 0);
       openSheet(
         "Перевести BS",
-        `<form class="form-grid referral-transfer-form" id="referral-transfer-form"><div class="referral-transfer-balance"><span class="field-label">Доступно сейчас</span><strong>${Number(state.payload?.referral?.bsBalance || 0)} BS</strong></div><label class="field"><span class="field-label">Телефон получателя</span><input type="tel" inputmode="tel" autocomplete="tel" name="targetPhone" placeholder="+7..." value="${formatPhoneInputValue(draft.targetPhone)}" required /></label><label class="field"><span class="field-label">Сумма BS</span><input type="number" name="amountBs" min="1" step="1" value="${normalizeText(draft.amountBs)}" required /></label><div class="referral-transfer-form-presets"><span class="field-label">Быстрые суммы</span><div class="referral-quick-transfer-amounts">${REFERRAL_TRANSFER_QUICK_AMOUNTS
-          .map(
-            (amount) => `
-              <button
-                class="referral-quick-amount ${selectedQuickAmount === amount ? "is-selected" : ""}"
-                type="button"
-                data-action="transfer-preset"
-                data-amount="${amount}"
-              >
-                ${amount} BS
-              </button>`,
-          )
-          .join("")}</div></div><label class="field"><span class="field-label">Комментарий</span><input name="comment" placeholder="Необязательно" value="${normalizeText(draft.comment)}" /></label><div class="inline-actions"><button class="primary-btn" type="submit">Продолжить</button><button class="ghost-btn" type="button" data-action="close-sheet">Отмена</button></div></form>`,
+        buildTransferBsSheet(),
         "",
-        "sheet-wide",
+        "sheet-wide transfer-bs-sheet",
       );
       return;
     }
@@ -3746,12 +4083,11 @@
       return;
     }
     if (sheetId === "confirm-transfer-bs") {
-      const draft = state.referralTransferDraft || {};
       openSheet(
         "Подтверждение перевода",
-        `<div class="referral-transfer-confirm"><div class="referral-transfer-confirm-card"><span class="field-label">Получатель</span><strong>${normalizeText(draft.recipientShortName || "Не найден")}</strong><span class="subtitle">${draft.targetPhone ? formatPhone(draft.targetPhone) : ""}</span></div><div class="referral-transfer-confirm-card"><span class="field-label">Сумма</span><strong>${Number(draft.amountBs || 0)} BS</strong><span class="subtitle">${normalizeText(draft.comment) ? normalizeText(draft.comment) : "Без комментария"}</span></div><div class="inline-actions"><button class="primary-btn" type="button" data-action="confirm-referral-transfer">Отправить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="transfer-bs">Назад</button></div></div>`,
+        buildConfirmTransferBsSheet(),
         "",
-        "sheet-wide",
+        "sheet-wide transfer-bs-sheet",
       );
       return;
     }
@@ -3774,16 +4110,16 @@
       const targetId = normalizeText(state.pendingBookingCancellationId || appointment?.id || "");
       openSheet(
         "Отменить запись",
-        `<div class="list-item"><p class="list-title">Отменить текущую запись?</p><p class="subtitle">Запись будет отменена без возможности её вернуть.${appointment?.date ? ` · ${formatDateOnly(appointment.date)}` : ""}${appointment?.time ? ` · ${normalizeText(appointment.time)}` : ""}</p></div><div class="inline-actions"><button class="danger-btn" type="button" data-action="confirm-cancel-booking" data-id="${targetId}">Отменить запись</button><button class="ghost-btn" type="button" data-action="close-sheet">Назад</button></div>`,
+        `<div class="list-item"><p class="list-title">Отменить текущую запись?</p><p class="subtitle">Запись будет отменена без возможности её вернуть.${appointment?.date ? ` · ${formatDateOnly(appointment.date)}` : ""}${appointment?.time || appointment?.timeLabel ? ` · ${normalizeText(appointment?.timeLabel || appointment?.time)}` : ""}</p></div><div class="inline-actions"><button class="danger-btn" type="button" data-action="confirm-cancel-booking" data-id="${targetId}">Отменить запись</button><button class="ghost-btn" type="button" data-action="close-sheet">Назад</button></div>`,
       );
       return;
     }
     if (sheetId === "profile-menu") {
-      openSheet("Настройки", `<div class="list"><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-edit"><p class="list-title">Редактировать профиль</p><p class="subtitle">Имя, телефон, дата рождения, пол и фото.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-security"><p class="list-title">Безопасность</p><p class="subtitle">Смена пароля, Telegram и защита доступа.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-notifications"><p class="list-title">Настройки уведомлений</p><p class="subtitle">Управление уведомлениями о записях на сайте.</p></button><button class="list-item menu-action danger-surface" type="button" data-action="open-sheet" data-sheet="profile-logout-confirm"><p class="list-title">Выход</p><p class="subtitle">Завершить текущую сессию.</p></button></div>`);
+      openSheet("Настройки", `<div class="list"><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-edit"><p class="list-title">Редактировать профиль</p><p class="subtitle">Имя, телефон, дата рождения, пол и фото.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-security"><p class="list-title">Безопасность</p><p class="subtitle">Смена пароля, Telegram и защита доступа.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-notifications"><p class="list-title">Настройки уведомлений</p><p class="subtitle">Управление уведомлениями о записях на сайте.</p></button><button class="list-item menu-action danger-surface" type="button" data-action="open-sheet" data-sheet="profile-logout-confirm"><p class="list-title">Выход</p><p class="subtitle">Выйти из аккаунта.</p></button></div>`);
       return;
     }
     if (sheetId === "profile-logout-confirm") {
-      openSheet("Подтвердите выход", `<div class="list-item"><p class="list-title">Выйти из аккаунта?</p><p class="subtitle">Текущая сессия на этом устройстве будет завершена.</p></div><div class="inline-actions"><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button><button class="danger-btn" type="button" data-action="logout">Завершить сессию</button></div>`);
+      openSheet("Подтвердите выход", `<div class="list-item"><p class="list-title">Выйти из аккаунта?</p><p class="subtitle">Вы выйдете из аккаунта на этом устройстве.</p></div><div class="inline-actions"><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button><button class="danger-btn" type="button" data-action="logout">Выйти из аккаунта</button></div>`);
       return;
     }
     if (sheetId === "profile-edit") {
@@ -4145,7 +4481,13 @@
         case "book-another":
           event.preventDefault();
           closeSheet();
-          window.setTimeout(() => navigateTo("/booking/"), 180);
+          {
+            const appointmentId = normalizeText(actionNode.dataset.id || state.pendingBookingCancellationId);
+            const appointment = Array.isArray(state.payload?.booking?.activeAppointments)
+              ? state.payload.booking.activeAppointments.find((item) => normalizeText(item.id) === appointmentId)
+              : null;
+            window.setTimeout(() => navigateTo(buildBookingBarberHref(appointment?.barberId)), 180);
+          }
           return;
         case "download-booking-reminder": {
           event.preventDefault();
@@ -4184,6 +4526,16 @@
           }
           render();
           return;
+        case "set-referral-section":
+          event.preventDefault();
+          event.stopPropagation();
+          {
+            const nextSection = normalizeText(actionNode.dataset.section) || "overview";
+            if (state.referralSection === nextSection) return;
+            state.referralSection = nextSection;
+          }
+          if (!refreshReferralSectionDom()) render();
+          return;
         case "open-promo":
           event.preventDefault();
           openPromoSheet(actionNode.dataset.id, actionNode.dataset.index);
@@ -4213,6 +4565,7 @@
             recipientShortName: normalizeText(actionNode.dataset.shortName || actionNode.dataset.name),
             fullName: normalizeText(actionNode.dataset.name),
           };
+          state.referralTransferError = "";
           openNamedSheet("quick-transfer");
           return;
         case "scroll-transfer-recipients": {
@@ -4233,7 +4586,16 @@
             ...(state.referralTransferDraft || {}),
             amountBs: Number(actionNode.dataset.amount || 0),
           };
-          openNamedSheet("transfer-bs");
+          {
+            const transferForm = actionNode.closest("#referral-transfer-form");
+            const amountInput = transferForm?.elements?.amountBs;
+            if (transferForm && amountInput) {
+              amountInput.value = String(state.referralQuickAmount);
+              syncTransferBsAmountUi(transferForm);
+            } else {
+              refreshTransferBsSheet();
+            }
+          }
           return;
         case "quick-transfer-amount":
           event.preventDefault();
@@ -4247,6 +4609,7 @@
                 comment: "",
               };
               const recipient = await requestReferralTransferPreview(draft);
+              state.referralTransferError = "";
               state.referralTransferDraft = {
                 ...draft,
                 recipientId: normalizeText(recipient?.id),
@@ -4254,7 +4617,8 @@
               };
               openNamedSheet("confirm-transfer-bs");
             } catch (error) {
-              openSheet("Ошибка перевода", `<div class="list-item"><p class="list-title">${humanizeReferralTransferError(error)}</p></div>`);
+              state.referralTransferDraft = draft;
+              reopenTransferBsSheetWithError(humanizeReferralTransferError(error));
             }
           })();
           return;
@@ -4262,6 +4626,7 @@
           event.preventDefault();
           void (async () => {
             state.booking.barberId = normalizeText(actionNode.dataset.id);
+            window.history.replaceState(buildHistoryState(state.sheet), "", `${buildBookingBarberHref(state.booking.barberId)}${window.location.hash}`);
             await loadServices();
             scrollToBookingStep("services");
           })();
@@ -4326,7 +4691,7 @@
             try {
               await submitReferralTransfer(state.referralTransferDraft || {});
             } catch (error) {
-              openSheet("Ошибка перевода", `<div class="list-item"><p class="list-title">${humanizeReferralTransferError(error)}</p></div>`);
+              reopenTransferBsSheetWithError(humanizeReferralTransferError(error));
             }
           })();
           return;
@@ -4381,6 +4746,7 @@
             comment: "",
           };
           const recipient = await requestReferralTransferPreview(draft);
+          state.referralTransferError = "";
           state.referralTransferDraft = {
             ...draft,
             recipientId: normalizeText(recipient?.id),
@@ -4388,7 +4754,14 @@
           };
           openNamedSheet("confirm-transfer-bs");
         } catch (error) {
-          openSheet("Ошибка перевода", `<div class="list-item"><p class="list-title">${humanizeReferralTransferError(error)}</p></div>`);
+          state.referralTransferDraft = {
+            targetPhone: normalizeText(quickTransferForm.dataset.phone),
+            amountBs: Number(amountInput?.value || 0),
+            recipientShortName: normalizeText(quickTransferForm.dataset.shortName || quickTransferForm.dataset.name),
+            fullName: normalizeText(quickTransferForm.dataset.name),
+            comment: "",
+          };
+          reopenTransferBsSheetWithError(humanizeReferralTransferError(error));
         }
       });
     }
@@ -4699,6 +5072,37 @@
       if (targetPhoneInput) {
         applyPhoneMask(targetPhoneInput);
         attachPhoneMask(targetPhoneInput);
+        targetPhoneInput.addEventListener("input", () => {
+          state.referralTransferDraft = {
+            ...(state.referralTransferDraft || {}),
+            targetPhone: normalizePhone(targetPhoneInput.value),
+          };
+          if (state.referralTransferError) {
+            state.referralTransferError = "";
+          }
+        });
+      }
+      const amountInput = referralTransferForm.elements?.amountBs;
+      if (amountInput) {
+        amountInput.addEventListener("input", () => {
+          syncTransferBsAmountUi(referralTransferForm);
+          if (state.referralTransferError) {
+            state.referralTransferError = "";
+          }
+        });
+        syncTransferBsAmountUi(referralTransferForm);
+      }
+      const commentInput = referralTransferForm.elements?.comment;
+      if (commentInput) {
+        commentInput.addEventListener("input", () => {
+          state.referralTransferDraft = {
+            ...(state.referralTransferDraft || {}),
+            comment: normalizeText(commentInput.value),
+          };
+          if (state.referralTransferError) {
+            state.referralTransferError = "";
+          }
+        });
       }
       referralTransferForm.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -4710,6 +5114,7 @@
             comment: normalizeText(formData.get("comment")),
           };
           const recipient = await requestReferralTransferPreview(draft);
+          state.referralTransferError = "";
           state.referralTransferDraft = {
             ...draft,
             recipientId: normalizeText(recipient?.id),
@@ -4717,10 +5122,12 @@
           };
           openNamedSheet("confirm-transfer-bs");
         } catch (error) {
-          openSheet(
-            "Ошибка перевода",
-            `<div class="list-item"><p class="list-title">${humanizeReferralTransferError(error)}</p></div>`,
-          );
+          state.referralTransferDraft = {
+            targetPhone: normalizePhone(formData.get("targetPhone")),
+            amountBs: Number(formData.get("amountBs") || 0),
+            comment: normalizeText(formData.get("comment")),
+          };
+          reopenTransferBsSheetWithError(humanizeReferralTransferError(error));
         }
       });
     }
@@ -4840,6 +5247,9 @@
         state.sheetState = "closed";
       }
       render();
+      if (state.currentPage === "booking") {
+        void syncBookingSelectionFromLocation();
+      }
       suppressSheetHistoryBack = false;
     });
     if (!isAuthenticated()) {
@@ -4863,7 +5273,7 @@
       state.payload = await apiRequest("/app");
       state.bootstrapError = "";
       if (state.currentPage === "home") {
-        const homeBarbers = Array.isArray(state.payload?.booking?.barbers) ? state.payload.booking.barbers : [];
+        const homeBarbers = getSortedBookingBarbers();
         const activeHomeBarber = homeBarbers.length
           ? homeBarbers[((state.homeBarberRotationIndex % homeBarbers.length) + homeBarbers.length) % homeBarbers.length]
           : null;
@@ -4871,11 +5281,29 @@
           await ensureBarberProfileServices(activeHomeBarber.id, { suppressRender: true });
         }
       }
+      if (state.currentPage === "booking") {
+        await syncBookingSelectionFromLocation();
+      }
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") {
           void sendSitePresence("online");
         }
       });
+      document.addEventListener("copy", (event) => {
+        if (isEditableTarget(event.target)) return;
+        if (getProtectedAssetTarget(event.target)) event.preventDefault();
+      }, true);
+      document.addEventListener("cut", (event) => {
+        if (isEditableTarget(event.target)) return;
+        if (getProtectedAssetTarget(event.target)) event.preventDefault();
+      }, true);
+      document.addEventListener("contextmenu", (event) => {
+        if (isEditableTarget(event.target)) return;
+        if (getProtectedAssetTarget(event.target)) event.preventDefault();
+      }, true);
+      document.addEventListener("dragstart", (event) => {
+        if (getProtectedAssetTarget(event.target)) event.preventDefault();
+      }, true);
       window.addEventListener("resize", () => {
         setupPromoMarqueeAutoScroll();
       }, { passive: true });

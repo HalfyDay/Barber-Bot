@@ -162,6 +162,18 @@ video,
 a,
 button {
   -webkit-user-drag: none;
+  user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+a img,
+a svg,
+.profile-avatar,
+.profile-avatar * {
+  -webkit-user-drag: none;
+  user-drag: none;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
@@ -2470,10 +2482,6 @@ img.media-wave.is-ready {
   margin: 0 auto;
 }
 
-.referral-page {
-  gap: 18px;
-}
-
 .referral-cabinet-card {
   padding: 20px;
   background:
@@ -2488,6 +2496,7 @@ img.media-wave.is-ready {
   --referral-outline: var(--md-sys-color-outline);
   --referral-outline-soft: var(--md-sys-color-outline-variant);
   --referral-chip: color-mix(in srgb, var(--md-sys-color-secondary-container) 54%, var(--md-sys-color-surface-container-low) 46%);
+  gap: 0;
 }
 
 .referral-wallet-card,
@@ -3149,6 +3158,55 @@ img.media-wave.is-ready {
   gap: 12px;
 }
 
+.referral-section-tabs {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-self: start;
+  gap: 10px;
+  padding: 6px;
+  margin: 6px 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-low) 94%, #0f1415);
+}
+
+.referral-section-tabs .nav-pill {
+  min-width: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--md-sys-color-surface-container) 92%, #101516);
+  box-shadow: none;
+}
+
+.referral-section-tabs .nav-pill.active {
+  background: color-mix(in srgb, var(--md-sys-color-primary-container) 84%, #13201f);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.referral-stats-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.referral-overview-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.referral-section-panel {
+  margin: 6px 0 10px;
+  min-height: clamp(520px, 62vh, 760px);
+  animation: referral-section-fade 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transform-origin: top left;
+}
+
+.referral-wallet-card + .referral-section-tabs {
+  margin-top: 6px;
+}
+
+.referral-section-tabs + .referral-section-panel {
+  margin-top: 6px;
+}
+
 .referral-inline-insight {
   display: grid;
   gap: 8px;
@@ -3162,6 +3220,17 @@ img.media-wave.is-ready {
   font-family: var(--font-display);
   font-size: 1.32rem;
   line-height: 1;
+}
+
+@keyframes referral-section-fade {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.992);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .referral-subsection {
@@ -3222,8 +3291,9 @@ img.media-wave.is-ready {
   gap: 14px;
   padding: 15px 16px;
   border-radius: 22px;
-  border: 1px solid transparent;
+  border: 0;
   background: linear-gradient(180deg, var(--referral-surface-3), var(--md-sys-color-surface-container-low));
+  box-shadow: none;
 }
 
 .referral-activity-icon {
@@ -3516,6 +3586,310 @@ img.media-wave.is-ready {
   gap: 16px;
 }
 
+.transfer-bs-sheet {
+  background: color-mix(in srgb, var(--md-sys-color-surface) 94%, #0c1011);
+}
+
+.transfer-bs-sheet .sheet-body {
+  padding-top: 8px;
+}
+
+.referral-transfer-bank-sheet {
+  display: grid;
+  gap: 14px;
+}
+
+.referral-transfer-bank-hero,
+.referral-transfer-bank-section,
+.referral-transfer-bank-summary {
+  display: grid;
+  gap: 10px;
+  padding: 18px 18px 16px;
+  border-radius: 24px;
+  border: 0;
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-low) 88%, #101516);
+  box-shadow: none;
+}
+
+.referral-transfer-bank-hero {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.referral-transfer-bank-hero-copy {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.referral-transfer-bank-hero-copy strong {
+  font: 800 clamp(2rem, 4vw, 2.7rem)/0.94 var(--font-display);
+  letter-spacing: -0.04em;
+}
+
+.referral-transfer-bank-hero-copy .subtitle {
+  margin: 0;
+  max-width: 34ch;
+  color: color-mix(in srgb, var(--text) 70%, white 30%);
+  line-height: 1.45;
+}
+
+.referral-transfer-bank-hero-action {
+  min-height: 44px;
+  padding-inline: 16px;
+  align-self: start;
+  border: 0;
+  background: color-mix(in srgb, var(--md-sys-color-surface-container) 92%, #13191a);
+  box-shadow: none;
+}
+
+.referral-transfer-bank-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.referral-transfer-bank-section-note {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.referral-transfer-bank-field {
+  gap: 0;
+}
+
+.referral-transfer-bank-contact-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.referral-transfer-bank-contact-field {
+  min-width: 0;
+}
+
+.referral-transfer-bank-field input {
+  min-height: 60px;
+  padding-inline: 18px;
+  border: 0;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--md-sys-color-surface) 94%, #101516);
+  box-shadow: none;
+  font-size: 1rem;
+}
+
+.referral-transfer-bank-field input:hover,
+.referral-transfer-bank-field input:focus {
+  background: color-mix(in srgb, var(--md-sys-color-surface) 98%, #141a1b);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-sys-color-primary) 18%, transparent);
+}
+
+.referral-transfer-bank-scan-action {
+  width: 60px;
+  height: 60px;
+  min-width: 60px;
+  min-height: 60px;
+  max-width: 60px;
+  max-height: 60px;
+  min-height: 60px;
+  padding: 0;
+  border-radius: 18px;
+  align-self: stretch;
+  justify-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+}
+
+.referral-transfer-bank-scan-action span:last-child {
+  display: none;
+}
+
+.referral-transfer-bank-scan-action svg {
+  width: 22px;
+  height: 22px;
+}
+
+.referral-transfer-bank-amount-field {
+  position: relative;
+}
+
+.referral-transfer-bank-amount-field input {
+  padding-right: 72px;
+  font: 800 1.3rem/1 var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+.referral-transfer-bank-currency {
+  position: absolute;
+  top: 50%;
+  right: 18px;
+  transform: translateY(-50%);
+  color: var(--secondary);
+  font: 800 0.92rem/1 var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.referral-transfer-bank-presets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.referral-transfer-bank-preset {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--md-sys-color-surface) 95%, #121718);
+  color: var(--text);
+  font: 700 0.94rem/1 var(--font-display);
+  box-shadow: none;
+  transition: background-color 0.18s ease, transform 0.18s ease, color 0.18s ease;
+}
+
+.referral-transfer-bank-preset:hover {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--md-sys-color-surface) 100%, #171d1f);
+}
+
+.referral-transfer-bank-preset.is-selected {
+  background: color-mix(in srgb, var(--md-sys-color-primary-container) 84%, #162120);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.referral-transfer-bank-summary {
+  gap: 12px;
+  background: color-mix(in srgb, var(--md-sys-color-surface-container) 86%, #121718);
+}
+
+.referral-transfer-bank-error {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 0;
+  background: color-mix(in srgb, var(--md-sys-color-error-container) 92%, #1d1111);
+  color: var(--md-sys-color-on-error-container);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  box-shadow: none;
+}
+
+.referral-transfer-bank-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.referral-transfer-bank-summary-row strong {
+  color: var(--text);
+  font: 800 1.02rem/1 var(--font-display);
+}
+
+.referral-transfer-bank-confirm-sheet .referral-transfer-bank-hero-copy strong {
+  font-size: clamp(2.1rem, 4.8vw, 3rem);
+}
+
+.referral-transfer-bank-counterparty {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.referral-transfer-bank-counterparty-avatar .profile-avatar {
+  box-shadow: none;
+}
+
+.referral-transfer-bank-counterparty-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.referral-transfer-bank-counterparty-copy strong {
+  font: 800 1.02rem/1.1 var(--font-display);
+  color: var(--text);
+}
+
+.referral-transfer-bank-counterparty-copy span {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.referral-transfer-bank-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.referral-transfer-bank-submit,
+.referral-transfer-bank-cancel {
+  min-height: 52px;
+  border: 0;
+  box-shadow: none;
+}
+
+.referral-transfer-bank-submit {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 92%, #15b7ab);
+  color: var(--md-sys-color-on-primary);
+}
+
+.referral-transfer-bank-cancel {
+  min-width: 112px;
+  background: color-mix(in srgb, var(--md-sys-color-surface-container) 92%, #131819);
+}
+
+@media (max-width: 640px) {
+  .referral-transfer-bank-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .referral-transfer-bank-contact-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .referral-transfer-bank-presets {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+  }
+
+  .referral-transfer-bank-presets::-webkit-scrollbar {
+    display: none;
+  }
+
+  .referral-transfer-bank-preset {
+    flex: 0 0 auto;
+    min-width: 94px;
+    scroll-snap-align: start;
+  }
+
+  .referral-transfer-bank-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .referral-transfer-bank-cancel {
+    min-width: 0;
+  }
+}
+
 .referral-transfer-form-presets {
   display: grid;
   gap: 10px;
@@ -3548,53 +3922,20 @@ img.media-wave.is-ready {
   gap: 14px;
 }
 
-.referral-quick-transfer-recipient {
-  background:
-    radial-gradient(circle at top left, rgba(143, 232, 216, 0.08), transparent 40%),
-    linear-gradient(180deg, var(--md-sys-color-surface-container-high), var(--md-sys-color-surface-container-low));
-}
-
-.referral-quick-transfer-user {
+.referral-quick-transfer-bank-sheet {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
   gap: 14px;
-  align-items: center;
 }
 
-.referral-quick-transfer-user .subtitle {
-  display: block;
-  margin-top: 6px;
+.referral-quick-transfer-bank-sheet .referral-transfer-bank-hero {
+  grid-template-columns: 1fr;
 }
 
-.referral-quick-transfer-amounts {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.referral-quick-amount {
-  min-height: 40px;
-  padding: 0 16px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 70%, transparent 30%);
-  background: var(--md-sys-color-surface-container-low);
+.referral-quick-transfer-bank-sheet .referral-transfer-bank-cancel {
+  background: color-mix(in srgb, var(--md-sys-color-surface-container) 92%, #131819) !important;
   color: var(--text);
-  font: 700 0.92rem/1 var(--font-display);
-  cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-}
-
-.referral-quick-amount:hover {
-  transform: translateY(-1px);
-  border-color: var(--referral-outline);
-  background: color-mix(in srgb, var(--md-sys-color-surface-container-high) 82%, var(--md-sys-color-primary-container) 18%);
-}
-
-.referral-quick-amount.is-selected {
-  border-color: color-mix(in srgb, var(--md-sys-color-primary) 36%, transparent 64%);
-  background: linear-gradient(180deg, var(--md-sys-color-primary-container), color-mix(in srgb, var(--md-sys-color-primary-container) 72%, var(--md-sys-color-surface-container) 28%));
-  color: var(--md-sys-color-on-primary-container);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-sys-color-primary) 18%, transparent 82%);
+  box-shadow: none;
+  border: 0;
 }
 
 .referral-referrals-onboarding {
@@ -3608,11 +3949,6 @@ img.media-wave.is-ready {
 
 .referral-quick-transfer-custom {
   width: 100%;
-  margin-top: 12px;
-}
-
-.referral-quick-transfer-manual {
-  margin-top: 12px;
 }
 
 .achievements-page {
@@ -3645,18 +3981,41 @@ img.media-wave.is-ready {
   gap: 16px;
 }
 
-.referral-qr-card {
+.referral-qr-bank-sheet .referral-transfer-bank-hero-copy {
+  text-align: left;
+  align-items: start;
+}
+
+.referral-qr-bank-sheet .referral-transfer-bank-hero-copy strong {
+  font-size: clamp(1.7rem, 4.2vw, 2.35rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.referral-qr-bank-sheet .referral-transfer-bank-hero-copy .subtitle {
+  max-width: none;
+}
+
+.referral-qr-bank-sheet .referral-transfer-bank-summary {
   text-align: center;
 }
 
-.referral-qr-image-wrap,
-.referral-qr-scanner-wrap {
+.referral-qr-bank-frame {
   display: grid;
   place-items: center;
   padding: 18px;
-  border-radius: 24px;
-  border: 1px solid var(--referral-outline-soft);
-  background: linear-gradient(180deg, var(--md-sys-color-surface-container-high), var(--md-sys-color-surface-container-low));
+}
+
+.referral-qr-bank-scanner-frame {
+  min-height: 296px;
+}
+
+.referral-qr-bank-note {
+  justify-content: center;
+  text-align: center;
+  color: color-mix(in srgb, var(--text) 74%, white 26%);
+  line-height: 1.5;
 }
 
 .referral-qr-image {
@@ -3673,10 +4032,6 @@ img.media-wave.is-ready {
   border-radius: 20px;
   background: #000;
   object-fit: cover;
-}
-
-.referral-qr-note {
-  text-align: center;
 }
 
 @keyframes referral-copy-pop {
@@ -5128,6 +5483,54 @@ img.media-wave.is-ready {
 }
 
 @media (max-width: 768px) {
+  .referral-page {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .referral-page > *,
+  .referral-page .hero-card,
+  .referral-page .list-card,
+  .referral-page .content-card,
+  .referral-page .referral-wallet-card,
+  .referral-page .referral-transfer-card,
+  .referral-page .referral-transfer-history-card,
+  .referral-page .referral-panel-card,
+  .referral-page .referral-insights-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .referral-page .section-head,
+  .referral-page .referral-wallet-actions,
+  .referral-page .filter-row,
+  .referral-page .referral-inline-insights,
+  .referral-page .referral-transfer-recipient-carousel,
+  .referral-page .referral-transfer-recipient-strip {
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .referral-page .referral-section-tabs {
+    margin: 0;
+  }
+
+  .referral-page .referral-section-panel {
+    margin: 6px 0 10px;
+  }
+
+  .referral-page .referral-wallet-card + .referral-section-tabs {
+    margin-top: 3px;
+  }
+
+  .referral-page .referral-section-tabs + .referral-section-panel {
+    margin-top: 3px;
+  }
+
   .home-page,
   .home-mobile-layout {
     width: 100%;

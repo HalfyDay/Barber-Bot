@@ -147,6 +147,19 @@ const createHomeClientStoreService = ({
     if (Number.isNaN(parsed.getTime())) return null;
     return parsed.toISOString();
   };
+  const formatTimeValue = (value) => {
+    const safeValue = normalizeText(value);
+    if (/^\d{2}:\d{2}$/.test(safeValue)) return safeValue;
+    const parsed = new Date(safeValue);
+    if (Number.isNaN(parsed.getTime())) return "";
+    return `${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`;
+  };
+  const buildTimeRangeLabel = (startTime, endDateTime) => {
+    const start = formatTimeValue(startTime);
+    const end = formatTimeValue(endDateTime);
+    if (start && end) return `${start} - ${end}`;
+    return start || end || "";
+  };
 
   const buildReferralCode = () =>
     randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase();
@@ -753,12 +766,12 @@ const createHomeClientStoreService = ({
       .filter((referral) => referral.color !== 'red');
     const manualTransactions = (ownerMeta.transactions || []).map((transaction) => {
       const sanitized = sanitizeTransaction(transaction);
-      const fallbackAvatarUrl = normalizeText(
+      const currentAvatarUrl = normalizeText(
         userMetaById.get(normalizeText(sanitized.counterpartId))?.avatarUrl || "",
       );
       return {
         ...sanitized,
-        counterpartAvatarUrl: normalizeText(sanitized.counterpartAvatarUrl) || fallbackAvatarUrl,
+        counterpartAvatarUrl: currentAvatarUrl,
       };
     });
     const operations = [...rewardOperations, ...manualTransactions].sort((left, right) =>
@@ -780,6 +793,7 @@ const createHomeClientStoreService = ({
           fullName,
           shortName: formatShortPersonName(fullName),
           phone,
+          avatarUrl: normalizeText(operation.counterpartAvatarUrl),
           lastTransferAt: operation.createdAt,
         });
       });
@@ -1046,7 +1060,7 @@ const createHomeClientStoreService = ({
         counterpartId: recipientUser.id,
         counterpartName: recipientLabel,
         counterpartPhone: normalizePhone(recipientUser.Phone || "") || "",
-        counterpartAvatarUrl: normalizeText(recipientMeta.avatarUrl) || "",
+        counterpartAvatarUrl: "",
       }),
     ];
 
@@ -1063,7 +1077,7 @@ const createHomeClientStoreService = ({
         counterpartId: safeFromUserId,
         counterpartName: senderLabel,
         counterpartPhone: normalizePhone(senderUser.Phone || "") || "",
-        counterpartAvatarUrl: normalizeText(senderMeta.avatarUrl) || "",
+        counterpartAvatarUrl: "",
       }),
     ];
 
@@ -1243,6 +1257,7 @@ const createHomeClientStoreService = ({
           id: appointment.id,
           date: appointment.Date,
           time: appointment.Time,
+          timeLabel: buildTimeRangeLabel(appointment.Time, appointment.endDateTime),
           barber: appointment.Barber,
           barberId: appointment.BarberID || "",
           barberAvatarUrl:

@@ -1,14 +1,20 @@
-const CACHE_VERSION = "v7";
+const CACHE_VERSION = "v8";
 const CACHE_PREFIX = "brothershop-cache";
 const CACHE_NAME = `${CACHE_PREFIX}-${CACHE_VERSION}`;
-const OFFLINE_URL = "/panel/";
+const SCOPE_PATH = new URL(self.registration.scope).pathname;
+const normalizeScopePath = (pathname) =>
+  pathname.endsWith("/") ? pathname : `${pathname}/`;
+const APP_SCOPE = normalizeScopePath(SCOPE_PATH);
+const resolveScopedPath = (assetPath = "") => new URL(assetPath, self.registration.scope).pathname;
+const OFFLINE_URL = APP_SCOPE;
 const STATIC_ASSETS = [
   OFFLINE_URL,
-  "/panel/index.html",
-  "/panel/styles.css",
-  "/panel/manifest.webmanifest"
+  resolveScopedPath("index.html"),
+  resolveScopedPath("styles.css"),
+  resolveScopedPath("manifest.webmanifest"),
+  resolveScopedPath("panel/manifest.webmanifest")
 ];
-const BUNDLE_ASSET = "/panel/script.bundle.js";
+const BUNDLE_ASSET = resolveScopedPath("script.bundle.js");
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -35,9 +41,7 @@ self.addEventListener("activate", (event) => {
 const isSameOrigin = (url) => url.origin === self.location.origin;
 const shouldBypass = (url) => url.pathname.startsWith("/api");
 const isPanelScope = (url) =>
-  url.pathname === "/panel" ||
-  url.pathname === "/panel/" ||
-  url.pathname.startsWith("/panel/");
+  APP_SCOPE === "/" ? true : url.pathname === APP_SCOPE.slice(0, -1) || url.pathname.startsWith(APP_SCOPE);
 const isAssetDestination = (destination) =>
   ["script", "style", "font", "image"].includes(destination);
 
@@ -58,7 +62,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname === "/panel/styles.css") {
+  if (url.pathname === resolveScopedPath("styles.css")) {
     event.respondWith(staleWhileRevalidate(request));
     return;
   }

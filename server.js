@@ -284,6 +284,11 @@ app.get("/client.webmanifest", (req, res) => {
   res.type("application/manifest+json");
   res.sendFile(path.join(__dirname, "client.webmanifest"));
 });
+app.get("/manifest.webmanifest", (req, res) => {
+  setNoStoreHeaders(res);
+  res.type("application/manifest+json");
+  res.sendFile(path.join(__dirname, "manifest.webmanifest"));
+});
 app.get("/panel/manifest.webmanifest", (req, res) => {
   setNoStoreHeaders(res);
   res.type("application/manifest+json");

@@ -284,6 +284,11 @@ app.get("/client.webmanifest", (req, res) => {
   res.type("application/manifest+json");
   res.sendFile(path.join(__dirname, "client.webmanifest"));
 });
+app.get("/favicon.ico", (req, res) => {
+  setNoStoreHeaders(res);
+  res.type("image/x-icon");
+  res.sendFile(path.join(__dirname, "favicon.ico"));
+});
 app.get("/favicon.svg", (req, res) => {
   setNoStoreHeaders(res);
   res.type("image/svg+xml");

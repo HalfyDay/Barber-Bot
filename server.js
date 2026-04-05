@@ -284,15 +284,10 @@ app.get("/client.webmanifest", (req, res) => {
   res.type("application/manifest+json");
   res.sendFile(path.join(__dirname, "client.webmanifest"));
 });
-app.get("/favicon.ico", (req, res) => {
+app.get("/favicon.svg", (req, res) => {
   setNoStoreHeaders(res);
-  res.type("image/png");
-  res.sendFile(path.join(__dirname, "Image", "Icon", "icon-32.png"));
-});
-app.get("/favicon.png", (req, res) => {
-  setNoStoreHeaders(res);
-  res.type("image/png");
-  res.sendFile(path.join(__dirname, "Image", "Icon", "icon-32.png"));
+  res.type("image/svg+xml");
+  res.sendFile(path.join(__dirname, "Image", "site", "login", "orig_logo.svg"));
 });
 app.get("/apple-touch-icon.png", (req, res) => {
   setNoStoreHeaders(res);

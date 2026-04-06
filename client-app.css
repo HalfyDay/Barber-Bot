@@ -640,6 +640,7 @@ textarea:focus-visible {
   border-radius: 34px;
   padding-inline: 14px;
   margin-inline: -14px;
+  touch-action: pan-y;
 }
 
 .home-barber-rotating-card {

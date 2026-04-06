@@ -100,6 +100,7 @@
   let homeBarberRotationTimer = null;
   let homeBarberTransitionSwapTimer = null;
   let homeBarberTransitionResetTimer = null;
+  let homeBarberSwipeHandledAt = 0;
   let profileAvatarPanelCloseTimer = null;
   let homeBarberTiltSnapshot = {
     tiltX: "0deg",
@@ -798,6 +799,72 @@
       }
       void triggerHomeBarberRotationStep();
     }, 6500);
+  };
+  const setupHomeBarberRotationSwipe = (scope = ROOT) => {
+    const container = scope instanceof Element ? scope : ROOT;
+    if (!container) return;
+    const rotationRoot = container.matches?.("[data-home-barber-rotation-root]")
+      ? container
+      : container.querySelector?.("[data-home-barber-rotation-root]");
+    if (!rotationRoot || rotationRoot.dataset.swipeBound === "1") return;
+    rotationRoot.dataset.swipeBound = "1";
+    let activePointerId = null;
+    let startX = 0;
+    let startY = 0;
+    let swipeTriggered = false;
+    const isSwipeEligible = (event) => {
+      if (state.currentPage !== "home") return false;
+      if (getSortedBookingBarbers().length <= 1) return false;
+      if (isDesktopLikeDevice() && event.pointerType === "mouse") return false;
+      return event.isPrimary !== false;
+    };
+    const resetSwipe = () => {
+      activePointerId = null;
+      swipeTriggered = false;
+      startX = 0;
+      startY = 0;
+    };
+    rotationRoot.addEventListener("pointerdown", (event) => {
+      if (!isSwipeEligible(event)) return;
+      activePointerId = event.pointerId;
+      swipeTriggered = false;
+      startX = event.clientX;
+      startY = event.clientY;
+      try {
+        rotationRoot.setPointerCapture?.(event.pointerId);
+      } catch {
+        // ignore unsupported pointer capture environments
+      }
+    }, { passive: true });
+    rotationRoot.addEventListener("pointermove", (event) => {
+      if (activePointerId !== event.pointerId || swipeTriggered) return;
+      const deltaX = event.clientX - startX;
+      const deltaY = event.clientY - startY;
+      if (Math.abs(deltaX) < 46) return;
+      if (Math.abs(deltaX) <= Math.abs(deltaY) * 1.15) return;
+      if (state.homeBarberTransitionStage !== "idle") {
+        resetSwipe();
+        return;
+      }
+      swipeTriggered = true;
+      homeBarberSwipeHandledAt = Date.now();
+      restartHomeBarberRotation();
+      void triggerHomeBarberRotationStep(deltaX < 0 ? 1 : -1);
+      resetSwipe();
+    }, { passive: true });
+    const finishSwipe = (event) => {
+      if (activePointerId == null) return;
+      if (event?.pointerId != null && event.pointerId !== activePointerId) return;
+      try {
+        rotationRoot.releasePointerCapture?.(activePointerId);
+      } catch {
+        // ignore unsupported pointer capture environments
+      }
+      resetSwipe();
+    };
+    rotationRoot.addEventListener("pointerup", finishSwipe, { passive: true });
+    rotationRoot.addEventListener("pointercancel", finishSwipe, { passive: true });
+    rotationRoot.addEventListener("lostpointercapture", finishSwipe, { passive: true });
   };
   const setupTransferRecipientCarousels = (scope = ROOT) => {
     const container = scope instanceof Element ? scope : ROOT;
@@ -2116,6 +2183,7 @@
     if (state.currentPage !== "home") return;
     const rotationRoot = ROOT.querySelector("[data-home-barber-rotation-root]");
     if (!rotationRoot) return;
+    setupHomeBarberRotationSwipe(rotationRoot);
     const homeBarbers = getSortedBookingBarbers();
     const html = renderHomeBarberRotation(homeBarbers);
     if (rotationRoot.innerHTML === html) return;
@@ -4633,6 +4701,7 @@
           return;
         case "switch-home-barber":
           if (event.target.closest("a, button, input, textarea, select, label") && !actionNode.matches("a, button")) return;
+          if (Date.now() - homeBarberSwipeHandledAt < 420) return;
           event.preventDefault();
           if (state.homeBarberTransitionStage !== "idle") return;
           restartHomeBarberRotation();

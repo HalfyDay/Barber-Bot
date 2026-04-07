@@ -102,6 +102,7 @@
   let homeRealtimeRefreshPromise = null;
   let topbarAnnouncementTimer = null;
   let referralBalanceAnimationTimer = null;
+  let referralPillSyncFrame = null;
   let lastTopbarBalanceAnnouncementAt = 0;
   let lastKnownReferralBalance = null;
   let promoMarqueeAutoScroll = null;
@@ -2727,7 +2728,8 @@
             </div>
           </div>
         </article>
-        <div class="filter-row referral-section-tabs">
+        <div class="filter-row referral-section-tabs referral-pill-row" data-pill-group="referral-section">
+          <span class="referral-pill-indicator" aria-hidden="true"></span>
           <button class="nav-pill ${!isStatsSection ? "active" : ""}" type="button" data-action="set-referral-section" data-section="overview">Обзор</button>
           <button class="nav-pill ${isStatsSection ? "active" : ""}" type="button" data-action="set-referral-section" data-section="stats">Статистика</button>
         </div>
@@ -2850,7 +2852,8 @@
               </div>
               <span class="status-badge">${filteredBsActivity.length}</span>
             </div>
-            <div class="filter-row referral-history-filter-row">
+            <div class="filter-row referral-history-filter-row referral-pill-row" data-pill-group="referral-history">
+              <span class="referral-pill-indicator" aria-hidden="true"></span>
               <button class="nav-pill ${state.transferHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="all">Все</button>
               <button class="nav-pill ${state.transferHistoryFilter === "transfers" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="transfers">Переводы</button>
               <button class="nav-pill ${state.transferHistoryFilter === "rewards" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="rewards">Награды</button>
@@ -2946,13 +2949,107 @@
     const template = document.createElement("template");
     template.innerHTML = renderReferralPage().trim();
     const nextPageRoot = template.content.querySelector(".referral-page");
-    const nextTabs = nextPageRoot?.querySelector(".referral-section-tabs");
     const nextPanel = nextPageRoot?.querySelector(".referral-section-panel");
     const currentTabs = currentPageRoot.querySelector(".referral-section-tabs");
     const currentPanel = currentPageRoot.querySelector(".referral-section-panel");
-    if (!nextTabs || !nextPanel || !currentTabs || !currentPanel) return false;
-    currentTabs.replaceWith(nextTabs);
+    if (!nextPanel || !currentTabs || !currentPanel) return false;
+    const currentButtons = Array.from(currentTabs.querySelectorAll(".nav-pill"));
+    currentButtons.forEach((button) => {
+      const buttonSection = normalizeText(button.dataset.section) || "overview";
+      button.classList.toggle("active", buttonSection === state.referralSection);
+    });
+    scheduleReferralPillSync(currentPageRoot);
     currentPanel.replaceWith(nextPanel);
+    scheduleReferralPillSync(currentPageRoot);
+    return true;
+  };
+  const syncReferralPillRow = (row) => {
+    if (!(row instanceof HTMLElement)) return false;
+    const indicator = row.querySelector(".referral-pill-indicator");
+    const buttons = Array.from(row.querySelectorAll(".nav-pill"));
+    if (!(indicator instanceof HTMLElement) || !buttons.length) return false;
+    const activeIndex = Math.max(0, buttons.findIndex((button) => button.classList.contains("active")));
+    const activeButton = buttons[activeIndex] || buttons[0];
+    if (!(activeButton instanceof HTMLElement)) return false;
+    const rowRect = row.getBoundingClientRect();
+    const buttonRect = activeButton.getBoundingClientRect();
+    indicator.style.width = `${buttonRect.width}px`;
+    indicator.style.height = `${buttonRect.height}px`;
+    indicator.style.top = `${Math.max(0, buttonRect.top - rowRect.top)}px`;
+    indicator.style.transform = `translateX(${Math.max(0, buttonRect.left - rowRect.left)}px)`;
+    return true;
+  };
+  const syncReferralPillRows = (scope = ROOT) => {
+    scope?.querySelectorAll?.(".referral-pill-row")?.forEach((row) => {
+      syncReferralPillRow(row);
+    });
+  };
+  const scheduleReferralPillSync = (scope = ROOT) => {
+    if (referralPillSyncFrame !== null) {
+      window.cancelAnimationFrame(referralPillSyncFrame);
+      referralPillSyncFrame = null;
+    }
+    referralPillSyncFrame = window.requestAnimationFrame(() => {
+      referralPillSyncFrame = null;
+      syncReferralPillRows(scope);
+      window.requestAnimationFrame(() => {
+        syncReferralPillRows(scope);
+      });
+    });
+  };
+  const refreshReferralTransferHistoryDom = () => {
+    if (state.currentPage !== "referral" || state.referralSection === "stats") return false;
+    const appHost = ROOT.querySelector("[data-render-host='app']");
+    const currentPageRoot = appHost?.querySelector(".referral-page");
+    const currentHistoryCard = currentPageRoot?.querySelector(".referral-transfer-history-card");
+    if (!currentPageRoot || !currentHistoryCard) return false;
+    const template = document.createElement("template");
+    template.innerHTML = renderReferralPage().trim();
+    const nextPageRoot = template.content.querySelector(".referral-page");
+    const nextHistoryCard = nextPageRoot?.querySelector(".referral-transfer-history-card");
+    if (!nextHistoryCard) return false;
+    const currentFilterRow = currentHistoryCard.querySelector(".referral-history-filter-row");
+    const nextFilterRow = nextHistoryCard.querySelector(".referral-history-filter-row");
+    if (currentFilterRow && nextFilterRow) {
+      const currentButtons = Array.from(currentFilterRow.querySelectorAll(".nav-pill"));
+      const nextButtons = Array.from(nextFilterRow.querySelectorAll(".nav-pill"));
+      currentButtons.forEach((button, index) => {
+        button.classList.toggle("active", nextButtons[index]?.classList.contains("active") === true);
+      });
+      scheduleReferralPillSync(currentHistoryCard);
+    }
+    const currentBadge = currentHistoryCard.querySelector(".status-badge");
+    const nextBadge = nextHistoryCard.querySelector(".status-badge");
+    if (currentBadge && nextBadge) currentBadge.outerHTML = nextBadge.outerHTML;
+    const currentList = currentHistoryCard.querySelector(".referral-activity-list");
+    const nextList = nextHistoryCard.querySelector(".referral-activity-list");
+    if (currentList && nextList) currentList.innerHTML = nextList.innerHTML;
+    return true;
+  };
+  const refreshProfileHistoryDom = () => {
+    if (state.currentPage !== "profile") return false;
+    const appHost = ROOT.querySelector("[data-render-host='app']");
+    const currentPageRoot = appHost?.querySelector(".profile-page");
+    const currentHistoryCard = currentPageRoot?.querySelector(".profile-history-card");
+    if (!currentPageRoot || !currentHistoryCard) return false;
+    const template = document.createElement("template");
+    template.innerHTML = renderCurrentPage().trim();
+    const nextPageRoot = template.content.querySelector(".profile-page");
+    const nextHistoryCard = nextPageRoot?.querySelector(".profile-history-card");
+    if (!nextHistoryCard) return false;
+    const currentFilterRow = currentHistoryCard.querySelector(".profile-history-filter-row");
+    const nextFilterRow = nextHistoryCard.querySelector(".profile-history-filter-row");
+    if (currentFilterRow && nextFilterRow) {
+      const currentButtons = Array.from(currentFilterRow.querySelectorAll(".nav-pill"));
+      const nextButtons = Array.from(nextFilterRow.querySelectorAll(".nav-pill"));
+      currentButtons.forEach((button, index) => {
+        button.classList.toggle("active", nextButtons[index]?.classList.contains("active") === true);
+      });
+      scheduleReferralPillSync(currentHistoryCard);
+    }
+    const currentTimeline = currentHistoryCard.querySelector(".timeline");
+    const nextTimeline = nextHistoryCard.querySelector(".timeline");
+    if (currentTimeline && nextTimeline) currentTimeline.innerHTML = nextTimeline.innerHTML;
     return true;
   };
 
@@ -3911,7 +4008,8 @@
           <div class="section-head">
             <div><div class="section-eyebrow">История посещений</div><h2 class="section-title">Последние операции</h2></div>
           </div>
-          <div class="filter-row">
+          <div class="filter-row referral-pill-row profile-history-filter-row" data-pill-group="profile-history">
+            <span class="referral-pill-indicator" aria-hidden="true"></span>
             <button class="nav-pill ${state.profileHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="all">Все</button>
             <button class="nav-pill ${state.profileHistoryFilter === "visits" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="visits">Визиты</button>
             <button class="nav-pill ${state.profileHistoryFilter === "payments" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="payments">Оплата</button>
@@ -4138,6 +4236,8 @@
     if (appChanged) setupMediaWaveLoading(renderScope);
     if (sheetChanged && sheetScope) setupMediaWaveLoading(sheetScope);
     if (appChanged) setupInteractiveBarberCards(renderScope);
+    if (appChanged) scheduleReferralPillSync(renderScope);
+    if (sheetChanged && sheetScope) scheduleReferralPillSync(sheetScope);
     applyProfileCoverTheme(renderScope);
     setupPromoMarqueeAutoScroll(renderScope);
     setupHomeBarberRotation();
@@ -4508,7 +4608,7 @@
       const operations = Array.isArray(profile.operations) ? profile.operations : [];
       const historyItems = getProfileHistoryItems(visitHistory, operations);
       const filteredHistory = getFilteredProfileHistoryItems(historyItems, state.profileHistoryFilter);
-      openSheet("Вся история", `<div class="filter-row sheet-filter-row"><button class="nav-pill ${state.profileHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="all">Все</button><button class="nav-pill ${state.profileHistoryFilter === "visits" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="visits">Визиты</button><button class="nav-pill ${state.profileHistoryFilter === "payments" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="payments">Оплата</button></div><div class="timeline">${filteredHistory.length ? filteredHistory.map(renderProfileHistoryRow).join("") : `<div class="empty-state">История пока пуста.</div>`}</div>`);
+      openSheet("Вся история", `<div class="filter-row sheet-filter-row referral-pill-row profile-history-filter-row" data-pill-group="profile-history"><span class="referral-pill-indicator" aria-hidden="true"></span><button class="nav-pill ${state.profileHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="all">Все</button><button class="nav-pill ${state.profileHistoryFilter === "visits" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="visits">Визиты</button><button class="nav-pill ${state.profileHistoryFilter === "payments" ? "active" : ""}" type="button" data-action="set-history-filter" data-filter="payments">Оплата</button></div><div class="timeline">${filteredHistory.length ? filteredHistory.map(renderProfileHistoryRow).join("") : `<div class="empty-state">История пока пуста.</div>`}</div>`);
       return;
     }
   };
@@ -4846,7 +4946,16 @@
             openNamedSheet("profile-history");
             return;
           }
-          render();
+          {
+            const filterRow = actionNode.closest(".profile-history-filter-row");
+            if (filterRow) {
+              filterRow.querySelectorAll(".nav-pill").forEach((button) => {
+                button.classList.toggle("active", normalizeText(button.dataset.filter) === state.profileHistoryFilter);
+              });
+              scheduleReferralPillSync(filterRow);
+            }
+          }
+          if (!refreshProfileHistoryDom()) render();
           return;
         case "set-transfer-filter":
           event.preventDefault();
@@ -4860,7 +4969,16 @@
             openNamedSheet("referral-history");
             return;
           }
-          render();
+          {
+            const filterRow = actionNode.closest(".referral-history-filter-row");
+            if (filterRow) {
+              filterRow.querySelectorAll(".nav-pill").forEach((button) => {
+                button.classList.toggle("active", normalizeText(button.dataset.filter) === state.transferHistoryFilter);
+              });
+              scheduleReferralPillSync(filterRow);
+            }
+          }
+          if (!refreshReferralTransferHistoryDom()) render();
           return;
         case "set-referral-section":
           event.preventDefault();
@@ -4869,6 +4987,15 @@
             const nextSection = normalizeText(actionNode.dataset.section) || "overview";
             if (state.referralSection === nextSection) return;
             state.referralSection = nextSection;
+          }
+          {
+            const sectionRow = actionNode.closest(".referral-section-tabs");
+            if (sectionRow) {
+              sectionRow.querySelectorAll(".nav-pill").forEach((button) => {
+                button.classList.toggle("active", normalizeText(button.dataset.section) === state.referralSection);
+              });
+              scheduleReferralPillSync(sectionRow);
+            }
           }
           if (!refreshReferralSectionDom()) render();
           return;
@@ -5658,7 +5785,11 @@
       }, true);
       window.addEventListener("resize", () => {
         setupPromoMarqueeAutoScroll();
+        scheduleReferralPillSync();
       }, { passive: true });
+      window.addEventListener("load", () => {
+        scheduleReferralPillSync();
+      }, { once: true });
       window.addEventListener("beforeunload", () => {
         stopHomeEventsStream();
         void sendSitePresence("offline");

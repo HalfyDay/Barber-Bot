@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v8";
+const CACHE_VERSION = "v9";
 const CACHE_PREFIX = "brothershop-cache";
 const CACHE_NAME = `${CACHE_PREFIX}-${CACHE_VERSION}`;
 const SCOPE_PATH = new URL(self.registration.scope).pathname;
@@ -11,14 +11,28 @@ const STATIC_ASSETS = [
   OFFLINE_URL,
   resolveScopedPath("index.html"),
   resolveScopedPath("styles.css"),
-  resolveScopedPath("manifest.webmanifest"),
-  resolveScopedPath("panel/manifest.webmanifest")
+  resolveScopedPath("manifest.webmanifest")
 ];
 const BUNDLE_ASSET = resolveScopedPath("script.bundle.js");
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      await Promise.all(
+        STATIC_ASSETS.map(async (assetPath) => {
+          try {
+            const response = await fetch(assetPath, { cache: "no-cache" });
+            if (!response || !response.ok) {
+              throw new Error(`Failed to precache ${assetPath}: ${response?.status || "no-response"}`);
+            }
+            await cache.put(assetPath, response.clone());
+          } catch (error) {
+            console.warn("[service-worker] precache skipped:", assetPath, error);
+          }
+        })
+      );
+    })()
   );
   self.skipWaiting();
 });

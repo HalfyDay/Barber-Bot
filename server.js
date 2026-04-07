@@ -41,6 +41,7 @@ const { createCatalogLookupService } = require("./services/catalogLookupService"
 const { createBookingUtilityService } = require("./services/bookingUtilityService");
 const { createBarberAliasService } = require("./services/barberAliasService");
 const { createSitePresenceService } = require("./services/sitePresenceService");
+const { createHomeRealtimeService } = require("./services/homeRealtimeService");
 const { createPrismaClient, getPrismaRuntimeConfig, validatePrismaRuntimeConfig } = require("./services/prismaRuntime");
 const { registerAdminCrudRoutes } = require("./routes/adminCrudRoutes");
 const { registerHomeRoutes } = require("./routes/homeRoutes");
@@ -964,7 +965,7 @@ const {
   getServiceCatalog,
   readBlockedUsers,
   writeBlockedUsers,
-  requestRealtimePush: (...args) => requestRealtimePush(...args),
+  requestRealtimePush: (...args) => requestUnifiedRealtimePush(...args),
   parseDateFilter,
   getDefaultRevenueRange,
   formatDateOnly,
@@ -996,6 +997,24 @@ const {
   keepAliveMs: REALTIME_KEEPALIVE_MS,
   randomUUID,
 });
+const {
+  attachClient: attachHomeRealtimeClient,
+  broadcast: broadcastHomeRealtimeEvent,
+  shutdownClients: shutdownHomeRealtimeClients,
+} = createHomeRealtimeService({
+  randomUUID,
+  keepAliveMs: REALTIME_KEEPALIVE_MS,
+});
+const requestHomeRealtimeSync = (reason = "app-sync") =>
+  broadcastHomeRealtimeEvent({
+    type: "home:sync",
+    reason: normalizeText(reason) || "app-sync",
+    updatedAt: new Date().toISOString(),
+  });
+const requestUnifiedRealtimePush = (force = false) => {
+  requestRealtimePush(force);
+  requestHomeRealtimeSync("app-sync");
+};
 const {
   touchSession: touchSitePresenceSession,
   removeSession: removeSitePresenceSession,
@@ -1268,10 +1287,11 @@ registerHomeRoutes({
   STATUS_ACTIVE,
   STATUS_CANCELLED,
   notifyBarberAboutNewAppointment,
-  requestRealtimePush,
+  requestRealtimePush: requestUnifiedRealtimePush,
   parseDateTime,
   touchSitePresenceSession,
   removeSitePresenceSession,
+  attachHomeRealtimeClient,
 });
 registerBotInternalRoutes({
   app,
@@ -1296,7 +1316,7 @@ registerBotInternalRoutes({
   randomUUID,
   appointmentService,
   notifyBarberAboutNewAppointment,
-  requestRealtimePush,
+  requestRealtimePush: requestUnifiedRealtimePush,
   parseDateTime,
 });
 app.use("/api", (req, res, next) => {
@@ -1441,7 +1461,7 @@ registerAdminCrudRoutes({
   normalizeAppointmentStatus,
   appointmentService,
   respondWithAppointmentDomainError,
-  requestRealtimePush,
+  requestRealtimePush: requestUnifiedRealtimePush,
   respondWithLegacyCrudBlock,
   buildUserInsightsMap,
   adjustUserBsBalance,
@@ -1559,6 +1579,7 @@ const {
   stopAppointmentReminderLoop,
   stopRealtimeLoop,
   shutdownRealtimeClients,
+  shutdownHomeRealtimeClients,
   stopBotProcess,
   stopHttpServer,
   prisma,

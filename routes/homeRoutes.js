@@ -54,6 +54,7 @@ const registerHomeRoutes = ({
   parseDateTime,
   touchSitePresenceSession,
   removeSitePresenceSession,
+  attachHomeRealtimeClient,
 }) => {
   const buildClientAccessPayload = async (phone) => {
     const safePhone = normalizePhone(phone);
@@ -724,6 +725,7 @@ const registerHomeRoutes = ({
           gender: meta?.gender || "",
           avatarUrl: meta?.avatarUrl || "",
           bookingNotificationsEnabled: meta?.bookingNotificationsEnabled !== false,
+          balanceNotificationsEnabled: meta?.balanceNotificationsEnabled !== false,
           referralCode: meta?.referralCode || "",
         },
         botUsername: TELEGRAM_BOT_USERNAME || null,
@@ -843,6 +845,13 @@ const registerHomeRoutes = ({
           : !["false", "0", "off", ""].includes(
               String(bookingNotificationsEnabledRaw).trim().toLowerCase(),
             );
+      const balanceNotificationsEnabledRaw = req.body?.balanceNotificationsEnabled;
+      const balanceNotificationsEnabled =
+        balanceNotificationsEnabledRaw === undefined
+          ? undefined
+          : !["false", "0", "off", ""].includes(
+              String(balanceNotificationsEnabledRaw).trim().toLowerCase(),
+            );
 
       const updated = await prisma.users.update({
         where: { id: userId },
@@ -855,6 +864,7 @@ const registerHomeRoutes = ({
         gender: hasGender ? gender || "" : currentMeta?.gender || "",
         avatarUrl: hasAvatarUrl ? avatarUrl : currentMeta?.avatarUrl || "",
         ...(bookingNotificationsEnabled === undefined ? {} : { bookingNotificationsEnabled }),
+        ...(balanceNotificationsEnabled === undefined ? {} : { balanceNotificationsEnabled }),
       });
       const user = toPublicHomeProfile(updated);
       const identity = buildHomeIdentity({
@@ -873,6 +883,7 @@ const registerHomeRoutes = ({
           gender: meta?.gender || "",
           avatarUrl: meta?.avatarUrl || "",
           bookingNotificationsEnabled: meta?.bookingNotificationsEnabled !== false,
+          balanceNotificationsEnabled: meta?.balanceNotificationsEnabled !== false,
           referralCode: meta?.referralCode || "",
         },
       });
@@ -978,6 +989,34 @@ const registerHomeRoutes = ({
     }
   });
 
+  app.get("/api/home/events/stream", authenticateHomeToken, async (req, res) => {
+    try {
+      const userId = normalizeText(req.homeUser?.userId);
+      if (!userId) return res.sendStatus(401);
+      res.set({
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+      req.socket?.setKeepAlive?.(true);
+      if (typeof res.flushHeaders === "function") {
+        res.flushHeaders();
+      } else {
+        res.writeHead(200);
+      }
+      res.write("retry: 5000\n\n");
+      attachHomeRealtimeClient?.({ req, res, userId });
+    } catch (error) {
+      console.error("Home events stream error:", error);
+      try {
+        res.end();
+      } catch {
+        // ignore downstream disconnects
+      }
+    }
+  });
+
   app.get("/api/home/referral", authenticateHomeToken, async (req, res) => {
     try {
       const userId = normalizeText(req.homeUser?.userId);
@@ -1039,6 +1078,7 @@ const registerHomeRoutes = ({
         comment: req.body?.comment,
       });
       const referral = await buildReferralPayload(stored);
+      requestRealtimePush(true);
       return res.json({
         success: true,
         referral,

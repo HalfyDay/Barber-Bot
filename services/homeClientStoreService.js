@@ -531,6 +531,8 @@ const createHomeClientStoreService = ({
       : [];
     const bookingNotificationsEnabled =
       input.bookingNotificationsEnabled === undefined ? true : Boolean(input.bookingNotificationsEnabled);
+    const balanceNotificationsEnabled =
+      input.balanceNotificationsEnabled === undefined ? true : Boolean(input.balanceNotificationsEnabled);
     return {
       birthDate: sanitizeDateOnly(input.birthDate),
       gender: GENDER_OPTIONS.has(gender) ? gender : "",
@@ -538,6 +540,7 @@ const createHomeClientStoreService = ({
       referralCode: normalizeText(input.referralCode) || buildReferralCode(),
       referredByUserId: normalizeText(input.referredByUserId) || null,
       bookingNotificationsEnabled,
+      balanceNotificationsEnabled,
       privacyConsentAcceptedAt: toIsoString(input.privacyConsentAcceptedAt),
       privacyConsentIp: normalizeText(input.privacyConsentIp) || "",
       privacyConsentSource: normalizeText(input.privacyConsentSource) || "",
@@ -1357,6 +1360,7 @@ const createHomeClientStoreService = ({
         gender: userMeta.gender,
         avatarUrl: userMeta.avatarUrl,
         bookingNotificationsEnabled: userMeta.bookingNotificationsEnabled !== false,
+        balanceNotificationsEnabled: userMeta.balanceNotificationsEnabled !== false,
         referralCode: userMeta.referralCode,
         warningCount,
         noticeCount: notices.length,

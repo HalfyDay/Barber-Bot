@@ -11,6 +11,7 @@ const createServerLifecycleService = ({
   stopAppointmentReminderLoop,
   stopRealtimeLoop,
   shutdownRealtimeClients,
+  shutdownHomeRealtimeClients,
   stopBotProcess,
   stopHttpServer,
   prisma,
@@ -77,6 +78,7 @@ const createServerLifecycleService = ({
       stopAppointmentReminderLoop();
       stopRealtimeLoop();
       shutdownRealtimeClients();
+      shutdownHomeRealtimeClients?.();
       await stopBotProcess();
       await stopHttpServer();
       await prisma.$disconnect();

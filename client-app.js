@@ -6,6 +6,12 @@
   const LOGOUT_MARKER_STORAGE_KEY = "home-user-logout-marker";
   const SITE_PRESENCE_SESSION_KEY = "home-site-presence-session-id";
   const SITE_PRESENCE_PING_INTERVAL_MS = 30000;
+  const HOME_EVENTS_STREAM_PATH = `${API_ROOT}/events/stream`;
+  const HOME_REALTIME_REFRESH_DEBOUNCE_MS = 240;
+  const HOME_REALTIME_RECONNECT_DELAY_MS = 2200;
+  const TOPBAR_BALANCE_ANNOUNCEMENT_DURATION_MS = 2600;
+  const TOPBAR_BALANCE_ANNOUNCEMENT_COOLDOWN_MS = 9000;
+  const BALANCE_NOTIFICATION_TAG = "brothershop-home-balance";
   const CONTACT_PHONE = "+7 964 659-92-96";
   const SEO_HOME_TITLE = "BrotherShop | Барбершоп в Братске, мужские стрижки и оформление бороды";
   const APP_HOME_TITLE = "BrotherShop • Главная";
@@ -56,6 +62,8 @@
     },
     barberProfileServices: {},
     telegramLinkRequestId: "",
+    topbarAnnouncementActive: false,
+    topbarAnnouncementText: "",
     booking: {
       barberId: "",
       services: [],
@@ -88,6 +96,14 @@
   let referralQrScannerSession = 0;
   let delegatedHandlersBound = false;
   let sitePresenceTimer = null;
+  let homeEventsSource = null;
+  let homeEventsReconnectTimer = null;
+  let homeRealtimeRefreshTimer = null;
+  let homeRealtimeRefreshPromise = null;
+  let topbarAnnouncementTimer = null;
+  let referralBalanceAnimationTimer = null;
+  let lastTopbarBalanceAnnouncementAt = 0;
+  let lastKnownReferralBalance = null;
   let promoMarqueeAutoScroll = null;
   const isEditableTarget = (target) => {
     if (!(target instanceof HTMLElement)) return false;
@@ -120,6 +136,150 @@
   const lastRenderedHtml = {
     app: "",
     sheet: "",
+  };
+
+  const canUseBrowserNotifications = () => typeof window.Notification === "function";
+  const getReferralBalance = (payload = null) => {
+    const numeric = Number(payload?.referral?.bsBalance);
+    return Number.isFinite(numeric) ? Math.max(0, numeric) : 0;
+  };
+  const formatBsAmount = (amount) => Math.max(0, Math.round(Number(amount) || 0));
+  const buildTopbarBalanceAnnouncementText = (amount) => `Поступление ${formatBsAmount(amount)} BS`;
+  const triggerReferralBalanceHighlight = (scope = ROOT) => {
+    if (referralBalanceAnimationTimer) {
+      window.clearTimeout(referralBalanceAnimationTimer);
+      referralBalanceAnimationTimer = null;
+    }
+    const balanceNode = scope?.querySelector?.(".referral-wallet-balance-number");
+    if (!balanceNode) return;
+    balanceNode.classList.remove("is-balance-updated");
+    void balanceNode.offsetWidth;
+    balanceNode.classList.add("is-balance-updated");
+    referralBalanceAnimationTimer = window.setTimeout(() => {
+      balanceNode.classList.remove("is-balance-updated");
+      referralBalanceAnimationTimer = null;
+    }, 880);
+  };
+  const refreshTopbarDom = () => {
+    const appHost = ROOT.querySelector("[data-render-host='app']");
+    const currentTopbar = appHost?.querySelector(".topbar");
+    if (!appHost || !currentTopbar) return false;
+    const template = document.createElement("template");
+    template.innerHTML = renderTopbar().trim();
+    const nextTopbar = template.content.querySelector(".topbar");
+    if (!nextTopbar) return false;
+    currentTopbar.replaceWith(nextTopbar);
+    return true;
+  };
+  const refreshReferralLiveDom = ({ animateBalance = false } = {}) => {
+    if (state.currentPage !== "referral") return false;
+    const appHost = ROOT.querySelector("[data-render-host='app']");
+    const currentPageRoot = appHost?.querySelector(".referral-page");
+    if (!appHost || !currentPageRoot) return false;
+    const template = document.createElement("template");
+    template.innerHTML = renderReferralPage().trim();
+    const nextPageRoot = template.content.querySelector(".referral-page");
+    const nextWallet = nextPageRoot?.querySelector(".referral-wallet-card");
+    const nextTabs = nextPageRoot?.querySelector(".referral-section-tabs");
+    const nextPanel = nextPageRoot?.querySelector(".referral-section-panel");
+    const currentWallet = currentPageRoot.querySelector(".referral-wallet-card");
+    const currentTabs = currentPageRoot.querySelector(".referral-section-tabs");
+    const currentPanel = currentPageRoot.querySelector(".referral-section-panel");
+    if (!nextWallet || !nextTabs || !nextPanel || !currentWallet || !currentTabs || !currentPanel) return false;
+    currentWallet.replaceWith(nextWallet);
+    currentTabs.replaceWith(nextTabs);
+    currentPanel.className = nextPanel.className;
+    currentPanel.innerHTML = nextPanel.innerHTML;
+    setupTransferRecipientCarousels(currentPageRoot);
+    if (animateBalance) {
+      triggerReferralBalanceHighlight(currentPageRoot);
+    }
+    return true;
+  };
+  const refreshLiveAppDom = ({ animateReferralBalance = false } = {}) => {
+    if (state.currentPage !== "referral") {
+      render({ sheet: false });
+      return;
+    }
+    const topbarUpdated = refreshTopbarDom();
+    const referralUpdated = refreshReferralLiveDom({ animateBalance: animateReferralBalance });
+    if (!topbarUpdated && !referralUpdated) {
+      render({ sheet: false });
+    }
+  };
+  const clearTopbarAnnouncement = () => {
+    if (topbarAnnouncementTimer) {
+      window.clearTimeout(topbarAnnouncementTimer);
+      topbarAnnouncementTimer = null;
+    }
+    if (!state.topbarAnnouncementActive && !state.topbarAnnouncementText) return;
+    state.topbarAnnouncementActive = false;
+    state.topbarAnnouncementText = "";
+    if (!refreshTopbarDom()) render({ sheet: false });
+  };
+  const triggerTopbarBalanceAnnouncement = (amount) => {
+    const safeAmount = formatBsAmount(amount);
+    if (safeAmount <= 0) return false;
+    const now = Date.now();
+    if (now - lastTopbarBalanceAnnouncementAt < TOPBAR_BALANCE_ANNOUNCEMENT_COOLDOWN_MS) return false;
+    lastTopbarBalanceAnnouncementAt = now;
+    if (topbarAnnouncementTimer) {
+      window.clearTimeout(topbarAnnouncementTimer);
+      topbarAnnouncementTimer = null;
+    }
+    state.topbarAnnouncementActive = true;
+    state.topbarAnnouncementText = buildTopbarBalanceAnnouncementText(safeAmount);
+    if (!refreshTopbarDom()) render({ sheet: false });
+    topbarAnnouncementTimer = window.setTimeout(() => {
+      clearTopbarAnnouncement();
+    }, TOPBAR_BALANCE_ANNOUNCEMENT_DURATION_MS);
+    return true;
+  };
+  const shouldShowIncomingBalanceBrowserNotification = () => {
+    if (!canUseBrowserNotifications()) return false;
+    if (window.Notification.permission !== "granted") return false;
+    if (state.payload?.user?.balanceNotificationsEnabled === false) return false;
+    return document.visibilityState !== "visible" || document.hasFocus?.() === false;
+  };
+  const showIncomingBalanceBrowserNotification = (amount, nextBalance) => {
+    if (!shouldShowIncomingBalanceBrowserNotification()) return;
+    const safeAmount = formatBsAmount(amount);
+    const safeBalance = formatBsAmount(nextBalance);
+    try {
+      const notification = new window.Notification("Пополнение BS", {
+        body: `Поступление ${safeAmount} BS. Баланс: ${safeBalance} BS.`,
+        tag: BALANCE_NOTIFICATION_TAG,
+        renotify: true,
+      });
+      notification.onclick = () => {
+        try {
+          notification.close();
+        } catch {}
+        window.focus?.();
+      };
+    } catch {
+      // Browser notification delivery is best-effort.
+    }
+  };
+  const handleIncomingBalance = (delta, nextBalance) => {
+    const safeDelta = formatBsAmount(delta);
+    if (safeDelta <= 0) return;
+    const feedbackShown = triggerTopbarBalanceAnnouncement(safeDelta);
+    if (!feedbackShown) return;
+    showIncomingBalanceBrowserNotification(safeDelta, nextBalance);
+  };
+  const commitAppPayload = (nextPayload, options = {}) => {
+    const safePayload = nextPayload && typeof nextPayload === "object" ? nextPayload : null;
+    const previousBalance =
+      Number.isFinite(lastKnownReferralBalance) ? lastKnownReferralBalance : safePayload ? getReferralBalance(state.payload) : null;
+    const nextBalance = safePayload ? getReferralBalance(safePayload) : null;
+    state.payload = safePayload;
+    if (safePayload && options.allowBalanceAnnouncement === true && Number.isFinite(previousBalance) && Number.isFinite(nextBalance)) {
+      const delta = nextBalance - previousBalance;
+      if (delta > 0) handleIncomingBalance(delta, nextBalance);
+    }
+    lastKnownReferralBalance = Number.isFinite(nextBalance) ? nextBalance : null;
+    return state.payload;
   };
 
   const normalizeText = (value) => (value == null ? "" : String(value).trim());
@@ -994,6 +1154,9 @@
   const clearSession = () => {
     removeStorage(getStorage("local"), SESSION_STORAGE_KEY);
     removeStorage(getStorage("session"), SESSION_STORAGE_KEY);
+    stopHomeEventsStream();
+    clearTopbarAnnouncement();
+    lastKnownReferralBalance = null;
   };
   const clearLogoutMarker = () => {
     removeStorage(getStorage("local"), LOGOUT_MARKER_STORAGE_KEY);
@@ -1626,9 +1789,10 @@
       body: options?.body,
     });
     const refreshedToken = normalizeText(response.headers.get("x-home-session-token"));
-    if (refreshedToken) {
+    if (refreshedToken && refreshedToken !== token) {
       state.session.token = refreshedToken;
       persistSession(state.session);
+      restartHomeEventsStream();
     }
     if (response.status === 401 || response.status === 403) {
       clearSession();
@@ -1680,6 +1844,101 @@
       });
     } catch {
       // Best-effort presence sync.
+    }
+  };
+  const stopHomeRealtimeRefresh = () => {
+    if (!homeRealtimeRefreshTimer) return;
+    window.clearTimeout(homeRealtimeRefreshTimer);
+    homeRealtimeRefreshTimer = null;
+  };
+  const stopHomeEventsStream = () => {
+    stopHomeRealtimeRefresh();
+    if (homeEventsReconnectTimer) {
+      window.clearTimeout(homeEventsReconnectTimer);
+      homeEventsReconnectTimer = null;
+    }
+    if (homeEventsSource) {
+      homeEventsSource.close();
+      homeEventsSource = null;
+    }
+  };
+  const refreshAppPayloadFromRealtime = async () => {
+    if (!isAuthenticated()) return null;
+    if (homeRealtimeRefreshPromise) return homeRealtimeRefreshPromise;
+    homeRealtimeRefreshPromise = (async () => {
+      try {
+        const previousBalance = getReferralBalance(state.payload);
+        const payload = await apiRequest("/app");
+        commitAppPayload(payload, { allowBalanceAnnouncement: true });
+        const nextBalance = getReferralBalance(payload);
+        if (state.currentPage === "booking") {
+          void syncBookingSelectionFromLocation();
+        }
+        refreshLiveAppDom({ animateReferralBalance: nextBalance > previousBalance });
+        return payload;
+      } catch {
+        return null;
+      } finally {
+        homeRealtimeRefreshPromise = null;
+      }
+    })();
+    return homeRealtimeRefreshPromise;
+  };
+  const scheduleHomeRealtimeRefresh = () => {
+    if (!isAuthenticated()) return;
+    if (homeRealtimeRefreshTimer) {
+      window.clearTimeout(homeRealtimeRefreshTimer);
+    }
+    homeRealtimeRefreshTimer = window.setTimeout(() => {
+      homeRealtimeRefreshTimer = null;
+      void refreshAppPayloadFromRealtime();
+    }, HOME_REALTIME_REFRESH_DEBOUNCE_MS);
+  };
+  const startHomeEventsStream = () => {
+    if (!isAuthenticated() || homeEventsSource || typeof window.EventSource !== "function") return;
+    const token = normalizeText(state.session?.token);
+    if (!token) return;
+    const streamUrl = new URL(HOME_EVENTS_STREAM_PATH, window.location.origin);
+    streamUrl.searchParams.set("token", token);
+    const source = new window.EventSource(streamUrl.toString());
+    const restart = () => {
+      if (homeEventsSource !== source) return;
+      source.close();
+      homeEventsSource = null;
+      if (!isAuthenticated()) return;
+      if (homeEventsReconnectTimer) {
+        window.clearTimeout(homeEventsReconnectTimer);
+      }
+      homeEventsReconnectTimer = window.setTimeout(() => {
+        homeEventsReconnectTimer = null;
+        startHomeEventsStream();
+      }, HOME_REALTIME_RECONNECT_DELAY_MS);
+    };
+    source.addEventListener("home-sync", () => {
+      scheduleHomeRealtimeRefresh();
+    });
+    source.onopen = () => {
+      if (!homeEventsReconnectTimer) return;
+      window.clearTimeout(homeEventsReconnectTimer);
+      homeEventsReconnectTimer = null;
+    };
+    source.onerror = () => {
+      restart();
+    };
+    homeEventsSource = source;
+  };
+  const restartHomeEventsStream = () => {
+    stopHomeEventsStream();
+    startHomeEventsStream();
+  };
+  const requestIncomingBalanceNotificationPermission = async () => {
+    if (!canUseBrowserNotifications()) return "unsupported";
+    const currentPermission = window.Notification.permission;
+    if (currentPermission !== "default") return currentPermission;
+    try {
+      return await window.Notification.requestPermission();
+    } catch {
+      return window.Notification.permission || "default";
     }
   };
 
@@ -2040,18 +2299,27 @@
     const user = state.payload?.user || {};
     const siteHome = state.payload?.site?.home || {};
     const authenticated = isAuthenticated();
-    return memoizeRenderedFragment("topbar", [user, siteHome, authenticated], () => `
-      <header class="topbar">
-        <div class="brand">
-          <span class="brand-title">${normalizeText(siteHome.logoText || "BrotherShop")}</span>
-        </div>
-        <div class="topbar-side">
-          ${authenticated
-            ? `<button class="chip" type="button" data-action="navigate" data-href="/profile/">${avatarMarkup(user, 44)}<span>${normalizeText(user.displayName || "Клиент")}</span></button>`
-            : `<a class="ghost-btn" href="${buildLoginUrl("/booking/")}">Войти</a>`}
-        </div>
-      </header>
-    `);
+    return memoizeRenderedFragment(
+      "topbar",
+      [user, siteHome, authenticated, state.topbarAnnouncementActive, state.topbarAnnouncementText],
+      () => `
+        <header class="topbar ${state.topbarAnnouncementActive ? "is-announcing" : ""}">
+          <div class="topbar-content">
+            <div class="brand">
+              <span class="brand-title">${normalizeText(siteHome.logoText || "BrotherShop")}</span>
+            </div>
+            <div class="topbar-side">
+              ${authenticated
+                ? `<button class="chip" type="button" data-action="navigate" data-href="/profile/">${avatarMarkup(user, 44)}<span>${normalizeText(user.displayName || "Клиент")}</span></button>`
+                : `<a class="ghost-btn" href="${buildLoginUrl("/booking/")}">Войти</a>`}
+            </div>
+          </div>
+          <div class="topbar-announcement" aria-live="polite" aria-atomic="true">
+            <span class="topbar-announcement-label">${normalizeText(state.topbarAnnouncementText)}</span>
+          </div>
+        </header>
+      `,
+    );
   };
 
   const renderBottomNav = () => {
@@ -4008,7 +4276,7 @@
           coverBsAmount: Math.max(0, Math.trunc(Number(state.booking.appliedBs) || 0)),
         }),
       });
-      state.payload = await apiRequest("/app");
+      commitAppPayload(await apiRequest("/app"));
       state.booking = {
         barberId: "",
         services: [],
@@ -4043,7 +4311,7 @@
     await apiRequest(`/booking/appointments/${encodeURIComponent(safeId)}/cancel`, {
       method: "POST",
     });
-    state.payload = await apiRequest("/app");
+    commitAppPayload(await apiRequest("/app"));
     render({ sheet: false });
     closeSheet();
     openSheet("Запись отменена", buildBookingStatusSheet("Запись отменена"), "", "sheet-success");
@@ -4071,12 +4339,12 @@
     state.referralTransferDraft = null;
     state.referralTransferError = "";
     if (payload?.referral) {
-      state.payload = {
+      commitAppPayload({
         ...(state.payload || {}),
         referral: payload.referral,
-      };
+      });
     } else {
-      state.payload = await apiRequest("/app");
+      commitAppPayload(await apiRequest("/app"));
     }
     render({ sheet: false });
     dismissSheet();
@@ -4183,7 +4451,7 @@
       return;
     }
     if (sheetId === "profile-menu") {
-      openSheet("Настройки", `<div class="list"><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-edit"><p class="list-title">Редактировать профиль</p><p class="subtitle">Имя, телефон, дата рождения, пол и фото.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-security"><p class="list-title">Безопасность</p><p class="subtitle">Смена пароля, Telegram и защита доступа.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-notifications"><p class="list-title">Настройки уведомлений</p><p class="subtitle">Управление уведомлениями о записях на сайте.</p></button><button class="list-item menu-action danger-surface" type="button" data-action="open-sheet" data-sheet="profile-logout-confirm"><p class="list-title">Выход</p><p class="subtitle">Выйти из аккаунта.</p></button></div>`);
+      openSheet("Настройки", `<div class="list"><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-edit"><p class="list-title">Редактировать профиль</p><p class="subtitle">Имя, телефон, дата рождения, пол и фото.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-security"><p class="list-title">Безопасность</p><p class="subtitle">Смена пароля, Telegram и защита доступа.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-notifications"><p class="list-title">Настройки уведомлений</p><p class="subtitle">Уведомления о записях и пополнениях BS.</p></button><button class="list-item menu-action danger-surface" type="button" data-action="open-sheet" data-sheet="profile-logout-confirm"><p class="list-title">Выход</p><p class="subtitle">Выйти из аккаунта.</p></button></div>`);
       return;
     }
     if (sheetId === "profile-logout-confirm") {
@@ -4202,7 +4470,7 @@
     }
     if (sheetId === "profile-notifications") {
       const user = state.payload?.user || {};
-      openSheet("Уведомления", `<form class="form-grid" id="profile-notifications-form"><label class="toggle-card"><div><p class="list-title">Уведомления о записях</p><p class="subtitle">Показывать уведомления на сайте о создании и изменениях записи к барберу.</p></div><input type="checkbox" name="bookingNotificationsEnabled" ${user.bookingNotificationsEnabled !== false ? "checked" : ""} /></label><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
+      openSheet("Уведомления", `<form class="form-grid" id="profile-notifications-form"><label class="toggle-card"><div><p class="list-title">Уведомления о записях</p><p class="subtitle">Показывать уведомления на сайте о создании и изменениях записи к барберу.</p></div><input type="checkbox" name="bookingNotificationsEnabled" ${user.bookingNotificationsEnabled !== false ? "checked" : ""} /></label><label class="toggle-card"><div><p class="list-title">Уведомления о пополнении BS</p><p class="subtitle">Системные уведомления браузера и анимация в шапке при поступлении бонусов.</p></div><input type="checkbox" name="balanceNotificationsEnabled" ${user.balanceNotificationsEnabled !== false ? "checked" : ""} /></label><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
       return;
     }
     if (sheetId === "profile-notices") {
@@ -4251,13 +4519,13 @@
       const nextUserPatch = Object.fromEntries(
         Object.entries(safePatch).filter(([key, value]) => value !== undefined && (value !== "" || key === "avatarUrl")),
       );
-      state.payload = {
+      commitAppPayload({
         ...state.payload,
         user: {
           ...state.payload.user,
           ...nextUserPatch,
         },
-      };
+      });
     }
     closeSheet();
     try {
@@ -4265,10 +4533,10 @@
         method: "PUT",
         body: JSON.stringify(safePatch),
       });
-      state.payload = await apiRequest("/app");
+      commitAppPayload(await apiRequest("/app"));
       render();
     } catch (error) {
-      state.payload = await apiRequest("/app").catch(() => state.payload);
+      commitAppPayload(await apiRequest("/app").catch(() => state.payload));
       render();
       throw error;
     }
@@ -4357,7 +4625,7 @@
     if (!state.telegramLinkRequestId) return;
     const payload = await apiRequest(`/profile/telegram/status?requestId=${encodeURIComponent(state.telegramLinkRequestId)}`);
     if (payload?.done && payload?.success && payload?.user) {
-      state.payload = await apiRequest("/app");
+      commitAppPayload(await apiRequest("/app"));
       state.telegramLinkRequestId = "";
       render({ sheet: false });
       openSheet("Telegram привязан", `<div class="list-item"><p class="list-title">Аккаунт успешно привязан.</p></div>`);
@@ -4373,7 +4641,7 @@
 
   const unlinkTelegram = async () => {
     await apiRequest("/profile/telegram/unlink", { method: "POST" });
-    state.payload = await apiRequest("/app");
+    commitAppPayload(await apiRequest("/app"));
     render({ sheet: false });
   };
 
@@ -5113,9 +5381,18 @@
     bindProfileForm(sheetRoot, "profile-birthdate-form", async (formData) => ({ birthDate: normalizeText(formData.get("birthDate")) }));
     bindProfileForm(sheetRoot, "profile-gender-form", async (formData) => ({ gender: normalizeText(formData.get("gender")) }));
     bindProfileForm(sheetRoot, "profile-password-form", async (formData) => ({ password: normalizeText(formData.get("password")) }));
-    bindProfileForm(sheetRoot, "profile-notifications-form", async (formData) => ({
-      bookingNotificationsEnabled: formData.get("bookingNotificationsEnabled") === "on",
-    }));
+    bindProfileForm(sheetRoot, "profile-notifications-form", async (formData) => {
+      const bookingNotificationsEnabled = formData.get("bookingNotificationsEnabled") === "on";
+      const balanceNotificationsEnabled = formData.get("balanceNotificationsEnabled") === "on";
+      const balanceNotificationsWasEnabled = state.payload?.user?.balanceNotificationsEnabled !== false;
+      if (balanceNotificationsEnabled && !balanceNotificationsWasEnabled) {
+        await requestIncomingBalanceNotificationPermission();
+      }
+      return {
+        bookingNotificationsEnabled,
+        balanceNotificationsEnabled,
+      };
+    });
     const profilePasswordForm = queryById(sheetRoot, "profile-password-form");
     setupProfileFormDirtyState(profilePasswordForm, () => {
       const passwordField = profilePasswordForm?.elements?.password;
@@ -5123,10 +5400,15 @@
     });
     const profileNotificationsForm = queryById(sheetRoot, "profile-notifications-form");
     if (profileNotificationsForm) {
-      const initialNotificationsEnabled = state.payload?.user?.bookingNotificationsEnabled !== false;
+      const initialBookingNotificationsEnabled = state.payload?.user?.bookingNotificationsEnabled !== false;
+      const initialBalanceNotificationsEnabled = state.payload?.user?.balanceNotificationsEnabled !== false;
       setupProfileFormDirtyState(profileNotificationsForm, () => {
-        const currentValue = profileNotificationsForm.elements?.bookingNotificationsEnabled?.checked === true;
-        return currentValue !== initialNotificationsEnabled;
+        const currentBookingValue = profileNotificationsForm.elements?.bookingNotificationsEnabled?.checked === true;
+        const currentBalanceValue = profileNotificationsForm.elements?.balanceNotificationsEnabled?.checked === true;
+        return (
+          currentBookingValue !== initialBookingNotificationsEnabled ||
+          currentBalanceValue !== initialBalanceNotificationsEnabled
+        );
       });
     }
     const profilePhoneForm = queryById(sheetRoot, "profile-phone-form");
@@ -5328,7 +5610,7 @@
       }
       clearLogoutMarker();
       try {
-        state.payload = await publicApiRequest("/public");
+        commitAppPayload(await publicApiRequest("/public"));
         state.bootstrapError = "";
         render();
       } catch (error) {
@@ -5339,7 +5621,7 @@
       return;
     }
     try {
-      state.payload = await apiRequest("/app");
+      commitAppPayload(await apiRequest("/app"));
       state.bootstrapError = "";
       if (state.currentPage === "home") {
         const homeBarbers = getSortedBookingBarbers();
@@ -5356,6 +5638,7 @@
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") {
           void sendSitePresence("online");
+          if (!homeEventsSource) startHomeEventsStream();
         }
       });
       document.addEventListener("copy", (event) => {
@@ -5377,9 +5660,11 @@
         setupPromoMarqueeAutoScroll();
       }, { passive: true });
       window.addEventListener("beforeunload", () => {
+        stopHomeEventsStream();
         void sendSitePresence("offline");
       });
       startSitePresenceLoop();
+      startHomeEventsStream();
       render();
     } catch (error) {
       stopSitePresenceLoop();

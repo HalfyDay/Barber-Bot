@@ -38,6 +38,7 @@ const createBaseService = (overrides = {}) => {
     stopAppointmentReminderLoop: () => events.push("stopAppointmentReminderLoop"),
     stopRealtimeLoop: () => events.push("stopRealtimeLoop"),
     shutdownRealtimeClients: () => events.push("shutdownRealtimeClients"),
+    shutdownHomeRealtimeClients: () => events.push("shutdownHomeRealtimeClients"),
     stopBotProcess: async () => {
       events.push("stopBotProcess");
     },
@@ -134,9 +135,10 @@ test("server lifecycle service shuts down dependencies and exits", async () => {
     "stopAppointmentReminderLoop",
     "stopRealtimeLoop",
     "shutdownRealtimeClients",
+    "shutdownHomeRealtimeClients",
     "stopBotProcess",
     "stopHttpServer",
-    "prismaDisconnect",
   ]);
-  assert.deepEqual(events[6], { type: "exit", code: 0 });
+  assert.equal(events[6], "prismaDisconnect");
+  assert.deepEqual(events[7], { type: "exit", code: 0 });
 });

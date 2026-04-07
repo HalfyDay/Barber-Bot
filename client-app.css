@@ -2688,8 +2688,14 @@ img.media-wave.is-ready {
   gap: 0;
 }
 
+.referral-wallet-hero {
+  display: grid;
+  gap: 14px;
+}
+
 .referral-wallet-card,
-.referral-panel-card {
+.referral-panel-card,
+.referral-level-card {
   display: grid;
 }
 
@@ -2745,6 +2751,18 @@ img.media-wave.is-ready {
   z-index: 2;
 }
 
+.referral-level-card {
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 30px;
+  background: linear-gradient(180deg, var(--referral-surface-2), var(--md-sys-color-surface-container));
+  border: 1px solid transparent;
+}
+
+.referral-level-card-head {
+  align-items: start;
+}
+
 .referral-wallet-mark {
   display: inline-flex;
   align-items: center;
@@ -2775,18 +2793,12 @@ img.media-wave.is-ready {
   z-index: 2;
 }
 
-.referral-wallet-card .hero-eyebrow,
 .referral-wallet-card .hero-title,
 .referral-wallet-balance-number,
 .referral-wallet-level strong,
 .referral-wallet-progress-head strong,
 .referral-wallet-action span:last-child {
   font-family: "Manrope", var(--font-display);
-}
-
-.referral-wallet-card .hero-eyebrow {
-  text-transform: none;
-  letter-spacing: 0.02em;
 }
 
 .referral-wallet-balance-number {
@@ -3453,6 +3465,10 @@ img.media-wave.is-ready {
 
 .referral-section-tabs + .referral-section-panel {
   margin-top: 0;
+}
+
+.referral-wallet-hero + .referral-section-tabs {
+  margin-top: 14px;
 }
 
 .referral-inline-insight {
@@ -5652,11 +5668,20 @@ img.media-wave.is-ready {
 }
 
 @media (min-width: 769px) {
+  .referral-wallet-hero {
+    grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.72fr);
+    align-items: stretch;
+  }
+
   .referral-page .referral-wallet-card + .referral-section-tabs {
     margin-top: 14px;
   }
 
   .referral-page .referral-section-tabs + .referral-section-panel {
+    margin-top: 14px;
+  }
+
+  .referral-page .referral-wallet-hero + .referral-section-tabs {
     margin-top: 14px;
   }
 
@@ -5765,6 +5790,10 @@ img.media-wave.is-ready {
 }
 
 @media (max-width: 768px) {
+  .referral-wallet-hero {
+    grid-template-columns: 1fr;
+  }
+
   .referral-page {
     width: 100%;
     max-width: 100%;
@@ -5810,6 +5839,10 @@ img.media-wave.is-ready {
   }
 
   .referral-page .referral-section-tabs + .referral-section-panel {
+    margin-top: 0;
+  }
+
+  .referral-page .referral-wallet-hero + .referral-section-tabs {
     margin-top: 0;
   }
 

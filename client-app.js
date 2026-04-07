@@ -2698,36 +2698,45 @@
         null;
       return `
       <section class="page referral-page">
-        <article class="hero-card referral-wallet-card">
-          <div class="referral-wallet-sheen"></div>
-          <div class="referral-wallet-head">
-            <div>
-              <div class="hero-eyebrow">BS Wallet</div>
-              <h1 class="hero-title">Бонусы и переводы</h1>
+        <div class="referral-wallet-hero">
+          <article class="hero-card referral-wallet-card">
+            <div class="referral-wallet-sheen"></div>
+            <div class="referral-wallet-head">
+              <div>
+                <h1 class="hero-title">Бонусы и переводы</h1>
+              </div>
+              <div class="referral-wallet-mark">${iconMarkup("wallet")}</div>
             </div>
-            <div class="referral-wallet-mark">${iconMarkup("wallet")}</div>
-          </div>
-          <div class="referral-wallet-balance">
-            <span class="field-label referral-wallet-balance-label">Баланс BS</span>
-            <div class="referral-wallet-balance-number">${referral.bsBalance || 0}</div>
-            <button class="referral-wallet-balance-note referral-wallet-level-link" type="button" data-action="open-sheet" data-sheet="referral-levels">Уровень: ${referralLevelName}</button>
-          </div>
-          <div class="referral-wallet-progress">
-            <div class="referral-wallet-progress-head">
-              <span class="field-label">Прогресс до следующего уровня</span>
-              <strong>${referral.scale?.isMaxLevel ? "MAX" : `${currentReferralCount}/${nextReferralTarget}`}</strong>
+            <div class="referral-wallet-balance">
+              <span class="field-label referral-wallet-balance-label">Баланс BS</span>
+              <div class="referral-wallet-balance-number">${referral.bsBalance || 0}</div>
             </div>
-            <div class="progress-track referral-wallet-progress-track"><div class="progress-bar referral-wallet-progress-bar" style="width:${levelProgress}%"></div></div>
-          </div>
-          <div class="referral-wallet-footer">
-            <div class="referral-wallet-actions">
-              <button class="referral-wallet-action referral-copy-btn ${state.referralLinkCopied ? "is-copied" : ""}" type="button" data-action="copy-referral">${iconMarkup("copy")}<span>${state.referralLinkCopied ? "Ссылка скопирована" : "Реферальная ссылка"}</span></button>
-              <button class="referral-wallet-action" type="button" data-action="open-sheet" data-sheet="transfer-bs">${iconMarkup("transfer")}<span>Перевести BS</span></button>
-              <button class="referral-wallet-action" type="button" data-action="open-sheet" data-sheet="my-transfer-qr">${iconMarkup("qr")}<span>Мой QR</span></button>
-              <button class="referral-wallet-action referral-wallet-action-scan" type="button" data-action="open-sheet" data-sheet="scan-transfer-qr">${iconMarkup("scan")}<span>Сканировать QR</span></button>
+            <div class="referral-wallet-footer">
+              <div class="referral-wallet-actions">
+                <button class="referral-wallet-action referral-copy-btn ${state.referralLinkCopied ? "is-copied" : ""}" type="button" data-action="copy-referral">${iconMarkup("copy")}<span>${state.referralLinkCopied ? "Ссылка скопирована" : "Реферальная ссылка"}</span></button>
+                <button class="referral-wallet-action" type="button" data-action="open-sheet" data-sheet="transfer-bs">${iconMarkup("transfer")}<span>Перевести BS</span></button>
+                <button class="referral-wallet-action" type="button" data-action="open-sheet" data-sheet="my-transfer-qr">${iconMarkup("qr")}<span>Мой QR</span></button>
+                <button class="referral-wallet-action referral-wallet-action-scan" type="button" data-action="open-sheet" data-sheet="scan-transfer-qr">${iconMarkup("scan")}<span>Сканировать QR</span></button>
+              </div>
             </div>
-          </div>
-        </article>
+          </article>
+          <article class="list-card referral-level-card">
+            <div class="section-head referral-level-card-head">
+              <div>
+                <div class="section-eyebrow">Уровень</div>
+                <h2 class="section-title">${referralLevelName}</h2>
+              </div>
+              <button class="referral-wallet-balance-note referral-wallet-level-link" type="button" data-action="open-sheet" data-sheet="referral-levels">Все уровни</button>
+            </div>
+            <div class="referral-wallet-progress">
+              <div class="referral-wallet-progress-head">
+                <span class="field-label">Прогресс до следующего уровня</span>
+                <strong>${referral.scale?.isMaxLevel ? "MAX" : `${currentReferralCount}/${nextReferralTarget}`}</strong>
+              </div>
+              <div class="progress-track referral-wallet-progress-track"><div class="progress-bar referral-wallet-progress-bar" style="width:${levelProgress}%"></div></div>
+            </div>
+          </article>
+        </div>
         <div class="filter-row referral-section-tabs referral-pill-row" data-pill-group="referral-section">
           <span class="referral-pill-indicator" aria-hidden="true"></span>
           <button class="nav-pill ${!isStatsSection ? "active" : ""}" type="button" data-action="set-referral-section" data-section="overview">Обзор</button>

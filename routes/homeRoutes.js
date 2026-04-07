@@ -1,3 +1,219 @@
+const DEFAULT_REFERRAL_QR_SIZE = 320;
+const EXPRESSIVE_QR_PADDING = 18;
+
+const loadQrCodeModule = () => {
+  try {
+    return require("qrcode");
+  } catch {
+    return null;
+  }
+};
+
+const buildReferralQrDeepLink = ({ referralCode = "", phone = "", displayName = "" } = {}) => {
+  const inviteUrl = new URL("/login/", process.env.APP_BASE_URL || "https://brothershop.website");
+  if (referralCode) inviteUrl.searchParams.set("ref", referralCode);
+  if (phone) inviteUrl.searchParams.set("phone", phone);
+  if (displayName) inviteUrl.searchParams.set("name", displayName);
+  return inviteUrl.toString();
+};
+
+const buildExpressiveQrSvg = (qrCode, options = {}) => {
+  const moduleCount = Math.max(1, Number(qrCode?.modules?.size) || 1);
+  const requestedSize = Math.max(220, Math.floor(Number(options.size) || DEFAULT_REFERRAL_QR_SIZE));
+  const padding = Math.max(12, Math.floor(Number(options.padding) || EXPRESSIVE_QR_PADDING));
+  const drawingSize = requestedSize - padding * 2;
+  const moduleSize = drawingSize / moduleCount;
+  const darkColor = "#173e3c";
+  const midColor = "#1f6a63";
+  const backgroundColor = "#f6fffc";
+  const surfaceColor = "#e4f4ef";
+  const getModuleValue = (x, y) => {
+    if (!qrCode?.modules) return false;
+    if (typeof qrCode.modules.get === "function") return qrCode.modules.get(x, y);
+    const index = y * moduleCount + x;
+    return Array.isArray(qrCode.modules.data) ? qrCode.modules.data[index] : false;
+  };
+  const countNeighbours = (x, y) => {
+    let total = 0;
+    for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+      for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+        if (!offsetX && !offsetY) continue;
+        const nextX = x + offsetX;
+        const nextY = y + offsetY;
+        if (nextX < 0 || nextY < 0 || nextX >= moduleCount || nextY >= moduleCount) continue;
+        if (getModuleValue(nextX, nextY)) total += 1;
+      }
+    }
+    return total;
+  };
+  const isInsideFinder = (x, y, left, top) => x >= left && x < left + 7 && y >= top && y < top + 7;
+  const isFinderModule = (x, y) =>
+    isInsideFinder(x, y, 0, 0) ||
+    isInsideFinder(x, y, moduleCount - 7, 0) ||
+    isInsideFinder(x, y, 0, moduleCount - 7);
+  const consumedModules = new Set();
+  const moduleKey = (x, y) => `${x}:${y}`;
+  const pickModuleColor = (x, y, density = 0) => ((x * 7 + y * 11 + density) % 5 === 0 ? midColor : darkColor);
+  const renderFinder = (left, top) => {
+    const x = padding + left * moduleSize;
+    const y = padding + top * moduleSize;
+    const outerSize = moduleSize * 7;
+    const ringInset = moduleSize * 1.04;
+    const ringSize = moduleSize * 4.92;
+    const coreInset = moduleSize * 2.04;
+    const coreSize = moduleSize * 2.92;
+    return `
+      <rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${outerSize.toFixed(2)}" height="${outerSize.toFixed(2)}" rx="${(moduleSize * 1.88).toFixed(2)}" fill="${midColor}" />
+      <rect x="${(x + ringInset).toFixed(2)}" y="${(y + ringInset).toFixed(2)}" width="${ringSize.toFixed(2)}" height="${ringSize.toFixed(2)}" rx="${(moduleSize * 1.4).toFixed(2)}" fill="${backgroundColor}" />
+      <rect x="${(x + coreInset).toFixed(2)}" y="${(y + coreInset).toFixed(2)}" width="${coreSize.toFixed(2)}" height="${coreSize.toFixed(2)}" rx="${(moduleSize * 1.04).toFixed(2)}" fill="${midColor}" />
+    `;
+  };
+
+  const expressiveModules = [];
+  const markConsumed = (x, y, widthModules, heightModules) => {
+    for (let offsetY = 0; offsetY < heightModules; offsetY += 1) {
+      for (let offsetX = 0; offsetX < widthModules; offsetX += 1) {
+        consumedModules.add(moduleKey(x + offsetX, y + offsetY));
+      }
+    }
+  };
+  const drawRoundedModule = (x, y, density = 0) => {
+    const inset = moduleSize * 0.1;
+    const size = moduleSize - inset * 2;
+    const left = padding + x * moduleSize + inset;
+    const top = padding + y * moduleSize + inset;
+    const radius = Math.max(size * 0.26, 3.2);
+    expressiveModules.push(
+      `<rect x="${left.toFixed(2)}" y="${top.toFixed(2)}" width="${size.toFixed(2)}" height="${size.toFixed(2)}" rx="${radius.toFixed(2)}" fill="${pickModuleColor(x, y, density)}" />`,
+    );
+    markConsumed(x, y, 1, 1);
+  };
+  const drawDotModule = (x, y, density = 0) => {
+    const cx = padding + x * moduleSize + moduleSize / 2;
+    const cy = padding + y * moduleSize + moduleSize / 2;
+    const radius = moduleSize * (density >= 5 ? 0.28 : 0.24);
+    expressiveModules.push(
+      `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${radius.toFixed(2)}" fill="${pickModuleColor(x, y, density)}" />`,
+    );
+    markConsumed(x, y, 1, 1);
+  };
+  const drawRoundedBlock = (x, y, widthModules, heightModules, density = 0) => {
+    const inset = moduleSize * 0.1;
+    const left = padding + x * moduleSize + inset;
+    const top = padding + y * moduleSize + inset;
+    const width = widthModules * moduleSize - inset * 2;
+    const height = heightModules * moduleSize - inset * 2;
+    const radius = Math.max(Math.min(width, height) * 0.28, 3.2);
+    expressiveModules.push(
+      `<rect x="${left.toFixed(2)}" y="${top.toFixed(2)}" width="${width.toFixed(2)}" height="${height.toFixed(2)}" rx="${radius.toFixed(2)}" fill="${pickModuleColor(x, y, density + widthModules + heightModules)}" />`,
+    );
+    markConsumed(x, y, widthModules, heightModules);
+  };
+  const drawHorizontalRun = (x, y, runLength, density = 0) => {
+    const left = padding + x * moduleSize + moduleSize * 0.06;
+    const top = padding + y * moduleSize + moduleSize * (density >= 4 ? 0.22 : 0.18);
+    const width = runLength * moduleSize - moduleSize * 0.12;
+    const height = moduleSize * (density >= 4 ? 0.52 : 0.62);
+    expressiveModules.push(
+      `<rect x="${left.toFixed(2)}" y="${top.toFixed(2)}" width="${width.toFixed(2)}" height="${height.toFixed(2)}" rx="${(height / 2).toFixed(2)}" fill="${pickModuleColor(x, y, density + runLength)}" />`,
+    );
+    markConsumed(x, y, runLength, 1);
+  };
+  const drawVerticalRun = (x, y, runLength, density = 0) => {
+    const left = padding + x * moduleSize + moduleSize * (density >= 4 ? 0.22 : 0.18);
+    const top = padding + y * moduleSize + moduleSize * 0.06;
+    const width = moduleSize * (density >= 4 ? 0.52 : 0.62);
+    const height = runLength * moduleSize - moduleSize * 0.12;
+    expressiveModules.push(
+      `<rect x="${left.toFixed(2)}" y="${top.toFixed(2)}" width="${width.toFixed(2)}" height="${height.toFixed(2)}" rx="${(width / 2).toFixed(2)}" fill="${pickModuleColor(x, y, density + runLength)}" />`,
+    );
+    markConsumed(x, y, 1, runLength);
+  };
+
+  for (let y = 0; y < moduleCount; y += 1) {
+    for (let x = 0; x < moduleCount; x += 1) {
+      const key = moduleKey(x, y);
+      if (consumedModules.has(key) || !getModuleValue(x, y) || isFinderModule(x, y)) continue;
+      const density = countNeighbours(x, y);
+      const right = x + 1 < moduleCount && getModuleValue(x + 1, y) && !isFinderModule(x + 1, y);
+      const down = y + 1 < moduleCount && getModuleValue(x, y + 1) && !isFinderModule(x, y + 1);
+      const diagonal = x + 1 < moduleCount && y + 1 < moduleCount && getModuleValue(x + 1, y + 1) && !isFinderModule(x + 1, y + 1);
+      if (
+        right &&
+        down &&
+        diagonal &&
+        !consumedModules.has(moduleKey(x + 1, y)) &&
+        !consumedModules.has(moduleKey(x, y + 1)) &&
+        !consumedModules.has(moduleKey(x + 1, y + 1)) &&
+        density >= 3
+      ) {
+        drawRoundedBlock(x, y, 2, 2, density);
+        continue;
+      }
+      let horizontalRun = 1;
+      while (
+        x + horizontalRun < moduleCount &&
+        getModuleValue(x + horizontalRun, y) &&
+        !isFinderModule(x + horizontalRun, y) &&
+        !consumedModules.has(moduleKey(x + horizontalRun, y))
+      ) {
+        horizontalRun += 1;
+      }
+      let verticalRun = 1;
+      while (
+        y + verticalRun < moduleCount &&
+        getModuleValue(x, y + verticalRun) &&
+        !isFinderModule(x, y + verticalRun) &&
+        !consumedModules.has(moduleKey(x, y + verticalRun))
+      ) {
+        verticalRun += 1;
+      }
+      if (horizontalRun >= 4) {
+        drawHorizontalRun(x, y, Math.min(horizontalRun, 4), density);
+        continue;
+      }
+      if (verticalRun >= 4) {
+        drawVerticalRun(x, y, Math.min(verticalRun, 4), density);
+        continue;
+      }
+      if (horizontalRun === 3) {
+        drawHorizontalRun(x, y, 3, density);
+        continue;
+      }
+      if (verticalRun === 3) {
+        drawVerticalRun(x, y, 3, density);
+        continue;
+      }
+      if (horizontalRun === 2 && density >= 2) {
+        drawRoundedBlock(x, y, 2, 1, density);
+        continue;
+      }
+      if (verticalRun === 2 && density >= 2) {
+        drawRoundedBlock(x, y, 1, 2, density);
+        continue;
+      }
+      if ((x + y + density) % 5 === 0) {
+        drawDotModule(x, y, density);
+        continue;
+      }
+      drawRoundedModule(x, y, density);
+    }
+  }
+
+  const surfaceSize = drawingSize + padding * 0.34;
+  const surfaceOffset = (requestedSize - surfaceSize) / 2;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${requestedSize} ${requestedSize}" role="img" aria-label="QR code">
+  <rect width="${requestedSize}" height="${requestedSize}" rx="34" fill="${backgroundColor}" />
+  <rect x="${surfaceOffset.toFixed(2)}" y="${surfaceOffset.toFixed(2)}" width="${surfaceSize.toFixed(2)}" height="${surfaceSize.toFixed(2)}" rx="28" fill="${surfaceColor}" opacity="0.68" />
+  <rect x="${padding - 4}" y="${padding - 4}" width="${drawingSize + 8}" height="${drawingSize + 8}" rx="26" fill="${backgroundColor}" />
+  ${renderFinder(0, 0)}
+  ${renderFinder(moduleCount - 7, 0)}
+  ${renderFinder(0, moduleCount - 7)}
+  ${expressiveModules.join("")}
+</svg>`;
+};
+
 const registerHomeRoutes = ({
   app,
   authenticateHomeToken,
@@ -1033,6 +1249,50 @@ const registerHomeRoutes = ({
       return res.status(500).json({
         success: false,
         message: "Не удалось загрузить реферальную систему.",
+      });
+    }
+  });
+
+  app.get("/api/home/referral/qr", authenticateHomeToken, async (req, res) => {
+    try {
+      const userId = normalizeText(req.homeUser?.userId);
+      if (!userId) return res.sendStatus(401);
+      const stored = await findHomeUserById(userId);
+      if (!stored) return res.sendStatus(401);
+      const meta = await getUserMeta(userId);
+      const phone = normalizePhone(stored.Phone || stored.phone || req.homeUser?.phone || "");
+      const displayName = normalizeText(stored.Name || stored.displayName || req.homeUser?.displayName || "");
+      const referralCode = normalizeText(meta?.referralCode || "");
+      if (!phone) {
+        return res.status(400).json({
+          success: false,
+          message: "Для QR-кода в профиле должен быть указан телефон.",
+        });
+      }
+
+      const qrPayload = buildReferralQrDeepLink({ referralCode, phone, displayName });
+      const requestedSize = Math.max(220, Math.min(640, Number(req.query?.size) || DEFAULT_REFERRAL_QR_SIZE));
+      const qrCodeModule = loadQrCodeModule();
+      if (!qrCodeModule?.create) {
+        return res.status(503).json({
+          success: false,
+          message: "QR generator is unavailable.",
+        });
+      }
+
+      const qrCode = qrCodeModule.create(qrPayload, {
+        errorCorrectionLevel: "M",
+        margin: 0,
+      });
+      const svg = buildExpressiveQrSvg(qrCode, { size: requestedSize });
+      res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+      res.setHeader("Cache-Control", "private, max-age=300");
+      return res.send(svg);
+    } catch (error) {
+      console.error("Home referral qr error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Не удалось подготовить QR-код.",
       });
     }
   });

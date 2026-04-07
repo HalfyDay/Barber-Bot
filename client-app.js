@@ -527,7 +527,10 @@
   const buildReferralQrPayload = (user = {}) => {
     const phone = normalizePhone(user.phone || "");
     if (!phone) return "";
-    const url = new URL("brothershop://bs-transfer");
+    const url = new URL("/login/", window.location.origin);
+    if (normalizeText(state.payload?.referral?.referralCode)) {
+      url.searchParams.set("ref", normalizeText(state.payload.referral.referralCode));
+    }
     url.searchParams.set("phone", phone);
     if (normalizeText(user.displayName)) url.searchParams.set("name", normalizeText(user.displayName));
     return url.toString();
@@ -542,10 +545,12 @@
     try {
       const parsed = new URL(safeValue);
       const phone = normalizePhone(parsed.searchParams.get("phone"));
-      if (!phone) return null;
+      const referralCode = normalizeText(parsed.searchParams.get("ref")).toUpperCase();
+      if (!phone && !referralCode) return null;
       return {
         phone,
         name: normalizeText(parsed.searchParams.get("name")),
+        referralCode,
       };
     } catch {
       return null;
@@ -1747,7 +1752,7 @@
       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H5.5A2.5 2.5 0 0 1 3 16.5v-9Z"></path><path d="M16 12h5"></path><circle cx="16.5" cy="12" r="1"></circle></svg>';
     }
     if (name === "qr") {
-      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"></path><path d="M15 15h2v2h-2zM17 17h3v3h-3zM14 19h2v1h-2zM19 14h1v2h-1z"></path></svg>';
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="5" height="5" rx="1"></rect><rect x="16" y="3" width="5" height="5" rx="1"></rect><rect x="3" y="16" width="5" height="5" rx="1"></rect><path d="M21 16h-3a2 2 0 0 0-2 2v3"></path><path d="M21 21v.01"></path><path d="M12 7v3a2 2 0 0 1-2 2H7"></path><path d="M3 12h.01"></path><path d="M12 3h.01"></path><path d="M12 16v.01"></path><path d="M16 12h1"></path><path d="M21 12v.01"></path><path d="M12 21v-1"></path></svg>';
     }
     if (name === "scan") {
       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M20 7V5a1 1 0 0 0-1-1h-2M4 17v2a1 1 0 0 0 1 1h2M20 17v2a1 1 0 0 1-1 1h-2"></path><path d="M7 12h10"></path></svg>';
@@ -1884,6 +1889,27 @@
       }
     })();
     return homeRealtimeRefreshPromise;
+  };
+  const fetchReferralQrSvgMarkup = async (size = 360) => {
+    const token = normalizeText(state.session?.token);
+    if (!token) throw new Error("Сессия недоступна.");
+    const response = await fetch(`${API_ROOT}/referral/qr?size=${encodeURIComponent(String(size))}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "image/svg+xml, text/plain;q=0.9, */*;q=0.1",
+      },
+    });
+    if (response.status === 401 || response.status === 403) {
+      clearSession();
+      redirectToLogin();
+      throw new Error("Сессия истекла.");
+    }
+    const svgMarkup = await response.text();
+    if (!response.ok || !normalizeText(svgMarkup).startsWith("<")) {
+      throw new Error("Не удалось подготовить QR.");
+    }
+    return svgMarkup;
   };
   const scheduleHomeRealtimeRefresh = () => {
     if (!isAuthenticated()) return;
@@ -2703,9 +2729,9 @@
             <div class="referral-wallet-sheen"></div>
             <div class="referral-wallet-head">
               <div>
-                <h1 class="hero-title">Бонусы и переводы</h1>
+                <h1 class="hero-title">Бонусы</h1>
               </div>
-              <div class="referral-wallet-mark">${iconMarkup("wallet")}</div>
+              <button class="referral-wallet-mark" type="button" data-action="open-sheet" data-sheet="my-transfer-qr" aria-label="Мой QR">${iconMarkup("qr")}</button>
             </div>
             <div class="referral-wallet-balance">
               <span class="field-label referral-wallet-balance-label">Баланс BS</span>
@@ -2715,8 +2741,6 @@
               <div class="referral-wallet-actions">
                 <button class="referral-wallet-action referral-copy-btn ${state.referralLinkCopied ? "is-copied" : ""}" type="button" data-action="copy-referral">${iconMarkup("copy")}<span>${state.referralLinkCopied ? "Ссылка скопирована" : "Реферальная ссылка"}</span></button>
                 <button class="referral-wallet-action" type="button" data-action="open-sheet" data-sheet="transfer-bs">${iconMarkup("transfer")}<span>Перевести BS</span></button>
-                <button class="referral-wallet-action" type="button" data-action="open-sheet" data-sheet="my-transfer-qr">${iconMarkup("qr")}<span>Мой QR</span></button>
-                <button class="referral-wallet-action referral-wallet-action-scan" type="button" data-action="open-sheet" data-sheet="scan-transfer-qr">${iconMarkup("scan")}<span>Сканировать QR</span></button>
               </div>
             </div>
           </article>
@@ -2977,18 +3001,30 @@
     const indicator = row.querySelector(".referral-pill-indicator");
     const buttons = Array.from(row.querySelectorAll(".nav-pill"));
     if (!(indicator instanceof HTMLElement) || !buttons.length) return false;
+    const isInitialSync = !row.dataset.pillReady;
     const activeIndex = Math.max(0, buttons.findIndex((button) => button.classList.contains("active")));
     const activeButton = buttons[activeIndex] || buttons[0];
     if (!(activeButton instanceof HTMLElement)) return false;
+    if (isInitialSync) row.classList.add("is-pill-initializing");
     const rowRect = row.getBoundingClientRect();
     const buttonRect = activeButton.getBoundingClientRect();
     indicator.style.width = `${buttonRect.width}px`;
     indicator.style.height = `${buttonRect.height}px`;
     indicator.style.top = `${Math.max(0, buttonRect.top - rowRect.top)}px`;
     indicator.style.transform = `translateX(${Math.max(0, buttonRect.left - rowRect.left)}px)`;
+    if (isInitialSync) {
+      row.dataset.pillReady = "true";
+      window.requestAnimationFrame(() => {
+        row.classList.remove("is-pill-initializing");
+      });
+    }
     return true;
   };
   const syncReferralPillRows = (scope = ROOT) => {
+    if (scope instanceof HTMLElement && scope.classList.contains("referral-pill-row")) {
+      syncReferralPillRow(scope);
+      return;
+    }
     scope?.querySelectorAll?.(".referral-pill-row")?.forEach((row) => {
       syncReferralPillRow(row);
     });
@@ -3033,6 +3069,56 @@
     const currentList = currentHistoryCard.querySelector(".referral-activity-list");
     const nextList = nextHistoryCard.querySelector(".referral-activity-list");
     if (currentList && nextList) currentList.innerHTML = nextList.innerHTML;
+    return true;
+  };
+  const animateSheetHeightMutation = (mutation) => {
+    const sheetElement = ROOT.querySelector("[data-render-host='sheet'] .sheet");
+    if (!(sheetElement instanceof HTMLElement) || typeof mutation !== "function") {
+      mutation?.();
+      return;
+    }
+    const startHeight = sheetElement.offsetHeight;
+    sheetElement.style.height = `${startHeight}px`;
+    sheetElement.style.overflow = "hidden";
+    mutation();
+    const endHeight = sheetElement.scrollHeight;
+    if (!Number.isFinite(startHeight) || !Number.isFinite(endHeight) || Math.abs(endHeight - startHeight) < 1) {
+      sheetElement.style.removeProperty("height");
+      sheetElement.style.removeProperty("overflow");
+      return;
+    }
+    const cleanup = () => {
+      sheetElement.style.removeProperty("height");
+      sheetElement.style.removeProperty("overflow");
+      sheetElement.removeEventListener("transitionend", cleanup);
+    };
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        sheetElement.style.height = `${endHeight}px`;
+      });
+    });
+    sheetElement.addEventListener("transitionend", cleanup, { once: true });
+    window.setTimeout(cleanup, 380);
+  };
+  const refreshReferralHistorySheetDom = () => {
+    if (normalizeText(state.sheet?.title) !== "История BS") return false;
+    const sheetHost = ROOT.querySelector("[data-render-host='sheet']");
+    const sheetRoot = sheetHost?.querySelector(".sheet");
+    const currentFilterRow = sheetRoot?.querySelector(".referral-history-filter-row");
+    const currentList = sheetRoot?.querySelector(".referral-history-list");
+    if (!currentFilterRow || !currentList) return false;
+    const operations = Array.isArray(state.payload?.referral?.operations) ? state.payload.referral.operations : [];
+    const filteredOperations = getFilteredReferralActivity(operations, state.transferHistoryFilter);
+    const currentButtons = Array.from(currentFilterRow.querySelectorAll(".nav-pill"));
+    currentButtons.forEach((button) => {
+      button.classList.toggle("active", normalizeText(button.dataset.filter) === state.transferHistoryFilter);
+    });
+    animateSheetHeightMutation(() => {
+      currentList.innerHTML = filteredOperations.length
+        ? filteredOperations.map((operation) => renderReferralOperationCard(operation)).join("")
+        : `<div class="empty-state">По этому фильтру пока нет движений BS.</div>`;
+    });
+    scheduleReferralPillSync(currentFilterRow);
     return true;
   };
   const refreshProfileHistoryDom = () => {
@@ -3129,24 +3215,29 @@
     const user = state.payload?.user || {};
     const phone = normalizePhone(user.phone);
     const qrPayload = buildReferralQrPayload(user);
+    const displayName = normalizeText(user.displayName || user.phone || "Клиент");
     if (!phone || !qrPayload) {
       return `<div class="empty-state">Для QR-перевода в профиле должен быть указан телефон.</div>`;
     }
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=16&data=${encodeURIComponent(qrPayload)}`;
     return `
       <div class="referral-transfer-bank-sheet referral-qr-bank-sheet">
         <section class="referral-transfer-bank-hero">
           <div class="referral-transfer-bank-hero-copy">
-            <strong>${normalizeText(user.displayName || "Клиент")}</strong>
+            <strong>${displayName}</strong>
             <p class="subtitle">${formatPhone(phone)}</p>
           </div>
         </section>
         <section class="referral-transfer-bank-section referral-qr-bank-frame">
-          <img class="referral-qr-image" src="${qrImageUrl}" alt="QR для перевода BS" />
+          <div class="referral-qr-stage is-loading" data-qr-stage data-qr-size="360">
+            <div class="referral-qr-loading" aria-hidden="true">
+              <span class="referral-qr-loading-orb"></span>
+            </div>
+            <div class="referral-qr-svg-shell" data-qr-svg-host aria-label="QR для перевода BS"></div>
+          </div>
         </section>
         <section class="referral-transfer-bank-summary">
           <div class="referral-transfer-bank-summary-row referral-qr-bank-note">
-            <span>Покажите этот QR отправителю. После сканирования номер получателя подставится автоматически.</span>
+            <span>Этот QR работает в двух сценариях: для перевода BS подставит получателя, а для нового клиента откроет приглашение по вашей рефералке.</span>
           </div>
         </section>
       </div>
@@ -3172,31 +3263,88 @@
     </div>
   `;
 
+  const waitForReferralQrVideoReady = (video, timeoutMs = 2400) =>
+    new Promise((resolve) => {
+      if (!video) {
+        resolve(false);
+        return;
+      }
+      if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        resolve(true);
+        return;
+      }
+      let settled = false;
+      const finish = (ready) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        video.removeEventListener("loadedmetadata", handleReady);
+        video.removeEventListener("canplay", handleReady);
+        resolve(ready);
+      };
+      const handleReady = () => finish(video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0);
+      const timer = window.setTimeout(() => finish(video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0), timeoutMs);
+      video.addEventListener("loadedmetadata", handleReady, { once: true });
+      video.addEventListener("canplay", handleReady, { once: true });
+    });
+
   const startReferralQrScanner = async () => {
     const video = document.getElementById("referral-qr-video");
     const status = document.getElementById("referral-qr-scan-status");
     if (!video || !status) return;
     const scannerSession = referralQrScannerSession + 1;
     referralQrScannerSession = scannerSession;
-    if (!("BarcodeDetector" in window) || !window.isSecureContext) {
-      status.textContent = "Сканирование доступно только в защищённом браузере с поддержкой QR API.";
+    const hasMediaDevices = Boolean(window.navigator?.mediaDevices?.getUserMedia);
+    if (!window.isSecureContext || !hasMediaDevices) {
+      status.textContent = "Сканирование доступно только в защищённом браузере с доступом к камере.";
+      return;
+    }
+    if (!("BarcodeDetector" in window)) {
+      status.textContent = "В этом браузере QR-сканер не поддерживается. Откройте страницу в Chrome или Edge.";
       return;
     }
     try {
+      if (typeof window.BarcodeDetector.getSupportedFormats === "function") {
+        const supportedFormats = await window.BarcodeDetector.getSupportedFormats();
+        if (!Array.isArray(supportedFormats) || !supportedFormats.includes("qr_code")) {
+          status.textContent = "В этом браузере QR-сканирование недоступно. Попробуйте Chrome или Edge.";
+          return;
+        }
+      }
       const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
-      const stream = await window.navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
-        audio: false,
-      });
+      let stream = null;
+      try {
+        stream = await window.navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+      } catch {
+        stream = await window.navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
       if (scannerSession !== referralQrScannerSession || normalizeText(state.sheet?.title) !== "Сканировать QR") {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
       referralQrScannerStream = stream;
+      video.muted = true;
+      video.autoplay = true;
+      video.playsInline = true;
       video.srcObject = stream;
-      await video.play();
+      await video.play().catch(() => {});
+      const videoReady = await waitForReferralQrVideoReady(video);
       if (scannerSession !== referralQrScannerSession || normalizeText(state.sheet?.title) !== "Сканировать QR") {
         stopReferralQrScanner();
+        return;
+      }
+      if (!videoReady) {
+        status.textContent = "Камера подключена, но браузер не начал показ видео. Попробуйте Chrome или перезапустите доступ к камере.";
         return;
       }
       status.textContent = "Ищем QR-код...";
@@ -4491,7 +4639,8 @@
       openSheet(
         "История BS",
         operations.length
-          ? `<div class="filter-row sheet-filter-row referral-history-filter-row">
+          ? `<div class="filter-row sheet-filter-row referral-history-filter-row referral-pill-row" data-pill-group="referral-history">
+              <span class="referral-pill-indicator" aria-hidden="true"></span>
               <button class="nav-pill ${state.transferHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="all">Все</button>
               <button class="nav-pill ${state.transferHistoryFilter === "transfers" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="transfers">Переводы</button>
               <button class="nav-pill ${state.transferHistoryFilter === "rewards" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="rewards">Награды</button>
@@ -4515,7 +4664,7 @@
       return;
     }
     if (sheetId === "my-transfer-qr") {
-      openSheet("Мой QR для BS", buildReferralQrSheet(), "", "sheet-wide");
+      openSheet("Мой QR", buildReferralQrSheet(), "", "sheet-wide");
       return;
     }
     if (sheetId === "scan-transfer-qr") {
@@ -4975,7 +5124,16 @@
             state.transferHistoryFilter = nextFilter;
           }
           if (actionNode.closest("[data-render-host='sheet']")) {
-            openNamedSheet("referral-history");
+            {
+              const filterRow = actionNode.closest(".referral-history-filter-row");
+              if (filterRow) {
+                filterRow.querySelectorAll(".nav-pill").forEach((button) => {
+                  button.classList.toggle("active", normalizeText(button.dataset.filter) === state.transferHistoryFilter);
+                });
+                scheduleReferralPillSync(filterRow);
+              }
+            }
+            if (!refreshReferralHistorySheetDom()) openNamedSheet("referral-history");
             return;
           }
           {
@@ -5285,6 +5443,27 @@
         }
       });
     }
+    const referralQrStages = sheetRoot?.querySelectorAll?.("[data-qr-stage]") || [];
+    referralQrStages.forEach((stage) => {
+      if (!(stage instanceof HTMLElement)) return;
+      const host = stage.querySelector("[data-qr-svg-host]");
+      if (!(host instanceof HTMLElement)) return;
+      const qrSize = Math.max(220, Number(stage.dataset.qrSize) || 360);
+      host.innerHTML = "";
+      stage.classList.add("is-loading");
+      stage.classList.remove("is-ready", "is-error");
+      void (async () => {
+        try {
+          const svgMarkup = await fetchReferralQrSvgMarkup(qrSize);
+          host.innerHTML = svgMarkup;
+          stage.classList.remove("is-loading", "is-error");
+          stage.classList.add("is-ready");
+        } catch {
+          stage.classList.remove("is-loading", "is-ready");
+          stage.classList.add("is-error");
+        }
+      })();
+    });
     const setupProfileFormDirtyState = (form, hasChanges) => {
       if (!form || typeof hasChanges !== "function") return;
       const submitButton = form.querySelector("button[type='submit']");

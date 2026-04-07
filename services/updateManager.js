@@ -331,6 +331,16 @@ const canAutoResolveHomeDisplayNameMigration = (message = '') => {
   return hasMigrationName && hasP3018 && missingColumn;
 };
 
+const canSkipPrismaMigrateForProviderSwitch = (message = '') => {
+  if (!message) return false;
+  const hasP3019 = /\bP3019\b/i.test(message);
+  const mentionsProviderMismatch =
+    /datasource provider [`'"]postgresql[`'"]/i.test(message) &&
+    /migration_lock\.toml/i.test(message) &&
+    /[`'"]sqlite[`'"]/i.test(message);
+  return hasP3019 && mentionsProviderMismatch;
+};
+
 const buildPrismaUpdateCommands = (schemaPath = PRISMA_SCHEMA_PATH) => {
   const schemaArg = `--schema "${schemaPath}"`;
   return {
@@ -375,6 +385,12 @@ const runPrismaMigrations = async () => {
           );
           homeDisplayNameMigrationResolved = true;
           continue;
+        }
+        if (command === migrate && canSkipPrismaMigrateForProviderSwitch(message)) {
+          console.warn(
+            `[update] ${command} skipped because prisma migration history still has sqlite provider lock; PostgreSQL runtime will continue with generated client and runtime-managed schema compatibility.`,
+          );
+          break;
         }
         const isLocked = /database is locked/i.test(message);
         const isEpermPrismaEngine =
@@ -672,6 +688,7 @@ const applyUpdate = async () => {
 module.exports = {
   checkForUpdates,
   applyUpdate,
+  canSkipPrismaMigrateForProviderSwitch,
   describeUpdateError,
   buildPrismaUpdateCommands,
   createPreUpdateBackup,

@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  canSkipPrismaMigrateForProviderSwitch,
   describeUpdateError,
   buildPrismaUpdateCommands,
   resolvePostgresDumpPath,
@@ -47,4 +48,14 @@ test('update manager runs prisma migrate deploy before generate', () => {
     'npx prisma migrate deploy --schema "D:\\Works\\Barber Bot\\prisma\\schema.postgresql.prisma"',
     'npx prisma generate --schema "D:\\Works\\Barber Bot\\prisma\\schema.postgresql.prisma"',
   ]);
+});
+
+test('update manager detects prisma provider-switch lock mismatch', () => {
+  const message = `
+Error: P3019
+
+The datasource provider \`postgresql\` specified in your schema does not match the one specified in the migration_lock.toml, \`sqlite\`.
+`;
+
+  assert.equal(canSkipPrismaMigrateForProviderSwitch(message), true);
 });

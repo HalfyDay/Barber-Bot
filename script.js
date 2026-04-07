@@ -11379,8 +11379,9 @@ const handleBarberFieldChange = (id, field, value) => {
     try {
       const result = await apiRequest('/system/update', { method: 'POST' });
       console.log('[update] Apply result:', result);
-      setUpdateInfo(normalizeUpdateInfo(result.info || result));
-      fetchAll();
+      if (result?.info || result?.available !== undefined || result?.updateAvailable !== undefined) {
+        setUpdateInfo(normalizeUpdateInfo(result.info || result));
+      }
       restartPlanned = Boolean(result?.restarting);
       if (restartPlanned) {
         console.log('[update] Restart flagged, reloading page soon...');

@@ -153,10 +153,26 @@ const registerOwnerSystemRoutes = ({
     }
     try {
       console.log("[update] /api/system/update: user", req.identity?.username || "unknown");
-      const result = await performSystemUpdate();
-      const info = await checkForUpdates(true);
-      res.json({ ...result, info, restarting: true });
-      scheduleSelfRestart();
+      const info = await checkForUpdates(true).catch(() => null);
+      res.status(202).json({
+        success: true,
+        started: true,
+        restarting: true,
+        info,
+      });
+      void (async () => {
+        try {
+          await performSystemUpdate();
+          scheduleSelfRestart();
+        } catch (error) {
+          console.error("Update apply error:", error);
+          await appendUpdateAlert("System update failed", {
+            user: req.identity?.username || "unknown",
+            error: error?.message || String(error),
+          });
+        }
+      })();
+      return;
     } catch (error) {
       console.error("Update apply error:", error);
       await appendUpdateAlert("System update failed", {

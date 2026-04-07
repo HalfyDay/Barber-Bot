@@ -2421,11 +2421,16 @@ img.media-wave.is-ready {
   pointer-events: auto;
 }
 
-.sheet-backdrop.is-entering,
 .sheet-backdrop.is-open {
   opacity: 1;
   background: rgba(5, 8, 8, 0.62);
   backdrop-filter: blur(18px) saturate(1.06);
+}
+
+.sheet-backdrop.is-entering {
+  opacity: 0;
+  background: rgba(5, 8, 8, 0.28);
+  backdrop-filter: blur(6px) saturate(1.02);
 }
 
 .sheet-backdrop.is-closing {
@@ -2456,10 +2461,34 @@ img.media-wave.is-ready {
   max-height: min(92vh, 900px);
 }
 
-.sheet.is-entering,
+.sheet-body {
+  min-height: 0;
+}
+
+.sheet.referral-history-sheet {
+  height: min(82vh, 820px);
+}
+
+.sheet.referral-history-sheet .sheet-body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.sheet.referral-history-sheet .referral-history-list {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .sheet.is-open {
   transform: translateY(0) scale(1);
   opacity: 1;
+}
+
+.sheet.is-entering {
+  transform: translateY(28px) scale(0.975);
+  opacity: 0;
 }
 
 .sheet.is-closing {
@@ -8335,9 +8364,12 @@ img.media-wave.is-ready {
     padding: 0;
   }
 
-  .sheet.is-entering,
   .sheet.is-open {
     transform: translateY(0);
+  }
+
+  .sheet.is-entering {
+    transform: translateY(100%);
   }
 
   .sheet.is-closing {

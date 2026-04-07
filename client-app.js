@@ -3071,35 +3071,6 @@
     if (currentList && nextList) currentList.innerHTML = nextList.innerHTML;
     return true;
   };
-  const animateSheetHeightMutation = (mutation) => {
-    const sheetElement = ROOT.querySelector("[data-render-host='sheet'] .sheet");
-    if (!(sheetElement instanceof HTMLElement) || typeof mutation !== "function") {
-      mutation?.();
-      return;
-    }
-    const startHeight = sheetElement.offsetHeight;
-    sheetElement.style.height = `${startHeight}px`;
-    sheetElement.style.overflow = "hidden";
-    mutation();
-    const endHeight = sheetElement.scrollHeight;
-    if (!Number.isFinite(startHeight) || !Number.isFinite(endHeight) || Math.abs(endHeight - startHeight) < 1) {
-      sheetElement.style.removeProperty("height");
-      sheetElement.style.removeProperty("overflow");
-      return;
-    }
-    const cleanup = () => {
-      sheetElement.style.removeProperty("height");
-      sheetElement.style.removeProperty("overflow");
-      sheetElement.removeEventListener("transitionend", cleanup);
-    };
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        sheetElement.style.height = `${endHeight}px`;
-      });
-    });
-    sheetElement.addEventListener("transitionend", cleanup, { once: true });
-    window.setTimeout(cleanup, 380);
-  };
   const refreshReferralHistorySheetDom = () => {
     if (normalizeText(state.sheet?.title) !== "История BS") return false;
     const sheetHost = ROOT.querySelector("[data-render-host='sheet']");
@@ -3113,11 +3084,9 @@
     currentButtons.forEach((button) => {
       button.classList.toggle("active", normalizeText(button.dataset.filter) === state.transferHistoryFilter);
     });
-    animateSheetHeightMutation(() => {
-      currentList.innerHTML = filteredOperations.length
-        ? filteredOperations.map((operation) => renderReferralOperationCard(operation)).join("")
-        : `<div class="empty-state">По этому фильтру пока нет движений BS.</div>`;
-    });
+    currentList.innerHTML = filteredOperations.length
+      ? filteredOperations.map((operation) => renderReferralOperationCard(operation)).join("")
+      : `<div class="empty-state">По этому фильтру пока нет движений BS.</div>`;
     scheduleReferralPillSync(currentFilterRow);
     return true;
   };
@@ -4185,7 +4154,7 @@
     const className = normalizeText(state.sheet.className);
     const isSuccessSheet = className.includes("sheet-success");
     const isPromoSheet = className.includes("promo-sheet-shell");
-    return `<div class="sheet-backdrop ${sheetStateClass}" id="sheet-backdrop"><div class="sheet ${sheetStateClass} ${className}">${isSuccessSheet || isPromoSheet ? `<button class="ghost-btn icon-only-btn sheet-close-btn ${isSuccessSheet ? "sheet-success-close" : "promo-sheet-close"}" type="button" data-action="dismiss-sheet" aria-label="Закрыть">${iconMarkup("close")}</button>` : `<div class="sheet-head"><h3 class="section-title sheet-title">${state.sheet.title}</h3><button class="ghost-btn icon-only-btn sheet-close-btn" type="button" data-action="dismiss-sheet" aria-label="Закрыть">${iconMarkup("close")}</button></div>`}<div>${state.sheet.bodyHtml || ""}</div>${state.sheet.footerHtml ? `<div style="margin-top:16px;">${state.sheet.footerHtml}</div>` : ""}</div></div>`;
+    return `<div class="sheet-backdrop ${sheetStateClass}" id="sheet-backdrop"><div class="sheet ${sheetStateClass} ${className}">${isSuccessSheet || isPromoSheet ? `<button class="ghost-btn icon-only-btn sheet-close-btn ${isSuccessSheet ? "sheet-success-close" : "promo-sheet-close"}" type="button" data-action="dismiss-sheet" aria-label="Закрыть">${iconMarkup("close")}</button>` : `<div class="sheet-head"><h3 class="section-title sheet-title">${state.sheet.title}</h3><button class="ghost-btn icon-only-btn sheet-close-btn" type="button" data-action="dismiss-sheet" aria-label="Закрыть">${iconMarkup("close")}</button></div>`}<div class="sheet-body">${state.sheet.bodyHtml || ""}</div>${state.sheet.footerHtml ? `<div style="margin-top:16px;">${state.sheet.footerHtml}</div>` : ""}</div></div>`;
   };
 
   const renderCurrentPage = () => {
@@ -4650,7 +4619,7 @@
               : `<div class="empty-state">По этому фильтру пока нет движений BS.</div>`}</div>`
           : `<div class="empty-state">Пока нет начислений и списаний.</div>`,
         "",
-        "sheet-wide",
+        "sheet-wide referral-history-sheet",
       );
       return;
     }

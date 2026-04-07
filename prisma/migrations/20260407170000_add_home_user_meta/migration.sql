@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS "HomeUserMeta" (
+  "userId" TEXT PRIMARY KEY,
+  "payload" JSONB NOT NULL DEFAULT '{}'::jsonb,
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

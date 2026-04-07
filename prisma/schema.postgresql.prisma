@@ -171,6 +171,15 @@ model SiteSettings {
   updatedAt DateTime @updatedAt
 }
 
+model HomeUserMeta {
+  userId    String   @id
+  payload   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("HomeUserMeta")
+}
+
 model TelegramAuthRequests {
   id           String  @id
   code         String  @unique

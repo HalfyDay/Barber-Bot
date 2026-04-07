@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 
 const {
   describeUpdateError,
+  buildPrismaUpdateCommands,
   resolvePostgresDumpPath,
   stripPostgresSchemaQuery,
 } = require('../services/updateManager');
@@ -37,4 +38,13 @@ test('update manager strips prisma schema query for pg_dump url', () => {
     ),
     'postgresql://postgres@127.0.0.1:54329/barber_bot',
   );
+});
+
+test('update manager runs prisma migrate deploy before generate', () => {
+  const commands = buildPrismaUpdateCommands('D:\\Works\\Barber Bot\\prisma\\schema.postgresql.prisma');
+
+  assert.deepEqual(commands.commands, [
+    'npx prisma migrate deploy --schema "D:\\Works\\Barber Bot\\prisma\\schema.postgresql.prisma"',
+    'npx prisma generate --schema "D:\\Works\\Barber Bot\\prisma\\schema.postgresql.prisma"',
+  ]);
 });

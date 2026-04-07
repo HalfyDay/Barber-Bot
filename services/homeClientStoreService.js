@@ -23,7 +23,9 @@ const createHomeClientStoreService = ({
     users: {},
     site: {},
   };
+  const HOME_USER_META_TABLE = "HomeUserMeta";
   const SITE_SETTINGS_ROW_ID = "client-site";
+  const STORE_USERS_SNAPSHOT_KEY = Symbol("homeClientStoreUsersSnapshot");
   const BS_THRESHOLDS = [10, 25, 50, 100];
   const ACTIVITY_GREEN_DAYS = 90;
   const ACTIVITY_YELLOW_DAYS = 180;
@@ -201,6 +203,45 @@ const createHomeClientStoreService = ({
     };
   };
 
+  let legacyStoreLoaded = false;
+  let legacyStoreCache = ensureStoreShape(DEFAULT_STORE);
+
+  const attachPersistedUsersSnapshot = (store, snapshot) => {
+    Object.defineProperty(store, STORE_USERS_SNAPSHOT_KEY, {
+      configurable: true,
+      enumerable: false,
+      writable: true,
+      value: snapshot instanceof Map ? snapshot : new Map(),
+    });
+    return store;
+  };
+
+  const getPersistedUsersSnapshot = (store) =>
+    store?.[STORE_USERS_SNAPSHOT_KEY] instanceof Map ? store[STORE_USERS_SNAPSHOT_KEY] : new Map();
+
+  const readLegacyStoreFile = async () => {
+    if (legacyStoreLoaded) return legacyStoreCache;
+    try {
+      legacyStoreCache = ensureStoreShape(await fs.readJson(dataFilePath));
+    } catch {
+      legacyStoreCache = ensureStoreShape(DEFAULT_STORE);
+    }
+    legacyStoreLoaded = true;
+    return legacyStoreCache;
+  };
+
+  const normalizeDatabaseJsonPayload = (payload) => {
+    if (!payload) return {};
+    if (typeof payload === "string") {
+      try {
+        return JSON.parse(payload);
+      } catch {
+        return {};
+      }
+    }
+    return payload && typeof payload === "object" ? payload : {};
+  };
+
   const sanitizeSitePromo = (input = {}, index = 0) => ({
     id: normalizeText(input.id) || `promo-${index + 1}`,
     title: normalizeText(input.title) || `Акция ${index + 1}`,
@@ -303,36 +344,112 @@ const createHomeClientStoreService = ({
     };
   };
 
+  const ensureHomeUserMetaTable = async () => {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "${HOME_USER_META_TABLE}" (
+        "userId" TEXT PRIMARY KEY,
+        "payload" JSONB NOT NULL DEFAULT '{}'::jsonb,
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+  };
+
+  const readHomeUserMetaRows = async () => {
+    await ensureHomeUserMetaTable();
+    const rows = await prisma.$queryRawUnsafe(
+      `SELECT "userId", "payload" FROM "${HOME_USER_META_TABLE}"`,
+    );
+    return Array.isArray(rows) ? rows : [];
+  };
+
+  const upsertHomeUserMetaRow = async (userId, payload) => {
+    const safeUserId = normalizeText(userId);
+    if (!safeUserId) return;
+    await ensureHomeUserMetaTable();
+    await prisma.$executeRawUnsafe(
+      `
+        INSERT INTO "${HOME_USER_META_TABLE}" ("userId", "payload", "createdAt", "updatedAt")
+        VALUES ($1, $2::jsonb, NOW(), NOW())
+        ON CONFLICT ("userId")
+        DO UPDATE SET
+          "payload" = EXCLUDED."payload",
+          "updatedAt" = NOW()
+      `,
+      safeUserId,
+      JSON.stringify(payload),
+    );
+  };
+
+  const buildUsersSnapshot = (users = {}) =>
+    new Map(
+      Object.entries(users)
+        .map(([userId, meta]) => [normalizeText(userId), JSON.stringify(sanitizeUserMeta(meta))])
+        .filter(([userId]) => Boolean(userId)),
+    );
+
   const readStore = async () => {
-    try {
-      const payload = await fs.readJson(dataFilePath);
-      return ensureStoreShape(payload);
-    } catch {
-      return ensureStoreShape(DEFAULT_STORE);
+    let rows = await readHomeUserMetaRows();
+    const legacyStore = await readLegacyStoreFile();
+    const legacyUsers =
+      legacyStore?.users && typeof legacyStore.users === "object" ? legacyStore.users : {};
+    const dbUserIds = new Set(rows.map((row) => normalizeText(row?.userId)).filter(Boolean));
+    const missingLegacyEntries = Object.entries(legacyUsers)
+      .map(([userId, meta]) => [normalizeText(userId), sanitizeUserMeta(meta)])
+      .filter(([userId]) => Boolean(userId) && !dbUserIds.has(userId));
+
+    if (missingLegacyEntries.length) {
+      for (const [userId, meta] of missingLegacyEntries) {
+        await upsertHomeUserMetaRow(userId, meta);
+      }
+      rows = rows.concat(
+        missingLegacyEntries.map(([userId, payload]) => ({
+          userId,
+          payload,
+        })),
+      );
     }
+
+    const users = {};
+    rows.forEach((row) => {
+      const userId = normalizeText(row?.userId);
+      if (!userId) return;
+      users[userId] = sanitizeUserMeta(normalizeDatabaseJsonPayload(row?.payload));
+    });
+
+    const store = ensureStoreShape({
+      version: 1,
+      users,
+      site: legacyStore?.site,
+    });
+    return attachPersistedUsersSnapshot(store, buildUsersSnapshot(store.users));
   };
 
   const writeStore = async (store) => {
     const nextStore = ensureStoreShape(store);
-    await fs.ensureDir(require("path").dirname(dataFilePath));
-    await fs.writeJson(dataFilePath, nextStore, { spaces: 2 });
-    return nextStore;
+    const previousSnapshot = getPersistedUsersSnapshot(store);
+    const nextUsers = {};
+    Object.entries(nextStore.users || {}).forEach(([userId, meta]) => {
+      const safeUserId = normalizeText(userId);
+      if (!safeUserId) return;
+      nextUsers[safeUserId] = sanitizeUserMeta(meta);
+    });
+    const nextSnapshot = buildUsersSnapshot(nextUsers);
+    for (const [userId, serialized] of nextSnapshot.entries()) {
+      if (previousSnapshot.get(userId) === serialized) continue;
+      await upsertHomeUserMetaRow(userId, nextUsers[userId]);
+    }
+    const persistedStore = ensureStoreShape({
+      ...nextStore,
+      users: nextUsers,
+    });
+    return attachPersistedUsersSnapshot(persistedStore, nextSnapshot);
   };
 
   const hasLegacySiteSettings = (store = {}) =>
     Boolean(store?.site && typeof store.site === "object" && Object.keys(store.site).length > 0);
 
-  const normalizeDatabaseSitePayload = (payload) => {
-    if (!payload) return {};
-    if (typeof payload === "string") {
-      try {
-        return JSON.parse(payload);
-      } catch {
-        return {};
-      }
-    }
-    return payload && typeof payload === "object" ? payload : {};
-  };
+  const normalizeDatabaseSitePayload = normalizeDatabaseJsonPayload;
 
   const ensureSiteSettingsTable = async () => {
     await prisma.$executeRawUnsafe(`

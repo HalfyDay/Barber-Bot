@@ -331,15 +331,25 @@ const canAutoResolveHomeDisplayNameMigration = (message = '') => {
   return hasMigrationName && hasP3018 && missingColumn;
 };
 
+const buildPrismaUpdateCommands = (schemaPath = PRISMA_SCHEMA_PATH) => {
+  const schemaArg = `--schema "${schemaPath}"`;
+  return {
+    schemaArg,
+    migrate: `npx prisma migrate deploy ${schemaArg}`,
+    generate: `npx prisma generate ${schemaArg}`,
+    commands: [
+      `npx prisma migrate deploy ${schemaArg}`,
+      `npx prisma generate ${schemaArg}`,
+    ],
+  };
+};
+
 const runPrismaMigrations = async () => {
   if (!fs.existsSync(PRISMA_SCHEMA_PATH)) {
     console.warn('[update] Prisma schema not found, skipping migrations');
     return;
   }
-  const schemaArg = `--schema "${PRISMA_SCHEMA_PATH}"`;
-  const migrate = `npx prisma migrate deploy ${schemaArg}`;
-  const generate = `npx prisma generate ${schemaArg}`;
-  const commands = [generate];
+  const { schemaArg, migrate, commands } = buildPrismaUpdateCommands(PRISMA_SCHEMA_PATH);
   let homeDisplayNameMigrationResolved = false;
   for (const command of commands) {
     let attempt = 0;
@@ -663,6 +673,7 @@ module.exports = {
   checkForUpdates,
   applyUpdate,
   describeUpdateError,
+  buildPrismaUpdateCommands,
   createPreUpdateBackup,
   resolvePostgresDumpPath,
   stripPostgresSchemaQuery,

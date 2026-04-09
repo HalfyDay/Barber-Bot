@@ -4638,10 +4638,10 @@
     await apiRequest(`/booking/appointments/${encodeURIComponent(safeId)}/cancel`, {
       method: "POST",
     });
+    state.pendingBookingCancellationId = "";
     commitAppPayload(await apiRequest("/app"));
     render({ sheet: false });
-    closeSheet();
-    openSheet("Запись отменена", buildBookingStatusSheet("Запись отменена"), "", "sheet-success");
+    dismissSheet();
   };
 
   const requestReferralTransferPreview = async (draft) => {

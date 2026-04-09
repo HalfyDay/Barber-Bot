@@ -118,6 +118,17 @@ const createAdminInsightsService = ({
     };
   };
 
+  const mapVisitHistoryToAppointments = (visitHistory = []) =>
+    (Array.isArray(visitHistory) ? visitHistory : []).map((visit) => ({
+      id: visit?.id,
+      Date: normalizeText(visit?.date) || null,
+      Time: normalizeText(visit?.time) || null,
+      Barber: normalizeText(visit?.barber) || "",
+      Services: Array.isArray(visit?.services) ? visit.services.filter(Boolean).join(", ") : "",
+      Status: normalizeText(visit?.status) || "",
+      startDateTime: normalizeText(visit?.when) || null,
+    }));
+
   const buildUserProfile = async (name) => {
     const user = await prisma.users.findFirst({ where: { Name: name } });
     if (!user) {
@@ -139,7 +150,7 @@ const createAdminInsightsService = ({
             activityColor: homeAppPayload.referral?.stats?.green > 0 ? "green" : "",
             noticeCount: homeAppPayload.user?.noticeCount || 0,
           },
-          appointments: homeAppPayload.profile?.visitHistory || [],
+          appointments: mapVisitHistoryToAppointments(homeAppPayload.profile?.visitHistory || []),
           operations: homeAppPayload.profile?.operations || [],
           notices: homeAppPayload.profile?.notices || [],
           referral: homeAppPayload.referral || null,

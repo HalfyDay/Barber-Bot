@@ -137,6 +137,66 @@ test("admin insights service builds user profile with warning and manual block f
   assert.equal(result.appointments[0].id, "appt-1");
 });
 
+test("admin insights service maps home payload visit history to appointment records for CRM profile", async () => {
+  const service = createAdminInsightsService({
+    ...baseDeps(),
+    prisma: {
+      appointments: {
+        async findMany() {
+          return [];
+        },
+      },
+      users: {
+        async findFirst() {
+          return { id: "user-1", Name: "Ivan", Phone: "+70000000001" };
+        },
+        async findUnique() {
+          return null;
+        },
+      },
+    },
+    buildHomeAppPayload: async () => ({
+      user: {
+        warningCount: 1,
+        isBlocked: false,
+        noticeCount: 0,
+      },
+      profile: {
+        visitHistory: [
+          {
+            id: "visit-1",
+            when: "2026-03-15T09:00:00.000Z",
+            date: "2026-03-15",
+            time: "12:00 - 13:00",
+            barber: "Max",
+            services: ["Fade", "Beard"],
+            status: "done",
+          },
+        ],
+        operations: [],
+        notices: [],
+      },
+      referral: {
+        bsBalance: 0,
+        stats: { green: 0 },
+      },
+    }),
+  });
+
+  const result = await service.buildUserProfile("Ivan");
+
+  assert.equal(result.appointments.length, 1);
+  assert.deepEqual(result.appointments[0], {
+    id: "visit-1",
+    Date: "2026-03-15",
+    Time: "12:00 - 13:00",
+    Barber: "Max",
+    Services: "Fade, Beard",
+    Status: "done",
+    startDateTime: "2026-03-15T09:00:00.000Z",
+  });
+});
+
 test("admin insights service toggles manual block and requests realtime push", async () => {
   const pushes = [];
   let persisted = null;

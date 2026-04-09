@@ -241,8 +241,23 @@ const buildVisitHistory = (appointments = []) => {
   const cutoff = Date.now() - YEAR_IN_MS;
   const completed = appointments
     .map((appt) => {
-      const startDate = getAppointmentStartDate(appt.Date, appt.Time, appt.startDateTime);
-      return { ...appt, startDate };
+      const dateValue = normalizeText(appt?.Date || appt?.date);
+      const timeValue = normalizeText(appt?.Time || appt?.time);
+      const statusValue = normalizeText(appt?.Status || appt?.status);
+      const barberValue = normalizeText(appt?.Barber || appt?.barber);
+      const servicesValue = Array.isArray(appt?.services)
+        ? appt.services.filter(Boolean).join(', ')
+        : normalizeText(appt?.Services);
+      const startDate = getAppointmentStartDate(dateValue, timeValue, appt?.startDateTime || appt?.when);
+      return {
+        ...appt,
+        Date: dateValue,
+        Time: timeValue,
+        Status: statusValue,
+        Barber: barberValue,
+        Services: servicesValue,
+        startDate,
+      };
     })
     .filter(
       (appt) =>
@@ -8170,8 +8185,38 @@ const AppointmentModal = ({
   const isReminderSent = (value) => value === true || value === 'true' || value === 1 || value === '1';
   const getReminderLabel = (value) => (isReminderSent(value) ? 'Напомнено' : 'Не напомнено');
   const getReminderAccent = (value) => (isReminderSent(value) ? 'text-emerald-300' : 'text-slate-500');
+  const linkedClient = useMemo(() => {
+    const safeUserId = normalizeText(draft?.UserID);
+    const safePhone = normalizePhoneValue(draft?.Phone);
+    const safeName = normalizeText(draft?.CustomerName);
+    return (Array.isArray(clients) ? clients : []).find((client) => {
+      const clientId = normalizeText(client?.id);
+      const clientTelegramId = normalizeText(client?.telegramId || client?.TelegramID);
+      const clientPhone = normalizePhoneValue(client?.phone || client?.Phone);
+      const clientName = normalizeText(client?.name || client?.Name);
+      if (safeUserId && (clientTelegramId === safeUserId || clientId === safeUserId)) return true;
+      if (safePhone && clientPhone === safePhone) return true;
+      if (safeName && clientName === safeName) return true;
+      return false;
+    }) || null;
+  }, [clients, draft?.CustomerName, draft?.Phone, draft?.UserID]);
+  const resolvedTelegramUserId = normalizeText(linkedClient?.telegramId || linkedClient?.TelegramID);
+  const storedUserId = normalizeText(draft?.UserID);
   const recordDetails = [
-    { key: 'user', label: 'UserID', value: draft.UserID || '-', accent: draft.UserID ? 'text-white' : 'text-slate-500' },
+    {
+      key: 'user',
+      label: 'UserID',
+      value: resolvedTelegramUserId || storedUserId || '-',
+      accent: resolvedTelegramUserId || storedUserId ? 'text-white' : 'text-slate-500',
+    },
+    ...(resolvedTelegramUserId && storedUserId && resolvedTelegramUserId !== storedUserId
+      ? [{
+          key: 'siteUser',
+          label: 'ID сайта',
+          value: storedUserId,
+          accent: 'text-slate-400',
+        }]
+      : []),
     {
       key: 'clientReminder',
       label: 'Напоминание клиенту (2ч)',

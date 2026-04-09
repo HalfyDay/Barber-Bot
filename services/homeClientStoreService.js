@@ -149,15 +149,35 @@ const createHomeClientStoreService = ({
     if (Number.isNaN(parsed.getTime())) return null;
     return parsed.toISOString();
   };
+  const extractTimeTokens = (value) => {
+    const safeValue = normalizeText(value);
+    if (!safeValue) return [];
+    return Array.from(
+      new Set(
+        [...safeValue.matchAll(/\b(\d{1,2}):(\d{2})\b/g)].map(
+          (match) => `${match[1].padStart(2, "0")}:${match[2]}`,
+        ),
+      ),
+    );
+  };
   const formatTimeValue = (value) => {
     const safeValue = normalizeText(value);
     if (/^\d{2}:\d{2}$/.test(safeValue)) return safeValue;
+    const [matchedTime] = extractTimeTokens(safeValue);
+    if (matchedTime) return matchedTime;
     const parsed = new Date(safeValue);
     if (Number.isNaN(parsed.getTime())) return "";
     return `${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`;
   };
-  const buildTimeRangeLabel = (startTime, endDateTime) => {
-    const start = formatTimeValue(startTime);
+  const buildTimeRangeLabel = (timeValue, endDateTime) => {
+    const timeTokens = extractTimeTokens(timeValue);
+    if (timeTokens.length >= 2) {
+      return `${timeTokens[0]} - ${timeTokens[1]}`;
+    }
+    if (timeTokens.length === 1) {
+      return timeTokens[0];
+    }
+    const start = formatTimeValue(timeValue);
     const end = formatTimeValue(endDateTime);
     if (start && end) return `${start} - ${end}`;
     return start || end || "";

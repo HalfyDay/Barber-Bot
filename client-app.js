@@ -1315,27 +1315,122 @@
     return parsed.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", weekday: "short" });
   };
 
+  const APP_TIME_ZONE = "Europe/Moscow";
+  const dateTimeFormatterCache = new Map();
+  const getDateTimeFormatter = (options = {}) => {
+    const cacheKey = JSON.stringify(options);
+    if (!dateTimeFormatterCache.has(cacheKey)) {
+      dateTimeFormatterCache.set(
+        cacheKey,
+        new Intl.DateTimeFormat("ru-RU", {
+          timeZone: APP_TIME_ZONE,
+          ...options,
+        }),
+      );
+    }
+    return dateTimeFormatterCache.get(cacheKey);
+  };
+  const formatZonedDateValue = (value, options = {}) => {
+    const safeValue = normalizeText(value);
+    if (!safeValue) return "";
+    const parsed = new Date(safeValue);
+    if (Number.isNaN(parsed.getTime())) return safeValue;
+    return getDateTimeFormatter(options).format(parsed);
+  };
+  const sanitizeTimeToken = (value) => {
+    const match = normalizeText(value).match(/(\d{1,2}):(\d{2})/);
+    if (!match) return "";
+    return `${match[1].padStart(2, "0")}:${match[2]}`;
+  };
+  const parseTimeRangeParts = (value) => {
+    const safeValue = normalizeText(value).replace(/[\u2014\u2013]/g, "-");
+    if (!safeValue) return { start: "", end: "" };
+    const [startRaw, endRaw = ""] = safeValue.split("-").map((part) => sanitizeTimeToken(part));
+    return { start: startRaw, end: endRaw };
+  };
+  const timeZoneFormatterCache = new Map();
+  const getTimeZoneFormatter = (zone = APP_TIME_ZONE) => {
+    const cacheKey = zone || "default";
+    if (!timeZoneFormatterCache.has(cacheKey)) {
+      timeZoneFormatterCache.set(
+        cacheKey,
+        new Intl.DateTimeFormat("en-CA", {
+          timeZone: zone,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        }),
+      );
+    }
+    return timeZoneFormatterCache.get(cacheKey);
+  };
+  const getTimeZoneParts = (dateObj, zone = APP_TIME_ZONE) => {
+    const formatter = getTimeZoneFormatter(zone);
+    return formatter.formatToParts(dateObj).reduce((acc, part) => {
+      if (part.type !== "literal") {
+        acc[part.type] = part.value;
+      }
+      return acc;
+    }, {});
+  };
+  const getTimeZoneOffsetMs = (dateObj, zone = APP_TIME_ZONE) => {
+    const parts = getTimeZoneParts(dateObj, zone);
+    const asUtc = Date.UTC(
+      Number(parts.year || 0),
+      Number(parts.month || 1) - 1,
+      Number(parts.day || 1),
+      Number(parts.hour || 0),
+      Number(parts.minute || 0),
+      Number(parts.second || 0),
+    );
+    return asUtc - dateObj.getTime();
+  };
+  const parseZonedDateTime = (dateValue, timeToken, zone = APP_TIME_ZONE) => {
+    const safeDate = normalizeText(dateValue).slice(0, 10);
+    const safeTime = sanitizeTimeToken(timeToken) || "00:00";
+    const dateMatch = safeDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const timeMatch = safeTime.match(/^(\d{2}):(\d{2})$/);
+    if (!dateMatch || !timeMatch) return null;
+    const year = Number(dateMatch[1]);
+    const month = Number(dateMatch[2]);
+    const day = Number(dateMatch[3]);
+    const hours = Number(timeMatch[1]);
+    const minutes = Number(timeMatch[2]);
+    const utcMillis = Date.UTC(year, month - 1, day, hours, minutes, 0);
+    let candidate = new Date(utcMillis);
+    try {
+      let offsetMs = getTimeZoneOffsetMs(candidate, zone);
+      candidate = new Date(utcMillis - offsetMs);
+      const adjustedOffsetMs = getTimeZoneOffsetMs(candidate, zone);
+      if (adjustedOffsetMs !== offsetMs) {
+        candidate = new Date(utcMillis - adjustedOffsetMs);
+      }
+      return Number.isNaN(candidate.getTime()) ? null : candidate;
+    } catch {
+      const fallback = new Date(`${safeDate}T${safeTime}:00`);
+      return Number.isNaN(fallback.getTime()) ? null : fallback;
+    }
+  };
+
   const formatDateTime = (value) => {
     const safeValue = normalizeText(value);
     if (!safeValue) return "Без даты";
-    const parsed = new Date(safeValue);
-    if (Number.isNaN(parsed.getTime())) return safeValue;
-    return parsed.toLocaleString("ru-RU", { day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit" });
+    return formatZonedDateValue(safeValue, { day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit" });
   };
 
   const formatShortDate = (value) => {
     const safeValue = normalizeText(value);
     if (!safeValue) return "";
-    const parsed = new Date(safeValue);
-    if (Number.isNaN(parsed.getTime())) return safeValue;
-    return parsed.toLocaleDateString("ru-RU", { day: "2-digit", month: "short" });
+    return formatZonedDateValue(safeValue, { day: "2-digit", month: "short" });
   };
   const formatShortDateTime = (value) => {
     const safeValue = normalizeText(value);
     if (!safeValue) return "";
-    const parsed = new Date(safeValue);
-    if (Number.isNaN(parsed.getTime())) return safeValue;
-    return parsed.toLocaleString("ru-RU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    return formatZonedDateValue(safeValue, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
   const formatProfileDateOnly = (value) => {
@@ -1349,19 +1444,20 @@
   const formatProfileDateTime = (value) => {
     const safeValue = normalizeText(value);
     if (!safeValue) return "";
-    const parsed = new Date(safeValue);
-    if (Number.isNaN(parsed.getTime())) return safeValue;
-    return parsed.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    return formatZonedDateValue(safeValue, {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   const parseAppointmentStart = (dateValue, timeValue) => {
     const safeDate = normalizeText(dateValue);
     if (!safeDate) return null;
-    const safeTime = normalizeText(timeValue);
-    const matchedTime = safeTime.match(/(\d{1,2}:\d{2})/);
-    const startTime = matchedTime ? matchedTime[1] : "00:00";
-    const parsed = new Date(`${safeDate}T${startTime}:00`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
+    const startTime = parseTimeRangeParts(timeValue).start || "00:00";
+    return parseZonedDateTime(safeDate, startTime);
   };
 
   const formatAppointmentEta = (dateValue, timeValue) => {
@@ -1381,11 +1477,16 @@
   const parseAppointmentEnd = (dateValue, timeValue) => {
     const startAt = parseAppointmentStart(dateValue, timeValue);
     if (!startAt) return null;
-    const safeTime = normalizeText(timeValue);
-    const matchedTimes = safeTime.match(/\d{1,2}:\d{2}/g);
-    if (matchedTimes && matchedTimes.length > 1) {
-      const parsed = new Date(`${normalizeText(dateValue)}T${matchedTimes[1]}:00`);
-      if (!Number.isNaN(parsed.getTime())) return parsed;
+    const { start, end } = parseTimeRangeParts(timeValue);
+    const endTime = end || start;
+    if (endTime) {
+      let parsed = parseZonedDateTime(normalizeText(dateValue), endTime);
+      if (parsed) {
+        if (end && start && end <= start) {
+          parsed = new Date(parsed.getTime() + 24 * 60 * 60 * 1000);
+        }
+        if (!Number.isNaN(parsed.getTime())) return parsed;
+      }
     }
     return new Date(startAt.getTime() + 60 * 60 * 1000);
   };

@@ -159,3 +159,41 @@ test("home client store service persists updates in postgres and can read withou
   assert.equal(meta.bookingNotificationsEnabled, false);
   assert.equal(meta.referralCode, harness.userMetaRows.get("user-9")?.referralCode);
 });
+
+test("home client store service keeps active appointment time label from stored time range", async () => {
+  const harness = createPrismaHarness();
+  harness.prisma.users.findUnique = async () => ({
+    id: "user-1",
+    Name: "Client One",
+    Phone: "+79990000001",
+    Barber: "Barber One",
+    TelegramID: null,
+  });
+  harness.prisma.appointments.findMany = async () => [
+    {
+      id: "appt-1",
+      UserID: "user-1",
+      CustomerName: "Client One",
+      Phone: "+79990000001",
+      Barber: "Barber One",
+      BarberID: "barber-1",
+      Date: "2026-04-09",
+      Time: "17:00 - 18:00",
+      endDateTime: "2026-04-09T10:00:00.000Z",
+      Status: "active",
+      Services: "Haircut",
+      isActive: true,
+    },
+  ];
+
+  const service = createService({
+    prisma: harness.prisma,
+    legacyStore: { version: 1, users: {}, site: {} },
+  });
+
+  const payload = await service.buildHomeAppPayload("user-1");
+
+  assert.equal(payload.booking.activeAppointments.length, 1);
+  assert.equal(payload.booking.activeAppointments[0].time, "17:00 - 18:00");
+  assert.equal(payload.booking.activeAppointments[0].timeLabel, "17:00 - 18:00");
+});

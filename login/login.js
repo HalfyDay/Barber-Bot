@@ -731,7 +731,13 @@
       const response = await fetch(`${HOME_API_BASE_URL}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, password, displayName: fullName, referralCode }),
+        body: JSON.stringify({
+          phone,
+          password,
+          displayName: fullName,
+          referralCode,
+          privacyConsentAccepted,
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.success || !payload?.token || !payload?.user) {

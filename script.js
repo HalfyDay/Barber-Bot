@@ -8165,6 +8165,21 @@ const AppointmentModal = ({
       return syncDraftTimeWithServices(prev);
     });
   }, [open, isNew, selectedServicesDuration, syncDraftTimeWithServices]);
+  const linkedClient = useMemo(() => {
+    const safeUserId = normalizeText(draft?.UserID);
+    const safePhone = normalizePhoneValue(draft?.Phone);
+    const safeName = normalizeText(draft?.CustomerName);
+    return (Array.isArray(clients) ? clients : []).find((client) => {
+      const clientId = normalizeText(client?.id);
+      const clientTelegramId = normalizeText(client?.telegramId || client?.TelegramID);
+      const clientPhone = normalizePhoneValue(client?.phone || client?.Phone);
+      const clientName = normalizeText(client?.name || client?.Name);
+      if (safeUserId && (clientTelegramId === safeUserId || clientId === safeUserId)) return true;
+      if (safePhone && clientPhone === safePhone) return true;
+      if (safeName && clientName === safeName) return true;
+      return false;
+    }) || null;
+  }, [clients, draft?.CustomerName, draft?.Phone, draft?.UserID]);
   if (!open || !draft) return null;
   const actionButtonClass = RESPONSIVE_ACTION_BUTTON_CLASS;
   const handleChange = (field, value) => {
@@ -8185,21 +8200,6 @@ const AppointmentModal = ({
   const isReminderSent = (value) => value === true || value === 'true' || value === 1 || value === '1';
   const getReminderLabel = (value) => (isReminderSent(value) ? 'Напомнено' : 'Не напомнено');
   const getReminderAccent = (value) => (isReminderSent(value) ? 'text-emerald-300' : 'text-slate-500');
-  const linkedClient = useMemo(() => {
-    const safeUserId = normalizeText(draft?.UserID);
-    const safePhone = normalizePhoneValue(draft?.Phone);
-    const safeName = normalizeText(draft?.CustomerName);
-    return (Array.isArray(clients) ? clients : []).find((client) => {
-      const clientId = normalizeText(client?.id);
-      const clientTelegramId = normalizeText(client?.telegramId || client?.TelegramID);
-      const clientPhone = normalizePhoneValue(client?.phone || client?.Phone);
-      const clientName = normalizeText(client?.name || client?.Name);
-      if (safeUserId && (clientTelegramId === safeUserId || clientId === safeUserId)) return true;
-      if (safePhone && clientPhone === safePhone) return true;
-      if (safeName && clientName === safeName) return true;
-      return false;
-    }) || null;
-  }, [clients, draft?.CustomerName, draft?.Phone, draft?.UserID]);
   const resolvedTelegramUserId = normalizeText(linkedClient?.telegramId || linkedClient?.TelegramID);
   const storedUserId = normalizeText(draft?.UserID);
   const recordDetails = [

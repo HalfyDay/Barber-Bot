@@ -26,6 +26,24 @@ const createDashboardSnapshotService = ({
   botRuntime,
   buildUserInsightsMap,
 }) => {
+  const isTransientPrismaDisconnect = (error) => {
+    const message = String(error?.message || error || "");
+    return error?.code === "P1017" || /server has closed the connection|connection terminated unexpectedly|econnrefused/i.test(message);
+  };
+
+  const retryOnTransientDisconnect = async (operation) => {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isTransientPrismaDisconnect(error)) throw error;
+      try {
+        await prisma.$disconnect?.();
+      } catch {}
+      await prisma.$connect?.();
+      return operation();
+    }
+  };
+
   const buildClientRows = (users, appointments, manualBlockedSet = new Set()) => {
     const now = new Date();
     const yearAgo = new Date(now);
@@ -311,11 +329,13 @@ const createDashboardSnapshotService = ({
   };
 
   const buildRealtimeAppointmentsPayload = async () => {
-    const [appointmentsRaw, usersCount, blockedUsers] = await Promise.all([
-      prisma.appointments.findMany(),
-      prisma.users.count(),
-      readBlockedUsers(),
-    ]);
+    const [appointmentsRaw, usersCount, blockedUsers] = await retryOnTransientDisconnect(() =>
+      Promise.all([
+        prisma.appointments.findMany(),
+        prisma.users.count(),
+        readBlockedUsers(),
+      ]),
+    );
     const mapped = appointmentsRaw.map(mapAppointment);
     const now = new Date();
     const todayKey = formatDateOnly(now);

@@ -6,6 +6,13 @@ const SQL_BACKUP_RE = /\.sql$/i;
 const SQLITE_BACKUP_RE = /\.db$/i;
 
 const isBackupFileName = (fileName = "") => SQL_BACKUP_RE.test(fileName) || SQLITE_BACKUP_RE.test(fileName);
+const parseBackupTimestamp = (fileName = "") => {
+  const match = String(fileName || "").match(/backup(?:-pre-update)?-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})(?:-(\d{3}))?/i);
+  if (!match) return 0;
+  const [, datePart, hours, minutes, seconds, milliseconds = "000"] = match;
+  const parsed = new Date(`${datePart}T${hours}:${minutes}:${seconds}.${milliseconds}Z`);
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+};
 
 const stripPostgresSchemaQuery = (databaseUrl = "") => {
   const raw = String(databaseUrl || "").trim();
@@ -88,7 +95,13 @@ const createBackupService = ({
   const listBackups = async () => {
     await ensureBackupDir();
     const files = await fs.readdir(BACKUP_DIR);
-    return files.filter(isBackupFileName).sort().reverse();
+    return files
+      .filter(isBackupFileName)
+      .sort((left, right) => {
+        const timestampDiff = parseBackupTimestamp(right) - parseBackupTimestamp(left);
+        if (timestampDiff !== 0) return timestampDiff;
+        return right.localeCompare(left);
+      });
   };
 
   const createSqliteBackup = async (timestamp) => {

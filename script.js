@@ -10191,6 +10191,7 @@ const App = () => {
   const [confirmDialog, setConfirmDialog] = useState(defaultConfirmState);
   const [connectionStatus, setConnectionStatus] = useState('unknown');
   const confirmResolverRef = useRef(null);
+  const fetchAllRef = useRef(null);
   const role = normalizeRoleValue(session?.role);
   const isCreator = role === ROLE_CREATOR;
   const isOwner = role === ROLE_OWNER;
@@ -10508,6 +10509,9 @@ const apiRequest = useCallback(
 	    }
 	  }, [apiRequest, canAccessBot, canAccessSystem, session?.token]);
   useEffect(() => {
+    fetchAllRef.current = fetchAll;
+  }, [fetchAll]);
+  useEffect(() => {
     if (!canAccessSystem || !session?.token) return undefined;
     const intervalId = window.setInterval(async () => {
       try {
@@ -10547,9 +10551,9 @@ const apiRequest = useCallback(
   );
   useEffect(() => {
     if (session?.token) {
-      fetchAll();
+      fetchAllRef.current?.();
     }
-  }, [session?.token, fetchAll]);
+  }, [Boolean(session?.token)]);
   useEffect(() => {
     if (!session?.token || !canUseRealtime) {
       setRealtimeSnapshot(null);
@@ -11199,6 +11203,16 @@ const handleBarberFieldChange = (id, field, value) => {
       setGlobalError(error.message || 'Не удалось восстановить бэкап');
     }
   };
+  const refreshBackupsList = useCallback(async () => {
+    const backups = await apiRequest('/backups/list');
+    setDashboard((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        backups: Array.isArray(backups) ? backups : [],
+      };
+    });
+  }, [apiRequest]);
   const handleCreateBackup = async () => {
     const confirmed = await requestConfirm({
       title: 'Создать резервную копию?',
@@ -11209,7 +11223,7 @@ const handleBarberFieldChange = (id, field, value) => {
     if (!confirmed) return;
     try {
       await apiRequest('/backups/create', { method: 'POST' });
-      fetchAll();
+      await refreshBackupsList();
     } catch (error) {
       setGlobalError(error.message || 'Не удалось создать бэкап');
     }
@@ -11225,7 +11239,7 @@ const handleBarberFieldChange = (id, field, value) => {
     if (!confirmed) return;
     try {
       await apiRequest('/backups/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename }) });
-      fetchAll();
+      await refreshBackupsList();
     } catch (error) {
       setGlobalError(error.message || 'Не удалось удалить бэкап');
     }

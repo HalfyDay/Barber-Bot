@@ -30,6 +30,87 @@ const createHomeClientStoreService = ({
   const ACTIVITY_GREEN_DAYS = 90;
   const ACTIVITY_YELLOW_DAYS = 180;
   const GENDER_OPTIONS = new Set(["male", "female", "other"]);
+  const parseWorkingRange = (value) => {
+    const text = normalizeText(value);
+    if (!text || text === "0" || !text.includes("-")) return null;
+    const [startRaw, endRaw] = text.split("-", 2).map((part) => normalizeText(part));
+    const timePattern = /^\d{1,2}:\d{2}$/;
+    if (!timePattern.test(startRaw) || !timePattern.test(endRaw)) return null;
+    const [startHour, startMinute] = startRaw.split(":").map(Number);
+    const [endHour, endMinute] = endRaw.split(":").map(Number);
+    const startTotal = startHour * 60 + startMinute;
+    const endTotal = endHour * 60 + endMinute;
+    return endTotal > startTotal ? [startTotal, endTotal] : null;
+  };
+  const buildDateWindowKeys = (maxDaysAhead = 14) => {
+    const safeDays = Math.max(1, Math.min(30, Number(maxDaysAhead) || 14));
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return Array.from({ length: safeDays }).map((_, index) => {
+      const current = new Date(start);
+      current.setDate(start.getDate() + index);
+      const year = current.getFullYear();
+      const month = String(current.getMonth() + 1).padStart(2, "0");
+      const day = String(current.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    });
+  };
+  const buildBookableBarbersPayload = async (barbers = [], services = [], options = {}) => {
+    const safeBarbers = Array.isArray(barbers) ? barbers : [];
+    if (!safeBarbers.length) return [];
+    const settings = await getBotSettings();
+    const dateWindowKeys = buildDateWindowKeys(settings?.maxDaysAhead);
+    const activeScheduleRows = dateWindowKeys.length
+      ? await prisma.schedules.findMany({
+          where: {
+            Barber: { in: safeBarbers.map((barber) => normalizeText(barber?.name)).filter(Boolean) },
+            Date: { in: dateWindowKeys },
+          },
+          select: { Barber: true, Week: true },
+        })
+      : [];
+    const barbersWithWorkingDays = new Set(
+      activeScheduleRows
+        .filter((row) => parseWorkingRange(row?.Week))
+        .map((row) => normalizeText(row?.Barber)),
+    );
+    const includeServices = options.includeServices === true;
+    return safeBarbers
+      .filter((barber) => barber?.isActive !== false)
+      .filter((barber) => barbersWithWorkingDays.has(normalizeText(barber?.name)))
+      .map((barber) => {
+        const barberServices = (Array.isArray(services) ? services : [])
+          .filter((service) => {
+            const price = Number(getServicePriceForBarber(service, barber.id));
+            return Number.isFinite(price) && price > 0;
+          })
+          .map((service) => normalizeText(service?.name || service?.title || service?.label))
+          .filter(Boolean);
+        const servicesCount = barberServices.length;
+        const displayName =
+          normalizeText(barber.cardTitle) ||
+          normalizeText(barber.nickname) ||
+          normalizeText(barber.name) ||
+          "Барбер";
+        return {
+          id: barber.id,
+          name: displayName,
+          fullName: normalizeText(barber.name) || displayName,
+          nickname: normalizeText(barber.nickname),
+          description: normalizeText(barber.description),
+          color: normalizeText(barber.color),
+          rating: normalizeText(barber.rating),
+          avatarUrl: normalizeText(barber.avatarUrl),
+          cardImageUrl: normalizeText(barber.cardImageUrl),
+          cardTitle: normalizeText(barber.cardTitle),
+          cardDescription: normalizeText(barber.cardDescription),
+          cardPhrase: normalizeText(barber.cardPhrase),
+          phrase: normalizeText(barber.cardPhrase) || normalizeText(barber.description),
+          ...(includeServices ? { services: barberServices } : {}),
+          servicesCount,
+        };
+      });
+  };
   const DEFAULT_SITE_CONFIG = Object.freeze({
     home: {
       logoText: "BrotherShop",
@@ -1335,6 +1416,7 @@ const createHomeClientStoreService = ({
     const isBlocked = manualBlocked || warningCount >= warningBlockThreshold;
     const userMeta = ensureUserMeta(store, user.id);
     const { barberLookup, serviceLookup, barbers, services } = await buildCatalogHelpers();
+    const bookingBarbers = await buildBookableBarbersPayload(barbers, services);
     const visitHistory = completedAppointments.map((appointment) => {
       const amountRub = resolveAppointmentSpend(appointment, barberLookup, serviceLookup);
       return {
@@ -1410,35 +1492,7 @@ const createHomeClientStoreService = ({
           services: splitServiceList(appointment.Services),
           status: appointment.Status,
         })),
-        barbers: (Array.isArray(barbers) ? barbers : [])
-          .filter((barber) => barber?.isActive !== false)
-          .map((barber) => {
-            const servicesCount = (Array.isArray(services) ? services : []).reduce((count, service) => {
-              const price = Number(getServicePriceForBarber(service, barber.id));
-              return Number.isFinite(price) && price > 0 ? count + 1 : count;
-            }, 0);
-            const displayName =
-              normalizeText(barber.cardTitle) ||
-              normalizeText(barber.nickname) ||
-              normalizeText(barber.name) ||
-              "Барбер";
-            return {
-              id: barber.id,
-              name: displayName,
-              fullName: normalizeText(barber.name) || displayName,
-              nickname: normalizeText(barber.nickname),
-              description: normalizeText(barber.description),
-              color: normalizeText(barber.color),
-              rating: normalizeText(barber.rating),
-              avatarUrl: normalizeText(barber.avatarUrl),
-              cardImageUrl: normalizeText(barber.cardImageUrl),
-              cardTitle: normalizeText(barber.cardTitle),
-              cardDescription: normalizeText(barber.cardDescription),
-              cardPhrase: normalizeText(barber.cardPhrase),
-              phrase: normalizeText(barber.cardPhrase) || normalizeText(barber.description),
-              servicesCount,
-            };
-          }),
+        barbers: bookingBarbers,
       },
       profile: {
         notices,
@@ -1453,46 +1507,11 @@ const createHomeClientStoreService = ({
   const buildPublicHomePayload = async () => {
     const site = await getPersistedSiteSettings();
     const { barbers, services } = await buildCatalogHelpers();
+    const bookingBarbers = await buildBookableBarbersPayload(barbers, services, { includeServices: true });
     return {
       booking: {
         activeAppointments: [],
-        barbers: (Array.isArray(barbers) ? barbers : [])
-          .filter((barber) => barber?.isActive !== false)
-          .map((barber) => {
-            const barberServices = (Array.isArray(services) ? services : [])
-              .filter((service) => {
-                const price = Number(getServicePriceForBarber(service, barber.id));
-                return Number.isFinite(price) && price > 0;
-              })
-              .map((service) => normalizeText(service?.name || service?.title || service?.label))
-              .filter(Boolean);
-            const servicesCount = (Array.isArray(services) ? services : []).reduce((count, service) => {
-              const price = Number(getServicePriceForBarber(service, barber.id));
-              return Number.isFinite(price) && price > 0 ? count + 1 : count;
-            }, 0);
-            const displayName =
-              normalizeText(barber.cardTitle) ||
-              normalizeText(barber.nickname) ||
-              normalizeText(barber.name) ||
-              "Барбер";
-            return {
-              id: barber.id,
-              name: displayName,
-              fullName: normalizeText(barber.name) || displayName,
-              nickname: normalizeText(barber.nickname),
-              description: normalizeText(barber.description),
-              color: normalizeText(barber.color),
-              rating: normalizeText(barber.rating),
-              avatarUrl: normalizeText(barber.avatarUrl),
-              cardImageUrl: normalizeText(barber.cardImageUrl),
-              cardTitle: normalizeText(barber.cardTitle),
-              cardDescription: normalizeText(barber.cardDescription),
-              cardPhrase: normalizeText(barber.cardPhrase),
-              phrase: normalizeText(barber.cardPhrase) || normalizeText(barber.description),
-              services: barberServices,
-              servicesCount,
-            };
-          }),
+        barbers: bookingBarbers,
       },
       site,
     };

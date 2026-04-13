@@ -17,6 +17,13 @@ const buildReferralQrDeepLink = ({ referralCode = "", phone = "", displayName = 
   return inviteUrl.toString();
 };
 
+const parseConsentAccepted = (value) => {
+  if (value === true) return true;
+  if (typeof value === "number") return value === 1;
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return ["true", "1", "yes", "on"].includes(normalized);
+};
+
 const buildExpressiveQrSvg = (qrCode, options = {}) => {
   const moduleCount = Math.max(1, Number(qrCode?.modules?.size) || 1);
   const requestedSize = Math.max(220, Math.floor(Number(options.size) || DEFAULT_REFERRAL_QR_SIZE));
@@ -313,7 +320,7 @@ const registerHomeRoutes = ({
       const phoneInput = normalizeText(req.body?.phone);
       const safePhone = normalizePhone(phoneInput);
       const password = normalizeText(req.body?.password);
-      const privacyConsentAccepted = req.body?.privacyConsentAccepted === true;
+      const privacyConsentAccepted = parseConsentAccepted(req.body?.privacyConsentAccepted);
       if (!safePhone || !password) {
         return res.status(400).json({
           success: false,
@@ -692,7 +699,7 @@ const registerHomeRoutes = ({
     const displayNameInput = normalizeText(req.body?.displayName);
     const phoneInput = normalizeText(req.body?.phone);
     const password = normalizeText(req.body?.password);
-    const privacyConsentAccepted = req.body?.privacyConsentAccepted === true;
+    const privacyConsentAccepted = parseConsentAccepted(req.body?.privacyConsentAccepted);
     if (!requestId || !password) {
       return res.status(400).json({
         success: false,

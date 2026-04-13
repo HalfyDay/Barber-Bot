@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v9";
+const CACHE_VERSION = "v10";
 const CACHE_PREFIX = "brothershop-cache";
 const CACHE_NAME = `${CACHE_PREFIX}-${CACHE_VERSION}`;
 const SCOPE_PATH = new URL(self.registration.scope).pathname;
@@ -54,6 +54,7 @@ self.addEventListener("activate", (event) => {
 
 const isSameOrigin = (url) => url.origin === self.location.origin;
 const shouldBypass = (url) => url.pathname.startsWith("/api");
+const isLoginAsset = (url) => url.pathname.startsWith("/login/");
 const isPanelScope = (url) =>
   APP_SCOPE === "/" ? true : url.pathname === APP_SCOPE.slice(0, -1) || url.pathname.startsWith(APP_SCOPE);
 const isAssetDestination = (destination) =>
@@ -67,6 +68,11 @@ self.addEventListener("fetch", (event) => {
   if (!isSameOrigin(url) || shouldBypass(url) || !isPanelScope(url)) return;
 
   if (url.pathname === BUNDLE_ASSET) {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  if (isLoginAsset(url)) {
     event.respondWith(networkFirst(request));
     return;
   }

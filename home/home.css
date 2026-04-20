@@ -460,6 +460,11 @@ body.authenticated .home-root {
   text-transform: none;
 }
 
+.divider[hidden],
+.telegram-btn[hidden] {
+  display: none !important;
+}
+
 .telegram-btn {
   width: 100%;
   min-height: 56px;

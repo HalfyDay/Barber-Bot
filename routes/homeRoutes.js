@@ -241,6 +241,7 @@ const registerHomeRoutes = ({
   buildHomeIdentity,
   signHomeSessionToken,
   buildLimitBlockedMessage,
+  getBotSettings,
   getUserMeta,
   updateUserMeta,
   applyReferralCode,
@@ -506,6 +507,13 @@ const registerHomeRoutes = ({
 
   app.post("/api/home/auth/telegram/start", async (req, res) => {
     try {
+      const botSettings = await getBotSettings();
+      if (botSettings?.isBotEnabled === false) {
+        return res.status(503).json({
+          success: false,
+          message: "Вход через Telegram сейчас недоступен.",
+        });
+      }
       await markExpiredTelegramAuthRequests();
       const request = await createTelegramAuthRequest({
         flow: TELEGRAM_AUTH_FLOW_LOGIN,

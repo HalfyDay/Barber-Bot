@@ -71,10 +71,18 @@ const registerOwnerSystemRoutes = ({
     const { action, isBotEnabled } = req.body || {};
     try {
       const currentSettings = await ensureBotSettingsRecord();
-      if (typeof isBotEnabled === "boolean") {
+      const nextIsBotEnabled =
+        typeof isBotEnabled === "boolean"
+          ? isBotEnabled
+          : action === "start"
+            ? true
+            : action === "stop"
+              ? false
+              : null;
+      if (typeof nextIsBotEnabled === "boolean") {
         await prisma.botSettings.update({
           where: { id: currentSettings.id },
-          data: { isBotEnabled, lastSyncSource: "site" },
+          data: { isBotEnabled: nextIsBotEnabled, lastSyncSource: "site" },
         });
       }
       let actionHandled = false;

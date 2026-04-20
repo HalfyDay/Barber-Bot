@@ -1255,6 +1255,7 @@ registerHomeRoutes({
   buildHomeIdentity,
   signHomeSessionToken,
   buildLimitBlockedMessage,
+  getBotSettings,
   getUserMeta,
   updateUserMeta,
   applyReferralCode,

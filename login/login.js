@@ -1,5 +1,6 @@
 (function () {
   const HOME_API_BASE_URL = `${window.location.origin}/api/home/auth`;
+  const HOME_PUBLIC_API_URL = `${window.location.origin}/api/home/public`;
   const HOME_TELEGRAM_AUTH_START_API_URL = `${HOME_API_BASE_URL}/telegram/start`;
   const HOME_TELEGRAM_AUTH_STATUS_API_URL = `${HOME_API_BASE_URL}/telegram/status`;
   const HOME_TELEGRAM_AUTH_COMPLETE_API_URL = `${HOME_API_BASE_URL}/telegram/complete`;
@@ -78,6 +79,7 @@
   let telegramAuthFinished = false;
   let telegramPollAttempt = 0;
   let telegramPollInFlight = false;
+  let telegramLoginAvailable = true;
   let telegramSetupState = {
     active: false,
     requestId: "",
@@ -453,11 +455,31 @@
     element.hidden = Boolean(hidden);
   };
 
+  const applyTelegramLoginAvailability = (isAvailable) => {
+    telegramLoginAvailable = Boolean(isAvailable);
+    const shouldHideTelegramEntry = !telegramLoginAvailable || telegramSetupState.active;
+    setElementHidden(telegramDivider, shouldHideTelegramEntry);
+    setElementHidden(telegramButton, shouldHideTelegramEntry);
+  };
+
+  const loadTelegramLoginAvailability = async () => {
+    try {
+      const response = await fetch(HOME_PUBLIC_API_URL, { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        applyTelegramLoginAvailability(true);
+        return;
+      }
+      applyTelegramLoginAvailability(payload?.site?.auth?.telegramEnabled !== false);
+    } catch {
+      applyTelegramLoginAvailability(true);
+    }
+  };
+
   const renderTelegramSetupUi = () => {
     const isActive = telegramSetupState.active;
     const isSetPasswordMode = telegramSetupState.mode === "set_password";
-    setElementHidden(telegramDivider, isActive);
-    setElementHidden(telegramButton, isActive);
+    applyTelegramLoginAvailability(telegramLoginAvailable);
     setElementHidden(telegramSetupBanner, !isActive);
     setElementHidden(tabsRoot, isActive);
     authFrame.classList.toggle("is-telegram-setup", isActive);
@@ -899,6 +921,7 @@
   };
 
   const handleTelegramLogin = async () => {
+    if (!telegramLoginAvailable) return;
     setStatus("");
     resetTelegramSetupState();
     setTelegramPending(true);
@@ -949,6 +972,7 @@
   const init = async () => {
     resetTelegramSetupState();
     tabsRoot.setAttribute("data-active", "login");
+    await loadTelegramLoginAvailability();
     try {
       const params = new URLSearchParams(window.location.search || "");
       const referralCode = normalizeText(params.get("ref"));

@@ -1505,7 +1505,10 @@ const createHomeClientStoreService = ({
   };
 
   const buildPublicHomePayload = async () => {
-    const site = await getPersistedSiteSettings();
+    const [site, botSettings] = await Promise.all([
+      getPersistedSiteSettings(),
+      getBotSettings().catch(() => null),
+    ]);
     const { barbers, services } = await buildCatalogHelpers();
     const bookingBarbers = await buildBookableBarbersPayload(barbers, services, { includeServices: true });
     return {
@@ -1513,7 +1516,13 @@ const createHomeClientStoreService = ({
         activeAppointments: [],
         barbers: bookingBarbers,
       },
-      site,
+      site: {
+        ...site,
+        auth: {
+          ...(site?.auth && typeof site.auth === "object" ? site.auth : {}),
+          telegramEnabled: botSettings?.isBotEnabled !== false,
+        },
+      },
     };
   };
 

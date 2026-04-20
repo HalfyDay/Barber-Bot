@@ -71,6 +71,7 @@ const createHomeHarness = (overrides = {}) => {
     buildHomeIdentity: (payload) => payload,
     signHomeSessionToken: () => "token",
     buildLimitBlockedMessage: () => "blocked",
+    getBotSettings: async () => ({ isBotEnabled: true }),
     TELEGRAM_BOT_USERNAME: "botname",
     markExpiredTelegramAuthRequests: () => {},
     createTelegramAuthRequest: () => ({
@@ -139,6 +140,43 @@ test("home telegram auth start returns request payload with bot link", async () 
   assert.equal(res.body.requestId, "req-42");
   assert.equal(res.body.code, "654321");
   assert.match(res.body.botLink, /brother_bot/);
+});
+
+test("home telegram auth start rejects when bot is disabled", async () => {
+  const { app } = createHomeHarness({
+    getBotSettings: async () => ({ isBotEnabled: false }),
+  });
+  const handler = app.getRoute("POST", "/api/home/auth/telegram/start");
+  const res = createResponseMock();
+
+  await handler({ body: {} }, res);
+
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.success, false);
+  assert.equal(res.body.message, "Вход через Telegram сейчас недоступен.");
+});
+
+test("home public payload exposes telegram auth availability", async () => {
+  const { app } = createHomeHarness({
+    buildPublicHomePayload: async () => ({
+      site: {
+        home: {},
+        auth: { telegramEnabled: false },
+      },
+      booking: {
+        activeAppointments: [],
+        barbers: [],
+      },
+    }),
+  });
+  const handler = app.getRoute("GET", "/api/home/public");
+  const res = createResponseMock();
+
+  await handler({ query: {} }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.success, true);
+  assert.equal(res.body.site.auth.telegramEnabled, false);
 });
 
 test("home telegram auth status completes login for existing user with password", async () => {
@@ -493,4 +531,3 @@ test("home booking appointment maps outside working hours domain error to 409 re
   assert.equal(res.statusCode, 409);
   assert.equal(res.body.error, "Время выходит за рабочий диапазон барбера.");
 });
-

@@ -252,6 +252,52 @@ test("owner system routes update bot status and toggle settings", async () => {
   ]);
 });
 
+test("owner system routes stop action disables bot in settings by default", async () => {
+  const calls = [];
+  const { app } = createHarness({
+    prisma: {
+      botSettings: {
+        async update(input) {
+          calls.push(["botSettings.update", input]);
+          return { id: "settings-3", isBotEnabled: false };
+        },
+      },
+    },
+    ensureBotSettingsRecord: async () => ({ id: "settings-3" }),
+    stopBotProcess: async () => {
+      calls.push(["stopBotProcess"]);
+    },
+    getBotSettings: async () => ({ isBotEnabled: false }),
+    serializeBotRuntime: () => ({ running: false }),
+  });
+  const handler = app.getRoute("POST", "/api/bot/status");
+  const res = createResponseMock();
+
+  await handler(
+    {
+      identity: { username: "owner" },
+      body: { action: "stop" },
+    },
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, {
+    status: { running: false },
+    settings: { isBotEnabled: false },
+  });
+  assert.deepEqual(calls, [
+    [
+      "botSettings.update",
+      {
+        where: { id: "settings-3" },
+        data: { isBotEnabled: false, lastSyncSource: "site" },
+      },
+    ],
+    ["stopBotProcess"],
+  ]);
+});
+
 test("owner system routes schedule restart successfully", async () => {
   const calls = [];
   const { app } = createHarness({

@@ -9717,6 +9717,7 @@ const TablesWorkspace = ({
   const [appointmentCalendarView, setAppointmentCalendarView] = useLocalStorage('tables.appointmentsCalendarView', 'week');
   const [appointmentCalendarScale, setAppointmentCalendarScale] = useLocalStorage('tables.appointmentsCalendarScale', 'normal');
   const [appointmentCalendarDate, setAppointmentCalendarDate] = useLocalStorage('tables.appointmentsCalendarDate', getLocalISODateString());
+  const previousActiveTableRef = useRef(activeTable);
   const [scheduleFillDays, setScheduleFillDays] = useLocalStorage('tables.schedulesFillDays', 14);
   const restrictStaffBarberFilter = role === ROLE_STAFF && activeTable === 'Appointments';
   const staffBarberId = currentUser?.barberId || null;
@@ -9781,6 +9782,14 @@ const TablesWorkspace = ({
   useEffect(() => {
     onActiveTableChange?.(activeTable);
   }, [activeTable, onActiveTableChange]);
+  useEffect(() => {
+    const previousActiveTable = previousActiveTableRef.current;
+    previousActiveTableRef.current = activeTable;
+    if (activeTable !== 'Appointments' || previousActiveTable === 'Appointments') return;
+    const today = getLocalISODateString();
+    if (appointmentCalendarDate === today) return;
+    setAppointmentCalendarDate(today);
+  }, [activeTable, appointmentCalendarDate, setAppointmentCalendarDate]);
   useEffect(() => {
     if (!preferredTable) return;
     const nextTable = preferredTable;

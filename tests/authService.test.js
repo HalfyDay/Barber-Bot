@@ -36,12 +36,7 @@ const createHarness = (overrides = {}) =>
     normalizePhone,
     normalizeLogin,
     buildHomeIdentity,
-    creatorAccount: {
-      username: "creator",
-      phone: "+70000000000",
-      password: "pass",
-      name: "Creator",
-    },
+    creatorAccount: null,
     creatorRole: "creator",
     prisma: {
       barbers: {
@@ -104,8 +99,32 @@ test("auth service authenticates home token and refreshes home session header", 
   assert.ok(res.headers["x-home-session-token"]);
 });
 
-test("auth service allows creator login without barber lookup", async () => {
+test("auth service rejects creator login when emergency account is disabled", async () => {
   const service = createHarness();
+  const req = {
+    body: {
+      login: "creator",
+      password: "pass",
+    },
+  };
+  const res = createResponseMock();
+
+  await service.handleLogin(req, res);
+
+  assert.equal(res.statusCode, 401);
+  assert.equal(res.body.success, false);
+});
+
+test("auth service allows creator login only when emergency account is explicitly enabled", async () => {
+  const service = createHarness({
+    creatorAccount: {
+      enabled: true,
+      username: "creator",
+      phone: "+70000000000",
+      password: "pass",
+      name: "Creator",
+    },
+  });
   const req = {
     body: {
       login: "creator",

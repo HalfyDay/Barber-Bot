@@ -185,13 +185,22 @@ const createAuthService = ({
         orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
       });
       const options = [
-        {
-          id: "creator",
-          login: creatorAccount.username,
-          phone: creatorAccount.phone,
-          label: creatorAccount.name,
-          color: null,
-        },
+        ...(creatorAccount?.enabled &&
+        normalizeText(creatorAccount.password) &&
+        normalizeText(creatorAccount.username || creatorAccount.phone)
+          ? [
+              {
+                id: "creator",
+                login: creatorAccount.username || null,
+                phone: normalizePhone(creatorAccount.phone) || null,
+                label:
+                  normalizeText(creatorAccount.name) ||
+                  normalizePhone(creatorAccount.phone) ||
+                  normalizeLogin(creatorAccount.username),
+                color: null,
+              },
+            ]
+          : []),
         ...barbers
           .map((barber) => {
             const normalizedPhone = normalizePhone(barber.phone);
@@ -236,9 +245,11 @@ const createAuthService = ({
           .status(400)
           .json({ success: false, message: "Введите номер телефона и пароль." });
       }
-      const creatorPhone = normalizePhone(creatorAccount.phone);
-      const creatorLogin = normalizeLogin(creatorAccount.username);
+      const creatorPhone = normalizePhone(creatorAccount?.phone);
+      const creatorLogin = normalizeLogin(creatorAccount?.username);
       const isCreatorLogin =
+        creatorAccount?.enabled === true &&
+        normalizeText(creatorAccount.password) &&
         password === creatorAccount.password &&
         ((creatorPhone && normalizedPhone === creatorPhone) ||
           (creatorLogin && username === creatorLogin));

@@ -9,6 +9,11 @@ Current production server for `BrotherShop`.
 - Public panel: `https://panel.brothershop.website/`
 - Reverse proxy: `nginx`
 
+TLS note:
+
+- The nginx certificate must include `brothershop.website`, `www.brothershop.website`, and `panel.brothershop.website`
+- If `panel.brothershop.website` is served with a certificate issued only for `brothershop.website`, browsers and antivirus products will flag CRM as unsafe even when the app code itself is clean
+
 ## Services
 
 - Systemd service: `brothershop`
@@ -33,6 +38,9 @@ Important production env keys:
 - `PRISMA_RUNTIME=postgres`
 - `POSTGRES_DATABASE_URL=...`
 - `POSTGRES_SHADOW_DATABASE_URL=...`
+- `JWT_SECRET=...`
+- `HOME_JWT_SECRET=...`
+- `BOT_INTERNAL_API_TOKEN=...`
 - `BOT_PYTHON_PATH=/opt/brothershop/.venv/bin/python`
 - `APP_TIMEZONE=Asia/Irkutsk`
 - `POSTGRES_PG_DUMP_PATH=/usr/bin/pg_dump`

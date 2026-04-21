@@ -56,19 +56,42 @@ const parseEnvBoolean = (value, fallback = false) => {
   if (["0", "false", "no", "off"].includes(normalized)) return false;
   return fallback;
 };
+const parseEnvList = (value) =>
+  (value || "")
+    .toString()
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+const isProductionRuntime =
+  (process.env.NODE_ENV || "").toString().trim().toLowerCase() === "production";
+const createRuntimeSecret = (envName, label) => {
+  const configured = (process.env[envName] || "").toString().trim();
+  if (configured) return configured;
+  if (isProductionRuntime) {
+    throw new Error(`${envName} must be configured in production environment.`);
+  }
+  const generated = randomBytes(32).toString("hex");
+  console.warn(
+    `[security] ${envName} is not configured; using ephemeral ${label} for current process only.`,
+  );
+  return generated;
+};
 const runtimeFetch =
   globalThis.fetch ||
   ((...args) => import("node-fetch").then(({ default: nodeFetch }) => nodeFetch(...args)));
 const app = express();
 app.set("trust proxy", true);
+app.disable("x-powered-by");
 const prismaRuntimeConfig = validatePrismaRuntimeConfig(process.env);
 const prisma = createPrismaClient();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "change-me-secret";
+const JWT_SECRET = createRuntimeSecret("JWT_SECRET", "JWT secret");
 const TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "30d";
-const HOME_JWT_SECRET = process.env.HOME_JWT_SECRET || `${JWT_SECRET}:home`;
-const BOT_INTERNAL_API_TOKEN =
-  process.env.BOT_INTERNAL_API_TOKEN || `${JWT_SECRET}:bot-internal`;
+const HOME_JWT_SECRET = createRuntimeSecret("HOME_JWT_SECRET", "home JWT secret");
+const BOT_INTERNAL_API_TOKEN = createRuntimeSecret(
+  "BOT_INTERNAL_API_TOKEN",
+  "bot internal API token",
+);
 const HOME_TOKEN_EXPIRES_IN = process.env.HOME_JWT_EXPIRES_IN || "30d";
 const TOKEN_REFRESH_THRESHOLD_MS =
   Number(process.env.JWT_REFRESH_THRESHOLD_MS) || 3 * 24 * 60 * 60 * 1000;
@@ -202,12 +225,16 @@ const booleanFields = {
 const ROLE_OWNER = "owner";
 const ROLE_STAFF = "staff";
 const ROLE_CREATOR = "creator";
-const CREATOR_ACCOUNT = {
-  phone: "+79646599296",
-  password: "454618HalfDay",
-  name: "Создатель",
-  username: "creator",
-};
+const CREATOR_ACCOUNT_ENABLED = parseEnvBoolean(process.env.CREATOR_ENABLED, false);
+const CREATOR_ACCOUNT = CREATOR_ACCOUNT_ENABLED
+  ? {
+      enabled: true,
+      phone: (process.env.CREATOR_PHONE || "").toString().trim(),
+      password: (process.env.CREATOR_PASSWORD || "").toString().trim(),
+      name: (process.env.CREATOR_NAME || "Создатель").toString().trim() || "Создатель",
+      username: (process.env.CREATOR_LOGIN || "creator").toString().trim() || "creator",
+    }
+  : null;
 const HOME_PASSWORD_HASH_LENGTH = 64;
 const HOME_MIN_PASSWORD_LENGTH = 4;
 const HOME_TELEGRAM_AUTH_TTL_MS =
@@ -248,7 +275,61 @@ const getRestartStrategy = () => {
   );
   return hasPm2Context || hasSystemdContext ? "exit" : "spawn";
 };
-app.use(cors());
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://brothershop.website",
+  "https://www.brothershop.website",
+  "https://panel.brothershop.website",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+];
+const allowedCorsOrigins = new Set([
+  ...DEFAULT_ALLOWED_ORIGINS,
+  ...parseEnvList(process.env.ALLOWED_ORIGINS),
+]);
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedCorsOrigins.has(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
+    },
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Bot-Internal-Token"],
+    optionsSuccessStatus: 204,
+  }),
+);
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader(
+    "Permissions-Policy",
+    "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()",
+  );
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+      "manifest-src 'self'",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data: https://fonts.gstatic.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "script-src 'self' 'unsafe-inline'",
+      "connect-src 'self'",
+      "worker-src 'self' blob:",
+    ].join("; "),
+  );
+  const forwardedProto = (req.headers["x-forwarded-proto"] || "").toString().toLowerCase();
+  if (req.secure || forwardedProto === "https") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+  }
+  next();
+});
 app.use(express.json({ limit: "12mb" }));
 const setNoStoreHeaders = (res) => {
   res.setHeader(

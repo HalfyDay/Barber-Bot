@@ -341,3 +341,14 @@ body::-webkit-scrollbar-button,
         background-size: 100% 120px, 120px 100%;
     }
 }
+
+.crm-login-input:-webkit-autofill,
+.crm-login-input:-webkit-autofill:hover,
+.crm-login-input:-webkit-autofill:focus,
+.crm-login-input:-webkit-autofill:active {
+    -webkit-text-fill-color: #ffffff;
+    -webkit-box-shadow: 0 0 0 1000px rgba(7, 9, 10, 0.96) inset;
+    box-shadow: 0 0 0 1000px rgba(7, 9, 10, 0.96) inset;
+    caret-color: #ffffff;
+    transition: background-color 9999s ease-in-out 0s;
+}

@@ -1205,14 +1205,26 @@ img.media-wave.is-ready {
   outline: none;
 }
 
-.promo-thumb:hover {
+.promo-thumb-surface {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.promo-thumb:hover,
+.promo-thumb-surface:hover {
   transform: translateY(-2px) scale(1.01);
   box-shadow: none;
 }
 
-.promo-thumb:focus,
-.promo-thumb:focus-visible,
-.promo-thumb:active {
+.promo-thumb-surface:focus,
+.promo-thumb-surface:focus-visible,
+.promo-thumb-surface:active {
   outline: none;
   box-shadow: none;
 }
@@ -1269,6 +1281,7 @@ img.media-wave.is-ready {
   font-size: 0.84rem;
   line-height: 1.3;
 }
+
 
 .appointment-card {
   display: grid;

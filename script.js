@@ -1042,6 +1042,25 @@ const rangesOverlap = (left, right) => {
   if (!left?.start || !left?.end || !right?.start || !right?.end) return false;
   return left.start < right.end && right.start < left.end;
 };
+const MIN_AVAILABLE_APPOINTMENT_SLOT_MINUTES = 15;
+const formatTimeTokenFromDate = (value) => {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return '';
+  return `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`;
+};
+const roundDateUpToMinutes = (value, stepMinutes = 5) => {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
+  const next = new Date(value);
+  next.setSeconds(0, 0);
+  const minutes = next.getMinutes();
+  const remainder = minutes % stepMinutes;
+  if (remainder) {
+    next.setMinutes(minutes + (stepMinutes - remainder));
+  }
+  if (next.getTime() < value.getTime()) {
+    next.setMinutes(next.getMinutes() + stepMinutes);
+  }
+  return next;
+};
 const getDateOnlyValue = (value) => normalizeText(value).slice(0, 10);
 const getDateWeekdayIndex = (value) => {
   const safeDate = getDateOnlyValue(value);
@@ -1072,6 +1091,92 @@ const isAppointmentOngoing = (appointment, nowTs = Date.now()) => {
   const endTs = endDate.getTime();
   return startTs <= nowTs && endTs > nowTs;
 };
+const buildAvailableAppointmentSlots = ({ date, schedules = [], appointments = [], nowTs = Date.now() }) => {
+  const safeDate = startOfLocalDay(date);
+  if (!isValidDate(safeDate)) return [];
+  const today = startOfLocalDay();
+  if (safeDate.getTime() < today.getTime()) return [];
+  const dateKey = getLocalISODateString(safeDate);
+  const dayIndex = getDateWeekdayIndex(dateKey);
+  const normalizedSchedules = (Array.isArray(schedules) ? schedules : []).filter((slot) => {
+    const slotDate = getDateOnlyValue(slot?.Date);
+    if (slotDate) return slotDate === dateKey;
+    return getDayIndex(slot?.DayOfWeek) === dayIndex;
+  });
+  if (!normalizedSchedules.length) return [];
+  const normalizedAppointments = (Array.isArray(appointments) ? appointments : [])
+    .filter((record) => isActiveAppointmentStatus(record?.Status))
+    .map((record) => {
+      const start = resolveAppointmentStartDate(record);
+      const end = ensureRangeEnd(start, resolveAppointmentEndDate(record));
+      return {
+        ...record,
+        _startDate: start,
+        _endDate: end,
+        _barberKey: normalizeText(record?.Barber).trim().toLowerCase(),
+      };
+    })
+    .filter((record) => record._startDate && record._endDate && getLocalISODateString(record._startDate) === dateKey);
+  const now = new Date(nowTs);
+  const minSlotMs = MIN_AVAILABLE_APPOINTMENT_SLOT_MINUTES * 60000;
+  return normalizedSchedules.flatMap((slot, slotIndex) => {
+    const barberLabel = normalizeText(slot?.Barber).trim();
+    const barberKey = barberLabel.toLowerCase();
+    const startDate = getAppointmentStartDate(dateKey, slot?.Week, slot?.startDateTime || slot?.when);
+    const endDate = getAppointmentEndDate(dateKey, slot?.Week, slot?.startDateTime || slot?.when);
+    if (!startDate || !endDate || endDate.getTime() <= startDate.getTime()) return [];
+    let cursor = new Date(startDate);
+    if (isSameLocalDay(safeDate, today)) {
+      const roundedNow = roundDateUpToMinutes(now, 5);
+      if (roundedNow && roundedNow.getTime() > cursor.getTime()) {
+        cursor = roundedNow;
+      }
+    }
+    if (cursor.getTime() >= endDate.getTime()) return [];
+    const blockers = normalizedAppointments
+      .filter((record) => record._barberKey === barberKey)
+      .map((record) => ({ start: record._startDate, end: record._endDate }))
+      .sort((left, right) => left.start.getTime() - right.start.getTime());
+    const freeWindows = [];
+    blockers.forEach((blocker) => {
+      if (blocker.end.getTime() <= cursor.getTime()) return;
+      if (blocker.start.getTime() > cursor.getTime()) {
+        freeWindows.push({ start: new Date(cursor), end: new Date(Math.min(blocker.start.getTime(), endDate.getTime())) });
+      }
+      if (blocker.end.getTime() > cursor.getTime()) {
+        cursor = new Date(Math.min(blocker.end.getTime(), endDate.getTime()));
+      }
+    });
+    if (cursor.getTime() < endDate.getTime()) {
+      freeWindows.push({ start: new Date(cursor), end: new Date(endDate) });
+    }
+    return freeWindows
+      .filter((window) => window.end.getTime() - window.start.getTime() >= minSlotMs)
+      .map((window, windowIndex) => ({
+        id: `free-${dateKey}-${barberKey || 'barber'}-${slotIndex}-${windowIndex}`,
+        Barber: barberLabel,
+        Date: dateKey,
+        Time: buildTimeRangeValue(formatTimeTokenFromDate(window.start), formatTimeTokenFromDate(window.end)),
+        startDate: window.start,
+        endDate: window.end,
+      }));
+  });
+};
+const buildCalendarDayEntries = (appointments = [], freeSlots = []) =>
+  [
+    ...appointments.map((record, index) => ({
+      kind: 'appointment',
+      key: getRecordId(record) || `appointment-${index}-${record.Date}-${record.Time}`,
+      startTs: resolveAppointmentStartDate(record)?.getTime() || 0,
+      record,
+    })),
+    ...freeSlots.map((slot, index) => ({
+      kind: 'slot',
+      key: slot.id || `slot-${index}-${slot.Date}-${slot.Time}`,
+      startTs: slot.startDate?.getTime?.() || 0,
+      slot,
+    })),
+  ].sort((left, right) => left.startTs - right.startTs);
 const parseMultiValue = (value) =>
   Array.from(
     normalizeText(value)
@@ -1474,9 +1579,12 @@ const VIEW_TAB_ICONS = {
 };
 const SYSTEM_SUB_SECTIONS = Object.freeze([
   { id: 'bot', label: 'Бот' },
-  { id: 'constructor', label: 'Конструктор меню' },
   { id: 'site', label: 'Сайт' },
   { id: 'system', label: 'Система' },
+]);
+const BOT_SUB_SECTIONS = Object.freeze([
+  { id: 'status', label: 'Бот' },
+  { id: 'constructor', label: 'Конструктор меню' },
 ]);
 const UI_TEXT = Object.freeze({
   accountTitle: 'Ваш аккаунт',
@@ -1492,9 +1600,18 @@ const BotMenuBuilder = (typeof window !== 'undefined' && window.BotMenuBuilder) 
 const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-w-3xl' }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-stretch overflow-y-auto bg-black/60 p-0 sm:items-center sm:justify-center sm:px-4 sm:py-6">
+    <div
+      className="fixed inset-0 z-50 flex items-stretch justify-stretch overflow-y-auto bg-black/60 p-0 sm:items-center sm:justify-center sm:px-4 sm:py-6"
+      onMouseDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (typeof window !== 'undefined' && window.innerWidth >= 640) {
+          onClose?.();
+        }
+      }}
+    >
       <div
         className={`flex h-full max-h-[100dvh] min-h-0 w-full ${maxWidthClass} flex-col overflow-hidden border border-slate-700 bg-slate-900 shadow-2xl rounded-none sm:h-auto sm:rounded-2xl`}
+        onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex min-w-0 items-center justify-between gap-3 border-b border-slate-800 px-4 py-3 sm:px-6 sm:py-4">
           <h3 className="min-w-0 flex-1 truncate text-lg font-semibold text-white">{title}</h3>
@@ -1927,7 +2044,7 @@ const DashboardView = ({
   const stats = data.stats || {};
   const hasExplicitUpcoming = Array.isArray(data.appointments?.upcoming);
   const hasExplicitOverdue = Array.isArray(data.appointments?.overdue);
-  const useExplicitOverdue = hasExplicitOverdue && data.appointments.overdue.length > 0;
+  const useExplicitOverdue = hasExplicitOverdue;
   const activeRaw = Array.isArray(data.appointments?.active) ? data.appointments.active : [];
   const upcomingRaw = hasExplicitUpcoming ? data.appointments.upcoming : activeRaw;
   const overdueRaw = useExplicitOverdue ? data.appointments.overdue : activeRaw;
@@ -3531,9 +3648,23 @@ const BarbersView = ({
   onSave,
   onAdd,
   onDelete,
+  onReorder,
+  reorderBusy = false,
+  role = ROLE_OWNER,
 }) => {
   const [editorState, setEditorState] = useState({ open: false, mode: 'edit', targetId: null });
   const [draftBarber, setDraftBarber] = useState(buildNewBarberState);
+  const [dragOrderIds, setDragOrderIds] = useState([]);
+  const [dragState, setDragState] = useState(null);
+  const barberItemRefs = useRef(new Map());
+  const dragMetaRef = useRef(null);
+  const canManageBarbers = role !== ROLE_STAFF;
+  const sortedBarbers = useMemo(() => sortServicesByOrder(barbers), [barbers]);
+  const visibleBarbers = useMemo(() => {
+    if (!dragOrderIds.length) return sortedBarbers;
+    const barberMap = new Map(sortedBarbers.map((barber) => [barber.id, barber]));
+    return dragOrderIds.map((id) => barberMap.get(id)).filter(Boolean);
+  }, [sortedBarbers, dragOrderIds]);
   const openEditor = (mode, targetId = null) => {
     if (mode === 'create') {
       setDraftBarber(buildNewBarberState());
@@ -3542,7 +3673,7 @@ const BarbersView = ({
   };
   const closeEditor = () => setEditorState({ open: false, mode: 'edit', targetId: null });
   const isCreateMode = editorState.mode === 'create';
-  const activeBarber = barbers.find((barber) => barber.id === editorState.targetId) || null;
+  const activeBarber = sortedBarbers.find((barber) => barber.id === editorState.targetId) || null;
   const workingBarber = isCreateMode ? draftBarber : activeBarber;
   const [pendingAvatar, setPendingAvatar] = useState('');
   const cardSaverRef = useRef(null);
@@ -3562,6 +3693,19 @@ const BarbersView = ({
     [sortedPositions, workingBarber?.positionId]
   );
   const avatarSyncRef = useRef({ id: null, avatar: '' });
+  useEffect(() => {
+    if (!dragState) {
+      setDragOrderIds([]);
+    }
+  }, [dragState]);
+  useEffect(() => {
+    if (!dragState) return undefined;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+    return () => {
+      document.body.style.userSelect = previousUserSelect;
+    };
+  }, [dragState]);
   useEffect(() => {
     if (!editorState.open) {
       setPendingAvatar('');
@@ -3594,6 +3738,100 @@ const BarbersView = ({
   useEffect(() => {
     setShowPassword(false);
   }, [editorState.open, editorState.mode, editorState.targetId]);
+  const buildReorderedIds = useCallback((sourceIds, activeId, clientY) => {
+    const idleIds = sourceIds.filter((id) => id !== activeId);
+    let targetIndex = idleIds.length;
+    for (let index = 0; index < idleIds.length; index += 1) {
+      const currentId = idleIds[index];
+      const element = barberItemRefs.current.get(currentId);
+      if (!element) continue;
+      const rect = element.getBoundingClientRect();
+      const middle = rect.top + rect.height / 2;
+      if (clientY < middle) {
+        targetIndex = index;
+        break;
+      }
+    }
+    const nextIds = [...idleIds];
+    nextIds.splice(targetIndex, 0, activeId);
+    return nextIds;
+  }, []);
+  const finishDrag = useCallback(async (shouldSave = true) => {
+    const meta = dragMetaRef.current;
+    dragMetaRef.current = null;
+    setDragState(null);
+    if (!meta?.started) {
+      setDragOrderIds([]);
+      return;
+    }
+    const finalIds = dragOrderIds.length ? dragOrderIds : meta.sourceIds;
+    setDragOrderIds([]);
+    if (!shouldSave || !Array.isArray(finalIds) || !finalIds.length) return;
+    const changed = finalIds.some((id, index) => id !== meta.sourceIds[index]);
+    if (!changed) return;
+    await onReorder?.(finalIds);
+  }, [dragOrderIds, onReorder]);
+  useEffect(() => {
+    if (!dragState) return undefined;
+    const handlePointerMove = (event) => {
+      const meta = dragMetaRef.current;
+      if (!meta || event.pointerId !== meta.pointerId) return;
+      const dx = event.clientX - meta.startX;
+      const dy = event.clientY - meta.startY;
+      if (!meta.started) {
+        const threshold = meta.pointerType === 'touch' ? 10 : 6;
+        if (Math.hypot(dx, dy) < threshold) return;
+        meta.started = true;
+        setDragOrderIds(meta.sourceIds);
+        setDragState({
+          activeId: meta.activeId,
+          pointerType: meta.pointerType,
+        });
+      }
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+      const baseIds = dragMetaRef.current?.started && dragOrderIds.length ? dragOrderIds : meta.sourceIds;
+      const nextIds = buildReorderedIds(baseIds, meta.activeId, event.clientY);
+      setDragOrderIds((prev) => {
+        const prevIds = prev.length ? prev : meta.sourceIds;
+        const unchanged = prevIds.length === nextIds.length && prevIds.every((id, index) => id === nextIds[index]);
+        return unchanged ? prev : nextIds;
+      });
+    };
+    const handlePointerUp = () => {
+      finishDrag(true);
+    };
+    const handlePointerCancel = () => {
+      finishDrag(false);
+    };
+    window.addEventListener('pointermove', handlePointerMove, { passive: false });
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+    };
+  }, [buildReorderedIds, dragOrderIds, dragState, finishDrag]);
+  const handleReorderPointerDown = useCallback((event, barberId) => {
+    if (!canManageBarbers || reorderBusy) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragMetaRef.current = {
+      activeId: barberId,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType || 'mouse',
+      startX: event.clientX,
+      startY: event.clientY,
+      started: false,
+      sourceIds: sortedBarbers.map((barber) => barber.id),
+    };
+    setDragState({
+      activeId: barberId,
+      pointerType: event.pointerType || 'mouse',
+    });
+  }, [canManageBarbers, reorderBusy, sortedBarbers]);
   const handleFieldChange = (field, value) => {
     const nextValue = field === 'rating' ? formatRatingValue(value) : value;
     if (field === 'avatarUrl') {
@@ -3718,19 +3956,21 @@ const BarbersView = ({
       <SectionCard
         title="Барберы"
         actions={
-          <button
-            onClick={() => openEditor('create')}
-            className="rounded-full bg-emerald-600/90 px-4 py-2 text-sm font-semibold text-white shadow shadow-emerald-900/40 hover:bg-emerald-500"
-          >
-            + Добавить барбера
-          </button>
+          canManageBarbers ? (
+            <button
+              onClick={() => openEditor('create')}
+              className="rounded-full bg-emerald-600/90 px-4 py-2 text-sm font-semibold text-white shadow shadow-emerald-900/40 hover:bg-emerald-500"
+            >
+              + Добавить барбера
+            </button>
+          ) : null
         }
       >
-        {barbers.length === 0 ? (
+        {sortedBarbers.length === 0 ? (
           <p className="text-slate-400">Список барберов пока пуст. Добавьте первого сотрудника.</p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
-            {barbers.map((barber) => {
+            {visibleBarbers.map((barber, index) => {
               const avatarSrc = resolveAssetUrl(barber.avatarUrl);
               const phoneLabel = barber.phone ? formatPhoneInput(barber.phone) : '';
               const ratingLabel = clampRatingValue(barber.rating || RATING_MAX);
@@ -3738,12 +3978,53 @@ const BarbersView = ({
               const commissionRate =
                 typeof barber.position?.commissionRate === 'number' ? barber.position.commissionRate : null;
               const commissionLabel = commissionRate !== null ? formatPercent(commissionRate) : null;
+              const isDragging = dragState?.activeId === barber.id;
               return (
-                <button
+                <div
                   key={barber.id}
+                  ref={(node) => {
+                    if (node) {
+                      barberItemRefs.current.set(barber.id, node);
+                    } else {
+                      barberItemRefs.current.delete(barber.id);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => openEditor('edit', barber.id)}
-                  className="group flex w-full items-center gap-4 rounded-2xl border border-slate-700/70 bg-slate-900/50 p-4 text-left transition hover:border-indigo-500/70 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openEditor('edit', barber.id);
+                    }
+                  }}
+                  className={classNames(
+                    'group flex w-full items-center gap-4 rounded-2xl border border-slate-700/70 bg-slate-900/50 p-4 text-left transition hover:border-indigo-500/70 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500',
+                    isDragging && 'border-indigo-400/80 bg-slate-900 shadow-[0_18px_40px_rgba(49,46,129,0.22)]'
+                  )}
                 >
+                  {canManageBarbers ? (
+                    <button
+                      type="button"
+                      aria-label={`Переместить барбера ${barber.name || index + 1}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                      onPointerDown={(event) => handleReorderPointerDown(event, barber.id)}
+                      className={classNames(
+                        'flex h-11 w-11 flex-shrink-0 touch-none items-center justify-center rounded-xl border border-slate-700/80 bg-slate-950/80 text-slate-500 transition',
+                        reorderBusy ? 'cursor-wait opacity-60' : 'cursor-grab hover:border-indigo-400 hover:bg-slate-900 hover:text-white active:cursor-grabbing'
+                      )}
+                      disabled={reorderBusy}
+                    >
+                      <span className="grid grid-cols-2 gap-1">
+                        {Array.from({ length: 6 }).map((_, dotIndex) => (
+                          <span key={dotIndex} className="h-1 w-1 rounded-full bg-current" />
+                        ))}
+                      </span>
+                    </button>
+                  ) : null}
                   <div className="relative h-16 w-16 flex-shrink-0">
                     {avatarSrc ? (
                       <img src={avatarSrc} alt={barber.name || 'avatar'} className="h-16 w-16 rounded-2xl object-cover" />
@@ -3759,8 +4040,16 @@ const BarbersView = ({
                   </div>
                   <div className="flex-1 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex h-7 min-w-[1.9rem] items-center justify-center rounded-full bg-indigo-500/15 px-2 text-[11px] font-semibold text-indigo-100">
+                        {index + 1}
+                      </span>
                       <p className="text-base font-semibold text-white sm:text-lg">{barber.name || 'Без имени'}</p>
                       {renderStatusBadge(barber)}
+                      {reorderBusy && isDragging ? (
+                        <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200">
+                          Сохраняем
+                        </span>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 sm:text-sm">
                       <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-200">
@@ -3777,7 +4066,7 @@ const BarbersView = ({
                     </div>
                     {barber.description && <p className="text-sm text-slate-400">{barber.description}</p>}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -4710,6 +4999,11 @@ const SchedulesView = ({
   const isStaffUser = currentUser?.role === ROLE_STAFF;
   const datePickerInputRef = useRef(null);
   const [scheduleSheetDate, setScheduleSheetDate] = useState('');
+  const [directScheduleEditSlot, setDirectScheduleEditSlot] = useState(null);
+  const [directScheduleDraft, setDirectScheduleDraft] = useState({ start: '', end: '' });
+  const [directSchedulePristine, setDirectSchedulePristine] = useState({ start: true, end: true });
+  const directScheduleStartInputId = useMemo(() => `schedule-start-${Math.random().toString(36).slice(2, 8)}`, []);
+  const directScheduleEndInputId = useMemo(() => `schedule-end-${Math.random().toString(36).slice(2, 8)}`, []);
   const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -4885,31 +5179,49 @@ const SchedulesView = ({
     }
     return Array.from(new Set(filteredSchedules.map((slot) => normalizeText(slot.Barber)).filter(Boolean)));
   }, [activeBarberFilter, barberOptions, filteredSchedules]);
+  const singleVisibleBarberMode = visibleBarberNames.length === 1;
+  const buildScheduleSheetSlot = useCallback((dateKey, barberName) => {
+    const slots = slotsByDate.get(dateKey) || [];
+    const existing = slots.find((slot) => normalizeText(slot.Barber) === normalizeText(barberName));
+    if (existing) return existing;
+    return {
+      id: `${barberName}-${dateKey}`,
+      Barber: barberName,
+      Date: dateKey,
+      DayOfWeek: formatScheduleDayShort(dateKey, '') || '',
+      Week: '',
+    };
+  }, [slotsByDate]);
   const scheduleSheetRows = useMemo(() => {
     if (!scheduleSheetDate) return [];
-    const slots = slotsByDate.get(scheduleSheetDate) || [];
-    const slotMap = new Map(slots.map((slot) => [normalizeText(slot.Barber), slot]));
-    const dateDayLabel = formatScheduleDayShort(scheduleSheetDate, '') || '';
-    return visibleBarberNames.map((barberName) => {
-      const existing = slotMap.get(barberName);
-      return (
-        existing || {
-          id: `${barberName}-${scheduleSheetDate}`,
-          Barber: barberName,
-          Date: scheduleSheetDate,
-          DayOfWeek: dateDayLabel,
-          Week: '',
-        }
-      );
-    });
-  }, [scheduleSheetDate, slotsByDate, visibleBarberNames]);
+    return visibleBarberNames.map((barberName) => buildScheduleSheetSlot(scheduleSheetDate, barberName));
+  }, [buildScheduleSheetSlot, scheduleSheetDate, visibleBarberNames]);
+  const singleScheduleSheetSlot = scheduleSheetRows.length === 1 ? scheduleSheetRows[0] : null;
+  const scheduleSheetMaxWidthClass = singleScheduleSheetSlot ? 'max-w-md' : 'max-w-3xl';
   const openScheduleSheet = useCallback((dateKey) => {
     setCalendarDate(dateKey);
+    if (singleVisibleBarberMode && visibleBarberNames[0]) {
+      setDirectScheduleEditSlot(buildScheduleSheetSlot(dateKey, visibleBarberNames[0]));
+      setScheduleSheetDate('');
+      return;
+    }
     setScheduleSheetDate(dateKey);
-  }, [setCalendarDate]);
+  }, [buildScheduleSheetSlot, setCalendarDate, singleVisibleBarberMode, visibleBarberNames]);
   const closeScheduleSheet = useCallback(() => {
     setScheduleSheetDate('');
   }, []);
+  const closeDirectScheduleEditor = useCallback(() => {
+    setDirectScheduleEditSlot(null);
+  }, []);
+  useEffect(() => {
+    if (!directScheduleEditSlot) return;
+    const nextRange = parseTimeRangeValue(directScheduleEditSlot.Week === '0' ? '' : directScheduleEditSlot.Week || '');
+    setDirectScheduleDraft(nextRange);
+    setDirectSchedulePristine({
+      start: !nextRange.start,
+      end: !nextRange.end,
+    });
+  }, [directScheduleEditSlot]);
   const resolveScheduleTone = useCallback((slot) => {
     const hasWorkingHours = normalizeText(slot?.Week).trim() && normalizeText(slot?.Week).trim() !== '0';
     return hasWorkingHours
@@ -4925,33 +5237,36 @@ const SchedulesView = ({
         };
   }, []);
   const calendarBlock = (
-    <div className={classNames(isMobileViewport ? '-mx-4 px-1' : '')}>
-      <div className={classNames('space-y-3', isMobileViewport && 'px-1')}>
-        <div className={classNames('flex items-center justify-between gap-3', isMobileViewport && 'gap-2')}>
+    <div
+      className="w-full"
+      style={
+        isMobileViewport
+          ? {
+              width: '100vw',
+              maxWidth: '100vw',
+              marginLeft: 'calc(50% - 50vw)',
+              marginRight: 'calc(50% - 50vw)',
+              paddingLeft: '16px',
+              paddingRight: '16px',
+            }
+          : undefined
+      }
+    >
+      <div className="space-y-3">
+        <div className={classNames('flex items-center justify-between gap-3', isMobileViewport && 'gap-1.5')}>
           <div className={classNames('flex items-center gap-1 min-w-0', isMobileViewport && 'flex-1 gap-0.5')}>
-            <button
-              type="button"
-              onClick={() => shiftMonth(-1)}
-              className={classNames(
-                'inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-300 transition hover:bg-slate-800 hover:text-white',
-                isMobileViewport && 'h-9 w-9 flex-shrink-0'
-              )}
-              aria-label="Предыдущий месяц"
-            >
-              <IconChevronLeft className="h-5 w-5" />
-            </button>
             <button
               type="button"
               onClick={openDatePicker}
               className={classNames(
                 'inline-flex items-center gap-2 rounded-full px-3 py-2 text-left text-2xl font-semibold capitalize text-white transition hover:bg-slate-800/80',
-                isMobileViewport && 'min-w-0 gap-1 px-2 py-1.5 text-xl leading-none'
+                isMobileViewport && 'min-w-0 flex-1 gap-1 px-1.5 py-1.5 text-[18px] leading-none'
               )}
             >
               {isMobileViewport ? (
                 <span className="min-w-0 leading-[1.05]">
-                  <span className="block truncate capitalize">{mobileMonthName}</span>
-                  <span className="block truncate">{mobileYearLabel}</span>
+                  <span className="block capitalize">{mobileMonthName}</span>
+                  <span className="block">{mobileYearLabel}</span>
                 </span>
               ) : (
                 <span>{monthLabel}</span>
@@ -4976,7 +5291,7 @@ const SchedulesView = ({
                 onChange={(event) => onScheduleFillDaysChange(normalizeScheduleFillDays(event.target.value))}
                 className={classNames(
                   'h-10 rounded-full border border-slate-700 bg-slate-950 px-3 text-sm font-semibold text-slate-200 focus:border-indigo-400 focus:outline-none',
-                  isMobileViewport && 'h-9 px-2.5 text-xs'
+                  isMobileViewport && 'h-9 px-2 text-[11px]'
                 )}
                 aria-label="На сколько дней заполнять расписание"
               >
@@ -4989,10 +5304,21 @@ const SchedulesView = ({
             )}
             <button
               type="button"
+              onClick={() => shiftMonth(-1)}
+              className={classNames(
+                'inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-300 transition hover:bg-slate-800 hover:text-white',
+                isMobileViewport && 'h-9 w-9'
+              )}
+              aria-label="Предыдущий месяц"
+            >
+              <IconChevronLeft className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
               onClick={jumpToToday}
               className={classNames(
                 'inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 hover:text-white',
-                isMobileViewport && 'h-9 px-3 text-xs'
+                isMobileViewport && 'h-9 px-2.5 text-[11px]'
               )}
             >
               Сегодня
@@ -5010,7 +5336,10 @@ const SchedulesView = ({
             </button>
           </div>
         </div>
-        <div className={classNames('grid grid-cols-7 px-1', isMobileViewport ? 'gap-0.5' : 'gap-1')}>
+        <div
+          className={classNames('grid w-full px-1', isMobileViewport ? 'gap-0.5' : 'gap-1')}
+          style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}
+        >
           {weekdayLabels.map((label) => (
             <div
               key={label}
@@ -5024,7 +5353,10 @@ const SchedulesView = ({
           ))}
         </div>
       </div>
-      <div className={classNames('grid grid-cols-7', isMobileViewport ? 'gap-0.5' : 'gap-1')}>
+      <div
+        className={classNames('grid w-full', isMobileViewport ? 'gap-0.5' : 'gap-1')}
+        style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}
+      >
         {monthDays.map((day) => {
           const daySlots = slotsByDate.get(day.key) || [];
           const isSelected = day.key === getLocalISODateString(anchorDate);
@@ -5035,7 +5367,7 @@ const SchedulesView = ({
               type="button"
               onClick={() => openScheduleSheet(day.key)}
               className={classNames(
-                'flex flex-col rounded-2xl bg-slate-950/70 text-left transition hover:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/40',
+                'min-w-0 flex flex-col rounded-2xl bg-slate-950/70 text-left transition hover:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/40',
                 isMobileViewport ? 'h-[84px] rounded-[18px] px-1 py-1.5' : 'min-h-[120px] p-2',
                 day.inCurrentMonth ? 'text-white' : 'text-slate-500',
               )}
@@ -5171,7 +5503,7 @@ const SchedulesView = ({
         title={scheduleSheetDate ? formatDateHeading(scheduleSheetDate) : 'Расписание'}
         isOpen={Boolean(scheduleSheetDate)}
         onClose={closeScheduleSheet}
-        maxWidthClass="max-w-3xl"
+        maxWidthClass={scheduleSheetMaxWidthClass}
         footer={
           <button
             type="button"
@@ -5184,45 +5516,147 @@ const SchedulesView = ({
       >
         <div className="space-y-3">
           {scheduleSheetRows.length ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              {scheduleSheetRows.map((slot) => (
-                <div
-                  key={getRecordId(slot) || `${slot.Barber}-${slot.Date}`}
-                  className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/50 p-3"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="min-w-0 truncate text-sm font-semibold text-white">{slot.Barber || 'Без мастера'}</p>
-                    <span className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                      {slot.DayOfWeek || formatScheduleDayShort(slot.Date, slot.DayOfWeek) || 'День'}
-                    </span>
+            singleScheduleSheetSlot ? (
+              <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+                {!isStaffUser && activeBarberFilter === 'all' && singleScheduleSheetSlot.Barber ? (
+                  <p className="text-sm font-semibold text-white">{singleScheduleSheetSlot.Barber}</p>
+                ) : null}
+                {canEditSlot(singleScheduleSheetSlot) ? (
+                  <TimeRangePicker
+                    value={singleScheduleSheetSlot.Week === '0' ? '' : singleScheduleSheetSlot.Week || ''}
+                    onChange={(nextValue) => handleTimeChange(singleScheduleSheetSlot, nextValue)}
+                    title={singleScheduleSheetSlot.Barber || 'Слот'}
+                    placeholder="Выходной"
+                    buttonClassName={classNames(
+                      'w-full rounded-xl border border-slate-700 px-3 py-3 text-center text-base',
+                      resolveScheduleTone(singleScheduleSheetSlot).sheet
+                    )}
+                  />
+                ) : (
+                  <div className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-3 text-center text-base text-slate-200">
+                    {singleScheduleSheetSlot.Week && singleScheduleSheetSlot.Week !== '0' ? singleScheduleSheetSlot.Week : 'Слоты не указаны'}
                   </div>
-                  {canEditSlot(slot) ? (
-                    (() => {
-                      const tone = resolveScheduleTone(slot);
-                      return (
-                        <TimeRangePicker
-                          value={slot.Week === '0' ? '' : slot.Week || ''}
-                          onChange={(nextValue) => handleTimeChange(slot, nextValue)}
-                          title={slot.Barber || 'Слот'}
-                          placeholder="Выходной"
-                          buttonClassName={classNames(
-                            'w-full rounded-xl border border-slate-700 px-3 py-2 text-left text-sm',
-                            tone.sheet
-                          )}
-                        />
-                      );
-                    })()
-                  ) : (
-                    <div className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-left text-sm text-slate-200">
-                      {slot.Week && slot.Week !== '0' ? slot.Week : 'Слоты не указаны'}
+                )}
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {scheduleSheetRows.map((slot) => (
+                  <div
+                    key={getRecordId(slot) || `${slot.Barber}-${slot.Date}`}
+                    className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/50 p-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="min-w-0 truncate text-sm font-semibold text-white">{slot.Barber || 'Без мастера'}</p>
+                      <span className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                        {slot.DayOfWeek || formatScheduleDayShort(slot.Date, slot.DayOfWeek) || 'День'}
+                      </span>
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                    {canEditSlot(slot) ? (
+                      (() => {
+                        const tone = resolveScheduleTone(slot);
+                        return (
+                          <TimeRangePicker
+                            value={slot.Week === '0' ? '' : slot.Week || ''}
+                            onChange={(nextValue) => handleTimeChange(slot, nextValue)}
+                            title={slot.Barber || 'Слот'}
+                            placeholder="Выходной"
+                            buttonClassName={classNames(
+                              'w-full rounded-xl border border-slate-700 px-3 py-2 text-left text-sm',
+                              tone.sheet
+                            )}
+                          />
+                        );
+                      })()
+                    ) : (
+                      <div className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-left text-sm text-slate-200">
+                        {slot.Week && slot.Week !== '0' ? slot.Week : 'Слоты не указаны'}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
           ) : (
             <p className="text-sm text-slate-400">Для этого дня расписание не найдено.</p>
           )}
+        </div>
+      </Modal>
+      <Modal
+        title={directScheduleEditSlot?.Barber || 'Слот'}
+        isOpen={Boolean(directScheduleEditSlot)}
+        onClose={closeDirectScheduleEditor}
+        maxWidthClass="max-w-md"
+        footer={
+          <>
+            <button type="button" onClick={closeDirectScheduleEditor} className="rounded-lg border border-slate-600 px-4 py-2 text-white">
+              Отмена
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!directScheduleEditSlot) return;
+                handleTimeChange(directScheduleEditSlot, buildTimeRangeValue(directScheduleDraft.start, directScheduleDraft.end));
+                closeDirectScheduleEditor();
+              }}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-500"
+            >
+              Сохранить
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-slate-300">Выберите время начала и окончания</p>
+            <button
+              type="button"
+              onClick={() => {
+                if (!directScheduleEditSlot) return;
+                handleTimeChange(directScheduleEditSlot, '0');
+                closeDirectScheduleEditor();
+              }}
+              className="text-xs text-slate-400 hover:text-slate-100"
+            >
+              Очистить
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center justify-around gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+            <div className="text-center">
+              <label className="block text-sm font-medium text-slate-400" htmlFor={directScheduleStartInputId}>Начало</label>
+              <input
+                id={directScheduleStartInputId}
+                name="directScheduleStartTime"
+                aria-label="Начало"
+                type="time"
+                step="60"
+                value={directSchedulePristine.start ? '00:00' : directScheduleDraft.start || '00:00'}
+                onChange={(event) => {
+                  const nextStart = normalizeTimeInputValue(event.target.value);
+                  setDirectScheduleDraft((prev) => ({ ...prev, start: nextStart }));
+                  setDirectSchedulePristine((prev) => ({ ...prev, start: !nextStart }));
+                }}
+                className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-900 px-2 py-2 text-center text-lg text-white"
+              />
+            </div>
+            <span className="text-2xl font-light text-slate-500">-</span>
+            <div className="text-center">
+              <label className="block text-sm font-medium text-slate-400" htmlFor={directScheduleEndInputId}>Окончание</label>
+              <input
+                id={directScheduleEndInputId}
+                name="directScheduleEndTime"
+                aria-label="Окончание"
+                type="time"
+                step="60"
+                value={directSchedulePristine.end ? '00:00' : directScheduleDraft.end || '00:00'}
+                onChange={(event) => {
+                  const nextEnd = normalizeTimeInputValue(event.target.value);
+                  setDirectScheduleDraft((prev) => ({ ...prev, end: nextEnd }));
+                  setDirectSchedulePristine((prev) => ({ ...prev, end: !nextEnd }));
+                }}
+                className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-900 px-2 py-2 text-center text-lg text-white"
+              />
+            </div>
+          </div>
         </div>
       </Modal>
     </div>
@@ -7330,8 +7764,10 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
 };
 const AppointmentsCalendarView = ({
   rows = [],
+  schedules = [],
   onOpen,
   onOpenProfile,
+  onCreateAppointment,
   viewMode = 'week',
   scaleMode = 'normal',
   calendarDate = '',
@@ -7413,6 +7849,23 @@ const AppointmentsCalendarView = ({
     });
     return buckets;
   }, [datedRows]);
+  const renderAvailableSlot = useCallback(
+    (slot, { compact = false, showBarber = false } = {}) => (
+      <button
+        key={slot.id || `${slot.Barber}-${slot.Date}-${slot.Time}`}
+        type="button"
+        onClick={() => onCreateAppointment?.({ Barber: slot.Barber, Date: slot.Date, Time: slot.Time })}
+        className={classNames(
+          'w-full rounded-2xl border border-dashed border-emerald-500/50 bg-emerald-500/10 text-left text-emerald-100 transition hover:border-emerald-400 hover:bg-emerald-500/15 focus:outline-none focus:ring-2 focus:ring-emerald-400/40',
+          compact ? 'px-2 py-2' : 'p-3'
+        )}
+      >
+        <p className={classNames('font-semibold', compact ? 'text-[11px]' : 'text-sm')}>{slot.Time || 'Свободное окно'}</p>
+        {showBarber && slot.Barber && <p className={classNames('mt-1 text-emerald-200/80', compact ? 'text-[10px]' : 'text-xs')}>{slot.Barber}</p>}
+      </button>
+    ),
+    [onCreateAppointment]
+  );
   const scrollCalendarToToday = useCallback(() => {
     const target = safeViewMode === 'day' ? dayViewRef.current : todayMarkerRef.current;
     if (target && typeof target.scrollIntoView === 'function') {
@@ -7456,6 +7909,36 @@ const AppointmentsCalendarView = ({
     const gridStart = getWeekStartDate(monthStart);
     return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
   }, [monthStart]);
+  const viewDays = useMemo(() => {
+    if (safeViewMode === 'day') return [anchorDate];
+    if (safeViewMode === 'week') return weekDays;
+    return monthGridDays;
+  }, [anchorDate, monthGridDays, safeViewMode, weekDays]);
+  const availableSlotsByDate = useMemo(() => {
+    const buckets = new Map();
+    const nowTs = Date.now();
+    viewDays.forEach((day) => {
+      const key = getLocalISODateString(day);
+      buckets.set(
+        key,
+        buildAvailableAppointmentSlots({
+          date: day,
+          schedules,
+          appointments: rows,
+          nowTs,
+        })
+      );
+    });
+    return buckets;
+  }, [rows, schedules, viewDays]);
+  const anchorDayEntries = useMemo(
+    () =>
+      buildCalendarDayEntries(
+        rowsByDate.get(getLocalISODateString(anchorDate)) || [],
+        availableSlotsByDate.get(getLocalISODateString(anchorDate)) || []
+      ),
+    [anchorDate, availableSlotsByDate, rowsByDate]
+  );
   const headerTitle = useMemo(() => {
     if (safeViewMode === 'day') {
       return new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).format(anchorDate);
@@ -7546,16 +8029,23 @@ const AppointmentsCalendarView = ({
               : scaleConfig.dayGrid
           )}
         >
-          {(rowsByDate.get(getLocalISODateString(anchorDate)) || []).map((record) => (
-            <AppointmentCalendarCard
-              key={record.id || `${record.CustomerName}-${record.Time}`}
-              record={record}
-              onOpen={onOpen}
-              onOpenProfile={onOpenProfile}
-              compact={isMobileViewport && safeScaleMode === 'compact'}
-            />
-          ))}
-          {!(rowsByDate.get(getLocalISODateString(anchorDate)) || []).length && (
+          {anchorDayEntries.map((entry) =>
+            entry.kind === 'appointment' ? (
+              <AppointmentCalendarCard
+                key={entry.key}
+                record={entry.record}
+                onOpen={onOpen}
+                onOpenProfile={onOpenProfile}
+                compact={isMobileViewport && safeScaleMode === 'compact'}
+              />
+            ) : (
+              renderAvailableSlot(entry.slot, {
+                compact: isMobileViewport && safeScaleMode === 'compact',
+                showBarber: Boolean(entry.slot.Barber),
+              })
+            )
+          )}
+          {!anchorDayEntries.length && (
             <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/30 p-6 text-sm text-slate-400">На этот день записей нет.</div>
           )}
         </div>
@@ -7566,7 +8056,10 @@ const AppointmentsCalendarView = ({
           {weekDays.map((day) => {
             const dayKey = getLocalISODateString(day);
             const items = rowsByDate.get(dayKey) || [];
+            const freeSlots = availableSlotsByDate.get(dayKey) || [];
+            const dayEntries = buildCalendarDayEntries(items, freeSlots);
             const isToday = isSameLocalDay(day, new Date());
+            const showBarber = new Set(freeSlots.map((slot) => normalizeText(slot.Barber)).filter(Boolean)).size > 1;
             return (
               <section
                 key={dayKey}
@@ -7585,16 +8078,23 @@ const AppointmentsCalendarView = ({
                   <p className="text-lg font-semibold text-white">{new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(day).replace('.', '')}</p>
                 </button>
                 <div className="space-y-2">
-                  {items.map((record) => (
-                    <AppointmentCalendarCard
-                      key={record.id || `${record.CustomerName}-${record.Time}`}
-                      record={record}
-                      onOpen={onOpen}
-                      onOpenProfile={onOpenProfile}
-                      compact={isMobileViewport && safeScaleMode === 'compact'}
-                    />
-                  ))}
-                  {!items.length && <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-center text-xs text-slate-500">Пусто</div>}
+                  {dayEntries.map((entry) =>
+                    entry.kind === 'appointment' ? (
+                      <AppointmentCalendarCard
+                        key={entry.key}
+                        record={entry.record}
+                        onOpen={onOpen}
+                        onOpenProfile={onOpenProfile}
+                        compact={isMobileViewport && safeScaleMode === 'compact'}
+                      />
+                    ) : (
+                      renderAvailableSlot(entry.slot, {
+                        compact: isMobileViewport && safeScaleMode === 'compact',
+                        showBarber,
+                      })
+                    )
+                  )}
+                  {!dayEntries.length && <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-center text-xs text-slate-500">Пусто</div>}
                 </div>
               </section>
             );
@@ -7608,8 +8108,12 @@ const AppointmentsCalendarView = ({
           {monthGridDays.map((day) => {
             const dayKey = getLocalISODateString(day);
             const items = rowsByDate.get(dayKey) || [];
+            const freeSlots = availableSlotsByDate.get(dayKey) || [];
+            const dayEntries = buildCalendarDayEntries(items, freeSlots);
+            const visibleEntries = dayEntries.slice(0, 3);
             const isToday = isSameLocalDay(day, new Date());
             const isCurrentMonth = isSameLocalMonth(day, anchorDate);
+            const showBarber = new Set(freeSlots.map((slot) => normalizeText(slot.Barber)).filter(Boolean)).size > 1;
             return (
               <section
                 key={dayKey}
@@ -7627,19 +8131,26 @@ const AppointmentsCalendarView = ({
                   >
                     <p className={classNames('text-sm font-semibold', isCurrentMonth ? 'text-white' : 'text-slate-500')}>{day.getDate()}</p>
                   </button>
-                  {!!items.length && <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300">{items.length}</span>}
+                  {!!dayEntries.length && <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300">{dayEntries.length}</span>}
                 </div>
                 <div className="space-y-2">
-                  {items.slice(0, 3).map((record) => (
-                    <AppointmentCalendarCard
-                      key={record.id || `${record.CustomerName}-${record.Time}`}
-                      record={record}
-                      onOpen={onOpen}
-                      onOpenProfile={onOpenProfile}
-                      compact={isMobileViewport && safeScaleMode === 'compact'}
-                    />
-                  ))}
-                  {items.length > 3 && (
+                  {visibleEntries.map((entry) =>
+                    entry.kind === 'appointment' ? (
+                      <AppointmentCalendarCard
+                        key={entry.key}
+                        record={entry.record}
+                        onOpen={onOpen}
+                        onOpenProfile={onOpenProfile}
+                        compact={isMobileViewport && safeScaleMode === 'compact'}
+                      />
+                    ) : (
+                      renderAvailableSlot(entry.slot, {
+                        compact: true,
+                        showBarber,
+                      })
+                    )
+                  )}
+                  {dayEntries.length > 3 && (
                     <button
                       type="button"
                       onClick={() => {
@@ -7648,10 +8159,10 @@ const AppointmentsCalendarView = ({
                       }}
                       className="text-xs text-indigo-300 hover:text-indigo-100"
                     >
-                      + еще {items.length - 3}
+                      + еще {dayEntries.length - 3}
                     </button>
                   )}
-                  {!items.length && <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-center text-xs text-slate-600">-</div>}
+                  {!dayEntries.length && <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-center text-xs text-slate-600">-</div>}
                 </div>
               </section>
             );
@@ -7680,6 +8191,8 @@ const DataTable = ({
   appointmentCalendarDate = '',
   setAppointmentCalendarDate,
   setAppointmentCalendarView,
+  appointmentSchedules = [],
+  onCreateAppointment,
 }) => {
   if (!rows.length) {
     return <p className="text-slate-400">Нет записей.</p>;
@@ -7696,8 +8209,10 @@ const DataTable = ({
     return (
       <AppointmentsCalendarView
         rows={rows}
+        schedules={appointmentSchedules}
         onOpen={onOpenAppointment}
         onOpenProfile={onOpenProfile}
+        onCreateAppointment={onCreateAppointment}
         viewMode={appointmentCalendarView}
         scaleMode={appointmentCalendarScale}
         calendarDate={appointmentCalendarDate}
@@ -9129,6 +9644,7 @@ const TablesWorkspace = ({
   onOptionsUpdate,
   onOpenProfile,
   onOpenAppointmentRecord,
+  onCreateAppointment,
   clients = [],
   currentUser = null,
   liveAppointments = null,
@@ -9140,6 +9656,8 @@ const TablesWorkspace = ({
   onSaveBarber,
   onAddBarber,
   onDeleteBarber,
+  onReorderBarbers,
+  barberReorderBusy = false,
   onServiceFieldChange,
   onServicePriceChange,
   onDeleteService,
@@ -9586,6 +10104,9 @@ const TablesWorkspace = ({
               onSave={onSaveBarber}
               onAdd={onAddBarber}
               onDelete={onDeleteBarber}
+              onReorder={onReorderBarbers}
+              reorderBusy={barberReorderBusy}
+              role={role}
               loadAvatarOptions={loadAvatarAssets}
               uploadAvatar={uploadAvatar}
               uploadCard={uploadCard}
@@ -9702,6 +10223,16 @@ const TablesWorkspace = ({
                   appointmentCalendarDate={activeTable === 'Appointments' ? appointmentCalendarDate : ''}
                   setAppointmentCalendarDate={activeTable === 'Appointments' ? setAppointmentCalendarDate : null}
                   setAppointmentCalendarView={activeTable === 'Appointments' ? setAppointmentCalendarView : null}
+                  appointmentSchedules={
+                    activeTable === 'Appointments'
+                      ? (tables.Schedules || []).filter((row) =>
+                          selectedBarber === 'all'
+                            ? true
+                            : normalizeText(row.Barber).toLowerCase() === normalizeText(selectedBarber).toLowerCase()
+                        )
+                      : []
+                  }
+                  onCreateAppointment={activeTable === 'Appointments' ? onCreateAppointment : null}
                 />
               )}
             </div>
@@ -9770,6 +10301,7 @@ const BotControlView = ({
   uploadMenuImage = null,
   role = ROLE_OWNER,
 }) => {
+  const [botSubSection, setBotSubSection] = useLocalStorage('bot.subSection', 'status');
   const [description, setDescription] = useState(settings?.botDescription || '');
   const [about, setAbout] = useState(settings?.aboutText || '');
   const [tokenDraft, setTokenDraft] = useState(token || '');
@@ -9833,16 +10365,40 @@ const BotControlView = ({
   const isCreator = role === ROLE_CREATOR;
   const licenseList = Array.isArray(licenseStatus?.licenses) ? licenseStatus.licenses : [];
   const hasLicenseList = isCreator && licenseList.length > 0;
-  if (viewMode === 'constructor') {
+  const resolvedBotSubSection = BOT_SUB_SECTIONS.some((tab) => tab.id === botSubSection) ? botSubSection : 'status';
+  const showConstructorInsideBot = viewMode === 'bot' && resolvedBotSubSection === 'constructor';
+  if (viewMode === 'constructor' || showConstructorInsideBot) {
     return (
-      <BotMenuBuilder
-        menu={menu}
-        onSave={onSaveMenu}
-        onReload={onReloadMenu}
-        isSaving={menuSaving}
-        loadMenuImages={loadMenuImages}
-        onUploadMenuImage={uploadMenuImage}
-      />
+      <div className="space-y-4">
+        {viewMode === 'bot' && (
+          <div className="flex flex-wrap gap-2">
+            {BOT_SUB_SECTIONS.map((tab) => {
+              const isActive = tab.id === resolvedBotSubSection;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setBotSubSection(tab.id)}
+                  className={classNames(
+                    'rounded-2xl px-4 py-2 text-sm font-semibold transition',
+                    isActive ? 'bg-indigo-600 text-white shadow shadow-indigo-900/40' : 'bg-slate-800/70 text-slate-300 hover:text-white'
+                  )}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <BotMenuBuilder
+          menu={menu}
+          onSave={onSaveMenu}
+          onReload={onReloadMenu}
+          isSaving={menuSaving}
+          loadMenuImages={loadMenuImages}
+          onUploadMenuImage={uploadMenuImage}
+        />
+      </div>
     );
   }
   if (viewMode === 'system') {
@@ -9925,6 +10481,26 @@ const BotControlView = ({
   }
   return (
     <div className="space-y-6">
+      {viewMode === 'bot' && (
+        <div className="flex flex-wrap gap-2">
+          {BOT_SUB_SECTIONS.map((tab) => {
+            const isActive = tab.id === resolvedBotSubSection;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setBotSubSection(tab.id)}
+                className={classNames(
+                  'rounded-2xl px-4 py-2 text-sm font-semibold transition',
+                  isActive ? 'bg-indigo-600 text-white shadow shadow-indigo-900/40' : 'bg-slate-800/70 text-slate-300 hover:text-white'
+                )}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <SectionCard
         title="Статус бота"
         actions={
@@ -10105,6 +10681,8 @@ const createSitePromoDraft = () => ({
   subtitle: '',
   imageUrl: '',
   details: '',
+  buttonLabel: '',
+  buttonUrl: '',
 });
 
 const createReferralRewardDraft = () => ({
@@ -10469,6 +11047,14 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
                       <span>Подзаголовок</span>
                       <input value={promo.subtitle || ''} onChange={(event) => updatePromoField(index, 'subtitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
                     </label>
+                    <label className="space-y-2 text-sm text-slate-300">
+                      <span>Текст кнопки</span>
+                      <input value={promo.buttonLabel || ''} onChange={(event) => updatePromoField(index, 'buttonLabel', event.target.value)} placeholder="Подробнее" className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white placeholder:text-slate-500" />
+                    </label>
+                    <label className="space-y-2 text-sm text-slate-300">
+                      <span>Ссылка кнопки</span>
+                      <input value={promo.buttonUrl || ''} onChange={(event) => updatePromoField(index, 'buttonUrl', event.target.value)} placeholder="https://..." className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white placeholder:text-slate-500" />
+                    </label>
                   </div>
                   <label className="space-y-2 text-sm text-slate-300">
                     <span>Описание акции</span>
@@ -10494,7 +11080,7 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
               <input value={draft?.referral?.pageTitle || ''} onChange={(event) => updateReferralField('pageTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
             </label>
             <label className="space-y-2 text-sm text-slate-300">
-              <span>Скидка другу, ₽</span>
+              <span>Бонус другу BS</span>
               <input type="number" min="0" value={draft?.referral?.friendDiscountRub ?? ''} onChange={(event) => updateReferralField('friendDiscountRub', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
             </label>
             <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
@@ -10737,14 +11323,11 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
     </div>
   );
 };
-const LoginScreen = ({ onLogin, error, defaultRemember = false, onRememberChange = null }) => {
+const LoginScreen = ({ onLogin, error }) => {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(defaultRemember);
+  const [showPassword, setShowPassword] = useState(false);
   const [validationError, setValidationError] = useState('');
-  useEffect(() => {
-    setRememberMe(defaultRemember);
-  }, [defaultRemember]);
   useEffect(() => {
     if (error) {
       setValidationError('');
@@ -10767,12 +11350,8 @@ const LoginScreen = ({ onLogin, error, defaultRemember = false, onRememberChange
       phone: normalizedPhone,
       login: normalizedLogin,
       password,
-      remember: rememberMe,
+      remember: false,
     });
-  };
-  const handleRememberToggle = (value) => {
-    setRememberMe(value);
-    onRememberChange?.(value);
   };
   const formatPhoneDisplay = (value) => {
     const digits = (value || '').replace(/\D/g, '');
@@ -10805,69 +11384,88 @@ const LoginScreen = ({ onLogin, error, defaultRemember = false, onRememberChange
     setPhone(formatPhoneDisplay(raw));
   };
   const suggestionPlaceholder = 'Например: +7 999 123-45-67';
+  const loginLogoSrc = '/Image/site/login/logo.svg';
   return (
-    <div className="login-hero relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
-      <div className="login-aurora login-aurora-emerald" />
-      <div className="login-aurora login-aurora-amber" />
-      <div className="login-aurora login-aurora-indigo" />
-      <div className="login-grid" />
-      <div className="login-fog" />
-      <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-10">
-        <form
-          onSubmit={handleSubmit}
-          className="w-full max-w-md space-y-6 rounded-3xl border border-white/10 bg-slate-900/80 p-8 shadow-[0_30px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl"
-        >
-          <div className="flex items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-100/70">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.9)]" />
-            <span>Внутренняя панель</span>
-          </div>
-          <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-extrabold text-white">BrotherShop</h1>
-            <p className="text-sm text-slate-400">Авторизация для команды барбершопа</p>
-          </div>
-          <div>
-            <label className="text-sm text-slate-300">Номер телефона</label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(event) => handlePhoneInput(event.target.value)}
-              placeholder={suggestionPlaceholder}
-              className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white shadow-inner shadow-black/10 backdrop-blur focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
-            />
-            <div className="mt-2 space-y-1 text-xs text-slate-400">
-              <p>Номер подтверждает, что вы из команды.</p>
-            </div>
-          </div>
-          <div>
-            <label className="text-sm text-slate-300">Пароль</label>
-            <input
-              name="sessionPassword"
-              aria-label="Пароль"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white shadow-inner shadow-black/10 backdrop-blur focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30"
+    <div className="relative min-h-screen overflow-hidden bg-[#0b0d0d] text-slate-100">
+      <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-6">
+        <div className="w-full max-w-md">
+          <div className="relative z-0 flex justify-center">
+            <img
+              src={loginLogoSrc}
+              alt="BrotherShop"
+              className="h-56 w-auto max-w-[500px] object-contain drop-shadow-[0_12px_32px_rgba(0,0,0,0.32)] sm:h-64 sm:max-w-[560px]"
             />
           </div>
-          <div className="flex items-center justify-between text-sm text-slate-200">
-            <label className="inline-flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(event) => handleRememberToggle(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-400 focus:ring-indigo-400"
-              />
-              <span>Запомнить меня</span>
-            </label>
-          </div>
-          {(validationError || error) && <ErrorBanner message={validationError || error} />}
-          <button
-            type="submit"
-            className="w-full rounded-xl bg-gradient-to-r from-indigo-500 via-emerald-400 to-amber-400 py-3 font-semibold text-slate-900 shadow-lg shadow-emerald-900/30 transition duration-200 hover:scale-[1.01] hover:shadow-amber-400/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70"
+          <form
+            onSubmit={handleSubmit}
+            className="relative z-10 -mt-12 w-full space-y-5 rounded-[32px] bg-[rgba(15,18,18,0.98)] p-7 pt-7 shadow-[0_24px_60px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:-mt-16 sm:pt-9"
           >
-            Войти
-          </button>
-        </form>
+            <div className="space-y-1 text-center">
+              <h1 className="text-[2rem] font-extrabold tracking-tight text-white sm:text-3xl">Вход в CRM</h1>
+              <p className="text-sm text-slate-400">Авторизация для команды BrotherShop</p>
+            </div>
+            <div className="space-y-4">
+              <label className="block">
+                <span className="mb-2 block text-sm text-slate-300">Номер телефона</span>
+                <span className="relative block">
+                  <span className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-[#5ed8ce]">
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M6.6 2h3.2l1.2 4.7-2 1.6a15.1 15.1 0 0 0 6.7 6.7l1.6-2 4.7 1.2v3.2a2 2 0 0 1-2.2 2A18.2 18.2 0 0 1 4.6 4.2 2 2 0 0 1 6.6 2Z"/>
+                    </svg>
+                  </span>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(event) => handlePhoneInput(event.target.value)}
+                    placeholder={suggestionPlaceholder}
+                    className="crm-login-input w-full rounded-2xl bg-[rgba(7,9,10,0.96)] py-3.5 pl-12 pr-4 text-white shadow-inner shadow-black/20 backdrop-blur placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#00bfaf]/25"
+                  />
+                </span>
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm text-slate-300">Пароль</span>
+                <span className="relative block">
+                  <span className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-[#5ed8ce]">
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M7 10V7a5 5 0 1 1 10 0v3M6 10h12a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-8a1 1 0 0 1 1-1Zm6 4v3"/>
+                    </svg>
+                  </span>
+                  <input
+                    name="sessionPassword"
+                    aria-label="Пароль"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className="crm-login-input w-full rounded-2xl bg-[rgba(7,9,10,0.96)] py-3.5 pl-12 pr-12 text-white shadow-inner shadow-black/20 backdrop-blur placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#00bfaf]/25"
+                  />
+                  <button
+                    type="button"
+                    aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-4 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:text-white"
+                  >
+                    {showPassword ? (
+                      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
+                      </svg>
+                    ) : (
+                      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="m4 20 16-16"/>
+                      </svg>
+                    )}
+                  </button>
+                </span>
+              </label>
+            </div>
+            {(validationError || error) && <ErrorBanner message={validationError || error} />}
+            <button
+              type="submit"
+              className="w-full rounded-2xl bg-[#00bfaf] py-3.5 font-semibold text-[#031211] shadow-[0_16px_34px_rgba(0,191,175,0.22)] transition duration-200 hover:scale-[1.01] hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00bfaf]/50"
+            >
+              Войти
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
@@ -10891,6 +11489,7 @@ const App = () => {
   const [services, setServices] = useState([]);
   const [serviceReorderBusy, setServiceReorderBusy] = useState(false);
   const [barbers, setBarbers] = useState([]);
+  const [barberReorderBusy, setBarberReorderBusy] = useState(false);
   const [botStatus, setBotStatus] = useState(null);
   const [botSettings, setBotSettings] = useState(null);
   const [botMessages, setBotMessages] = useState([]);
@@ -11546,6 +12145,18 @@ const handleBarberFieldChange = (id, field, value) => {
       })),
     );
   }, []);
+  const applyBarberOrder = useCallback((barberList, orderedIds) => {
+    const safeBarbers = Array.isArray(barberList) ? barberList : [];
+    const safeOrderedIds = Array.isArray(orderedIds) ? orderedIds : [];
+    const orderMap = new Map(safeOrderedIds.map((id, index) => [id, index]));
+    const fallbackStart = safeOrderedIds.length;
+    return sortServicesByOrder(
+      safeBarbers.map((barber, index) => ({
+        ...barber,
+        orderIndex: orderMap.has(barber.id) ? orderMap.get(barber.id) : fallbackStart + index,
+      })),
+    );
+  }, []);
   const deriveBarberLogin = (barberData = {}) => resolveLogin(barberData.login || barberData.name || '');
   const buildBarberPayload = (barberData = {}, fallbackOrder = 0) => {
     const payload = {
@@ -11753,6 +12364,30 @@ const handleBarberFieldChange = (id, field, value) => {
       }
     },
     [apiRequest, applyServiceOrder, role, serviceReorderBusy, services]
+  );
+  const handleReorderBarbers = useCallback(
+    async (orderedIds) => {
+      if (role === ROLE_STAFF || barberReorderBusy || !Array.isArray(orderedIds) || !orderedIds.length) return;
+      const previousBarbers = barbers;
+      const nextBarbers = applyBarberOrder(previousBarbers, orderedIds);
+      setBarbers(nextBarbers);
+      try {
+        setBarberReorderBusy(true);
+        const response = await apiRequest('/barbers/reorder', {
+          method: 'POST',
+          body: JSON.stringify({ orderedIds }),
+        });
+        if (Array.isArray(response)) {
+          setBarbers(sortServicesByOrder(response));
+        }
+      } catch (error) {
+        setBarbers(previousBarbers);
+        setGlobalError(error.message || 'Не удалось сохранить порядок барберов');
+      } finally {
+        setBarberReorderBusy(false);
+      }
+    },
+    [apiRequest, applyBarberOrder, barberReorderBusy, barbers, role]
   );
   const handleUploadAvatar = useCallback(
     async ({ name, data }) => {
@@ -12066,10 +12701,10 @@ const handleBarberFieldChange = (id, field, value) => {
     },
     [ensureOptions, fetchAppointmentContext, setGlobalError]
   );
-  const handleCreateAppointment = useCallback(async () => {
+  const handleCreateAppointment = useCallback(async (preset = {}) => {
     try {
       const [options, context] = await Promise.all([ensureOptions(), fetchAppointmentContext()]);
-      const today = getLocalISODateString();
+      const today = preset.Date || getLocalISODateString();
       const defaultStatus = normalizeStatusValue(options.statuses?.[0] || BOT_SUPPORTED_STATUS_OPTIONS[0] || 'Активная');
       const defaultBarber = pickBarberForUser(session, options.barbers || []);
       setAppointmentModal({
@@ -12078,9 +12713,9 @@ const handleBarberFieldChange = (id, field, value) => {
           id: null,
           CustomerName: '',
           Phone: '',
-          Barber: defaultBarber,
+          Barber: preset.Barber || defaultBarber,
           Date: today,
-          Time: '',
+          Time: preset.Time || '',
           Status: defaultStatus,
           Services: '',
           UserID: '',
@@ -12094,6 +12729,64 @@ const handleBarberFieldChange = (id, field, value) => {
       setGlobalError(error.message || 'Не удалось начать создание записи');
     }
   }, [ensureOptions, fetchAppointmentContext, session, setGlobalError]);
+  const applyAppointmentStatusLocally = useCallback((appointment, nextStatus) => {
+    const appointmentId = getRecordId(appointment);
+    const normalizedStatus = normalizeStatusValue(nextStatus);
+    if (!appointmentId || !normalizedStatus) return;
+    const isStillActive = isActiveAppointmentStatus(normalizedStatus);
+    const mapRows = (rows = []) =>
+      rows.map((row) =>
+        getRecordId(row) === appointmentId ? { ...row, Status: normalizedStatus } : row
+      );
+    const mapActiveBuckets = (rows = []) =>
+      rows
+        .map((row) =>
+          getRecordId(row) === appointmentId ? { ...row, Status: normalizedStatus } : row
+        )
+        .filter((row) => isStillActive || getRecordId(row) !== appointmentId);
+    setDashboard((prev) => {
+      if (!prev) return prev;
+      const nextAppointments = prev.appointments || {};
+      const nextActive = mapActiveBuckets(nextAppointments.active || []);
+      const nextUpcoming = mapActiveBuckets(nextAppointments.upcoming || []);
+      const nextOverdue = mapActiveBuckets(nextAppointments.overdue || []);
+      return {
+        ...prev,
+        appointments: {
+          ...nextAppointments,
+          active: nextActive,
+          upcoming: nextUpcoming,
+          overdue: nextOverdue,
+        },
+        stats: {
+          ...(prev.stats || {}),
+          activeAppointments: nextActive.length,
+          upcomingAppointments: nextUpcoming.length,
+          overdueAppointments: nextOverdue.length,
+        },
+      };
+    });
+    setRealtimeSnapshot((prev) => {
+      if (!prev) return prev;
+      const nextActive = mapActiveBuckets(prev.active || []);
+      const nextUpcoming = mapActiveBuckets(prev.upcoming || []);
+      const nextOverdue = mapActiveBuckets(prev.overdue || []);
+      return {
+        ...prev,
+        rows: mapRows(prev.rows || []),
+        active: nextActive,
+        upcoming: nextUpcoming,
+        overdue: nextOverdue,
+        stats: {
+          ...(prev.stats || {}),
+          activeAppointments: nextActive.length,
+          upcomingAppointments: nextUpcoming.length,
+          overdueAppointments: nextOverdue.length,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  }, []);
 	  const handleSaveAppointment = async ({ id, payload, isNew }) => {
 	    try {
 	      if (isNew) {
@@ -12111,6 +12804,7 @@ const handleBarberFieldChange = (id, field, value) => {
 	    async (appointment, nextStatus) => {
 	      const id = getRecordId(appointment);
 	      if (!id || !nextStatus) return;
+        applyAppointmentStatusLocally(appointment, nextStatus);
 	      try {
 	        await apiRequest(`/appointments/${encodeURIComponent(id)}`, {
 	          method: 'PUT',
@@ -12118,11 +12812,12 @@ const handleBarberFieldChange = (id, field, value) => {
 	        });
 	        fetchAll({ silent: true });
 	      } catch (error) {
+          fetchAll({ silent: true });
 	        setGlobalError(error.message || 'Не удалось обновить статус записи');
 	        throw error;
 	      }
 	    },
-	    [apiRequest, fetchAll, setGlobalError]
+	    [apiRequest, applyAppointmentStatusLocally, fetchAll, setGlobalError]
 	  );
 	  const handleDeleteAppointment = async (appointment) => {
 	    if (!appointment?.id) return;
@@ -12250,7 +12945,7 @@ const handleBarberFieldChange = (id, field, value) => {
     }
   };
   if (!session?.token) {
-    return <LoginScreen onLogin={handleLogin} error={authError} defaultRemember={rememberSession} onRememberChange={handleRememberChange} />;
+    return <LoginScreen onLogin={handleLogin} error={authError} />;
   }
   const preferredTableTarget = pendingTableView;
   const liveUpdatedAt = realtimeSnapshot?.updatedAt || null;
@@ -12286,6 +12981,7 @@ const handleBarberFieldChange = (id, field, value) => {
             onOptionsUpdate={setOptionsCache}
             onOpenProfile={openProfile}
             onOpenAppointmentRecord={handleOpenAppointment}
+            onCreateAppointment={handleCreateAppointment}
             clients={dashboard?.clients || []}
             currentUser={session || null}
             liveAppointments={realtimeSnapshot?.rows || null}
@@ -12297,6 +12993,8 @@ const handleBarberFieldChange = (id, field, value) => {
             onSaveBarber={handleSaveBarber}
             onAddBarber={handleAddBarber}
             onDeleteBarber={handleDeleteBarber}
+            onReorderBarbers={handleReorderBarbers}
+            barberReorderBusy={barberReorderBusy}
             onServiceFieldChange={handleServiceFieldChange}
             onServicePriceChange={handleServicePriceChange}
             onDeleteService={handleDeleteService}

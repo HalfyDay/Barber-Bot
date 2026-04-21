@@ -1,4 +1,8 @@
 (function () {
+  const EYE_ICON_OPEN =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/></svg>';
+  const EYE_ICON_CLOSED =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="m4 20 16-16"/></svg>';
   const HOME_API_BASE_URL = `${window.location.origin}/api/home/auth`;
   const HOME_PUBLIC_API_URL = `${window.location.origin}/api/home/public`;
   const HOME_TELEGRAM_AUTH_START_API_URL = `${HOME_API_BASE_URL}/telegram/start`;
@@ -963,6 +967,7 @@
   const handleTogglePassword = () => {
     const nextType = loginPasswordInput.type === "password" ? "text" : "password";
     loginPasswordInput.type = nextType;
+    togglePasswordButton.innerHTML = nextType === "password" ? EYE_ICON_CLOSED : EYE_ICON_OPEN;
     togglePasswordButton.setAttribute(
       "aria-label",
       nextType === "password" ? "Показать пароль" : "Скрыть пароль",
@@ -971,6 +976,7 @@
 
   const init = async () => {
     resetTelegramSetupState();
+    togglePasswordButton.innerHTML = EYE_ICON_CLOSED;
     tabsRoot.setAttribute("data-active", "login");
     await loadTelegramLoginAvailability();
     try {

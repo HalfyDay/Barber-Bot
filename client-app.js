@@ -2606,12 +2606,14 @@
         ? promoLaneItems
             .map(
               (promo) => `
-                <button class="promo-thumb" data-action="open-promo" data-id="${normalizeText(promo.id)}" data-index="${Number.isInteger(promo._promoIndex) ? promo._promoIndex : ""}" style="${normalizeText(promo.imageUrl) ? `background-image:url('${normalizeText(promo.imageUrl)}');` : ""}">
-                  <span class="promo-thumb-overlay">
-                    <strong>${normalizeText(promo.title)}</strong>
-                    <small>${normalizeText(promo.subtitle)}</small>
-                  </span>
-                </button>`,
+                <article class="promo-thumb" style="${normalizeText(promo.imageUrl) ? `background-image:url('${normalizeText(promo.imageUrl)}');` : ""}">
+                  <button class="promo-thumb-surface" type="button" data-action="open-promo" data-id="${normalizeText(promo.id)}" data-index="${Number.isInteger(promo._promoIndex) ? promo._promoIndex : ""}" aria-label="${normalizeText(promo.title) || "Акция"}">
+                    <span class="promo-thumb-overlay">
+                      <strong>${normalizeText(promo.title)}</strong>
+                      <small>${normalizeText(promo.subtitle)}</small>
+                    </span>
+                  </button>
+                </article>`,
             )
             .join("")
         : "";
@@ -3593,7 +3595,7 @@
               <strong>${getReferralLevelName(referralProgram, referralProgram.activeReferralsCount || referral.stats?.green || 0)}</strong>
             </div>
             <div class="referral-levels-sheet-stat">
-              <span class="field-label">Скидка другу</span>
+              <span class="field-label">Бонус другу BS</span>
               <strong>${Number(referralProgram.friendDiscountRub || 0)} ₽</strong>
             </div>
             <div class="referral-levels-sheet-stat">
@@ -5005,6 +5007,7 @@
           <div class="promo-sheet-copy">
             <p>${normalizeText(promo.details) || "Подробности акции скоро появятся."}</p>
           </div>
+          ${normalizeText(promo.buttonLabel) && normalizeText(promo.buttonUrl) ? `<a class="primary-btn" href="${normalizeText(promo.buttonUrl)}" target="_blank" rel="noopener noreferrer">${normalizeText(promo.buttonLabel)}</a>` : ""}
         </div>
       </article>`,
       "",

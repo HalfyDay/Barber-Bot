@@ -241,6 +241,40 @@ const registerAdminCrudRoutes = ({
     }
   });
 
+  app.post("/api/barbers/reorder", authenticateToken, async (req, res) => {
+    if (isStaffIdentity(req.identity)) {
+      return res.status(403).json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РёР·РјРµРЅРµРЅРёСЏ РїРѕСЂСЏРґРєР° Р±Р°СЂР±РµСЂРѕРІ." });
+    }
+    const orderedIds = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds : [];
+    try {
+      const existingBarbers = await prisma.barbers.findMany({
+        select: { id: true, orderIndex: true, name: true },
+        orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+      });
+      const knownIds = new Set(existingBarbers.map((barber) => barber.id));
+      const uniqueIds = orderedIds
+        .map((value) => normalizeText(value))
+        .filter((value, index, values) => value && knownIds.has(value) && values.indexOf(value) === index);
+      const remainingIds = existingBarbers
+        .map((barber) => barber.id)
+        .filter((id) => !uniqueIds.includes(id));
+      const finalOrder = [...uniqueIds, ...remainingIds];
+      await prisma.$transaction(
+        finalOrder.map((id, index) =>
+          prisma.barbers.update({
+            where: { id },
+            data: { orderIndex: index },
+          }),
+        ),
+      );
+      const barbers = await getBarbers({ includeInactive: true });
+      return res.json(filterBarbersForIdentity(barbers, req.identity));
+    } catch (error) {
+      console.error("Reorder barbers error:", error);
+      return res.status(500).json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РёР·РјРµРЅРёС‚СЊ РїРѕСЂСЏРґРѕРє Р±Р°СЂР±РµСЂРѕРІ." });
+    }
+  });
+
   app.get("/api/appointments", authenticateToken, async (req, res) => {
     try {
       const records = await prisma.appointments.findMany();

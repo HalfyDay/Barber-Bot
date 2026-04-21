@@ -120,6 +120,8 @@ const createHomeClientStoreService = ({
           title: "Стрижка + укладка",
           subtitle: "Быстрый визит",
           imageUrl: "",
+          buttonLabel: "",
+          buttonUrl: "",
           details:
             "Комбо-услуга для тех, кто хочет закрыть весь уход за один визит.",
         },
@@ -128,6 +130,8 @@ const createHomeClientStoreService = ({
           title: "Оформление бороды",
           subtitle: "Точная форма",
           imageUrl: "",
+          buttonLabel: "",
+          buttonUrl: "",
           details:
             "Аккуратная работа по контуру и форме с быстрым подбором образа.",
         },
@@ -136,6 +140,8 @@ const createHomeClientStoreService = ({
           title: "Реферальный BS",
           subtitle: "Пригласи друга",
           imageUrl: "",
+          buttonLabel: "",
+          buttonUrl: "",
           details:
             "За активных рефералов начисляются BS после каждой выполненной записи.",
         },
@@ -349,6 +355,8 @@ const createHomeClientStoreService = ({
     subtitle: normalizeText(input.subtitle) || "",
     imageUrl: normalizeText(input.imageUrl) || "",
     details: normalizeText(input.details) || "",
+    buttonLabel: normalizeText(input.buttonLabel) || "",
+    buttonUrl: normalizeText(input.buttonUrl) || "",
   });
 
   const normalizeOptionalInteger = (value) => {

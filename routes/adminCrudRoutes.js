@@ -28,7 +28,7 @@ const registerAdminCrudRoutes = ({
   buildUserInsightsMap,
   adjustUserBsBalance,
 }) => {
-  const buildScheduleBoard = async () => {
+  const buildScheduleBoard = async (requestedWindowDays = 14) => {
     const barbersList = await getBarbers({ includeInactive: true });
     const daysOfWeek = [
       "Понедельник",
@@ -39,7 +39,9 @@ const registerAdminCrudRoutes = ({
       "Суббота",
       "Воскресенье",
     ];
-    const windowDays = 14;
+    const allowedWindowDays = [7, 14, 21, 30, 42];
+    const normalizedWindowDays = Number(requestedWindowDays);
+    const windowDays = allowedWindowDays.includes(normalizedWindowDays) ? normalizedWindowDays : 14;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const formatDateKey = (dateObj) => {
@@ -376,7 +378,7 @@ const registerAdminCrudRoutes = ({
       return res.status(403).json({ error: "Недостаточно прав для доступа к этому разделу." });
     }
     try {
-      return res.json(await buildScheduleBoard());
+      return res.json(await buildScheduleBoard(req.query.days));
     } catch (error) {
       console.error("Schedules fetch error:", error);
       return res.status(500).json({ error: "Не удалось загрузить расписание." });

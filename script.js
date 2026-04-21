@@ -1,4 +1,4 @@
-const { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, Fragment } = React;
+﻿const { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, Fragment } = React;
 const { createPortal, createRoot } = ReactDOM;
 const sendClientLog = (data) => {
   try {
@@ -232,6 +232,13 @@ const buildNewServiceState = () => ({
   isActive: true,
   prices: {},
 });
+const sortServicesByOrder = (services = []) =>
+  [...(Array.isArray(services) ? services : [])].sort((a, b) => {
+    const leftOrder = Number(a?.orderIndex) || 0;
+    const rightOrder = Number(b?.orderIndex) || 0;
+    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+    return normalizeText(a?.name).localeCompare(normalizeText(b?.name), 'ru');
+  });
 const ACTIVE_BARBER_LABEL = String.fromCharCode(0x0410, 0x043a, 0x0442, 0x0438, 0x0432, 0x0435, 0x043d);
 const HIDDEN_BARBER_LABEL = String.fromCharCode(0x0421, 0x043a, 0x0440, 0x044b, 0x0442);
 const ACTIVE_SERVICE_LABEL = String.fromCharCode(0x0410, 0x043a, 0x0442, 0x0438, 0x0432, 0x043d, 0x0430);
@@ -2088,15 +2095,15 @@ const DashboardView = ({
     <div className="space-y-6 overflow-x-hidden">
       <SectionCard title="Ключевые показатели">
         <div className="grid gap-4 stat-grid">
-          <StatCard label="Всего клиентов" value={stats.totalUsers ?? 0} onClick={resolveStatHandler('Users')} />
-          <StatCard
-            label="Активных записей"
-            value={stats.activeAppointments ?? 0}
-            accent="text-emerald-300"
-            onClick={resolveStatHandler('Appointments')}
-          />
           {isStaffView ? (
             <>
+              <StatCard label="Всего клиентов" value={stats.totalUsers ?? 0} onClick={resolveStatHandler('Users')} />
+              <StatCard
+                label="Активных записей"
+                value={stats.activeAppointments ?? 0}
+                accent="text-emerald-300"
+                onClick={resolveStatHandler('Appointments')}
+              />
               <StatCard
                 label="Заработано за месяц"
                 value={stats.earningsMonth == null ? '—' : formatCurrencyValue(stats.earningsMonth)}
@@ -2112,16 +2119,27 @@ const DashboardView = ({
           ) : (
             <>
               <StatCard
-                label="Подтверждено за год"
-                value={stats.confirmedYear ?? 0}
-                accent="text-fuchsia-300"
-                onClick={resolveStatHandler('Appointments')}
+                label="Постоянные клиенты"
+                value={stats.recurringClients ?? 0}
+                onClick={resolveStatHandler('Users')}
               />
               <StatCard
                 label="На сегодня"
                 value={stats.todaysAppointments ?? 0}
                 accent="text-cyan-300"
                 onClick={resolveStatHandler('Appointments')}
+              />
+              <StatCard
+                label="Подтверждено за месяц"
+                value={stats.confirmedMonth ?? 0}
+                accent="text-fuchsia-300"
+                onClick={resolveStatHandler('Appointments')}
+              />
+              <StatCard
+                label="Доход за месяц"
+                value={stats.incomeMonth == null ? '—' : formatCurrencyValue(stats.incomeMonth)}
+                accent="text-amber-200"
+                onClick={resolveStatHandler('Revenue')}
               />
             </>
           )}
@@ -3403,6 +3421,11 @@ const formatScheduleDateLabel = (dateValue) => {
     return '';
   }
 };
+const SCHEDULE_FILL_DAYS_OPTIONS = [7, 14, 21, 30, 42];
+const normalizeScheduleFillDays = (value) => {
+  const numeric = Number(value);
+  return SCHEDULE_FILL_DAYS_OPTIONS.includes(numeric) ? numeric : 14;
+};
 const isTodayDate = (dateValue) => {
   const safeDate = normalizeText(dateValue);
   if (!safeDate) return false;
@@ -4164,12 +4187,24 @@ const ServicesView = ({
   onPriceChange,
   onDelete,
   onAdd,
+  onReorder,
+  reorderBusy = false,
   role = ROLE_OWNER,
 }) => {
   const [editorState, setEditorState] = useState({ open: false, mode: 'edit', targetId: null });
   const [draftService, setDraftService] = useState(buildNewServiceState);
+  const [dragOrderIds, setDragOrderIds] = useState([]);
+  const [dragState, setDragState] = useState(null);
+  const serviceItemRefs = useRef(new Map());
+  const dragMetaRef = useRef(null);
   const isStaffMode = role === ROLE_STAFF;
   const canManageCatalog = !isStaffMode;
+  const sortedServices = useMemo(() => sortServicesByOrder(services), [services]);
+  const visibleServices = useMemo(() => {
+    if (!dragOrderIds.length) return sortedServices;
+    const serviceMap = new Map(sortedServices.map((service) => [service.id, service]));
+    return dragOrderIds.map((id) => serviceMap.get(id)).filter(Boolean);
+  }, [sortedServices, dragOrderIds]);
   const openEditor = (mode, targetId = null) => {
     if (mode === 'create' && !canManageCatalog) return;
     if (mode === 'create') {
@@ -4179,8 +4214,115 @@ const ServicesView = ({
   };
   const closeEditor = () => setEditorState({ open: false, mode: 'edit', targetId: null });
   const isCreateMode = editorState.mode === 'create';
-  const activeService = services.find((service) => service.id === editorState.targetId) || null;
+  const activeService = sortedServices.find((service) => service.id === editorState.targetId) || null;
   const workingService = isCreateMode ? draftService : activeService;
+  useEffect(() => {
+    if (!dragState) {
+      setDragOrderIds([]);
+    }
+  }, [dragState]);
+  useEffect(() => {
+    if (!dragState) return undefined;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+    return () => {
+      document.body.style.userSelect = previousUserSelect;
+    };
+  }, [dragState]);
+  const buildReorderedIds = useCallback((sourceIds, activeId, clientY) => {
+    const idleIds = sourceIds.filter((id) => id !== activeId);
+    let targetIndex = idleIds.length;
+    for (let index = 0; index < idleIds.length; index += 1) {
+      const currentId = idleIds[index];
+      const element = serviceItemRefs.current.get(currentId);
+      if (!element) continue;
+      const rect = element.getBoundingClientRect();
+      const middle = rect.top + rect.height / 2;
+      if (clientY < middle) {
+        targetIndex = index;
+        break;
+      }
+    }
+    const nextIds = [...idleIds];
+    nextIds.splice(targetIndex, 0, activeId);
+    return nextIds;
+  }, []);
+  const finishDrag = useCallback(async (shouldSave = true) => {
+    const meta = dragMetaRef.current;
+    dragMetaRef.current = null;
+    setDragState(null);
+    if (!meta?.started) {
+      setDragOrderIds([]);
+      return;
+    }
+    const finalIds = dragOrderIds.length ? dragOrderIds : meta.sourceIds;
+    setDragOrderIds([]);
+    if (!shouldSave || !Array.isArray(finalIds) || !finalIds.length) return;
+    const changed = finalIds.some((id, index) => id !== meta.sourceIds[index]);
+    if (!changed) return;
+    await onReorder?.(finalIds);
+  }, [dragOrderIds, onReorder]);
+  useEffect(() => {
+    if (!dragState) return undefined;
+    const handlePointerMove = (event) => {
+      const meta = dragMetaRef.current;
+      if (!meta || event.pointerId !== meta.pointerId) return;
+      const dx = event.clientX - meta.startX;
+      const dy = event.clientY - meta.startY;
+      if (!meta.started) {
+        const threshold = meta.pointerType === 'touch' ? 10 : 6;
+        if (Math.hypot(dx, dy) < threshold) return;
+        meta.started = true;
+        setDragOrderIds(meta.sourceIds);
+        setDragState({
+          activeId: meta.activeId,
+          pointerType: meta.pointerType,
+        });
+      }
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+      const baseIds = dragMetaRef.current?.started && dragOrderIds.length ? dragOrderIds : meta.sourceIds;
+      const nextIds = buildReorderedIds(baseIds, meta.activeId, event.clientY);
+      setDragOrderIds((prev) => {
+        const prevIds = prev.length ? prev : meta.sourceIds;
+        const unchanged = prevIds.length === nextIds.length && prevIds.every((id, index) => id === nextIds[index]);
+        return unchanged ? prev : nextIds;
+      });
+    };
+    const handlePointerUp = () => {
+      finishDrag(true);
+    };
+    const handlePointerCancel = () => {
+      finishDrag(false);
+    };
+    window.addEventListener('pointermove', handlePointerMove, { passive: false });
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+    };
+  }, [buildReorderedIds, dragOrderIds, dragState, finishDrag]);
+  const handleReorderPointerDown = useCallback((event, serviceId) => {
+    if (!canManageCatalog || reorderBusy) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragMetaRef.current = {
+      activeId: serviceId,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType || 'mouse',
+      startX: event.clientX,
+      startY: event.clientY,
+      started: false,
+      sourceIds: sortedServices.map((service) => service.id),
+    };
+    setDragState({
+      activeId: serviceId,
+      pointerType: event.pointerType || 'mouse',
+    });
+  }, [canManageCatalog, reorderBusy, sortedServices]);
   const handleFieldChange = (field, value) => {
     if (!canManageCatalog && !isCreateMode) return;
     if (isCreateMode) {
@@ -4259,52 +4401,113 @@ const ServicesView = ({
           ) : null
         }
       >
-        {services.length === 0 ? (
+        {sortedServices.length === 0 ? (
           <p className="text-slate-400">
             {canManageCatalog ? 'Список услуг пуст. Добавьте первую услугу.' : 'Каталог услуг пока недоступен.'}
           </p>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {services.map((service) => {
+          <div className="space-y-3">
+            {visibleServices.map((service, index) => {
               const summary = servicePriceSummary(service);
               const isActiveService = service.isActive !== false;
+              const isDragging = dragState?.activeId === service.id;
               return (
-                <button
+                <div
                   key={service.id}
+                  ref={(node) => {
+                    if (node) {
+                      serviceItemRefs.current.set(service.id, node);
+                    } else {
+                      serviceItemRefs.current.delete(service.id);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => openEditor('edit', service.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openEditor('edit', service.id);
+                    }
+                  }}
                   className={classNames(
-                    'group flex w-full flex-col gap-3 rounded-2xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-indigo-500',
+                    'group grid w-full grid-cols-[auto,minmax(0,1fr)] items-start gap-3 rounded-2xl border border-slate-700/70 bg-slate-900/45 px-4 py-3 text-left transition duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:grid-cols-[auto,minmax(0,1fr),auto] sm:items-center',
                     isActiveService
-                      ? 'border-slate-700/70 bg-slate-900/50 hover:border-indigo-500/70 hover:bg-slate-900'
-                      : 'border-slate-800 bg-slate-900/30 opacity-80 hover:border-amber-400/60'
+                      ? 'hover:border-indigo-500/70 hover:bg-slate-900/70'
+                      : 'opacity-80 hover:border-amber-400/60',
+                    isDragging && 'border-indigo-400/80 bg-slate-900 shadow-[0_18px_40px_rgba(49,46,129,0.22)]'
                   )}
                 >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                    <p
+                  {canManageCatalog ? (
+                    <button
+                      type="button"
+                      aria-label={`Переместить услугу ${service.name || index + 1}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                      onPointerDown={(event) => handleReorderPointerDown(event, service.id)}
                       className={classNames(
-                        'text-base font-semibold sm:text-lg',
-                        isActiveService ? 'text-white' : 'text-slate-400'
+                        'flex h-11 w-11 flex-shrink-0 touch-none items-center justify-center rounded-xl border border-slate-700/80 bg-slate-950/80 text-slate-500 transition',
+                        reorderBusy ? 'cursor-wait opacity-60' : 'cursor-grab hover:border-indigo-400 hover:bg-slate-900 hover:text-white active:cursor-grabbing'
                       )}
+                      disabled={reorderBusy}
                     >
-                      {service.name || 'Без названия'}
-                    </p>
-                    <div className="flex w-full flex-wrap items-center gap-2 text-sm sm:w-auto sm:justify-end">
-                      <span
-                        className={classNames(
-                          'rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide',
-                          isActiveService ? 'border-emerald-500 bg-emerald-500/10 text-emerald-200' : 'border-slate-600 bg-slate-900/60 text-slate-400'
-                        )}
-                      >
-                        {isActiveService ? 'Активна' : 'Скрыта'}
+                      <span className="grid grid-cols-2 gap-1">
+                        {Array.from({ length: 6 }).map((_, dotIndex) => (
+                          <span key={dotIndex} className="h-1 w-1 rounded-full bg-current" />
+                        ))}
                       </span>
-                      <span className="rounded-full bg-slate-800/80 px-2 py-0.5 text-xs text-slate-300">
-                        {service.duration ? `${service.duration} мин` : '—'}
-                      </span>
+                    </button>
+                  ) : (
+                    <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border border-slate-800 bg-slate-950/60 text-xs font-semibold text-slate-500">
+                      {String(index + 1).padStart(2, '0')}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="inline-flex h-7 min-w-[1.9rem] items-center justify-center rounded-full bg-indigo-500/15 px-2 text-[11px] font-semibold text-indigo-100">
+                          {index + 1}
+                        </span>
+                        <p
+                          className={classNames(
+                            'min-w-0 text-[15px] font-semibold leading-tight tracking-tight break-words sm:truncate sm:text-base',
+                            isActiveService ? 'text-white' : 'text-slate-400'
+                          )}
+                        >
+                          {service.name || 'Без названия'}
+                        </p>
+                      </div>
+                      <div className="flex min-w-0 flex-col gap-0.5 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1">
+                        <span className={classNames('font-semibold', isActiveService ? 'text-slate-100' : 'text-slate-500')}>
+                          {summary.label}
+                        </span>
+                        <span className={classNames('text-xs', isActiveService ? 'text-slate-400' : 'text-slate-500')}>
+                          {summary.details}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <div className={classNames('text-sm', isActiveService ? 'text-slate-100' : 'text-slate-500')}>{summary.label}</div>
-                  <p className={classNames('text-xs', isActiveService ? 'text-slate-400' : 'text-slate-500')}>{summary.details}</p>
-                </button>
+                  <div className="col-start-2 flex flex-wrap items-center justify-start gap-2 pt-1 sm:col-start-auto sm:justify-end sm:pt-0">
+                    <span
+                      className={classNames(
+                        'rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em]',
+                        isActiveService ? 'border-emerald-500 bg-emerald-500/10 text-emerald-200' : 'border-slate-600 bg-slate-900/60 text-slate-400'
+                      )}
+                    >
+                      {isActiveService ? 'Активна' : 'Скрыта'}
+                    </span>
+                    <span className="rounded-full bg-slate-800/80 px-2.5 py-1 text-[11px] font-semibold text-slate-300">
+                      {service.duration ? `${service.duration} мин` : '—'}
+                    </span>
+                    {reorderBusy && isDragging ? (
+                      <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200">
+                        Сохраняем
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -4339,10 +4542,33 @@ const ServicesView = ({
         }
       >
         {workingService ? (
-                  <div className="space-y-4 w-full">
+          <div className="w-full space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-800 bg-slate-950/55 px-4 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="inline-flex h-7 min-w-[1.9rem] items-center justify-center rounded-full bg-indigo-500/15 px-2 text-[11px] font-semibold text-indigo-100">
+                  {isCreateMode ? 'Н' : Number((visibleServices.findIndex((service) => service.id === workingService.id) || 0) + 1)}
+                </span>
+                <span className="truncate text-sm font-semibold text-white">
+                  {workingService.name || 'Без названия'}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={classNames(
+                    'rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em]',
+                    workingService.isActive !== false ? 'border-emerald-500 bg-emerald-500/10 text-emerald-200' : 'border-slate-600 bg-slate-900/60 text-slate-400'
+                  )}
+                >
+                  {workingService.isActive !== false ? 'Активна' : 'Скрыта'}
+                </span>
+                <span className="rounded-full bg-slate-800/80 px-2.5 py-1 text-[11px] font-semibold text-slate-300">
+                  {workingService.duration ? `${workingService.duration} мин` : '—'}
+                </span>
+              </div>
+            </div>
             <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-1">
-                <label className="block text-sm text-slate-300">Название</label>
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-slate-300">Название</label>
                 <input
                   name="serviceName"
                   aria-label="Название услуги"
@@ -4351,13 +4577,13 @@ const ServicesView = ({
                   placeholder="Например, стрижка"
                   disabled={!canManageCatalog}
                   className={classNames(
-                    'rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white',
+                    'w-full rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-white shadow-inner shadow-black/20',
                     !canManageCatalog && 'cursor-not-allowed opacity-70'
                   )}
                 />
               </div>
-              <div className="space-y-1">
-                <label className="block text-sm text-slate-300">Длительность, мин</label>
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-slate-300">Длительность, мин</label>
                 <input
                   name="serviceDuration"
                   aria-label="Длительность услуги"
@@ -4370,7 +4596,7 @@ const ServicesView = ({
                   }
                   disabled={!canManageCatalog}
                   className={classNames(
-                    'rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white',
+                    'w-full rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-white shadow-inner shadow-black/20',
                     !canManageCatalog && 'cursor-not-allowed opacity-70'
                   )}
                 />
@@ -4382,7 +4608,7 @@ const ServicesView = ({
                   type="button"
                   onClick={() => handleFieldChange('isActive', !(workingService.isActive !== false))}
                   className={classNames(
-                    'inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-semibold transition',
+                    'inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition',
                     workingService.isActive !== false ? 'border-emerald-400 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 bg-slate-900/60 text-slate-400'
                   )}
                 >
@@ -4407,16 +4633,23 @@ const ServicesView = ({
                 </div>
               )}
             </div>
-            <div className="space-y-2">
-              <p className="text-sm text-slate-300">Цены по барберам</p>
-              {isStaffMode && (
-                <p className="text-xs text-slate-500">Вы можете редактировать только свою стоимость.</p>
-              )}
+            <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/55 p-4">
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-slate-200">Цены по барберам</p>
+                  <p className="text-xs text-slate-500">Индивидуальные цены для каждого мастера.</p>
+                </div>
+                {isStaffMode && (
+                  <p className="text-xs text-slate-500">Вы можете редактировать только свою стоимость.</p>
+                )}
+              </div>
               {barbers.length ? (
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2.5 sm:grid-cols-2">
                   {barbers.map((barber) => (
-                    <label key={barber.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-white">
-                      <span className="truncate">{barber.name || 'Без имени'}</span>
+                    <label key={barber.id} className="grid grid-cols-[minmax(0,1fr),112px] items-center gap-3 rounded-xl border border-slate-700 bg-slate-900/45 px-3 py-2.5 text-sm text-white transition hover:border-slate-500">
+                      <div className="min-w-0">
+                        <span className="block truncate font-medium">{barber.name || 'Без имени'}</span>
+                      </div>
                       <input
                         name={`servicePrice-${barber.id}`}
                         aria-label={`Цена для ${barber.name || 'барбера'}`}
@@ -4424,7 +4657,7 @@ const ServicesView = ({
                         min={0}
                         value={workingService.prices?.[barber.id] ?? ''}
                         onChange={(event) => handlePriceChange(barber.id, event.target.value)}
-                        className="w-28 rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-right text-sm text-white"
+                        className="w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-2 text-right text-sm font-semibold text-white"
                         placeholder="0"
                       />
                     </label>
@@ -4466,19 +4699,24 @@ const formatWeekRangeLabel = (startDate) => {
   const endLabel = formatter.format(endDate).replace('.', '');
   return `${startLabel} – ${endLabel}`;
 };
-const groupSchedulesByWeek = (slots = []) => {
-  const buckets = new Map();
-  slots.forEach((slot) => {
-    const bucket = resolveWeekBucket(slot.Date);
-    if (!bucket) return;
-    const current = buckets.get(bucket.key) || { key: bucket.key, start: bucket.start, slots: [] };
-    current.slots.push(slot);
-    buckets.set(bucket.key, current);
-  });
-  return Array.from(buckets.values()).sort((a, b) => a.start.getTime() - b.start.getTime());
-};
-const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onScheduleUpdate }) => {
+const SchedulesView = ({
+  schedules = [],
+  barbers = [],
+  currentUser = null,
+  scheduleFillDays = 14,
+  onScheduleFillDaysChange,
+  onScheduleUpdate,
+}) => {
   const isStaffUser = currentUser?.role === ROLE_STAFF;
+  const datePickerInputRef = useRef(null);
+  const [scheduleSheetDate, setScheduleSheetDate] = useState('');
+  const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handler = () => setIsMobileViewport(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
   const normalizedUserKey = useMemo(() => {
     const baseName = canonicalizeName(
       currentUser?.barberName || currentUser?.displayName || currentUser?.username || '',
@@ -4493,9 +4731,31 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
     return match?.name || 'all';
   }, [barbers, normalizedUserKey]);
   const [barberFilter, setBarberFilter] = useState(defaultBarberFilter);
+  const [calendarDate, setCalendarDate] = useLocalStorage(
+    'tables.schedulesCalendarDate',
+    getLocalISODateString(),
+  );
   useEffect(() => {
     setBarberFilter(defaultBarberFilter);
   }, [defaultBarberFilter]);
+  const anchorDate = useMemo(
+    () => parseInputDate(calendarDate) || startOfLocalDay(new Date()),
+    [calendarDate],
+  );
+  const monthStart = useMemo(() => getMonthStartDate(anchorDate), [anchorDate]);
+  const gridStart = useMemo(() => getWeekStartDate(monthStart), [monthStart]);
+  const monthDays = useMemo(
+    () =>
+      Array.from({ length: 42 }, (_, index) => {
+        const date = addDays(gridStart, index);
+        return {
+          key: getLocalISODateString(date),
+          date,
+          inCurrentMonth: isSameLocalMonth(date, monthStart),
+        };
+      }),
+    [gridStart, monthStart],
+  );
   const normalizedSchedules = Array.isArray(schedules) ? schedules : [];
   const staffPreferredBarber = useMemo(() => {
     if (!isStaffUser) return null;
@@ -4511,27 +4771,55 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
     currentUser?.displayName,
     currentUser?.username,
   ]);
-  const staffDisplayName =
-    staffPreferredBarber ||
-    normalizeText(currentUser?.barberName || currentUser?.displayName || currentUser?.username || '') ||
-    '—';
   const activeBarberFilter = useMemo(
     () => (isStaffUser ? staffPreferredBarber || defaultBarberFilter || 'all' : barberFilter),
     [isStaffUser, staffPreferredBarber, defaultBarberFilter, barberFilter],
   );
+  const barberOptions = useMemo(
+    () =>
+      sortServicesByOrder(Array.isArray(barbers) ? barbers : [])
+        .map((barber) => ({
+          id: normalizeText(barber?.id),
+          name: normalizeText(barber?.name),
+          orderIndex: Number(barber?.orderIndex) || 0,
+        }))
+        .filter((barber) => barber.name),
+    [barbers],
+  );
+  const barberOrderLookup = useMemo(() => {
+    const lookup = new Map();
+    barberOptions.forEach((barber, index) => {
+      lookup.set(barber.name.toLowerCase(), Number(barber.orderIndex) || index);
+    });
+    return lookup;
+  }, [barberOptions]);
   const filteredSchedules = useMemo(() => {
     if (!activeBarberFilter || activeBarberFilter === 'all') return normalizedSchedules;
     const target = normalizeText(activeBarberFilter).toLowerCase();
     return normalizedSchedules.filter((slot) => normalizeText(slot.Barber).toLowerCase() === target);
   }, [normalizedSchedules, activeBarberFilter]);
-  const groupedWeeks = useMemo(() => groupSchedulesByWeek(filteredSchedules), [filteredSchedules]);
-  const barberOptions = useMemo(
-    () =>
-      (Array.isArray(barbers) ? barbers : [])
-        .map((barber) => normalizeText(barber.name))
-        .filter(Boolean),
-    [barbers],
-  );
+  const slotsByDate = useMemo(() => {
+    const buckets = new Map();
+    filteredSchedules.forEach((slot) => {
+      const key = normalizeText(slot.Date);
+      if (!key) return;
+      const next = buckets.get(key) || [];
+      next.push(slot);
+      buckets.set(key, next);
+    });
+    buckets.forEach((slots, key) => {
+      slots.sort((a, b) => {
+        const leftBarber = normalizeText(a?.Barber).toLowerCase();
+        const rightBarber = normalizeText(b?.Barber).toLowerCase();
+        const leftOrder = barberOrderLookup.get(leftBarber) ?? Number.MAX_SAFE_INTEGER;
+        const rightOrder = barberOrderLookup.get(rightBarber) ?? Number.MAX_SAFE_INTEGER;
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+        return getScheduleSortValue(a) - getScheduleSortValue(b);
+      });
+      buckets.set(key, slots);
+    });
+    return buckets;
+  }, [barberOrderLookup, filteredSchedules]);
   const canEditSchedules = typeof onScheduleUpdate === 'function';
   const canEditSlot = useCallback(
     (slot) => {
@@ -4557,104 +4845,386 @@ const SchedulesView = ({ schedules = [], barbers = [], currentUser = null, onSch
     },
     [canEditSlot, onScheduleUpdate]
   );
-  return (
-    <div className="space-y-6">
-      <SectionCard title="Расписание">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          {isStaffUser ? (
-            <div className="space-y-1">
-              <label className="text-sm text-slate-400">Мастер</label>
-              <div className="w-64 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-white">
-                {staffDisplayName}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <label className="text-sm text-slate-400">Мастер</label>
+  const monthLabel = useMemo(
+    () => new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(monthStart),
+    [monthStart],
+  );
+  const mobileMonthName = useMemo(
+    () => new Intl.DateTimeFormat('ru-RU', { month: 'long' }).format(monthStart),
+    [monthStart],
+  );
+  const mobileYearLabel = useMemo(() => String(monthStart.getFullYear()), [monthStart]);
+  const openDatePicker = () => {
+    const input = datePickerInputRef.current;
+    if (!input) return;
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+      return;
+    }
+    input.focus();
+    input.click();
+  };
+  const shiftMonth = useCallback(
+    (direction) => {
+      const nextDate = new Date(monthStart.getFullYear(), monthStart.getMonth() + direction, 1);
+      setCalendarDate(getLocalISODateString(nextDate));
+    },
+    [monthStart, setCalendarDate],
+  );
+  const jumpToToday = useCallback(() => {
+    setCalendarDate(getLocalISODateString(new Date()));
+  }, [setCalendarDate]);
+  const weekdayLabels = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+  const showBarberInChip = !isStaffUser && (!activeBarberFilter || activeBarberFilter === 'all');
+  const visibleBarberNames = useMemo(() => {
+    if (activeBarberFilter && activeBarberFilter !== 'all') {
+      return [activeBarberFilter];
+    }
+    if (barberOptions.length) {
+      return barberOptions.map((barber) => barber.name).filter(Boolean);
+    }
+    return Array.from(new Set(filteredSchedules.map((slot) => normalizeText(slot.Barber)).filter(Boolean)));
+  }, [activeBarberFilter, barberOptions, filteredSchedules]);
+  const scheduleSheetRows = useMemo(() => {
+    if (!scheduleSheetDate) return [];
+    const slots = slotsByDate.get(scheduleSheetDate) || [];
+    const slotMap = new Map(slots.map((slot) => [normalizeText(slot.Barber), slot]));
+    const dateDayLabel = formatScheduleDayShort(scheduleSheetDate, '') || '';
+    return visibleBarberNames.map((barberName) => {
+      const existing = slotMap.get(barberName);
+      return (
+        existing || {
+          id: `${barberName}-${scheduleSheetDate}`,
+          Barber: barberName,
+          Date: scheduleSheetDate,
+          DayOfWeek: dateDayLabel,
+          Week: '',
+        }
+      );
+    });
+  }, [scheduleSheetDate, slotsByDate, visibleBarberNames]);
+  const openScheduleSheet = useCallback((dateKey) => {
+    setCalendarDate(dateKey);
+    setScheduleSheetDate(dateKey);
+  }, [setCalendarDate]);
+  const closeScheduleSheet = useCallback(() => {
+    setScheduleSheetDate('');
+  }, []);
+  const resolveScheduleTone = useCallback((slot) => {
+    const hasWorkingHours = normalizeText(slot?.Week).trim() && normalizeText(slot?.Week).trim() !== '0';
+    return hasWorkingHours
+      ? {
+          dot: 'bg-emerald-300',
+          chip: 'bg-emerald-500/20 text-emerald-100',
+          sheet: 'bg-emerald-500/15 text-emerald-100',
+        }
+      : {
+          dot: 'bg-rose-300',
+          chip: 'bg-rose-500/18 text-rose-100',
+          sheet: 'bg-rose-500/15 text-rose-100',
+        };
+  }, []);
+  const calendarBlock = (
+    <div className={classNames(isMobileViewport ? '-mx-4 px-1' : '')}>
+      <div className={classNames('space-y-3', isMobileViewport && 'px-1')}>
+        <div className={classNames('flex items-center justify-between gap-3', isMobileViewport && 'gap-2')}>
+          <div className={classNames('flex items-center gap-1 min-w-0', isMobileViewport && 'flex-1 gap-0.5')}>
+            <button
+              type="button"
+              onClick={() => shiftMonth(-1)}
+              className={classNames(
+                'inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-300 transition hover:bg-slate-800 hover:text-white',
+                isMobileViewport && 'h-9 w-9 flex-shrink-0'
+              )}
+              aria-label="Предыдущий месяц"
+            >
+              <IconChevronLeft className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={openDatePicker}
+              className={classNames(
+                'inline-flex items-center gap-2 rounded-full px-3 py-2 text-left text-2xl font-semibold capitalize text-white transition hover:bg-slate-800/80',
+                isMobileViewport && 'min-w-0 gap-1 px-2 py-1.5 text-xl leading-none'
+              )}
+            >
+              {isMobileViewport ? (
+                <span className="min-w-0 leading-[1.05]">
+                  <span className="block truncate capitalize">{mobileMonthName}</span>
+                  <span className="block truncate">{mobileYearLabel}</span>
+                </span>
+              ) : (
+                <span>{monthLabel}</span>
+              )}
+              <svg className={classNames('h-4 w-4 text-slate-400', isMobileViewport && 'flex-shrink-0')} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <input
+              ref={datePickerInputRef}
+              type="date"
+              value={getLocalISODateString(anchorDate)}
+              onChange={(event) => setCalendarDate(event.target.value || getLocalISODateString(new Date()))}
+              className="pointer-events-none absolute h-0 w-0 opacity-0"
+              tabIndex={-1}
+            />
+          </div>
+          <div className={classNames('flex items-center gap-1', isMobileViewport && 'gap-0.5 flex-shrink-0')}>
+            {typeof onScheduleFillDaysChange === 'function' && (
               <select
-                value={barberFilter}
-                onChange={(event) => setBarberFilter(event.target.value)}
-                className="w-64 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-white focus:border-indigo-400 focus:outline-none"
+                value={normalizeScheduleFillDays(scheduleFillDays)}
+                onChange={(event) => onScheduleFillDaysChange(normalizeScheduleFillDays(event.target.value))}
+                className={classNames(
+                  'h-10 rounded-full border border-slate-700 bg-slate-950 px-3 text-sm font-semibold text-slate-200 focus:border-indigo-400 focus:outline-none',
+                  isMobileViewport && 'h-9 px-2.5 text-xs'
+                )}
+                aria-label="На сколько дней заполнять расписание"
               >
-                <option value="all">Все мастера</option>
-                {barberOptions.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
+                {SCHEDULE_FILL_DAYS_OPTIONS.map((days) => (
+                  <option key={days} value={days}>
+                    {days} дн.
                   </option>
                 ))}
               </select>
-            </div>
-          )}
+            )}
+            <button
+              type="button"
+              onClick={jumpToToday}
+              className={classNames(
+                'inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 hover:text-white',
+                isMobileViewport && 'h-9 px-3 text-xs'
+              )}
+            >
+              Сегодня
+            </button>
+            <button
+              type="button"
+              onClick={() => shiftMonth(1)}
+              className={classNames(
+                'inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-300 transition hover:bg-slate-800 hover:text-white',
+                isMobileViewport && 'h-9 w-9'
+              )}
+              aria-label="Следующий месяц"
+            >
+              <IconChevronRight className="h-5 w-5" />
+            </button>
+          </div>
         </div>
-        {groupedWeeks.length ? (
-          <div className="mt-4 space-y-4">
-            {groupedWeeks.map((group) => {
-              const slots = [...group.slots].sort((a, b) => getScheduleSortValue(a) - getScheduleSortValue(b));
-              return (
-                <div
-                  key={group.key}
-                  className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900/60 p-4 shadow-inner shadow-black/5"
+        <div className={classNames('grid grid-cols-7 px-1', isMobileViewport ? 'gap-0.5' : 'gap-1')}>
+          {weekdayLabels.map((label) => (
+            <div
+              key={label}
+              className={classNames(
+                'flex h-8 items-center justify-center font-semibold uppercase tracking-wide text-slate-400',
+                isMobileViewport ? 'text-xs' : 'text-sm'
+              )}
+            >
+              {label}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className={classNames('grid grid-cols-7', isMobileViewport ? 'gap-0.5' : 'gap-1')}>
+        {monthDays.map((day) => {
+          const daySlots = slotsByDate.get(day.key) || [];
+          const isSelected = day.key === getLocalISODateString(anchorDate);
+          const isToday = isSameLocalDay(day.date, new Date());
+          return (
+            <button
+              key={day.key}
+              type="button"
+              onClick={() => openScheduleSheet(day.key)}
+              className={classNames(
+                'flex flex-col rounded-2xl bg-slate-950/70 text-left transition hover:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/40',
+                isMobileViewport ? 'h-[84px] rounded-[18px] px-1 py-1.5' : 'min-h-[120px] p-2',
+                day.inCurrentMonth ? 'text-white' : 'text-slate-500',
+              )}
+            >
+              <div className={classNames(
+                isMobileViewport ? 'mb-1 flex items-start justify-center' : 'mb-2 flex items-start justify-center'
+              )}>
+                <span
+                  className={classNames(
+                    'inline-flex min-w-[28px] items-center justify-center rounded-full px-2 font-semibold sm:h-9 sm:min-w-[36px] sm:text-base',
+                    isMobileViewport ? 'h-6 text-[11px]' : 'h-8 text-sm',
+                    isSelected
+                      ? 'bg-indigo-200 text-slate-950'
+                      : isToday
+                        ? 'border border-indigo-300/50 text-white'
+                        : 'text-inherit',
+                  )}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-100">{formatWeekRangeLabel(group.start)}</p>
-                    <span className="text-xs text-slate-500">
-                      {!activeBarberFilter || activeBarberFilter === 'all'
-                        ? 'Все мастера'
-                        : `Мастер: ${activeBarberFilter}`}
-                    </span>
-                  </div>
-                  <div
-                    className="grid gap-3"
-                    style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}
-                  >
-                    {slots.map((slot) => {
-                      const slotId = getRecordId(slot) || `${slot.Barber}-${slot.Date}`;
-                      const dayLabel = formatScheduleDayShort(slot.Date, slot.DayOfWeek);
-                      const dateLabel = formatScheduleDateLabel(slot.Date);
-                      const isTodaySlot = isTodayDate(slot.Date);
-                      const showBarberName = !isStaffUser && (!activeBarberFilter || activeBarberFilter === 'all');
-                      const slotEditable = canEditSlot(slot);
+                  {day.date.getDate()}
+                </span>
+              </div>
+              <div className={classNames(isMobileViewport ? 'mt-0 flex flex-1 items-center' : 'flex flex-1 items-center')}>
+                {isMobileViewport ? (
+                  <div className="flex w-full flex-col justify-center space-y-0.5 text-center">
+                    {daySlots.slice(0, 2).map((slot, index) => {
+                      const tone = resolveScheduleTone(slot);
+                      const { start, end } = parseTimeRangeParts(slot.Week || '');
+                      const barberMarker = showBarberInChip
+                        ? `${normalizeText(slot.Barber).trim().slice(0, 1).toUpperCase()} `
+                        : '';
+                      const compactStart = start ? start.slice(0, 2) : '';
+                      const compactEnd = end ? end.slice(0, 2) : '';
+                      const mobileLabel = start
+                        ? `${barberMarker}${compactStart}${compactEnd ? `-${compactEnd}` : ''}`
+                        : `${barberMarker}вых`;
                       return (
                         <div
-                          key={slotId}
+                          key={getRecordId(slot) || `${day.key}-${index}`}
                           className={classNames(
-                            'space-y-3 rounded-2xl border bg-slate-900/60 p-3',
-                            isTodaySlot ? 'border-emerald-400/70 ring-1 ring-emerald-400/30' : 'border-slate-800'
+                            'w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-md px-0.5 py-0.5 text-center text-[8.5px] font-semibold leading-tight',
+                            tone.chip,
                           )}
                         >
-                          <div className="flex flex-col items-center text-center text-xs uppercase tracking-[0.25em] text-slate-500">
-                            <span className="text-sm font-semibold tracking-normal text-white">
-                              {[dayLabel, dateLabel].filter(Boolean).join(' · ')}
-                            </span>
-                            {showBarberName && (
-                              <span className="text-[11px] font-medium text-slate-400">{slot.Barber || '—'}</span>
-                            )}
-                          </div>
-                          {slotEditable ? (
-                            <TimeRangePicker
-                              value={slot.Week === '0' ? '' : slot.Week || ''}
-                              onChange={(nextValue) => handleTimeChange(slot, nextValue)}
-                              buttonClassName="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-center text-sm text-white whitespace-nowrap focus:ring-2 focus:ring-indigo-500"
-                              title="Редактировать время"
-                              placeholder="Выходной"
-                            />
-                          ) : (
-                            <div className="w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-center text-sm text-slate-200">
-                              {slot.Week && slot.Week !== '0' ? slot.Week : 'Слоты не указаны'}
-                            </div>
-                          )}
+                          {mobileLabel}
                         </div>
                       );
                     })}
+                    {daySlots.length > 2 ? (
+                      <div className="w-full px-0.5 text-center text-[9px] font-medium text-slate-500">+{daySlots.length - 2}</div>
+                    ) : null}
                   </div>
-                </div>
-              );
-            })}
+                ) : (
+                  <div className="w-full space-y-1 text-center">
+                    {daySlots.slice(0, 3).map((slot) => {
+                      const tone = resolveScheduleTone(slot);
+                      return (
+                        <div
+                          key={getRecordId(slot) || `${slot.Barber}-${slot.Date}-${slot.Week || 'empty'}`}
+                          className={classNames(
+                            'w-full truncate rounded-lg px-2 py-1 text-left text-[11px] font-medium',
+                            tone.chip,
+                          )}
+                        >
+                          {showBarberInChip
+                            ? `${normalizeText(slot.Barber)} ${slot.Week && slot.Week !== '0' ? slot.Week : ''}`.trim() || 'Выходной'
+                            : slot.Week && slot.Week !== '0'
+                              ? slot.Week
+                              : 'Выходной'}
+                        </div>
+                      );
+                    })}
+                    {daySlots.length > 3 && (
+                      <div className="px-1 text-[11px] font-medium text-slate-500">+{daySlots.length - 3}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+  return (
+    <div className="space-y-4">
+      {isMobileViewport ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3 px-1">
+            <h2 className="text-xl font-semibold text-white">Расписание</h2>
+            {!isStaffUser && (
+              <select
+                value={barberFilter}
+                onChange={(event) => setBarberFilter(event.target.value)}
+                className="h-10 min-w-[150px] rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-white focus:border-indigo-400 focus:outline-none"
+              >
+                <option value="all">Все мастера</option>
+                {barberOptions.map((barber) => (
+                  <option key={barber.id || barber.name} value={barber.name}>
+                    {barber.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
-        ) : (
-          <p className="mt-4 text-sm text-slate-400">Нет расписания для выбранных условий.</p>
-        )}
-      </SectionCard>
+          {calendarBlock}
+        </div>
+      ) : (
+        <SectionCard
+          title="Расписание"
+          actions={
+            <div className="flex items-center gap-2">
+              {!isStaffUser && (
+                <select
+                  value={barberFilter}
+                  onChange={(event) => setBarberFilter(event.target.value)}
+                  className="h-10 min-w-[150px] rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-white focus:border-indigo-400 focus:outline-none"
+                >
+                  <option value="all">Все мастера</option>
+                  {barberOptions.map((barber) => (
+                    <option key={barber.id || barber.name} value={barber.name}>
+                      {barber.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          }
+        >
+          <div className="space-y-3">{calendarBlock}</div>
+        </SectionCard>
+      )}
+      <Modal
+        title={scheduleSheetDate ? formatDateHeading(scheduleSheetDate) : 'Расписание'}
+        isOpen={Boolean(scheduleSheetDate)}
+        onClose={closeScheduleSheet}
+        maxWidthClass="max-w-3xl"
+        footer={
+          <button
+            type="button"
+            onClick={closeScheduleSheet}
+            className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800"
+          >
+            Закрыть
+          </button>
+        }
+      >
+        <div className="space-y-3">
+          {scheduleSheetRows.length ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {scheduleSheetRows.map((slot) => (
+                <div
+                  key={getRecordId(slot) || `${slot.Barber}-${slot.Date}`}
+                  className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/50 p-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="min-w-0 truncate text-sm font-semibold text-white">{slot.Barber || 'Без мастера'}</p>
+                    <span className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                      {slot.DayOfWeek || formatScheduleDayShort(slot.Date, slot.DayOfWeek) || 'День'}
+                    </span>
+                  </div>
+                  {canEditSlot(slot) ? (
+                    (() => {
+                      const tone = resolveScheduleTone(slot);
+                      return (
+                        <TimeRangePicker
+                          value={slot.Week === '0' ? '' : slot.Week || ''}
+                          onChange={(nextValue) => handleTimeChange(slot, nextValue)}
+                          title={slot.Barber || 'Слот'}
+                          placeholder="Выходной"
+                          buttonClassName={classNames(
+                            'w-full rounded-xl border border-slate-700 px-3 py-2 text-left text-sm',
+                            tone.sheet
+                          )}
+                        />
+                      );
+                    })()
+                  ) : (
+                    <div className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-left text-sm text-slate-200">
+                      {slot.Week && slot.Week !== '0' ? slot.Week : 'Слоты не указаны'}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">Для этого дня расписание не найдено.</p>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 };
@@ -7254,6 +7824,7 @@ const ClientsList = ({
   onRequestConfirm,
   onBlockClient,
 }) => {
+  const [showArchivedClients, setShowArchivedClients] = useState(false);
   const [modalState, setModalState] = useState({
     open: false,
     record: null,
@@ -7268,6 +7839,69 @@ const ClientsList = ({
     bsError: '',
   });
   const barberOptions = useMemo(() => (Array.isArray(barbers) ? barbers.filter(Boolean) : []), [barbers]);
+  const getClientLastVisitDate = useCallback((client) => {
+    if (!client?.lastHaircutDate) return null;
+    return (
+      getAppointmentStartDate(
+        client.lastHaircutDate,
+        client.lastHaircutTime || '00:00',
+        client.lastHaircutStartDateTime || null,
+      ) || null
+    );
+  }, []);
+  const classifyClientActivity = useCallback((client) => {
+    const totalConfirmed = Number(client?.totalConfirmed || 0);
+    const lastVisit = getClientLastVisitDate(client);
+    if (totalConfirmed <= 0 || !lastVisit) {
+      return {
+        key: 'never',
+        label: 'Ни разу не посещал',
+        accent: 'text-slate-200',
+        nameClassName: 'text-slate-300',
+      };
+    }
+    const now = new Date();
+    const threeMonthsAgo = new Date(now);
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    const sixMonthsAgo = new Date(now);
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    if (lastVisit >= threeMonthsAgo) {
+      return {
+        key: 'regular',
+        label: 'Постоянный',
+        accent: 'text-emerald-200',
+        nameClassName: 'text-emerald-300',
+      };
+    }
+    if (lastVisit >= sixMonthsAgo) {
+      return {
+        key: 'rare',
+        label: 'Редкий',
+        accent: 'text-amber-200',
+        nameClassName: 'text-amber-200',
+      };
+    }
+    return {
+      key: 'inactive',
+      label: 'Не ходит',
+      accent: 'text-rose-200',
+      nameClassName: 'text-rose-300',
+    };
+  }, [getClientLastVisitDate]);
+  const categorizedClients = useMemo(() => {
+    const visible = [];
+    const hidden = [];
+    (Array.isArray(clients) ? clients : []).forEach((client) => {
+      const activity = classifyClientActivity(client);
+      const enriched = { ...client, activity };
+      if (activity.key === 'regular' || activity.key === 'rare') {
+        visible.push(enriched);
+      } else {
+        hidden.push(enriched);
+      }
+    });
+    return { visible, hidden };
+  }, [clients, classifyClientActivity]);
   const openClientModal = async (client) => {
     if (!client) return;
     setModalState({
@@ -7416,46 +8050,96 @@ const ClientsList = ({
     await onDelete(modalState.record, { skipConfirm: true });
     closeClientModal();
   };
+  const renderClientsSection = (items, emptyMessage, sectionTone = 'default') => {
+    if (!items.length) {
+      return <p className="text-slate-400">{emptyMessage}</p>;
+    }
+    return (
+      <div
+        className={classNames(
+          'rounded-3xl border bg-slate-950/40 shadow-inner shadow-black/10',
+          sectionTone === 'archived' ? 'border-slate-700/80' : 'border-slate-800',
+        )}
+      >
+        <div className="divide-y divide-slate-900">
+          {items.map((client, index) => {
+            const clientNumber = String(index + 1).padStart(2, '0');
+            const phoneDisplay = client.Phone ? formatPhoneInput(client.Phone) : '';
+            const lastVisitLabel = client.lastHaircutDate
+              ? formatDate(client.lastHaircutDate)
+              : 'Не был ни разу';
+            return (
+              <button
+                type="button"
+                key={client.id}
+                onClick={() => openClientModal(client)}
+                className="flex w-full flex-col gap-2 px-4 py-3 text-left transition hover:bg-slate-900/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-indigo-300">
+                    {clientNumber}
+                  </div>
+                  <div className="flex flex-1 flex-col gap-2">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className={classNames('text-base font-semibold', client.activity?.nameClassName || 'text-white')}>
+                          {client.Name || 'Нет имени'}
+                        </p>
+                        {client.Barber && <p className="text-xs text-slate-400">Любимый барбер: {client.Barber}</p>}
+                        <p className="text-xs text-slate-500">
+                          Последний визит:{' '}
+                          <span className="font-medium text-slate-300">
+                            {lastVisitLabel}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="hidden text-right text-sm text-slate-300 sm:block">
+                        {phoneDisplay && <p>{phoneDisplay}</p>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
   return (
     <div className="space-y-6">
       {clients.length === 0 ? (
         <p className="text-slate-400">Список клиентов пуст.</p>
       ) : (
-        <div className="rounded-3xl border border-slate-800 bg-slate-950/40 shadow-inner shadow-black/10">
-          <div className="divide-y divide-slate-900">
-            {clients.map((client, index) => {
-              const clientNumber = String(index + 1).padStart(2, '0');
-              const phoneDisplay = client.Phone ? formatPhoneInput(client.Phone) : '';
-              const telegramHandle = formatTelegramHandle(client.TelegramID);
-              return (
-                <button
-                  type="button"
-                  key={client.id}
-                  onClick={() => openClientModal(client)}
-                  className="flex w-full flex-col gap-2 px-4 py-3 text-left transition hover:bg-slate-900/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-indigo-300">
-                      {clientNumber}
-                    </div>
-                    <div className="flex flex-1 flex-col gap-1">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <p className="text-base font-semibold text-white">{client.Name || 'Нет имени'}</p>
-                          {client.Barber && <p className="text-xs text-slate-400">Любимый барбер: {client.Barber}</p>}
-                        </div>
-                        <div className="hidden text-right text-sm text-slate-300 sm:block">
-                          {phoneDisplay && <p>{phoneDisplay}</p>}
-                          {telegramHandle && <p className="text-xs text-slate-500">{telegramHandle}</p>}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+        <>
+          {renderClientsSection(
+            categorizedClients.visible,
+            'Нет клиентов, которые посещали салон за последние 6 месяцев.',
+          )}
+          <div className="space-y-3 rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
+            <button
+              type="button"
+              onClick={() => setShowArchivedClients((prev) => !prev)}
+              className="flex w-full items-center justify-between gap-3 text-left"
+            >
+              <div>
+                <p className="text-sm font-semibold text-white">Скрытые категории клиентов</p>
+                <p className="text-xs text-slate-400">
+                  Не ходят и ни разу не посещали: {categorizedClients.hidden.length}
+                </p>
+              </div>
+              <span className="rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-300">
+                {showArchivedClients ? 'Скрыть' : 'Показать'}
+              </span>
+            </button>
+            {showArchivedClients &&
+              renderClientsSection(
+                categorizedClients.hidden,
+                'Скрытых клиентов нет.',
+                'archived',
+              )}
           </div>
-        </div>
+        </>
       )}
       <Modal
         title={modalState.record?.Name || 'Клиент'}
@@ -8460,6 +9144,8 @@ const TablesWorkspace = ({
   onServicePriceChange,
   onDeleteService,
   onAddService,
+  onReorderServices,
+  serviceReorderBusy = false,
   onCreatePosition,
   onUpdatePosition,
   onDeletePosition,
@@ -8513,8 +9199,31 @@ const TablesWorkspace = ({
   const [appointmentCalendarView, setAppointmentCalendarView] = useLocalStorage('tables.appointmentsCalendarView', 'week');
   const [appointmentCalendarScale, setAppointmentCalendarScale] = useLocalStorage('tables.appointmentsCalendarScale', 'normal');
   const [appointmentCalendarDate, setAppointmentCalendarDate] = useLocalStorage('tables.appointmentsCalendarDate', getLocalISODateString());
+  const [scheduleFillDays, setScheduleFillDays] = useLocalStorage('tables.schedulesFillDays', 14);
   const restrictStaffBarberFilter = role === ROLE_STAFF && activeTable === 'Appointments';
   const staffBarberId = currentUser?.barberId || null;
+  const clientInsightsLookup = useMemo(() => {
+    const lookup = new Map();
+    (Array.isArray(clients) ? clients : []).forEach((client) => {
+      const variants = [
+        client?.id,
+        client?.telegramId,
+        client?.TelegramID,
+        client?.phone,
+        client?.Phone,
+        client?.name,
+        client?.Name,
+      ]
+        .map((value) => normalizeText(value).toLowerCase())
+        .filter(Boolean);
+      variants.forEach((key) => {
+        if (!lookup.has(key)) {
+          lookup.set(key, client);
+        }
+      });
+    });
+    return lookup;
+  }, [clients]);
   const appointmentTemplate = useMemo(
     () => ({
       id: null,
@@ -8612,7 +9321,7 @@ const TablesWorkspace = ({
               : table === 'Services'
                 ? '/services/full'
               : table === 'Schedules'
-                ? '/schedules'
+                ? `/schedules?days=${encodeURIComponent(normalizeScheduleFillDays(scheduleFillDays))}`
                 : `/${table}`
           )
         ),
@@ -8643,7 +9352,7 @@ const TablesWorkspace = ({
     } finally {
       setIsFetching(false);
     }
-  }, [apiRequest, onOptionsUpdate, resolvedDataTables]);
+  }, [apiRequest, onOptionsUpdate, resolvedDataTables, scheduleFillDays]);
   useEffect(() => {
     fetchTables();
   }, [fetchTables]);
@@ -8675,6 +9384,17 @@ const TablesWorkspace = ({
     const source = tables[activeTable] || [];
     if (!source.length) return [];
     let rows = [...source];
+    if (activeTable === 'Users' && clientInsightsLookup.size) {
+      rows = rows.map((row) => {
+        const match =
+          clientInsightsLookup.get(normalizeText(row.id).toLowerCase()) ||
+          clientInsightsLookup.get(normalizeText(row.TelegramID).toLowerCase()) ||
+          clientInsightsLookup.get(normalizeText(row.Phone).toLowerCase()) ||
+          clientInsightsLookup.get(normalizeText(row.Name).toLowerCase()) ||
+          null;
+        return match ? { ...row, ...match } : row;
+      });
+    }
     if (TABLE_CONFIG[activeTable]?.supportsBarberFilter && selectedBarber !== 'all') {
       rows = rows.filter((row) => normalizeText(row.Barber).toLowerCase() === normalizeText(selectedBarber).toLowerCase());
     }
@@ -8703,7 +9423,7 @@ const TablesWorkspace = ({
       });
     }
     return rows;
-  }, [tables, activeTable, selectedBarber, hiddenStatuses, searchTerm, visibleColumns, sortConfig, showPastAppointments]);
+  }, [tables, activeTable, selectedBarber, hiddenStatuses, searchTerm, visibleColumns, sortConfig, showPastAppointments, clientInsightsLookup]);
   const handleSort = (columnKey) => {
     setSortConfigs((prev) => {
       const current = prev[activeTable];
@@ -8877,6 +9597,8 @@ const TablesWorkspace = ({
               schedules={tables.Schedules || []}
               barbers={barbers}
               currentUser={currentUser}
+              scheduleFillDays={scheduleFillDays}
+              onScheduleFillDaysChange={setScheduleFillDays}
               onScheduleUpdate={
                 role === ROLE_OWNER || role === ROLE_STAFF || role === ROLE_CREATOR
                   ? (recordId, payload) => handleUpdate(recordId, payload, { tableId: 'Schedules' })
@@ -8892,6 +9614,8 @@ const TablesWorkspace = ({
               onPriceChange={onServicePriceChange}
               onDelete={onDeleteService}
               onAdd={onAddService}
+              onReorder={onReorderServices}
+              reorderBusy={serviceReorderBusy}
               role={role}
             />
           )}
@@ -10165,6 +10889,7 @@ const App = () => {
   });
   const [dashboard, setDashboard] = useState(null);
   const [services, setServices] = useState([]);
+  const [serviceReorderBusy, setServiceReorderBusy] = useState(false);
   const [barbers, setBarbers] = useState([]);
   const [botStatus, setBotStatus] = useState(null);
   const [botSettings, setBotSettings] = useState(null);
@@ -10809,6 +11534,18 @@ const handleBarberFieldChange = (id, field, value) => {
       Object.entries(service.prices || {}).map(([key, value]) => [key, value === '' || value == null ? null : Number(value)])
     ),
   });
+  const applyServiceOrder = useCallback((serviceList, orderedIds) => {
+    const safeServices = Array.isArray(serviceList) ? serviceList : [];
+    const safeOrderedIds = Array.isArray(orderedIds) ? orderedIds : [];
+    const orderMap = new Map(safeOrderedIds.map((id, index) => [id, index]));
+    const fallbackStart = safeOrderedIds.length;
+    return sortServicesByOrder(
+      safeServices.map((service, index) => ({
+        ...service,
+        orderIndex: orderMap.has(service.id) ? orderMap.get(service.id) : fallbackStart + index,
+      })),
+    );
+  }, []);
   const deriveBarberLogin = (barberData = {}) => resolveLogin(barberData.login || barberData.name || '');
   const buildBarberPayload = (barberData = {}, fallbackOrder = 0) => {
     const payload = {
@@ -10990,6 +11727,32 @@ const handleBarberFieldChange = (id, field, value) => {
       }
     },
     [role, saveStaffServicePrice, scheduleServiceAutosave, services]
+  );
+  const handleReorderServices = useCallback(
+    async (orderedIds) => {
+      if (role === ROLE_STAFF || serviceReorderBusy || !Array.isArray(orderedIds) || !orderedIds.length) return;
+      serviceSaveTimers.current.forEach((timer) => clearTimeout(timer));
+      serviceSaveTimers.current.clear();
+      const previousServices = services;
+      const nextServices = applyServiceOrder(previousServices, orderedIds);
+      setServices(nextServices);
+      try {
+        setServiceReorderBusy(true);
+        const response = await apiRequest('/services/full/reorder', {
+          method: 'POST',
+          body: JSON.stringify({ orderedIds }),
+        });
+        if (Array.isArray(response?.services)) {
+          setServices(sortServicesByOrder(response.services));
+        }
+      } catch (error) {
+        setServices(previousServices);
+        setGlobalError(error.message || 'Не удалось сохранить порядок услуг');
+      } finally {
+        setServiceReorderBusy(false);
+      }
+    },
+    [apiRequest, applyServiceOrder, role, serviceReorderBusy, services]
   );
   const handleUploadAvatar = useCallback(
     async ({ name, data }) => {
@@ -11538,6 +12301,8 @@ const handleBarberFieldChange = (id, field, value) => {
             onServicePriceChange={handleServicePriceChange}
             onDeleteService={handleDeleteService}
             onAddService={handleAddService}
+            onReorderServices={handleReorderServices}
+            serviceReorderBusy={serviceReorderBusy}
             onCreatePosition={handleCreatePosition}
             onUpdatePosition={handleUpdatePosition}
             onDeletePosition={handleDeletePosition}

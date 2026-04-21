@@ -175,6 +175,40 @@ const registerServiceCatalogRoutes = ({
     }
   });
 
+  app.post("/api/services/full/reorder", authenticateToken, async (req, res) => {
+    if (!isOwnerRequest(req)) {
+      return res.status(403).json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РёР·РјРµРЅРµРЅРёСЏ РїРѕСЂСЏРґРєР° СѓСЃР»СѓРі." });
+    }
+    const orderedIds = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds : [];
+    try {
+      const existingServices = await prisma.services.findMany({
+        select: { id: true, orderIndex: true },
+        orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+      });
+      const knownIds = new Set(existingServices.map((service) => service.id));
+      const uniqueIds = orderedIds
+        .map((value) => normalizeText(value))
+        .filter((value, index, values) => value && knownIds.has(value) && values.indexOf(value) === index);
+      const remainingIds = existingServices
+        .map((service) => service.id)
+        .filter((id) => !uniqueIds.includes(id));
+      const finalOrder = [...uniqueIds, ...remainingIds];
+      await prisma.$transaction(
+        finalOrder.map((id, index) =>
+          prisma.services.update({
+            where: { id },
+            data: { orderIndex: index },
+          }),
+        ),
+      );
+      const services = await getServiceCatalog(true);
+      return res.json({ services });
+    } catch (error) {
+      console.error("Reorder services error:", error);
+      return res.status(500).json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РёР·РјРµРЅРёС‚СЊ РїРѕСЂСЏРґРѕРє СѓСЃР»СѓРі." });
+    }
+  });
+
   app.delete("/api/services/full/:id", authenticateToken, async (req, res) => {
     if (!isOwnerRequest(req)) {
       return res.status(403).json({ error: "Недостаточно прав для удаления услуг." });

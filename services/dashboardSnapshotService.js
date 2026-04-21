@@ -157,6 +157,37 @@ const createDashboardSnapshotService = ({
     });
   };
 
+  const getClientLastVisitDate = (client) => {
+    if (!client?.lastHaircutDate) return null;
+    const parsed = new Date(
+      `${client.lastHaircutDate}T${(client.lastHaircutTime || "00:00").slice(0, 5)}:00`,
+    );
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const buildClientLookup = (clients = []) => {
+    const lookup = new Map();
+    clients.forEach((client) => {
+      [
+        client?.id,
+        client?.telegramId,
+        client?.TelegramID,
+        client?.phone,
+        client?.Phone,
+        client?.name,
+        client?.Name,
+      ]
+        .map((value) => normalizeText(value).toLowerCase())
+        .filter(Boolean)
+        .forEach((key) => {
+          if (!lookup.has(key)) {
+            lookup.set(key, client);
+          }
+        });
+    });
+    return lookup;
+  };
+
   const buildDashboardSnapshot = async (identity = null) => {
     const [
       appointmentsRaw,
@@ -183,6 +214,8 @@ const createDashboardSnapshotService = ({
     const todayKey = formatDateOnly(now);
     const yearAgo = new Date(now);
     yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStartKey = formatDateOnly(monthStart);
     const activeBuckets = splitActiveAppointments(appointments, now);
     const activeAppointments = activeBuckets.active;
     const upcoming = activeBuckets.upcoming;
@@ -205,6 +238,64 @@ const createDashboardSnapshotService = ({
       return { ...client, ...extra };
     });
     const blockedClients = clients.filter((client) => client.isBlocked).length;
+    const sixMonthsAgo = new Date(now);
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const clientLookup = buildClientLookup(clients);
+    const recurringClients = users.filter((user) => {
+      const match =
+        clientLookup.get(normalizeText(user?.id).toLowerCase()) ||
+        clientLookup.get(normalizeText(user?.TelegramID).toLowerCase()) ||
+        clientLookup.get(normalizeText(user?.Phone).toLowerCase()) ||
+        clientLookup.get(normalizeText(user?.Name).toLowerCase()) ||
+        null;
+      if (!match || Number(match.totalConfirmed || 0) <= 0) return false;
+      const lastVisit = getClientLastVisitDate(match);
+      return Boolean(lastVisit && lastVisit >= sixMonthsAgo);
+    }).length;
+    const confirmedMonth = appointments.filter(
+      (appt) =>
+        appt.isConfirmed &&
+        appt.Date &&
+        appt.Date >= monthStartKey,
+    ).length;
+    const barberLookup = new Map();
+    barbers.forEach((barber) => {
+      const variants = [
+        barber?.id,
+        barber?.name,
+        barber?.nickname,
+        barber?.login,
+      ]
+        .map((value) => canonicalizeKey(value))
+        .filter(Boolean);
+      variants.forEach((key) => {
+        if (!barberLookup.has(key)) {
+          barberLookup.set(key, barber);
+        }
+      });
+    });
+    const serviceLookup = buildServiceLookup(services);
+    let incomeMonth = 0;
+    appointments.forEach((appt) => {
+      if (!isCompletedStatus(appt.Status)) return;
+      if (!appt.Date || appt.Date < monthStartKey) return;
+      const serviceNames = splitServiceList(appt.Services);
+      if (!serviceNames.length) return;
+      const barber = barberLookup.get(canonicalizeKey(appt.Barber)) || null;
+      let appointmentGross = 0;
+      serviceNames.forEach((serviceName) => {
+        const service = serviceLookup.get(canonicalizeKey(serviceName));
+        if (!service) return;
+        const price = getServicePriceForBarber(
+          service,
+          barber?.id || null,
+        );
+        const numericPrice = Number(price);
+        if (!Number.isFinite(numericPrice) || numericPrice <= 0) return;
+        appointmentGross += numericPrice;
+      });
+      incomeMonth += appointmentGross;
+    });
     const stats = {
       totalUsers: users.length,
       activeAppointments: activeAppointments.length,
@@ -212,6 +303,9 @@ const createDashboardSnapshotService = ({
       overdueAppointments: overdue.length,
       todaysAppointments,
       confirmedYear,
+      recurringClients,
+      confirmedMonth,
+      incomeMonth,
       blockedClients,
       earningsMonth: null,
       positionName: null,

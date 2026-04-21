@@ -205,3 +205,99 @@ test("dashboard snapshot service builds staff snapshot with filtered stats and e
   assert.equal(snapshot.barbers.length, 1);
   assert.equal(snapshot.backups.length, 0);
 });
+
+test("dashboard snapshot service builds owner snapshot with recurring clients and monthly metrics", async () => {
+  const now = new Date();
+  const currentMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  const day10 = `${currentMonth}-10`;
+  const day20 = `${currentMonth}-20`;
+  const day21 = `${currentMonth}-21`;
+  const service = createDashboardSnapshotService({
+    ...baseDeps(),
+    prisma: {
+      appointments: {
+        async findMany() {
+          return [
+            {
+              id: "appt-1",
+              UserID: "user-1",
+              CustomerName: "Ivan",
+              Phone: "+70000000001",
+              normalizedPhone: "+70000000001",
+              Barber: "Max",
+              Date: day10,
+              Time: "10:00 - 11:00",
+              Status: "done",
+              Services: "Fade",
+              isActive: false,
+              isConfirmed: true,
+              isBlocked: false,
+              startDateTime: `${day10}T10:00:00.000Z`,
+              sortKey: Date.parse(`${day10}T10:00:00Z`),
+            },
+            {
+              id: "appt-2",
+              UserID: "user-1",
+              CustomerName: "Ivan",
+              Phone: "+70000000001",
+              normalizedPhone: "+70000000001",
+              Barber: "Max",
+              Date: day20,
+              Time: "12:00 - 13:00",
+              Status: "done",
+              Services: "Fade",
+              isActive: false,
+              isConfirmed: true,
+              isBlocked: false,
+              startDateTime: `${day20}T12:00:00.000Z`,
+              sortKey: Date.parse(`${day20}T12:00:00Z`),
+            },
+            {
+              id: "appt-3",
+              UserID: "user-2",
+              CustomerName: "Petr",
+              Phone: "+70000000002",
+              normalizedPhone: "+70000000002",
+              Barber: "Leo",
+              Date: day21,
+              Time: "14:00 - 15:00",
+              Status: "done",
+              Services: "Fade",
+              isActive: false,
+              isConfirmed: true,
+              isBlocked: false,
+              startDateTime: `${day21}T14:00:00.000Z`,
+              sortKey: Date.parse(`${day21}T14:00:00Z`),
+            },
+          ];
+        },
+      },
+      users: {
+        async findMany() {
+          return [
+            { id: "user-1", Name: "Ivan", Phone: "+70000000001", Barber: "Max" },
+            { id: "user-2", Name: "Petr", Phone: "+70000000002", Barber: "Leo" },
+          ];
+        },
+        async count() {
+          return 2;
+        },
+      },
+    },
+    getBarbers: async () => [
+      { id: "barber-1", name: "Max" },
+      { id: "barber-2", name: "Leo" },
+    ],
+    getServiceCatalog: async () => [
+      { name: "Fade", prices: { "barber-1": 1000, "barber-2": 900 } },
+    ],
+    formatDateOnly: (date) => date.toISOString().slice(0, 10),
+  });
+
+  const snapshot = await service.buildDashboardSnapshot({ role: "owner" });
+
+  assert.equal(snapshot.stats.recurringClients, 2);
+  assert.equal(snapshot.stats.todaysAppointments, 0);
+  assert.equal(snapshot.stats.confirmedMonth, 3);
+  assert.equal(snapshot.stats.incomeMonth, 2900);
+});

@@ -979,6 +979,14 @@ const buildTimeRangeValue = (start, end) => {
   }
   return safeStart || '';
 };
+const buildManualTimeRangeValue = (start, end) => {
+  const safeStart = sanitizeTimeToken(start);
+  const safeEnd = sanitizeTimeToken(end);
+  if (safeStart && safeEnd) {
+    return `${safeStart} - ${safeEnd}`;
+  }
+  return safeStart || '';
+};
 const addMinutesToTimeToken = (timeValue, minutesToAdd) => {
   const safeTime = sanitizeTimeToken(timeValue);
   if (!safeTime) return '';
@@ -5236,6 +5244,14 @@ const SchedulesView = ({
           sheet: 'bg-rose-500/15 text-rose-100',
         };
   }, []);
+  const scheduleGridStyle = useMemo(
+    () => ({
+      gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+      gridAutoRows: isMobileViewport ? '84px' : '120px',
+      alignItems: 'stretch',
+    }),
+    [isMobileViewport]
+  );
   const calendarBlock = (
     <div
       className="w-full"
@@ -5355,7 +5371,7 @@ const SchedulesView = ({
       </div>
       <div
         className={classNames('grid w-full', isMobileViewport ? 'gap-0.5' : 'gap-1')}
-        style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}
+        style={scheduleGridStyle}
       >
         {monthDays.map((day) => {
           const daySlots = slotsByDate.get(day.key) || [];
@@ -5367,8 +5383,8 @@ const SchedulesView = ({
               type="button"
               onClick={() => openScheduleSheet(day.key)}
               className={classNames(
-                'min-w-0 flex flex-col rounded-2xl bg-slate-950/70 text-left transition hover:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/40',
-                isMobileViewport ? 'h-[84px] rounded-[18px] px-1 py-1.5' : 'min-h-[120px] p-2',
+                'min-w-0 h-full flex flex-col rounded-2xl bg-slate-950/70 text-left transition hover:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/40',
+                isMobileViewport ? 'rounded-[18px] px-1 py-1.5' : 'p-2',
                 day.inCurrentMonth ? 'text-white' : 'text-slate-500',
               )}
             >
@@ -6639,40 +6655,88 @@ const AppointmentTimeField = ({
   startValue,
   endValue,
   onChange,
+  onEndChange,
+  manualEndEnabled = false,
 }) => {
-  const [startPristine, setStartPristine] = useState(() => !startValue);
-  useEffect(() => {
-    setStartPristine(!startValue);
-  }, [startValue]);
+  const startInputRef = useRef(null);
+  const endInputRef = useRef(null);
+  const openPicker = (inputRef) => {
+    const input = inputRef?.current;
+    if (!input) return;
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+      return;
+    }
+    input.focus();
+    input.click?.();
+  };
   const handleStartChange = (event) => {
     const nextStart = normalizeTimeInputValue(event.target.value);
-    setStartPristine(!nextStart);
     onChange?.(nextStart);
+  };
+  const handleEndChange = (event) => {
+    const nextEnd = normalizeTimeInputValue(event.target.value);
+    onEndChange?.(nextEnd);
   };
   return (
     <div className="space-y-1">
       <label className="text-sm text-slate-300">Время</label>
       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
-        <input
-          name="appointmentStartTime"
-          aria-label="Время начала"
-          type="time"
-          step="60"
-          value={startPristine ? '00:00' : startValue || '00:00'}
-          onChange={handleStartChange}
-          className="h-11 min-w-0 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white"
-        />
+        <div className="relative min-w-0">
+          <input
+            ref={startInputRef}
+            name="appointmentStartTime"
+            aria-label="Время начала"
+            type="time"
+            step="60"
+            value={startValue || '00:00'}
+            onChange={handleStartChange}
+            className="crm-sheet-control crm-sheet-time h-11 min-w-0 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 pr-10 text-white"
+          />
+          <button
+            type="button"
+            onClick={() => openPicker(startInputRef)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/90 hover:text-white"
+            aria-label="Показать окно выбора времени"
+            title="Показать окно выбора времени"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M12 8v4l2.8 2.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
         <span className="text-slate-500">-</span>
-        <input
-          name="appointmentEndTime"
-          aria-label="Время окончания"
-          type="time"
-          step="60"
-          value={endValue || '00:00'}
-          readOnly
-          tabIndex={-1}
-          className="h-11 min-w-0 rounded-lg border border-slate-600 bg-slate-900 px-3 text-center text-white"
-        />
+        <div className="relative min-w-0">
+          <input
+            ref={endInputRef}
+            name="appointmentEndTime"
+            aria-label="Время окончания"
+            type="time"
+            step="60"
+            value={endValue || '00:00'}
+            onChange={manualEndEnabled ? handleEndChange : undefined}
+            readOnly={!manualEndEnabled}
+            tabIndex={manualEndEnabled ? 0 : -1}
+            className="crm-sheet-control crm-sheet-time h-11 min-w-0 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 pr-10 text-center text-white"
+          />
+          <button
+            type="button"
+            onClick={() => manualEndEnabled && openPicker(endInputRef)}
+            disabled={!manualEndEnabled}
+            className={classNames(
+              'absolute right-3 top-1/2 -translate-y-1/2',
+              manualEndEnabled ? 'text-white/90 hover:text-white' : 'cursor-default text-slate-600'
+            )}
+            aria-label="Показать окно выбора времени"
+            title="Показать окно выбора времени"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M12 8v4l2.8 2.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -9194,36 +9258,6 @@ const AppointmentModal = ({
     setValidationWarning('');
   }, [appointment, buildDraft, open]);
   const currentAppointmentId = appointment ? getRecordId(appointment) : null;
-  const updateWarningForDraft = useCallback(
-    (nextDraft) => {
-      if (!nextDraft) {
-        setValidationWarning('');
-        return;
-      }
-      const hasBarber = Boolean(normalizeText(nextDraft.Barber));
-      const hasDate = Boolean(getDateOnlyValue(nextDraft.Date));
-      const hasTime = Boolean(parseTimeRangeParts(nextDraft.Time || '').start);
-      if (!hasBarber || !hasDate || !hasTime) {
-        setValidationWarning('');
-        return;
-      }
-      const { warning } = validateDraft(nextDraft);
-      setValidationWarning(warning || '');
-    },
-    [validateDraft],
-  );
-  useEffect(() => {
-    if (!open) return;
-    updateWarningForDraft(draft);
-  }, [
-    open,
-    draft?.Barber,
-    draft?.Date,
-    draft?.Time,
-    schedules,
-    appointments,
-    updateWarningForDraft,
-  ]);
   const validateDraft = useCallback(
     (nextDraft) => {
       if (!nextDraft) {
@@ -9273,7 +9307,7 @@ const AppointmentModal = ({
           return rangesOverlap(draftRange, { start, end });
         });
         if (conflictExists) {
-          errors.push('На это время уже есть другая запись для выбранного барбера.');
+          warnings.push('На это время уже есть другая запись для выбранного барбера.');
         }
       }
       if (draftRange && (schedules || []).length && normalizedBarber && dateOnly) {
@@ -9310,7 +9344,45 @@ const AppointmentModal = ({
     },
     [appointments, schedules, currentAppointmentId]
   );
+  const updateWarningForDraft = useCallback(
+    (nextDraft) => {
+      if (!nextDraft) {
+        setValidationWarning('');
+        return;
+      }
+      const hasBarber = Boolean(normalizeText(nextDraft.Barber));
+      const hasDate = Boolean(getDateOnlyValue(nextDraft.Date));
+      const hasTime = Boolean(parseTimeRangeParts(nextDraft.Time || '').start);
+      if (!hasBarber || !hasDate || !hasTime) {
+        setValidationWarning('');
+        return;
+      }
+      const { warning } = validateDraft(nextDraft);
+      setValidationWarning(warning || '');
+    },
+    [validateDraft]
+  );
+  useEffect(() => {
+    if (!open) return;
+    updateWarningForDraft(draft);
+  }, [
+    open,
+    draft?.Barber,
+    draft?.Date,
+    draft?.Time,
+    schedules,
+    appointments,
+    updateWarningForDraft,
+  ]);
   const servicesSelection = parseMultiValue(draft?.Services);
+  const hasOtherService = useMemo(
+    () => servicesSelection.some((service) => canonicalizeName(service).toLowerCase() === canonicalizeName('Другое').toLowerCase()),
+    [servicesSelection]
+  );
+  const appointmentServiceOptions = useMemo(
+    () => dedupeOptionList([...(options.services || []), 'Другое']),
+    [options.services]
+  );
   const serviceDurationLookup = useMemo(
     () =>
       new Map(
@@ -9337,33 +9409,37 @@ const AppointmentModal = ({
   const appointmentStartTime = draftTimeParts.start;
   const appointmentEndTime = useMemo(
     () => (
-      (appointmentStartTime && selectedServicesDuration > 0
+      (!hasOtherService && appointmentStartTime && selectedServicesDuration > 0
         ? addMinutesToTimeToken(appointmentStartTime, selectedServicesDuration)
         : '') || draftTimeParts.end || ''
     ),
-    [appointmentStartTime, selectedServicesDuration, draftTimeParts.end]
+    [appointmentStartTime, hasOtherService, selectedServicesDuration, draftTimeParts.end]
   );
   const syncDraftTimeWithServices = useCallback(
     (nextDraft) => {
-      if (!nextDraft || !isNew) return nextDraft;
+      if (!nextDraft) return nextDraft;
       const start = extractTimeStart(nextDraft.Time || '');
       if (!start) return nextDraft;
+      const manualDurationAllowed = normalizeMultiValueList(nextDraft.Services).some(
+        (serviceName) => canonicalizeName(serviceName).toLowerCase() === canonicalizeName('Другое').toLowerCase()
+      );
+      if (manualDurationAllowed) return nextDraft;
       const duration = getServicesDuration(nextDraft.Services);
       const nextTime = duration > 0
         ? buildTimeRangeValue(start, addMinutesToTimeToken(start, duration))
-        : buildTimeRangeValue(start, '');
+        : buildTimeRangeValue(start, parseTimeRangeParts(nextDraft.Time || '').end || '');
       if (nextTime === (nextDraft.Time || '')) return nextDraft;
       return { ...nextDraft, Time: nextTime };
     },
-    [getServicesDuration, isNew]
+    [getServicesDuration]
   );
   useEffect(() => {
-    if (!open || !isNew) return;
+    if (!open) return;
     setDraft((prev) => {
       if (!prev) return prev;
       return syncDraftTimeWithServices(prev);
     });
-  }, [open, isNew, selectedServicesDuration, syncDraftTimeWithServices]);
+  }, [open, hasOtherService, selectedServicesDuration, syncDraftTimeWithServices]);
   const linkedClient = useMemo(() => {
     const safeUserId = normalizeText(draft?.UserID);
     const safePhone = normalizePhoneValue(draft?.Phone);
@@ -9379,6 +9455,17 @@ const AppointmentModal = ({
       return false;
     }) || null;
   }, [clients, draft?.CustomerName, draft?.Phone, draft?.UserID]);
+  const appointmentDateInputRef = useRef(null);
+  const openAppointmentDatePicker = () => {
+    const input = appointmentDateInputRef.current;
+    if (!input) return;
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+      return;
+    }
+    input.focus();
+    input.click?.();
+  };
   if (!open || !draft) return null;
   const actionButtonClass = RESPONSIVE_ACTION_BUTTON_CLASS;
   const handleChange = (field, value) => {
@@ -9393,7 +9480,15 @@ const AppointmentModal = ({
     });
   };
   const handleStartTimeChange = (nextStart) => {
-    const nextTime = nextStart ? buildTimeRangeValue(nextStart, '') : '';
+    const nextTime = nextStart
+      ? (hasOtherService
+          ? buildManualTimeRangeValue(nextStart, appointmentEndTime)
+          : buildTimeRangeValue(nextStart, ''))
+      : '';
+    handleChange('Time', nextTime);
+  };
+  const handleEndTimeChange = (nextEnd) => {
+    const nextTime = appointmentStartTime ? buildManualTimeRangeValue(appointmentStartTime, nextEnd) : '';
     handleChange('Time', nextTime);
   };
   const isReminderSent = (value) => value === true || value === 'true' || value === 1 || value === '1';
@@ -9429,9 +9524,9 @@ const AppointmentModal = ({
       accent: getReminderAccent(draft.Reminder2hBarberSent),
     },
   ];
-  const submitDraft = (nextDraft) => {
+  const submitDraft = async (nextDraft) => {
     if (!nextDraft) return;
-    onSave({
+    return onSave({
       id: nextDraft.id,
       payload: {
         CustomerName: nextDraft.CustomerName,
@@ -9446,23 +9541,30 @@ const AppointmentModal = ({
       isNew,
     });
   };
-  const handleSubmit = () => {
-    const { error, warning } = validateDraft(draft);
-    setValidationWarning(warning || '');
+  const handleSubmit = async () => {
+    const { error } = validateDraft(draft);
     if (error) {
       setValidationError(error);
       return;
     }
     setValidationError('');
-    submitDraft(draft);
+    try {
+      await submitDraft(draft);
+    } catch (submitError) {
+      setValidationError(submitError?.message || 'Не удалось сохранить запись.');
+    }
   };
-  const handleMarkCompleted = () => {
+  const handleMarkCompleted = async () => {
     if (!draft) return;
     setValidationError('');
     setValidationWarning('');
     const nextDraft = { ...draft, Status: 'Выполнена' };
     setDraft(nextDraft);
-    submitDraft(nextDraft);
+    try {
+      await submitDraft(nextDraft);
+    } catch (submitError) {
+      setValidationError(submitError?.message || 'Не удалось сохранить запись.');
+    }
   };
   const handleClientAutoFill = (client) => {
     if (!client) return;
@@ -9533,10 +9635,7 @@ const AppointmentModal = ({
       {validationError && (
         <div className="mb-4 rounded-xl border border-rose-600 bg-rose-500/10 px-4 py-2 text-sm text-rose-200">{validationError}</div>
       )}
-      {validationWarning && (
-        <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-400/10 px-4 py-2 text-sm text-amber-200">{validationWarning}</div>
-      )}
-	      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 	        <ClientLookupInput
 	          label="Имя клиента"
 	          value={draft.CustomerName || ''}
@@ -9556,7 +9655,7 @@ const AppointmentModal = ({
             className="h-11 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 text-white"
           />
         </div>
-        <select value={draft.Barber || ''} onChange={(event) => handleChange('Barber', event.target.value)} className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white">
+        <select value={draft.Barber || ''} onChange={(event) => handleChange('Barber', event.target.value)} className="crm-sheet-control crm-sheet-select h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 pr-10 text-white">
           <option value="">Барбер</option>
           {(options.barbers || []).map((barber) => (
             <option key={barber} value={barber}>
@@ -9564,30 +9663,46 @@ const AppointmentModal = ({
             </option>
           ))}
         </select>
-        <input
-          name="appointmentDate"
-          aria-label="Дата"
-          type="date"
-          value={draft.Date ? String(draft.Date).slice(0, 10) : ''}
-          onChange={(event) => handleChange('Date', event.target.value)}
-          className="h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 text-white"
-        />
-        {isNew ? (
+        <div className="relative">
+          <input
+            ref={appointmentDateInputRef}
+            name="appointmentDate"
+            aria-label="Дата"
+            type="date"
+            value={draft.Date ? String(draft.Date).slice(0, 10) : ''}
+            onChange={(event) => handleChange('Date', event.target.value)}
+            className="crm-sheet-control crm-sheet-date h-11 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 pr-10 text-white"
+          />
+          <button
+            type="button"
+            onClick={openAppointmentDatePicker}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/90 hover:text-white"
+            aria-label="Показать окно выбора даты"
+            title="Показать окно выбора даты"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="4" y="5" width="16" height="15" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M8 3.5V7M16 3.5V7M4 9.5H20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div className="space-y-2">
           <AppointmentTimeField
             startValue={appointmentStartTime}
             endValue={appointmentEndTime}
             onChange={handleStartTimeChange}
+            onEndChange={handleEndTimeChange}
+            manualEndEnabled={hasOtherService}
           />
-        ) : (
-          <TimeRangePicker
-            value={draft.Time || ''}
-            onChange={(nextValue) => handleChange('Time', nextValue)}
-            placeholder="Выбрать время"
-          />
-        )}
+          {validationWarning && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              {validationWarning}
+            </div>
+          )}
+        </div>
         <div className="space-y-1">
           <label className="text-sm text-slate-300">Статус</label>
-          <select value={draft.Status || ''} onChange={(event) => handleChange('Status', event.target.value)} className="h-11 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 text-white">
+          <select value={draft.Status || ''} onChange={(event) => handleChange('Status', event.target.value)} className="crm-sheet-control crm-sheet-select h-11 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 pr-10 text-white">
             <option value="">Статус</option>
             {(options.statuses || []).map((status) => (
               <option key={status} value={status}>
@@ -9599,7 +9714,7 @@ const AppointmentModal = ({
 	        <div className="col-span-full w-full min-w-0">
 	          <MultiSelectCheckboxes
 	            label="Услуги"
-	            options={options.services || []}
+	            options={appointmentServiceOptions}
 	            value={servicesSelection}
 	            onChange={(selected) => handleChange('Services', selected.join(', '))}
             placeholder="Нет доступных услуг"
@@ -9743,20 +9858,6 @@ const TablesWorkspace = ({
     });
     return lookup;
   }, [clients]);
-  const appointmentTemplate = useMemo(
-    () => ({
-      id: null,
-      CustomerName: '',
-      Phone: '',
-      Barber: pickBarberForUser(currentUser, dropdownOptions.barbers || []),
-      Date: getLocalISODateString(),
-      Time: '',
-      Status: normalizeStatusValue((dropdownOptions.statuses && dropdownOptions.statuses[0]) || 'Активная'),
-      Services: '',
-      UserID: '',
-    }),
-    [dropdownOptions, currentUser?.displayName, currentUser?.username]
-  );
   const staffBarberChoice = useMemo(
     () => pickBarberForUser(currentUser, dropdownOptions.barbers || []),
     [currentUser, dropdownOptions.barbers],
@@ -10185,7 +10286,11 @@ const TablesWorkspace = ({
             hiddenColumns={hiddenColumns}
             toggleColumn={toggleColumn}
             canCreate={tableSettings.canCreate}
-            onOpenCreate={() => setCreateModalOpen(true)}
+            onOpenCreate={
+              activeTable === 'Appointments'
+                ? () => onCreateAppointment?.()
+                : () => setCreateModalOpen(true)
+            }
             onRefresh={fetchTables}
             showPastAppointments={showPastAppointments}
             setShowPastAppointments={setShowPastAppointments}
@@ -10248,31 +10353,19 @@ const TablesWorkspace = ({
           )}
         </SectionCard>
       )}
-          {tableSettings.canCreate &&
-            (activeTable === 'Appointments' ? (
-              <AppointmentModal
-                open={createModalOpen}
-                appointment={appointmentTemplate}
-                options={dropdownOptions}
-                onClose={() => setCreateModalOpen(false)}
-                onSave={({ payload }) => handleCreateRecord(payload)}
-                isNew
-                clients={clients}
-                serviceCatalog={services}
-              />
-            ) : (
-              <CreateRecordModal
-                isOpen={createModalOpen}
-                onClose={() => setCreateModalOpen(false)}
-                onSave={handleCreateRecord}
-                columns={currentColumns}
-                tableName={tableSettings.label}
-                options={dropdownOptions}
-                tableId={activeTable}
-                clients={clients}
-                hiddenFields={activeTable === 'Appointments' ? ['UserID', 'Reminder2hClientSent', 'Reminder2hBarberSent'] : []}
-              />
-            ))}
+          {tableSettings.canCreate && activeTable !== 'Appointments' && (
+            <CreateRecordModal
+              isOpen={createModalOpen}
+              onClose={() => setCreateModalOpen(false)}
+              onSave={handleCreateRecord}
+              columns={currentColumns}
+              tableName={tableSettings.label}
+              options={dropdownOptions}
+              tableId={activeTable}
+              clients={clients}
+              hiddenFields={activeTable === 'Appointments' ? ['UserID', 'Reminder2hClientSent', 'Reminder2hBarberSent'] : []}
+            />
+          )}
         </>
       )}
     </div>
@@ -11337,6 +11430,42 @@ const LoginScreen = ({ onLogin, error }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [validationError, setValidationError] = useState('');
+  const shellStyle = {
+    minHeight: '100vh',
+    background:
+      'radial-gradient(circle at 12% -4%, rgba(0, 191, 175, 0.16), transparent 24%), radial-gradient(circle at 88% 10%, rgba(0, 191, 175, 0.08), transparent 18%), linear-gradient(180deg, #070909 0%, #0a0d0d 34%, #0b0e0e 100%)',
+  };
+  const frameStyle = {
+    maxWidth: '28rem',
+  };
+  const logoStyle = {
+    height: '14rem',
+    width: 'auto',
+    maxWidth: '500px',
+    objectFit: 'contain',
+    filter: 'drop-shadow(0 12px 32px rgba(0,0,0,0.32))',
+  };
+  const formStyle = {
+    marginTop: '-3rem',
+    borderRadius: '32px',
+    background: 'rgba(15,18,18,0.98)',
+    boxShadow: '0 24px 60px rgba(0,0,0,0.42)',
+    backdropFilter: 'blur(20px)',
+  };
+  const inputStyle = {
+    width: '100%',
+    borderRadius: '1rem',
+    background: 'rgba(7,9,10,0.96)',
+    color: '#ffffff',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.02), inset 0 0 0 1px rgba(15,23,42,0.08)',
+  };
+  const submitStyle = {
+    width: '100%',
+    borderRadius: '1rem',
+    background: '#00bfaf',
+    color: '#031211',
+    boxShadow: '0 16px 34px rgba(0,191,175,0.22)',
+  };
   useEffect(() => {
     if (error) {
       setValidationError('');
@@ -11392,22 +11521,23 @@ const LoginScreen = ({ onLogin, error }) => {
     setValidationError('');
     setPhone(formatPhoneDisplay(raw));
   };
-  const suggestionPlaceholder = 'Например: +7 999 123-45-67';
   const loginLogoSrc = '/Image/site/login/logo.svg';
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#0b0d0d] text-slate-100">
+    <div className="relative min-h-screen overflow-hidden bg-[#0b0d0d] text-slate-100" style={shellStyle}>
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-6">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-md" style={frameStyle}>
           <div className="relative z-0 flex justify-center">
             <img
               src={loginLogoSrc}
               alt="BrotherShop"
               className="h-56 w-auto max-w-[500px] object-contain drop-shadow-[0_12px_32px_rgba(0,0,0,0.32)] sm:h-64 sm:max-w-[560px]"
+              style={logoStyle}
             />
           </div>
           <form
             onSubmit={handleSubmit}
             className="relative z-10 -mt-12 w-full space-y-5 rounded-[32px] bg-[rgba(15,18,18,0.98)] p-7 pt-7 shadow-[0_24px_60px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:-mt-16 sm:pt-9"
+            style={formStyle}
           >
             <div className="space-y-1 text-center">
               <h1 className="text-[2rem] font-extrabold tracking-tight text-white sm:text-3xl">Вход в CRM</h1>
@@ -11426,8 +11556,9 @@ const LoginScreen = ({ onLogin, error }) => {
                     type="tel"
                     value={phone}
                     onChange={(event) => handlePhoneInput(event.target.value)}
-                    placeholder={suggestionPlaceholder}
+                    placeholder="Телефон"
                     className="crm-login-input w-full rounded-2xl bg-[rgba(7,9,10,0.96)] py-3.5 pl-12 pr-4 text-white shadow-inner shadow-black/20 backdrop-blur placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#00bfaf]/25"
+                    style={inputStyle}
                   />
                 </span>
               </label>
@@ -11445,7 +11576,9 @@ const LoginScreen = ({ onLogin, error }) => {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Пароль"
                     className="crm-login-input w-full rounded-2xl bg-[rgba(7,9,10,0.96)] py-3.5 pl-12 pr-12 text-white shadow-inner shadow-black/20 backdrop-blur placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#00bfaf]/25"
+                    style={inputStyle}
                   />
                   <button
                     type="button"
@@ -11470,6 +11603,7 @@ const LoginScreen = ({ onLogin, error }) => {
             <button
               type="submit"
               className="w-full rounded-2xl bg-[#00bfaf] py-3.5 font-semibold text-[#031211] shadow-[0_16px_34px_rgba(0,191,175,0.22)] transition duration-200 hover:scale-[1.01] hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00bfaf]/50"
+              style={submitStyle}
             >
               Войти
             </button>
@@ -12806,7 +12940,7 @@ const handleBarberFieldChange = (id, field, value) => {
 	      setAppointmentModal(buildAppointmentModalState());
 	      fetchAll({ silent: true });
 	    } catch (error) {
-	      setGlobalError(error.message || 'Не удалось сохранить запись');
+	      throw error;
 	    }
 	  };
 	  const handleQuickUpdateAppointmentStatus = useCallback(

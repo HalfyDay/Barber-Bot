@@ -310,7 +310,11 @@ const registerAdminCrudRoutes = ({
     }
     try {
       try {
-        await appointmentService.validateAppointmentRecord(payload);
+        await appointmentService.validateAppointmentRecord(payload, {
+          allowMissingSchedule: true,
+          allowOutsideWorkingHours: true,
+          allowBusySlot: true,
+        });
       } catch (error) {
         if (respondWithAppointmentDomainError(res, error)) {
           return;
@@ -366,6 +370,9 @@ const registerAdminCrudRoutes = ({
       try {
         await appointmentService.validateAppointmentRecord(nextAppointment, {
           excludeAppointmentId: id,
+          allowMissingSchedule: true,
+          allowOutsideWorkingHours: true,
+          allowBusySlot: true,
         });
       } catch (error) {
         if (respondWithAppointmentDomainError(res, error)) {

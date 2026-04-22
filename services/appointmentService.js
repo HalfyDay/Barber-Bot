@@ -252,6 +252,9 @@ const createAppointmentService = ({
     const safeTime = normalizeText(appointment?.Time);
     const excludeAppointmentId = normalizeText(options.excludeAppointmentId);
     const prismaClient = options.prismaClient || prisma;
+    const allowMissingSchedule = options.allowMissingSchedule === true;
+    const allowOutsideWorkingHours = options.allowOutsideWorkingHours === true;
+    const allowBusySlot = options.allowBusySlot === true;
 
     if (!safeBarber) {
       throw createError("INVALID_BARBER");
@@ -266,12 +269,28 @@ const createAppointmentService = ({
 
     const workingHours = await getWorkingHoursForBarberDate(safeBarber, safeDate, prismaClient);
     if (!workingHours) {
+      if (allowMissingSchedule) {
+        return {
+          date: safeDate,
+          time: safeTime,
+          workingHours: null,
+          appointmentRange,
+        };
+      }
       throw createError("NO_SCHEDULE");
     }
 
     const [startMinute, endMinute] = appointmentRange;
     const [workStart, workEnd] = workingHours;
     if (startMinute < workStart || endMinute > workEnd) {
+      if (allowOutsideWorkingHours) {
+        return {
+          date: safeDate,
+          time: safeTime,
+          workingHours,
+          appointmentRange,
+        };
+      }
       throw createError("OUTSIDE_WORKING_HOURS");
     }
 
@@ -282,6 +301,14 @@ const createAppointmentService = ({
       prismaClient,
     );
     if (!canFitTimeRange(startMinute, endMinute - startMinute, busyIntervals)) {
+      if (allowBusySlot) {
+        return {
+          date: safeDate,
+          time: safeTime,
+          workingHours,
+          appointmentRange,
+        };
+      }
       throw createError("SLOT_TAKEN");
     }
 

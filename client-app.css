@@ -2363,6 +2363,11 @@ img.media-wave.is-ready {
   height: var(--nav-booking-size);
 }
 
+.bottom-nav .nav-pill.nav-pill-booking svg {
+  width: var(--nav-booking-size);
+  height: var(--nav-booking-size);
+}
+
 .bottom-nav .nav-pill.nav-pill-booking {
   width: var(--nav-booking-size);
   min-height: var(--nav-booking-size);

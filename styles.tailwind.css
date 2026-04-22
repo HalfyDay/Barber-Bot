@@ -2,6 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  .crm-sheet-control {
+    color-scheme: dark;
+    appearance: none;
+    -webkit-appearance: none;
+    background-repeat: no-repeat;
+    background-position: right 0.875rem center;
+    background-size: 1rem 1rem;
+  }
+
+  .crm-sheet-control::-webkit-calendar-picker-indicator {
+    opacity: 0;
+    cursor: pointer;
+    width: 2rem;
+    min-width: 2rem;
+    margin: 0;
+  }
+
+  .crm-sheet-select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+
+  .crm-sheet-control::-ms-expand {
+    display: none;
+  }
+}
+
 body {
     font-family: 'Inter', sans-serif;
     -webkit-font-smoothing: antialiased;

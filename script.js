@@ -11659,6 +11659,7 @@ const App = () => {
   const [connectionStatus, setConnectionStatus] = useState('unknown');
   const confirmResolverRef = useRef(null);
   const fetchAllRef = useRef(null);
+  const systemDataLoadedRef = useRef(false);
   const role = normalizeRoleValue(session?.role);
   const isCreator = role === ROLE_CREATOR;
   const isOwner = role === ROLE_OWNER;
@@ -11870,22 +11871,16 @@ const apiRequest = useCallback(
     () => apiRequest('/assets/avatars'),
     [apiRequest]
   );
-  const fetchAll = useCallback(async ({ silent = false } = {}) => {
-	    if (!session?.token) return;
-	    if (!silent) {
-	      setLoading(true);
-	      setGlobalError('');
-	    }
-	    try {
-	      const overview = await apiRequest('/dashboard/overview');
-	      setDashboard(overview);
+  const fetchSystemResources = useCallback(
+    async ({ force = false } = {}) => {
+      if (!session?.token) return null;
+      if (!canAccessSystem && !canAccessBot) return null;
+      if (!force && systemDataLoadedRef.current) return null;
       const withFallback = (request, fallback, label) =>
         request.catch((error) => {
           console.warn(`${label} fetch skipped:`, error?.message || error);
           return fallback;
         });
-      const servicesPromise = withFallback(apiRequest('/services/full'), { services: [] }, 'Services');
-      const barbersPromise = withFallback(apiRequest('/barbers/full'), [], 'Barbers');
       const botStatusPromise = canAccessBot
         ? withFallback(apiRequest('/bot/status'), { status: null, settings: null, token: null }, 'Bot status')
         : Promise.resolve({ status: null, settings: null, token: null });
@@ -11907,51 +11902,17 @@ const apiRequest = useCallback(
       const updatePromise = canAccessSystem
         ? withFallback(apiRequest('/system/update'), null, 'Updates')
         : Promise.resolve(null);
-      const optionsPromise = withFallback(
-        apiRequest('/options/appointments'),
-        { statuses: [], barbers: [], services: [] },
-        'Options',
-      );
-      const [
-        servicesFull,
-        barbersFull,
-        botState,
-        botMessagesPayload,
-        botMenuPayload,
-        sitePayload,
-        siteOnlinePayload,
-        license,
-        update,
-        options,
-      ] = await Promise.all([
-        servicesPromise,
-        barbersPromise,
-        botStatusPromise,
-        botMessagesPromise,
-        botMenuPromise,
-        siteConfigPromise,
-        siteOnlinePromise,
-        licensePromise,
-        updatePromise,
-        optionsPromise,
-      ]);
-      const resolvedServices = Array.isArray(servicesFull)
-        ? servicesFull
-        : Array.isArray(servicesFull?.services)
-          ? servicesFull.services
-          : [];
-      const serviceBarbers = Array.isArray(servicesFull?.barbers) ? servicesFull.barbers : [];
-      setServices(resolvedServices);
-      const resolvedBarbers =
-        Array.isArray(barbersFull) && barbersFull.length
-          ? barbersFull
-          : serviceBarbers.length
-            ? serviceBarbers
-            : Array.isArray(overview.barbers)
-              ? overview.barbers
-              : [];
-      setBarbers(resolvedBarbers);
-      setBotSettings(botState.settings || overview.bot?.settings || null);
+      const [botState, botMessagesPayload, botMenuPayload, sitePayload, siteOnlinePayload, license, update] =
+        await Promise.all([
+          botStatusPromise,
+          botMessagesPromise,
+          botMenuPromise,
+          siteConfigPromise,
+          siteOnlinePromise,
+          licensePromise,
+          updatePromise,
+        ]);
+      setBotSettings(botState.settings || null);
       setBotStatus(botState.status);
       setBotToken(botState.token || null);
       setBotMessages(canAccessBot ? botMessagesPayload || [] : []);
@@ -11962,8 +11923,34 @@ const apiRequest = useCallback(
       setSiteOnlineStats(canAccessSystem ? siteOnlinePayload : null);
       setLicenseStatus(canAccessSystem ? license : null);
       setUpdateInfo(canAccessSystem ? normalizeUpdateInfo(update) : null);
-      const normalizedOptions = { ...options, statuses: normalizeStatusList(options.statuses || []) };
-      setOptionsCache(normalizedOptions);
+      systemDataLoadedRef.current = true;
+      return {
+        botState,
+        botMessagesPayload,
+        botMenuPayload,
+        sitePayload,
+        siteOnlinePayload,
+        license,
+        update,
+      };
+    },
+    [apiRequest, canAccessBot, canAccessSystem, session?.token]
+  );
+  const fetchAll = useCallback(async ({ silent = false } = {}) => {
+	    if (!session?.token) return;
+	    if (!silent) {
+	      setLoading(true);
+	      setGlobalError('');
+	    }
+	    try {
+	      const overview = await apiRequest('/dashboard/overview');
+	      setDashboard(overview);
+      setServices(Array.isArray(overview?.services) ? overview.services : []);
+      setBarbers(Array.isArray(overview?.barbers) ? overview.barbers : []);
+      setBotSettings(overview?.bot?.settings || null);
+      if (activeTab === 'system') {
+        await fetchSystemResources();
+      }
 	    } catch (error) {
 	      console.error(error);
 	      if (!silent) {
@@ -11974,12 +11961,20 @@ const apiRequest = useCallback(
 	        setLoading(false);
 	      }
 	    }
-	  }, [apiRequest, canAccessBot, canAccessSystem, session?.token]);
+	  }, [activeTab, apiRequest, fetchSystemResources, session?.token]);
   useEffect(() => {
     fetchAllRef.current = fetchAll;
   }, [fetchAll]);
   useEffect(() => {
-    if (!canAccessSystem || !session?.token) return undefined;
+    if (session?.token) return;
+    systemDataLoadedRef.current = false;
+  }, [session?.token]);
+  useEffect(() => {
+    if (!session?.token || activeTab !== 'system') return;
+    fetchSystemResources();
+  }, [activeTab, fetchSystemResources, session?.token]);
+  useEffect(() => {
+    if (!canAccessSystem || !session?.token || activeTab !== 'system') return undefined;
     const intervalId = window.setInterval(async () => {
       try {
         const payload = await apiRequest('/system/site/online');
@@ -11989,7 +11984,7 @@ const apiRequest = useCallback(
       }
     }, 30000);
     return () => window.clearInterval(intervalId);
-  }, [apiRequest, canAccessSystem, session?.token]);
+  }, [activeTab, apiRequest, canAccessSystem, session?.token]);
   const handleBlockClient = useCallback(
     async (clientId, blocked = true) => {
       if (!clientId) throw new Error('No client id');
@@ -12098,7 +12093,8 @@ const apiRequest = useCallback(
     const shouldRefreshViews =
       activeTab === 'dashboard' ||
       (activeTab === 'tables' && activeDataTable === 'Appointments');
-    if (!shouldRefreshViews) return undefined;
+    const shouldUsePolling = !canUseRealtime || connectionStatus !== 'online' || !realtimeSnapshot;
+    if (!shouldRefreshViews || !shouldUsePolling) return undefined;
     let cancelled = false;
     let inFlight = false;
     const runRefresh = async () => {
@@ -12116,7 +12112,7 @@ const apiRequest = useCallback(
       cancelled = true;
       clearInterval(interval);
     };
-  }, [activeDataTable, activeTab, refreshRealtimeViews, session?.token]);
+  }, [activeDataTable, activeTab, canUseRealtime, connectionStatus, realtimeSnapshot, refreshRealtimeViews, session?.token]);
   const handleCreatePosition = useCallback(
     (payload) => apiRequest('/Positions', { method: 'POST', body: JSON.stringify(payload) }),
     [apiRequest]
@@ -13388,5 +13384,3 @@ const renderApp = () => {
   }
 };
 renderApp();
-
-

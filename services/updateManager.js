@@ -520,6 +520,18 @@ const hasChangedFile = (files = [], matcher) => {
   }
   return files.includes(matcher);
 };
+const shouldRebuildWebForChangedFile = (file = '') =>
+  [
+    'script.js',
+    'bot-constructor.js',
+    'styles.tailwind.css',
+    'tailwind.config.js',
+    'index.html',
+    'manifest.webmanifest',
+    'service-worker.js',
+  ].includes(file) ||
+  file.startsWith('crm-source/') ||
+  file === 'scripts/buildSourceBundle.js';
 const removeWebBuildOutputs = async () => {
   for (const target of WEB_BUILD_OUTPUTS) {
     try {
@@ -637,17 +649,7 @@ const applyUpdate = async () => {
     const shouldRunWebBuild =
       !changedFiles.length ||
       shouldRunNodeInstall ||
-      hasChangedFile(changedFiles, (file) =>
-        [
-          'script.js',
-          'bot-constructor.js',
-          'styles.tailwind.css',
-          'tailwind.config.js',
-          'index.html',
-          'manifest.webmanifest',
-          'service-worker.js',
-        ].includes(file),
-      );
+      hasChangedFile(changedFiles, shouldRebuildWebForChangedFile);
     if (shouldRunNodeInstall) {
       await runCommand(resolveUpdateNpmInstallCommand());
     } else {

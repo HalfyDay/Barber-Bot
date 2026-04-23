@@ -9952,8 +9952,10 @@ const TablesWorkspace = ({
     setIsFetching(true);
     setTableError('');
     try {
-      const [tableResponse, rawOptions] = await Promise.all([
+      const shouldLoadScheduleContext = activeTable === 'Appointments';
+      const [tableResponse, schedulesResponse, rawOptions] = await Promise.all([
         apiRequest(resolveTableEndpoint(activeTable)),
+        shouldLoadScheduleContext ? apiRequest(resolveTableEndpoint('Schedules')) : Promise.resolve(null),
         sharedOptions ? Promise.resolve(null) : apiRequest('/options/appointments'),
       ]);
       const records =
@@ -9964,13 +9966,20 @@ const TablesWorkspace = ({
           : Array.isArray(tableResponse)
             ? tableResponse
             : [];
-      setTables((prev) => ({
-        ...prev,
-        [activeTable]:
-          activeTable === 'Appointments'
-            ? records.map((row) => ({ ...row, Status: normalizeStatusValue(row.Status) }))
-            : records,
-      }));
+      const scheduleRecords = Array.isArray(schedulesResponse) ? schedulesResponse : [];
+      setTables((prev) => {
+        const nextTables = {
+          ...prev,
+          [activeTable]:
+            activeTable === 'Appointments'
+              ? records.map((row) => ({ ...row, Status: normalizeStatusValue(row.Status) }))
+              : records,
+        };
+        if (shouldLoadScheduleContext) {
+          nextTables.Schedules = scheduleRecords;
+        }
+        return nextTables;
+      });
       if (rawOptions) {
         const normalizedOptions = {
           ...rawOptions,

@@ -3,9 +3,28 @@ param(
 )
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
+$serverEntryPath = Join-Path $projectRoot "server.js"
+
+function Stop-ExistingProjectNodeServer {
+  $nodeProcesses = Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue
+  foreach ($process in ($nodeProcesses | Where-Object { $_.CommandLine })) {
+    $commandLine = [string]$process.CommandLine
+    if ($commandLine -notmatch [regex]::Escape("server.js")) {
+      continue
+    }
+    if ($process.ProcessId -eq $PID) {
+      continue
+    }
+    Write-Host "Stopping existing local app process (PID $($process.ProcessId))..."
+    Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
+    Start-Sleep -Milliseconds 800
+  }
+}
 
 Push-Location $projectRoot
 try {
+  Stop-ExistingProjectNodeServer
+
   Write-Host "Checking project-local PostgreSQL..."
   npm run postgres:portable:status | Out-Null
   if ($LASTEXITCODE -ne 0) {

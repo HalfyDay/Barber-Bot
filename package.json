@@ -4,6 +4,9 @@
   "description": "BrotherShop CRM and booking platform",
   "main": "server.js",
   "scripts": {
+    "build:crm-source": "node scripts/buildSourceBundle.js crm-source crm-source/manifest.json generated/crm-entry.js",
+    "build:server-source": "node scripts/buildSourceBundle.js server-source server-source/manifest.json server.generated.js",
+    "build:sources": "npm run build:crm-source && npm run build:server-source",
     "test": "node --test tests/*.test.js",
     "start": "node server.js",
     "prisma:generate:postgres": "node scripts/prismaGeneratePostgresClient.js",
@@ -30,7 +33,7 @@
     "db:smoke-preflight": "node scripts/postgresSmokePreflight.js",
     "db:cutover-packet": "node scripts/postgresCutoverPacket.js",
     "build:css": "tailwindcss -i styles.tailwind.css -o styles.css --minify",
-    "build:web": "npm run build:css && babel bot-constructor.js --out-file bot-constructor.bundle.js --source-maps inline && babel script.js --out-file script.bundle.js --source-maps inline"
+    "build:web": "npm run build:crm-source && npm run build:css && babel bot-constructor.js --out-file bot-constructor.bundle.js --source-maps inline && babel generated/crm-entry.js --out-file script.bundle.js --source-maps inline"
   },
   "keywords": [],
   "author": "",

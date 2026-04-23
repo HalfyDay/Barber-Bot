@@ -45,6 +45,9 @@ __pycache__/
 /dist/
 /build/
 /tmp
+/generated/*.js
+/generated/*.map
+/server.generated.js
 /generated/prisma-postgresql-client/
 /android-app/.gradle/
 /android-app/local.properties

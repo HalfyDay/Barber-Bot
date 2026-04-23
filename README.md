@@ -4,13 +4,36 @@ Web CRM + site for a barbershop.
 Stack: Node.js, Express, Prisma, PostgreSQL, Python Telegram bot.
 
 ## Project structure
-- `server.js` - main API and runtime orchestration
+- `server.js` - thin server bootstrap that rebuilds and runs `server.generated.js`
 - `BotBrotherShop.py` - Telegram bot
-- `script.js` / `script.bundle.js` - web client logic
+- `script.js` - thin note/stub; the CRM bundle is built from `generated/crm-entry.js`
+- `script.bundle.js` - compiled CRM browser bundle
+- `crm-source/` - CRM source split into domain modules
+- `server-source/` - server source split into bootstrap/runtime modules
+- `generated/` - generated frontend entry files and other build artifacts
+- `server.generated.js` - generated server runtime entry built from `server-source/`
 - `prisma/` - schema and migrations
 - `services/` - update/license and helper services
 - `scripts/` - Ubuntu deploy and healthcheck scripts
 - `deploy/systemd/` - ready systemd service file
+
+## Source build flow
+- CRM source of truth: `crm-source/*.js`
+- Server source of truth: `server-source/*.js`
+- CRM manifest: `crm-source/manifest.json`
+- Server manifest: `server-source/manifest.json`
+- Concatenation helper: `scripts/buildSourceBundle.js`
+
+Commands:
+- `npm run build:crm-source` -> rebuilds `generated/crm-entry.js`
+- `npm run build:server-source` -> rebuilds `server.generated.js`
+- `npm run build:sources` -> rebuilds both generated entry files
+- `npm run build:web` -> rebuilds CRM source entry, CSS and browser bundle
+
+Operational note:
+- edit files in `crm-source/` and `server-source/`
+- do not edit `generated/*.js` manually
+- `server.js` rebuilds `server.generated.js` on startup before requiring it
 
 ## Local run
 1. Install dependencies:

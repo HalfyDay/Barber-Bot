@@ -1,0 +1,18 @@
+[
+  "00-core-config.js",
+  "01-domain-utils.js",
+  "02-ui-shell.js",
+  "10-dashboard.js",
+  "20-barbers.js",
+  "30-services-view.js",
+  "31-schedules-positions.js",
+  "32-revenue-view.js",
+  "33-editable-controls.js",
+  "40-table-toolbar-board.js",
+  "41-appointments-table-view.js",
+  "42-data-table-clients.js",
+  "41-table-modals.js",
+  "42-tables-workspace.js",
+  "50-system.js",
+  "60-auth-app.js"
+]

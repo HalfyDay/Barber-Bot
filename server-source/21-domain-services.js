@@ -1,0 +1,253 @@
+﻿  const error = legacyCrudGuard.ensureTableAllowed(tableName);
+  if (!error) return false;
+  res.status(error.status || 410).json({
+    error: error.message,
+    code: error.code || "LEGACY_ROUTE_DISABLED",
+    tableName: error.tableName || normalizeText(tableName),
+    route: error.targetRoute || null,
+  });
+  return true;
+};
+const {
+  buildHomeIdentity,
+  hashHomePassword,
+  verifyHomePassword,
+  toPublicHomeUser,
+  toPublicHomeProfile,
+  buildLimitBlockedMessage,
+  resolveHomeBookingUser,
+} = createHomeProfileService({
+  normalizeText,
+  normalizePhone,
+  randomBytes,
+  scryptSync,
+  timingSafeEqual,
+  homeMinPasswordLength: HOME_MIN_PASSWORD_LENGTH,
+  homePasswordHashLength: HOME_PASSWORD_HASH_LENGTH,
+  homeProfileChangeCooldownMs: HOME_PROFILE_CHANGE_COOLDOWN_MS,
+  findHomeUserById,
+});
+const {
+  signSessionToken,
+  verifyTokenGracefully,
+  authenticateToken,
+  authenticateStream,
+  authenticateBotInternal,
+  signHomeSessionToken,
+  authenticateHomeToken,
+  handleLoginOptions,
+  handleLogin,
+} = createAuthService({
+  jwt,
+  jwtSecret: JWT_SECRET,
+  tokenExpiresIn: TOKEN_EXPIRES_IN,
+  tokenRefreshThresholdMs: TOKEN_REFRESH_THRESHOLD_MS,
+  homeJwtSecret: HOME_JWT_SECRET,
+  homeTokenExpiresIn: HOME_TOKEN_EXPIRES_IN,
+  homeTokenRefreshThresholdMs: HOME_TOKEN_REFRESH_THRESHOLD_MS,
+  botInternalApiToken: BOT_INTERNAL_API_TOKEN,
+  resolveUserIdentity,
+  normalizeText,
+  normalizePhone,
+  normalizeLogin,
+  buildHomeIdentity,
+  creatorAccount: CREATOR_ACCOUNT,
+  creatorRole: ROLE_CREATOR,
+  prisma,
+  isDatabaseCorruptionError,
+  buildDatabaseCorruptionMessage,
+});
+const HOME_PROFILE_SELECT = {
+  ...HOME_USER_SELECT,
+  LastNameChanged: true,
+  homePhoneChangedAt: true,
+  homeTelegramChangedAt: true,
+  TelegramID: true,
+};
+const { listBackups, createBackup, restoreBackup } = createBackupService({
+  fs,
+  path,
+  BACKUP_DIR,
+  prisma,
+  runtimeConfig: getPrismaRuntimeConfig(process.env),
+});
+const {
+  ensureBootstrapData,
+  normalizeStoredAppointmentStatuses,
+  seedServicesFromCost,
+  getBarbers,
+  propagateBarberRename,
+  ensureBotSettingsRecord,
+  getBotSettings,
+  getServiceCatalog,
+  getHomeBookingSettings,
+} = createCatalogConfigService({
+  prisma,
+  randomUUID,
+  normalizeText,
+  canonicalizeKey,
+  normalizeAppointmentStatus,
+  DEFAULT_BOT_DESCRIPTION,
+  DEFAULT_ABOUT_TEXT,
+  RESERVED_COST_FIELDS,
+  buildBarberLookup,
+  resolveBarberIdFromLookup,
+  filterServicesForIdentity,
+  registerBarberAlias,
+  sanitizeCommissionRates,
+  onBarberLookupRefresh: (lookup) => {
+    setBarberAliasLookup(lookup);
+    barberAliasLookup = getBarberAliasLookup();
+  },
+  logger: console,
+});
+getBarbers({ includeInactive: true }).catch((error) =>
+  console.warn("Initial barbers preload failed:", error.message),
+);
+ensureBotSettingsRecord().catch((error) =>
+  console.warn("Initial bot settings preload failed:", error.message),
+);
+const {
+  buildBotInternalError,
+  getUserBookingSummaryByTelegram,
+  registerOrUpdateBotUser,
+  updateBotUserNameByTelegram,
+  updateBotUserPhoneByTelegram,
+  listBotAvailabilityDates,
+  listBotAvailabilityTimes,
+} = createBotUserService({
+  prisma,
+  randomUUID,
+  normalizeText,
+  normalizePhone,
+  toTelegramIdNumber,
+  findAnyUserByTelegramId,
+  findAnyUserByPhone,
+  getHomeBookingSettings,
+  getBarbers,
+  buildDateWindow,
+  appointmentService,
+  formatDateOnly,
+  isActiveStatus,
+  isCompletedStatus,
+  normalizeAppointmentStatus,
+  statusNoShow: STATUS_NO_SHOW,
+});
+const telegramAuthService = createTelegramAuthService({
+  prisma,
+  normalizeText,
+  normalizePhone,
+  getRequestById: getTelegramAuthRequestById,
+  getRequestByCode: getTelegramAuthRequestByCode,
+  updateRequestById: updateTelegramAuthRequestById,
+  markExpiredRequests: markExpiredTelegramAuthRequests,
+  findUserByTelegramId: findAnyUserByTelegramId,
+  findUserByPhone: findAnyUserByPhone,
+  toTelegramIdNumber,
+  buildError: buildBotInternalError,
+  flowLogin: TELEGRAM_AUTH_FLOW_LOGIN,
+  flowProfileLink: TELEGRAM_AUTH_FLOW_PROFILE_LINK,
+  statusPending: TELEGRAM_AUTH_STATUS_PENDING,
+  statusCompleted: TELEGRAM_AUTH_STATUS_COMPLETED,
+  statusFailed: TELEGRAM_AUTH_STATUS_FAILED,
+  statusExpired: TELEGRAM_AUTH_STATUS_EXPIRED,
+});
+const { processBotInternalTelegramAuthStart, processBotInternalTelegramAuthPhone } =
+  telegramAuthService;
+const {
+  botRuntime,
+  serializeBotRuntime,
+  readBotToken,
+  writeBotToken,
+  startBotProcess,
+  stopBotProcess,
+  ensureBotProcessState,
+} = createBotRuntimeService({
+  spawn,
+  pathExistsSync: fs.existsSync,
+  processEnv: process.env,
+  cwd: __dirname,
+  pythonExecutable,
+  botScriptPath,
+  getBotSettings,
+  ensureBotSettingsRecord,
+  prisma,
+  normalizeText,
+});
+const {
+  getUserMeta,
+  updateUserMeta,
+  getSiteSettings,
+  updateSiteSettings,
+  applyReferralCode,
+  buildReferralPayload,
+  resolveBsTransferRecipient,
+  adjustUserBsBalance,
+  transferBsBalance,
+  applyBsToBookingAppointment,
+  refundBsForCancelledAppointment,
+  buildHomeAppPayload,
+  buildPublicHomePayload,
+  buildUserInsightsMap,
+} = createHomeClientStoreService({
+  fs,
+  dataFilePath: HOME_CLIENT_STORE_PATH,
+  randomUUID,
+  normalizeText,
+  normalizePhone,
+  canonicalizeKey,
+  prisma,
+  readBlockedUsers,
+  getServiceCatalog,
+  getBarbers,
+  getBotSettings,
+  mapAppointment,
+  splitServiceList,
+  getServicePriceForBarber,
+  isCompletedStatus,
+  countAppointmentWarnings,
+  warningLookbackDays: WARNING_LOOKBACK_DAYS,
+  warningBlockThreshold: WARNING_BLOCK_THRESHOLD,
+});
+const REALTIME_POLL_INTERVAL_MS = Math.max(
+  2000,
+  Number(process.env.REALTIME_POLL_INTERVAL_MS || "5000") || 5000,
+);
+const REALTIME_KEEPALIVE_MS = 15000;
+const DASHBOARD_SNAPSHOT_CACHE_TTL_MS = Math.max(
+  1000,
+  Number(process.env.DASHBOARD_SNAPSHOT_CACHE_TTL_MS || "15000") || 15000,
+);
+const {
+  buildDashboardSnapshot,
+  buildRealtimeAppointmentsPayload,
+} = createDashboardSnapshotService({
+  prisma,
+  getBarbers,
+  getServiceCatalog,
+  getBotSettings,
+  listBackups,
+  readBlockedUsers,
+  mapAppointment,
+  formatDateOnly,
+  splitActiveAppointments,
+  normalizePhone,
+  normalizeText,
+  countAppointmentWarnings,
+  countBlockedClientsFromAppointments,
+  buildServiceLookup,
+  getServicePriceForBarber,
+  splitServiceList,
+  filterAppointmentsForIdentity,
+  filterBarbersForIdentity,
+  isStaffIdentity,
+  matchesIdentityBarber,
+  isCompletedStatus,
+  canonicalizeKey,
+  getWarningCutoffDate,
+  warningBlockThreshold: WARNING_BLOCK_THRESHOLD,
+  botRuntime,
+  buildUserInsightsMap,
+});
+const dashboardSnapshotCache = new Map();
+

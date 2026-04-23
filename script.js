@@ -9935,52 +9935,57 @@ const TablesWorkspace = ({
       return prev;
     });
   }, [setSortConfigs]);
+  const resolveTableEndpoint = useCallback(
+    (table) =>
+      table === 'Appointments'
+        ? '/appointments'
+        : table === 'Barbers'
+          ? '/barbers'
+          : table === 'Services'
+            ? '/services/full'
+            : table === 'Schedules'
+              ? `/schedules?days=${encodeURIComponent(normalizeScheduleFillDays(scheduleFillDays))}`
+              : `/${table}`,
+    [scheduleFillDays]
+  );
   const fetchTables = useCallback(async () => {
     setIsFetching(true);
     setTableError('');
     try {
-      const responses = await Promise.all([
-        ...resolvedDataTables.map((table) =>
-          apiRequest(
-            table === 'Appointments'
-              ? '/appointments'
-              : table === 'Barbers'
-                ? '/barbers'
-              : table === 'Services'
-                ? '/services/full'
-              : table === 'Schedules'
-                ? `/schedules?days=${encodeURIComponent(normalizeScheduleFillDays(scheduleFillDays))}`
-                : `/${table}`
-          )
-        ),
-        apiRequest('/options/appointments'),
+      const [tableResponse, rawOptions] = await Promise.all([
+        apiRequest(resolveTableEndpoint(activeTable)),
+        sharedOptions ? Promise.resolve(null) : apiRequest('/options/appointments'),
       ]);
-      const nextTables = {};
-      resolvedDataTables.forEach((table, index) => {
-        const responsePayload = responses[index] || [];
-        const records =
-          table === 'Services'
-            ? Array.isArray(responsePayload?.services)
-              ? responsePayload.services
-              : []
-            : responsePayload;
-        nextTables[table] = table === 'Appointments' ? records.map((row) => ({ ...row, Status: normalizeStatusValue(row.Status) })) : records;
-      });
-      const rawOptions = responses[resolvedDataTables.length] || { barbers: [], services: [], statuses: [] };
-      const normalizedOptions = {
-        ...rawOptions,
-        statuses: normalizeStatusList(rawOptions.statuses || []),
-      };
-      setTables(nextTables);
-      setDropdownOptions(normalizedOptions);
-      onOptionsUpdate?.(normalizedOptions);
+      const records =
+        activeTable === 'Services'
+          ? Array.isArray(tableResponse?.services)
+            ? tableResponse.services
+            : []
+          : Array.isArray(tableResponse)
+            ? tableResponse
+            : [];
+      setTables((prev) => ({
+        ...prev,
+        [activeTable]:
+          activeTable === 'Appointments'
+            ? records.map((row) => ({ ...row, Status: normalizeStatusValue(row.Status) }))
+            : records,
+      }));
+      if (rawOptions) {
+        const normalizedOptions = {
+          ...rawOptions,
+          statuses: normalizeStatusList(rawOptions.statuses || []),
+        };
+        setDropdownOptions(normalizedOptions);
+        onOptionsUpdate?.(normalizedOptions);
+      }
     } catch (error) {
       console.error('Table fetch failed', error);
       setTableError(error.message || 'Не удалось загрузить таблицы');
     } finally {
       setIsFetching(false);
     }
-  }, [apiRequest, onOptionsUpdate, resolvedDataTables, scheduleFillDays]);
+  }, [activeTable, apiRequest, onOptionsUpdate, resolveTableEndpoint, sharedOptions]);
   useEffect(() => {
     fetchTables();
   }, [fetchTables]);

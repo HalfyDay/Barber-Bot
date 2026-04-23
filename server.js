@@ -1005,6 +1005,10 @@ const REALTIME_POLL_INTERVAL_MS = Math.max(
   Number(process.env.REALTIME_POLL_INTERVAL_MS || "5000") || 5000,
 );
 const REALTIME_KEEPALIVE_MS = 15000;
+const DASHBOARD_SNAPSHOT_CACHE_TTL_MS = Math.max(
+  1000,
+  Number(process.env.DASHBOARD_SNAPSHOT_CACHE_TTL_MS || "15000") || 15000,
+);
 const {
   buildDashboardSnapshot,
   buildRealtimeAppointmentsPayload,
@@ -1036,6 +1040,58 @@ const {
   botRuntime,
   buildUserInsightsMap,
 });
+const dashboardSnapshotCache = new Map();
+const getDashboardSnapshotIdentityKey = (identity = null) => {
+  const safeIdentity = identity || {};
+  return JSON.stringify({
+    role: normalizeText(safeIdentity.role || ""),
+    barberId: normalizeText(safeIdentity.barberId || ""),
+    username: normalizeText(
+      safeIdentity.username || safeIdentity.login || safeIdentity.displayName || safeIdentity.name || "",
+    ),
+  });
+};
+const clearDashboardSnapshotCache = () => {
+  dashboardSnapshotCache.clear();
+};
+const buildDashboardSnapshotCached = async (identity = null, { force = false } = {}) => {
+  const cacheKey = getDashboardSnapshotIdentityKey(identity);
+  const now = Date.now();
+  const cachedEntry = dashboardSnapshotCache.get(cacheKey);
+  if (!force && cachedEntry?.value && now - cachedEntry.timestamp < DASHBOARD_SNAPSHOT_CACHE_TTL_MS) {
+    return { snapshot: cachedEntry.value, cacheStatus: "hit" };
+  }
+  if (!force && cachedEntry?.pending) {
+    const snapshot = await cachedEntry.pending;
+    return { snapshot, cacheStatus: "shared" };
+  }
+  const pending = (async () => {
+    const startedAt = Date.now();
+    const snapshot = await buildDashboardSnapshot(identity);
+    dashboardSnapshotCache.set(cacheKey, {
+      value: snapshot,
+      timestamp: Date.now(),
+      pending: null,
+    });
+    const durationMs = Date.now() - startedAt;
+    if (durationMs >= 1000) {
+      console.warn(`[perf] dashboard snapshot built in ${durationMs}ms for ${cacheKey}`);
+    }
+    return snapshot;
+  })();
+  dashboardSnapshotCache.set(cacheKey, {
+    value: cachedEntry?.value || null,
+    timestamp: cachedEntry?.timestamp || 0,
+    pending,
+  });
+  try {
+    const snapshot = await pending;
+    return { snapshot, cacheStatus: "miss" };
+  } catch (error) {
+    dashboardSnapshotCache.delete(cacheKey);
+    throw error;
+  }
+};
 const {
   buildRevenueSummary,
   buildUserProfile,
@@ -1093,6 +1149,7 @@ const requestHomeRealtimeSync = (reason = "app-sync") =>
     updatedAt: new Date().toISOString(),
   });
 const requestUnifiedRealtimePush = (force = false) => {
+  clearDashboardSnapshotCache();
   requestRealtimePush(force);
   requestHomeRealtimeSync("app-sync");
 };
@@ -1459,7 +1516,11 @@ registerOwnerSystemRoutes({
 });
 app.get("/api/dashboard/overview", authenticateToken, async (req, res) => {
   try {
-    const snapshot = await buildDashboardSnapshot(req.identity);
+    const forceRefresh = parseEnvBoolean(req.query?.force, false);
+    const { snapshot, cacheStatus } = await buildDashboardSnapshotCached(req.identity, {
+      force: forceRefresh,
+    });
+    res.setHeader("X-Dashboard-Cache", cacheStatus);
     res.json(snapshot);
   } catch (error) {
     console.error("Dashboard snapshot error:", error);

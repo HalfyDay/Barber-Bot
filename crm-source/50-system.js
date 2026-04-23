@@ -109,8 +109,8 @@
                   type="button"
                   onClick={() => setBotSubSection(tab.id)}
                   className={classNames(
-                    'rounded-2xl px-4 py-2 text-sm font-semibold transition',
-                    isActive ? 'bg-indigo-600 text-white shadow shadow-indigo-900/40' : 'bg-slate-800/70 text-slate-300 hover:text-white'
+                    'crm-subnav-pill px-4 py-2 text-sm font-semibold',
+                    isActive && 'crm-subnav-pill-active'
                   )}
                 >
                   {tab.label}
@@ -136,14 +136,14 @@
         <BackupsPanel backups={backups} onRestore={onRestoreBackup} onCreate={onCreateBackup} onDelete={onDeleteBackup} />
         <SectionCard title="Лицензия и обновления">
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
+            <div className="crm-soft-card p-4 text-sm text-[var(--crm-text)]">
               <p className="font-semibold">Лицензия</p>
               <p className="mt-1">Статус: {licenseStatus?.valid ? 'Активна' : 'Не подтверждена'}</p>
               {licenseStatus?.license?.owner && <p>Владелец: {licenseStatus.license.owner}</p>}
               {licenseStatus?.license?.expiresAt && <p>Действует до {formatDate(licenseStatus.license.expiresAt)}</p>}
               {licenseStatus?.license?.number && <p>Номер: {licenseStatus.license.number}</p>}
             </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
+            <div className="crm-soft-card p-4 text-sm text-[var(--crm-text)]">
               <p className="font-semibold">Обновления</p>
               <p className="mt-1">Текущая версия: {currentVersionLabel}</p>
               <p>Доступная версия: {latestVersionLabel}</p>
@@ -154,7 +154,7 @@
                 <p>
                   Источник:{' '}
                   {updateSourceUrl ? (
-                    <a href={updateSourceUrl} className="text-indigo-300 hover:text-indigo-100" target="_blank" rel="noreferrer">
+                    <a href={updateSourceUrl} className="text-[color:var(--crm-primary)] hover:text-white" target="_blank" rel="noreferrer">
                       {updateSourceLabel}
                     </a>
                   ) : (
@@ -166,21 +166,21 @@
                 <button
                   onClick={onRefreshUpdate}
                   disabled={systemBusy}
-                  className="rounded-lg border border-slate-600 px-2.5 py-2 text-[11px] text-white whitespace-nowrap hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
+                  className="crm-ghost-btn px-2.5 py-2 text-[11px] whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
                 >
                   Проверить
                 </button>
                 <button
                   onClick={onApplyUpdate}
                   disabled={systemBusy || !updateAvailable}
-                  className="rounded-lg bg-emerald-600 px-2.5 py-2 text-[11px] text-white whitespace-nowrap hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
+                  className="crm-action-btn px-2.5 py-2 text-[11px] whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
                 >
                   {updateButtonLabel}
                 </button>
                 <button
                   onClick={onRestartSystem}
                   disabled={restartDisabled}
-                  className="rounded-lg bg-amber-600 px-2.5 py-2 text-[11px] text-white whitespace-nowrap hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
+                  className="crm-tonal-btn px-2.5 py-2 text-[11px] whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
                 >
                   {restartButtonLabel}
                 </button>
@@ -195,10 +195,10 @@
                 const name = item.name || item.owner || 'Организация';
                 const key = item.key || item.number || '';
                 return (
-                  <div key={item.key || item.owner || index} className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-200">
+                  <div key={item.key || item.owner || index} className="crm-soft-card p-4 text-sm text-[var(--crm-text)]">
                     <p className="font-semibold text-white">{name}</p>
-                    {key && <p className="text-xs text-slate-400">Ключ: {key}</p>}
-                    {item.expiresAt && <p className="text-xs text-slate-400">Действует до {formatDate(item.expiresAt)}</p>}
+                    {key && <p className="text-xs text-[var(--crm-muted)]">Ключ: {key}</p>}
+                    {item.expiresAt && <p className="text-xs text-[var(--crm-muted)]">Действует до {formatDate(item.expiresAt)}</p>}
                   </div>
                 );
               })}
@@ -220,8 +220,8 @@
                 type="button"
                 onClick={() => setBotSubSection(tab.id)}
                 className={classNames(
-                  'rounded-2xl px-4 py-2 text-sm font-semibold transition',
-                  isActive ? 'bg-indigo-600 text-white shadow shadow-indigo-900/40' : 'bg-slate-800/70 text-slate-300 hover:text-white'
+                  'crm-subnav-pill px-4 py-2 text-sm font-semibold',
+                  isActive && 'crm-subnav-pill-active'
                 )}
               >
                 {tab.label}
@@ -233,13 +233,13 @@
       <SectionCard
         title="Статус бота"
         actions={
-          <div className="flex gap-2 text-sm">
+          <div className="flex gap-1.5 text-sm">
             {!botRunning && (
               <button
                 type="button"
                 onClick={onStart}
                 aria-label="Запустить"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 p-0 text-white sm:h-10 sm:w-auto sm:px-4 sm:py-2"
+                className="crm-action-btn inline-flex h-11 w-11 min-h-0 shrink-0 items-center justify-center rounded-full p-0 sm:h-10 sm:w-auto sm:px-4 sm:py-2"
               >
                 <span className="sm:hidden" aria-hidden="true">
                   <svg viewBox="0 0 20 20" className="h-5 w-5 fill-current">
@@ -255,7 +255,7 @@
                 type="button"
                 onClick={onStop}
                 aria-label="Остановить"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-600 p-0 text-white sm:h-10 sm:w-auto sm:px-4 sm:py-2"
+                className="crm-danger-btn inline-flex h-11 w-11 min-h-0 shrink-0 items-center justify-center rounded-full p-0 sm:h-10 sm:w-auto sm:px-4 sm:py-2"
               >
                 <span className="sm:hidden" aria-hidden="true">
                   <svg viewBox="0 0 20 20" className="h-5 w-5 fill-current">
@@ -270,7 +270,7 @@
               type="button"
               onClick={onRestart}
               aria-label="Перезапустить"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-600 p-0 text-white sm:h-10 sm:w-auto sm:px-4 sm:py-2"
+              className="crm-tonal-btn inline-flex h-11 w-11 min-h-0 shrink-0 items-center justify-center rounded-full p-0 sm:h-10 sm:w-auto sm:px-4 sm:py-2"
             >
               <span className="sm:hidden" aria-hidden="true">
                 <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -286,20 +286,25 @@
           </div>
         }
       >
-        <p className="text-slate-300">Состояние: {status?.running ? 'работает' : 'остановлен'}</p>
-        <label className="mt-3 inline-flex items-center gap-2 text-slate-300">
-          <input
-            type="checkbox"
-            name="botEnabled"
-            aria-label="Автостарт вместе с CRM"
-            checked={settings?.isBotEnabled !== false}
-            onChange={(event) => onToggleEnabled(event.target.checked)}
-          />
-          Автостарт вместе с CRM
-        </label>
-        <div className="mt-4">
-          <label className="text-sm text-slate-300">Telegram-токен</label>
-          <div className="mt-1 flex items-center gap-2">
+        <div className="space-y-3">
+          <div className="crm-inline-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <p className="text-sm text-[var(--crm-text)]">
+              Состояние: <span className="font-semibold text-white">{status?.running ? 'работает' : 'остановлен'}</span>
+            </p>
+            <label className="inline-flex items-center gap-2 text-sm text-[var(--crm-text)]">
+              <input
+                type="checkbox"
+                name="botEnabled"
+                aria-label="Автостарт вместе с CRM"
+                checked={settings?.isBotEnabled !== false}
+                onChange={(event) => onToggleEnabled(event.target.checked)}
+              />
+              Автостарт вместе с CRM
+            </label>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm text-[var(--crm-text)]">Telegram-токен</label>
+            <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
               <input
                 name="botToken"
@@ -307,7 +312,7 @@
                 type={showToken ? 'text' : 'password'}
                 value={tokenDraft}
                 onChange={(event) => setTokenDraft(event.target.value)}
-                className="w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 pr-16 font-mono text-sm text-white"
+                className="w-full rounded-[20px] border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-3 py-2 pr-16 font-mono text-sm text-white"
                 placeholder="1234567890:ABC-DEF"
                 spellCheck={false}
                 autoComplete="off"
@@ -316,7 +321,7 @@
                 type="button"
                 aria-label={showToken ? 'Скрыть токен' : 'Показать токен'}
                 onClick={() => setShowToken((prev) => !prev)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:text-white"
+                className="absolute right-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full text-[var(--crm-muted)] hover:text-white"
               >
                 <EyeIcon open={showToken} />
               </button>
@@ -324,41 +329,42 @@
             <button
               onClick={handleTokenSave}
               disabled={!canSaveToken || savingToken}
-              className="flex-none rounded-lg border border-indigo-500 bg-indigo-600/30 px-4 py-2 text-sm font-semibold text-indigo-100 hover:bg-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+              className="crm-action-btn h-11 flex-none px-4 text-sm disabled:cursor-not-allowed disabled:opacity-50"
             >
               {savingToken ? 'Сохранение...' : 'Сохранить'}
             </button>
           </div>
           {!token && (
-            <p className="mt-2 text-xs text-slate-400">
+              <p className="text-xs text-[var(--crm-muted)]">
               Укажите токен и сохраните изменения — CRM сохранит этот ключ в базе и перезапустит/остановит бота автоматически.
             </p>
           )}
+          </div>
         </div>
       </SectionCard>
       <SectionCard title="Тексты бота">
         <div className="space-y-4">
           <div>
-            <label className="text-sm text-slate-300">Описание лендинга</label>
+            <label className="text-sm text-[var(--crm-text)]">Описание лендинга</label>
             <textarea
               ref={descriptionRef}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={1}
-              className="w-full resize-none rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+              className="w-full resize-none rounded-[20px] border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-3 py-2 text-white"
             />
           </div>
           <div>
-            <label className="text-sm text-slate-300">Блок «О нас»</label>
+            <label className="text-sm text-[var(--crm-text)]">Блок «О нас»</label>
             <textarea
               ref={aboutRef}
               value={about}
               onChange={(event) => setAbout(event.target.value)}
               rows={1}
-              className="w-full resize-none rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+              className="w-full resize-none rounded-[20px] border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-3 py-2 text-white"
             />
           </div>
-          <button onClick={() => onSaveSettings({ botDescription: description, aboutText: about })} className="rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-500">
+          <button onClick={() => onSaveSettings({ botDescription: description, aboutText: about })} className="crm-action-btn px-4 py-2">
             Сохранить тексты
           </button>
         </div>
@@ -384,8 +390,8 @@ const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
               type="button"
               onClick={() => onSectionChange?.(tab.id)}
               className={classNames(
-                'rounded-2xl px-4 py-2 text-sm font-semibold transition',
-                isActive ? 'bg-indigo-600 text-white shadow shadow-indigo-900/40' : 'bg-slate-800/70 text-slate-300 hover:text-white'
+                'crm-subnav-pill px-4 py-2 text-sm font-semibold',
+                isActive && 'crm-subnav-pill-active'
               )}
             >
               {tab.label}
@@ -461,29 +467,29 @@ const SiteImageUploadField = ({ label, value = '', onChange, onUploadImage = nul
 
   return (
     <div className="space-y-2">
-      <span className="text-sm font-medium text-slate-200">{label}</span>
-      <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
+      <span className="text-sm font-medium text-[var(--crm-text)]">{label}</span>
+      <div className="crm-inline-panel p-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="h-24 w-full max-w-[160px] overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
+          <div className="crm-soft-panel h-24 w-full max-w-[160px] overflow-hidden">
             {preview ? (
               <img src={preview} alt={label} className="h-full w-full object-cover" />
             ) : (
-              <div className="flex h-full items-center justify-center px-3 text-center text-xs text-slate-500">Изображение не загружено</div>
+              <div className="flex h-full items-center justify-center px-3 text-center text-xs text-[var(--crm-muted)]">Изображение не загружено</div>
             )}
           </div>
           <div className="flex-1 space-y-3">
             <div className="flex flex-wrap gap-2">
-              <label className="inline-flex cursor-pointer items-center rounded-xl bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400">
+              <label className="crm-action-btn inline-flex cursor-pointer items-center px-3 py-2 text-sm">
                 {busy ? 'Загрузка...' : preview ? 'Заменить изображение' : 'Загрузить изображение'}
                 <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={busy || typeof onUploadImage !== 'function'} />
               </label>
               {preview ? (
-                <button type="button" onClick={() => onChange?.('')} className="rounded-xl border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800">
+                <button type="button" onClick={() => onChange?.('')} className="crm-ghost-btn px-3 py-2 text-sm font-medium">
                   Удалить
                 </button>
               ) : null}
             </div>
-            {helperText ? <p className="text-xs leading-5 text-slate-500">{helperText}</p> : null}
+            {helperText ? <p className="text-xs leading-5 text-[var(--crm-muted)]">{helperText}</p> : null}
             {error ? <p className="text-sm text-rose-400">{error}</p> : null}
           </div>
         </div>
@@ -663,62 +669,44 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
           <div className="space-y-4">
             <div className="grid gap-4 lg:grid-cols-2">
-              <label className="space-y-2 text-sm text-slate-300">
+              <label className="space-y-2 text-sm text-[var(--crm-text)]">
                 <span>Название в шапке</span>
-                <input value={draft?.home?.logoText || ''} onChange={(event) => updateHomeField('logoText', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                <input value={draft?.home?.logoText || ''} onChange={(event) => updateHomeField('logoText', event.target.value)} className="w-full px-4 py-3" />
               </label>
-              <label className="space-y-2 text-sm text-slate-300">
+              <label className="space-y-2 text-sm text-[var(--crm-text)]">
                 <span>Текст кнопки записи</span>
-                <input value={draft?.home?.bookingButtonText || ''} onChange={(event) => updateHomeField('bookingButtonText', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                <input value={draft?.home?.bookingButtonText || ''} onChange={(event) => updateHomeField('bookingButtonText', event.target.value)} className="w-full px-4 py-3" />
               </label>
-              <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+              <label className="space-y-2 text-sm text-[var(--crm-text)] lg:col-span-2">
                 <span>Заголовок блока о бренде</span>
-                <input value={draft?.home?.aboutTitle || ''} onChange={(event) => updateHomeField('aboutTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                <input value={draft?.home?.aboutTitle || ''} onChange={(event) => updateHomeField('aboutTitle', event.target.value)} className="w-full px-4 py-3" />
               </label>
-              <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+              <label className="space-y-2 text-sm text-[var(--crm-text)] lg:col-span-2">
                 <span>Текст блока о бренде</span>
-                <textarea value={draft?.home?.aboutText || ''} onChange={(event) => updateHomeField('aboutText', event.target.value)} rows={5} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                <textarea value={draft?.home?.aboutText || ''} onChange={(event) => updateHomeField('aboutText', event.target.value)} rows={5} className="w-full px-4 py-3" />
               </label>
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
-              <label className="space-y-2 text-sm text-slate-300">
+              <label className="space-y-2 text-sm text-[var(--crm-text)]">
                 <span>Заголовок контактов</span>
-                <input value={draft?.home?.contactsTitle || ''} onChange={(event) => updateHomeField('contactsTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                <input value={draft?.home?.contactsTitle || ''} onChange={(event) => updateHomeField('contactsTitle', event.target.value)} className="w-full px-4 py-3" />
               </label>
-              <label className="space-y-2 text-sm text-slate-300">
+              <label className="space-y-2 text-sm text-[var(--crm-text)]">
                 <span>Телефон</span>
-                <input value={draft?.home?.phone || ''} onChange={(event) => updateHomeField('phone', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                <input value={draft?.home?.phone || ''} onChange={(event) => updateHomeField('phone', event.target.value)} className="w-full px-4 py-3" />
               </label>
-              <label className="space-y-2 text-sm text-slate-300">
+              <label className="space-y-2 text-sm text-[var(--crm-text)]">
                 <span>Telegram</span>
-                <input value={draft?.home?.telegramUrl || ''} onChange={(event) => updateHomeField('telegramUrl', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                <input value={draft?.home?.telegramUrl || ''} onChange={(event) => updateHomeField('telegramUrl', event.target.value)} className="w-full px-4 py-3" />
               </label>
-              <label className="space-y-2 text-sm text-slate-300">
+              <label className="space-y-2 text-sm text-[var(--crm-text)]">
                 <span>Email</span>
-                <input value={draft?.home?.email || ''} onChange={(event) => updateHomeField('email', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                <input value={draft?.home?.email || ''} onChange={(event) => updateHomeField('email', event.target.value)} className="w-full px-4 py-3" />
               </label>
             </div>
           </div>
           <div className="space-y-4">
             <SiteImageUploadField label="Изображение блока о бренде" value={draft?.home?.aboutImageUrl || ''} onChange={(value) => updateHomeField('aboutImageUrl', value)} onUploadImage={onUploadSiteImage} helperText="Изображение для блока о бренде на главной." />
-            <div className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4">
-              <p className="text-sm font-semibold text-white">Быстрый просмотр</p>
-              <div className="mt-4 space-y-3">
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
-                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Шапка</p>
-                  <p className="mt-2 text-lg font-semibold text-white">{draft?.home?.logoText || 'BrotherShop'}</p>
-                  <p className="mt-1 text-sm text-emerald-300">{draft?.home?.bookingButtonText || 'Записаться'}</p>
-                </div>
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
-                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Контакты</p>
-                  <div className="mt-3 space-y-2 text-sm text-slate-300">
-                    <p>{draft?.home?.phone || 'Телефон не заполнен'}</p>
-                    <p>{draft?.home?.telegramUrl || 'Telegram не заполнен'}</p>
-                    <p>{draft?.home?.email || 'Email не заполнен'}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </SectionCard>
@@ -726,68 +714,68 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
       <SectionCard title="Карта и контакты">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="grid gap-4 lg:grid-cols-2">
-            <label className="space-y-2 text-sm text-slate-300">
+            <label className="space-y-2 text-sm text-[var(--crm-text)]">
               <span>Заголовок карты</span>
-              <input value={draft?.home?.mapTitle || ''} onChange={(event) => updateHomeField('mapTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              <input value={draft?.home?.mapTitle || ''} onChange={(event) => updateHomeField('mapTitle', event.target.value)} className="w-full px-4 py-3" />
             </label>
-            <label className="space-y-2 text-sm text-slate-300">
+            <label className="space-y-2 text-sm text-[var(--crm-text)]">
               <span>Ссылка на карту</span>
-              <input value={draft?.home?.mapLink || ''} onChange={(event) => updateHomeField('mapLink', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              <input value={draft?.home?.mapLink || ''} onChange={(event) => updateHomeField('mapLink', event.target.value)} className="w-full px-4 py-3" />
             </label>
-            <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+            <label className="space-y-2 text-sm text-[var(--crm-text)] lg:col-span-2">
               <span>Подпись под картой</span>
-              <textarea value={draft?.home?.mapCaption || ''} onChange={(event) => updateHomeField('mapCaption', event.target.value)} rows={3} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              <textarea value={draft?.home?.mapCaption || ''} onChange={(event) => updateHomeField('mapCaption', event.target.value)} rows={3} className="w-full px-4 py-3" />
             </label>
           </div>
           <SiteImageUploadField label="Изображение карты" value={draft?.home?.mapImageUrl || ''} onChange={(value) => updateHomeField('mapImageUrl', value)} onUploadImage={onUploadSiteImage} />
         </div>
       </SectionCard>
 
-      <SectionCard title="Акции" actions={<button type="button" onClick={addPromo} className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800">Добавить акцию</button>}>
+      <SectionCard title="Акции" actions={<button type="button" onClick={addPromo} className="crm-action-btn px-4 py-2 text-sm">Добавить акцию</button>}>
         <div className="space-y-4">
           {!promos.length ? (
-            <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-950/50 px-4 py-8 text-center text-sm text-slate-400">
+            <div className="crm-inline-panel px-4 py-8 text-center text-sm text-[var(--crm-muted)]">
               Акции пока не добавлены.
             </div>
           ) : null}
           {promos.map((promo, index) => (
-            <div key={promo.id || index} className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4">
+            <div key={promo.id || index} className="crm-soft-card p-4">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-white">Акция {index + 1}</p>
-                  <p className="text-xs text-slate-500">Карточка промо-блока на главной.</p>
+                  <p className="text-xs text-[var(--crm-muted)]">Карточка промо-блока на главной.</p>
                 </div>
-                <button type="button" onClick={() => removePromo(index)} className="rounded-xl border border-rose-500/30 px-3 py-2 text-sm font-medium text-rose-300 transition hover:bg-rose-500/10">
+                <button type="button" onClick={() => removePromo(index)} className="crm-danger-btn px-3 py-2 text-sm">
                   Удалить
                 </button>
               </div>
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_240px]">
                 <div className="grid gap-4">
                   <div className="grid gap-4 lg:grid-cols-2">
-                    <label className="space-y-2 text-sm text-slate-300">
+                    <label className="space-y-2 text-sm text-[var(--crm-text)]">
                       <span>Код акции</span>
-                      <input value={promo.id || ''} onChange={(event) => updatePromoField(index, 'id', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                      <input value={promo.id || ''} onChange={(event) => updatePromoField(index, 'id', event.target.value)} className="w-full px-4 py-3" />
                     </label>
-                    <label className="space-y-2 text-sm text-slate-300">
+                    <label className="space-y-2 text-sm text-[var(--crm-text)]">
                       <span>Заголовок</span>
-                      <input value={promo.title || ''} onChange={(event) => updatePromoField(index, 'title', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                      <input value={promo.title || ''} onChange={(event) => updatePromoField(index, 'title', event.target.value)} className="w-full px-4 py-3" />
                     </label>
-                    <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+                    <label className="space-y-2 text-sm text-[var(--crm-text)] lg:col-span-2">
                       <span>Подзаголовок</span>
-                      <input value={promo.subtitle || ''} onChange={(event) => updatePromoField(index, 'subtitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                      <input value={promo.subtitle || ''} onChange={(event) => updatePromoField(index, 'subtitle', event.target.value)} className="w-full px-4 py-3" />
                     </label>
-                    <label className="space-y-2 text-sm text-slate-300">
+                    <label className="space-y-2 text-sm text-[var(--crm-text)]">
                       <span>Текст кнопки</span>
-                      <input value={promo.buttonLabel || ''} onChange={(event) => updatePromoField(index, 'buttonLabel', event.target.value)} placeholder="Подробнее" className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white placeholder:text-slate-500" />
+                      <input value={promo.buttonLabel || ''} onChange={(event) => updatePromoField(index, 'buttonLabel', event.target.value)} placeholder="Подробнее" className="w-full px-4 py-3" />
                     </label>
-                    <label className="space-y-2 text-sm text-slate-300">
+                    <label className="space-y-2 text-sm text-[var(--crm-text)]">
                       <span>Ссылка кнопки</span>
-                      <input value={promo.buttonUrl || ''} onChange={(event) => updatePromoField(index, 'buttonUrl', event.target.value)} placeholder="https://..." className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white placeholder:text-slate-500" />
+                      <input value={promo.buttonUrl || ''} onChange={(event) => updatePromoField(index, 'buttonUrl', event.target.value)} placeholder="https://..." className="w-full px-4 py-3" />
                     </label>
                   </div>
-                  <label className="space-y-2 text-sm text-slate-300">
+                  <label className="space-y-2 text-sm text-[var(--crm-text)]">
                     <span>Описание акции</span>
-                    <textarea value={promo.details || ''} onChange={(event) => updatePromoField(index, 'details', event.target.value)} rows={4} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+                    <textarea value={promo.details || ''} onChange={(event) => updatePromoField(index, 'details', event.target.value)} rows={4} className="w-full px-4 py-3" />
                   </label>
                 </div>
                 <SiteImageUploadField label="Изображение акции" value={promo.imageUrl || ''} onChange={(value) => updatePromoField(index, 'imageUrl', value)} onUploadImage={onUploadSiteImage} />
@@ -804,41 +792,41 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
       <SectionCard title="Реферальная программа">
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_320px]">
           <div className="grid gap-4 lg:grid-cols-2">
-            <label className="space-y-2 text-sm text-slate-300">
+            <label className="space-y-2 text-sm text-[var(--crm-text)]">
               <span>Заголовок страницы</span>
-              <input value={draft?.referral?.pageTitle || ''} onChange={(event) => updateReferralField('pageTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              <input value={draft?.referral?.pageTitle || ''} onChange={(event) => updateReferralField('pageTitle', event.target.value)} className="w-full px-4 py-3" />
             </label>
-            <label className="space-y-2 text-sm text-slate-300">
+            <label className="space-y-2 text-sm text-[var(--crm-text)]">
               <span>Бонус другу BS</span>
-              <input type="number" min="0" value={draft?.referral?.friendDiscountRub ?? ''} onChange={(event) => updateReferralField('friendDiscountRub', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              <input type="number" min="0" value={draft?.referral?.friendDiscountRub ?? ''} onChange={(event) => updateReferralField('friendDiscountRub', event.target.value)} className="w-full px-4 py-3" />
             </label>
-            <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+            <label className="space-y-2 text-sm text-[var(--crm-text)] lg:col-span-2">
               <span>Основной текст программы</span>
-              <textarea value={draft?.referral?.introText || ''} onChange={(event) => updateReferralField('introText', event.target.value)} rows={4} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              <textarea value={draft?.referral?.introText || ''} onChange={(event) => updateReferralField('introText', event.target.value)} rows={4} className="w-full px-4 py-3" />
             </label>
-            <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+            <label className="space-y-2 text-sm text-[var(--crm-text)] lg:col-span-2">
               <span>Дополнительные условия</span>
-              <textarea value={draft?.referral?.participationText || ''} onChange={(event) => updateReferralField('participationText', event.target.value)} rows={4} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              <textarea value={draft?.referral?.participationText || ''} onChange={(event) => updateReferralField('participationText', event.target.value)} rows={4} className="w-full px-4 py-3" />
             </label>
-            <label className="space-y-2 text-sm text-slate-300">
+            <label className="space-y-2 text-sm text-[var(--crm-text)]">
               <span>Курс BS к рублю</span>
-              <input type="number" min="1" value={draft?.referral?.bsToRubRate ?? ''} onChange={(event) => updateReferralField('bsToRubRate', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
+              <input type="number" min="1" value={draft?.referral?.bsToRubRate ?? ''} onChange={(event) => updateReferralField('bsToRubRate', event.target.value)} className="w-full px-4 py-3" />
             </label>
           </div>
-          <div className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4">
+          <div className="crm-soft-card p-4">
             <p className="text-sm font-semibold text-white">Сводка программы</p>
             <div className="mt-4 grid gap-3">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Друг получает</p>
+              <div className="crm-soft-panel p-4">
+                <p className="text-xs uppercase tracking-[0.22em] text-[var(--crm-muted)]">Друг получает</p>
                 <p className="mt-2 text-2xl font-semibold text-white">{draft?.referral?.friendDiscountRub || 0} ₽</p>
               </div>
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Курс</p>
+              <div className="crm-soft-panel p-4">
+                <p className="text-xs uppercase tracking-[0.22em] text-[var(--crm-muted)]">Курс</p>
                 <p className="mt-2 text-2xl font-semibold text-white">{draft?.referral?.bsToRubRate || 0} BS</p>
-                <p className="mt-1 text-sm text-slate-400">за 1 рубль</p>
+                <p className="mt-1 text-sm text-[var(--crm-muted)]">за 1 рубль</p>
               </div>
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Уровни</p>
+              <div className="crm-soft-panel p-4">
+                <p className="text-xs uppercase tracking-[0.22em] text-[var(--crm-muted)]">Уровни</p>
                 <p className="mt-2 text-2xl font-semibold text-white">{referralLevels.length}</p>
               </div>
             </div>
@@ -848,68 +836,64 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
 
       <SectionCard title="Уровни и награды">
         <div className="space-y-4">
-          <p className="text-sm text-slate-400">Редактируйте уровни, диапазон рефералов и BS в одной таблице.</p>
-          <div className="overflow-x-auto rounded-3xl border border-slate-800 bg-slate-950/70">
-            <table className="min-w-full border-collapse text-sm text-slate-200">
-              <thead className="bg-slate-900/90">
+          <p className="text-sm text-[var(--crm-muted)]">Редактируйте уровни, диапазон рефералов и BS в одной таблице.</p>
+          <div className="crm-table-shell overflow-x-auto">
+            <table className="min-w-full border-collapse text-sm text-[var(--crm-text)]">
+              <thead className="bg-[color:var(--crm-surface-4)]/90">
                 <tr className="align-top">
-                  <th className="min-w-[220px] border-b border-r border-slate-800 px-3 py-3 text-left font-semibold">Уровень</th>
-                  <th className="w-[136px] min-w-[136px] border-b border-r border-slate-800 px-3 py-3 text-left font-semibold">Кол-во рефералов</th>
+                  <th className="crm-table-divider min-w-[220px] border-b border-r px-3 py-3 text-left font-semibold">Уровень</th>
+                  <th className="crm-table-divider w-[136px] min-w-[136px] border-b border-r px-3 py-3 text-left font-semibold">Кол-во рефералов</th>
                   {referralRewardColumns.map((column, columnIndex) => (
-                    <th key={`${column.id}-${columnIndex}`} className="min-w-[220px] border-b border-r border-slate-800 px-3 py-3 text-left font-semibold last:border-r-0">
+                    <th key={`${column.id}-${columnIndex}`} className="crm-table-divider min-w-[220px] border-b border-r px-3 py-3 text-left font-semibold last:border-r-0">
                       <div className="space-y-2">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="block text-xs uppercase tracking-wide text-slate-400">Бонус за услугу</span>
+                          <span className="block text-xs uppercase tracking-wide text-[var(--crm-muted)]">Бонус за услугу</span>
                           <button
                             type="button"
                             onClick={() => removeReferralRewardColumn(column.id)}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-rose-500/30 text-rose-300 transition hover:bg-rose-500/10"
+                            className="crm-danger-btn h-9 w-9"
                             aria-label="Удалить колонку услуги"
                             title="Удалить колонку услуги"
                           >
                             <IconTrash className="h-4 w-4" />
                           </button>
                         </div>
-                        <select
+                        <CustomSelect
                           value={column.labels[0] || ''}
-                          onChange={(event) => updateReferralRewardColumnLabels(column.id, event.target.value ? [event.target.value] : [])}
-                          className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
-                        >
-                          <option value="">Выберите услугу</option>
-                          {serviceOptions.map((option) => (
-                            <option key={option} value={option}>{option}</option>
-                          ))}
-                        </select>
-                        <p className="text-[11px] leading-4 text-slate-500">{column.labels[0] || 'Выберите услугу'}</p>
+                          onChange={(nextValue) => updateReferralRewardColumnLabels(column.id, nextValue ? [nextValue] : [])}
+                          options={[{ value: '', label: 'Выберите услугу' }, ...serviceOptions.map((option) => ({ value: option, label: option }))]}
+                          buttonClassName="h-10 px-4 text-sm"
+                        />
+                        <p className="text-[11px] leading-4 text-[var(--crm-muted)]">{column.labels[0] || 'Выберите услугу'}</p>
                       </div>
                     </th>
                   ))}
-                  <th className="w-[72px] min-w-[72px] border-b border-r border-slate-800 px-2 py-3 text-center font-semibold">
+                  <th className="crm-table-divider w-[72px] min-w-[72px] border-b border-r px-2 py-3 text-center font-semibold">
                     <button
                       type="button"
                       onClick={addReferralRewardColumn}
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-dashed border-slate-600 text-slate-200 transition hover:bg-slate-800"
+                      className="crm-ghost-btn h-10 w-10"
                       aria-label="Добавить колонку услуги"
                       title="Добавить колонку услуги"
                     >
                       <IconPlus className="h-4 w-4" />
                     </button>
                   </th>
-                  <th className="min-w-[120px] border-b border-slate-800 px-3 py-3 text-left font-semibold">Действия</th>
+                  <th className="crm-table-divider min-w-[120px] border-b px-3 py-3 text-left font-semibold">Действия</th>
                 </tr>
               </thead>
               <tbody>
                 {referralLevels.map((level, levelIndex) => (
                   <tr key={level.id || levelIndex} className="align-top">
-                    <td className="border-b border-r border-slate-800 px-3 py-3">
+                    <td className="crm-table-divider border-b border-r px-3 py-3">
                       <input
                         value={level.name || ''}
                         onChange={(event) => updateReferralLevelField(levelIndex, 'name', event.target.value)}
                         placeholder={`Уровень ${levelIndex + 1}`}
-                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white"
+                        className="w-full px-3 py-2"
                       />
                     </td>
-                    <td className="border-b border-r border-slate-800 px-3 py-3">
+                    <td className="crm-table-divider border-b border-r px-3 py-3">
                       <div className="grid grid-cols-2 gap-2">
                       <input
                         type="number"
@@ -917,7 +901,7 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
                         value={level.minReferrals ?? ''}
                         onChange={(event) => updateReferralLevelField(levelIndex, 'minReferrals', event.target.value)}
                         placeholder="От"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-white"
+                        className="w-full px-2 py-2"
                       />
                       <input
                         type="number"
@@ -925,12 +909,12 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
                         value={level.maxReferrals ?? ''}
                         onChange={(event) => updateReferralLevelField(levelIndex, 'maxReferrals', event.target.value)}
                         placeholder="До"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-white"
+                        className="w-full px-2 py-2"
                       />
                     </div>
                   </td>
                   {referralRewardColumns.map((column, columnIndex) => (
-                    <td key={`${level.id || levelIndex}-${column.id}-${columnIndex}`} className="border-b border-r border-slate-800 px-3 py-3 last:border-r-0">
+                    <td key={`${level.id || levelIndex}-${column.id}-${columnIndex}`} className="crm-table-divider border-b border-r px-3 py-3 last:border-r-0">
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
@@ -938,25 +922,25 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
                             value={getReferralRewardAmount(level, column)}
                             onChange={(event) => setReferralRewardAmount(levelIndex, column, event.target.value)}
                             placeholder="BS"
-                            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white"
+                            className="w-full px-3 py-2"
                           />
-                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">BS</span>
+                          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--crm-muted)]">BS</span>
                         </div>
                       </td>
                     ))}
-                    <td className="border-b border-r border-slate-800 px-2 py-3" />
-                    <td className="border-b border-slate-800 px-3 py-3">
+                    <td className="crm-table-divider border-b border-r px-2 py-3" />
+                    <td className="crm-table-divider border-b px-3 py-3">
                       <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={() => moveReferralLevel(levelIndex, -1)} disabled={levelIndex === 0} className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
+                        <button type="button" onClick={() => moveReferralLevel(levelIndex, -1)} disabled={levelIndex === 0} className="crm-ghost-btn px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-40">
                           ↑
                         </button>
-                        <button type="button" onClick={() => moveReferralLevel(levelIndex, 1)} disabled={levelIndex === referralLevels.length - 1} className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
+                        <button type="button" onClick={() => moveReferralLevel(levelIndex, 1)} disabled={levelIndex === referralLevels.length - 1} className="crm-ghost-btn px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-40">
                           ↓
                         </button>
                         <button
                           type="button"
                           onClick={() => removeReferralLevel(levelIndex)}
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-rose-500/30 text-rose-300 transition hover:bg-rose-500/10"
+                          className="crm-danger-btn h-10 w-10"
                           aria-label="Удалить уровень"
                           title="Удалить уровень"
                         >
@@ -971,7 +955,7 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
                     <button
                       type="button"
                       onClick={addReferralLevel}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-700 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
+                      className="crm-ghost-btn w-full px-4 py-3 text-sm"
                     >
                       <IconPlus className="h-4 w-4" />
                       Добавить уровень
@@ -988,25 +972,15 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
 
   const renderShopTab = () => (
     <SectionCard title="Страница магазина">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="grid gap-4">
-          <label className="space-y-2 text-sm text-slate-300">
-            <span>Заголовок тизера</span>
-            <input value={draft?.shop?.teaserTitle || ''} onChange={(event) => updateShopField('teaserTitle', event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300">
-            <span>Текст тизера</span>
-            <textarea value={draft?.shop?.teaserText || ''} onChange={(event) => updateShopField('teaserText', event.target.value)} rows={4} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white" />
-          </label>
-        </div>
-        <div className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4">
-          <p className="text-sm font-semibold text-white">Предпросмотр</p>
-          <div className="mt-4 rounded-3xl border border-slate-800 bg-slate-900/80 p-5">
-            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Тизер магазина</p>
-            <p className="mt-3 text-xl font-semibold text-white">{draft?.shop?.teaserTitle || 'Скоро в магазине'}</p>
-            <p className="mt-2 text-sm leading-6 text-slate-300">{draft?.shop?.teaserText || 'Добавьте короткий анонс, чтобы клиент понимал, что скоро появится.'}</p>
-          </div>
-        </div>
+      <div className="grid gap-4">
+        <label className="space-y-2 text-sm text-[var(--crm-text)]">
+          <span>Заголовок тизера</span>
+          <input value={draft?.shop?.teaserTitle || ''} onChange={(event) => updateShopField('teaserTitle', event.target.value)} className="w-full px-4 py-3" />
+        </label>
+        <label className="space-y-2 text-sm text-[var(--crm-text)]">
+          <span>Текст тизера</span>
+          <textarea value={draft?.shop?.teaserText || ''} onChange={(event) => updateShopField('teaserText', event.target.value)} rows={4} className="w-full px-4 py-3" />
+        </label>
       </div>
     </SectionCard>
   );
@@ -1019,7 +993,7 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 rounded-3xl border border-slate-800 bg-slate-950/80 p-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="crm-inline-panel flex flex-col gap-3 p-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap gap-2">
           {SITE_PAGE_TABS.map((tab) => {
             const isActive = tab.id === activeTab;
@@ -1029,8 +1003,8 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
                 className={classNames(
-                  'rounded-2xl px-4 py-2 text-sm font-semibold transition',
-                  isActive ? 'bg-emerald-500 text-slate-950 shadow shadow-emerald-950/40' : 'bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white'
+                  'crm-subnav-pill px-4 py-2 text-sm font-semibold',
+                  isActive && 'crm-subnav-pill-active'
                 )}
               >
                 {tab.label}
@@ -1038,14 +1012,14 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
             );
           })}
         </div>
-        <div className="flex items-center gap-2 self-start rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200 sm:self-auto">
-          <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+        <div className="flex items-center gap-2 self-start rounded-2xl bg-[color:var(--crm-primary-container)] px-3 py-2 text-sm text-[color:var(--crm-primary)] sm:self-auto">
+          <span className="inline-flex h-2.5 w-2.5 rounded-full bg-[color:var(--crm-primary)]" />
           Онлайн: {onlineCount}
         </div>
       </div>
       {renderTabContent()}
-      <div className="flex justify-end">
-        <button onClick={handleSave} disabled={siteSaving || !onSaveSite} className="rounded-2xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50">
+        <div className="flex justify-end">
+        <button onClick={handleSave} disabled={siteSaving || !onSaveSite} className="crm-action-btn px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-50">
           {siteSaving ? 'Сохранение...' : 'Сохранить изменения'}
         </button>
       </div>

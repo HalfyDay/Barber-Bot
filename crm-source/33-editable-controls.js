@@ -43,7 +43,7 @@
       <button
         ref={anchorRef}
         onClick={() => setOpen(true)}
-        className="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-left text-sm text-white hover:border-indigo-500"
+        className="crm-inline-panel w-full px-2 py-1 text-left text-sm text-white"
       >
         <span className="block max-h-[40px] overflow-hidden text-ellipsis whitespace-pre-wrap">{summary}</span>
       </button>
@@ -51,7 +51,7 @@
         createPortal(
           <div className="fixed inset-0 z-50" onClick={() => setOpen(false)}>
             <div
-              className="absolute w-full max-w-xs rounded-2xl border border-slate-700 bg-slate-900/95 p-3 text-sm text-white shadow-2xl"
+              className="crm-modal-surface absolute w-full max-w-xs p-3 text-sm text-white shadow-2xl"
               style={{ top: `${position.top}px`, left: `${position.left}px` }}
               onClick={(event) => event.stopPropagation()}
             >
@@ -59,7 +59,7 @@
                 <p className="font-semibold">Услуги</p>
                 <button
                   type="button"
-                  className="rounded-full p-1 text-slate-400 hover:text-white"
+                  className="rounded-full p-1 text-[var(--crm-muted)] hover:text-white"
                   onClick={() => {
                     setDraft(normalizeMultiValueList(value));
                     setOpen(false);
@@ -74,7 +74,7 @@
                     <button
                       type="button"
                       key={service}
-                      className="flex items-center gap-1 rounded-full bg-indigo-500/20 px-2 py-1 text-xs text-indigo-200"
+                      className="flex items-center gap-1 rounded-full bg-[color:var(--crm-primary-container)] px-2 py-1 text-xs text-[color:var(--crm-primary)]"
                       onClick={() => toggleOption(service)}
                     >
                       {service}
@@ -84,15 +84,15 @@
                 </div>
               )}
               <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
-                {normalizedOptions.length === 0 && <p className="text-slate-400">Нет доступных услуг</p>}
+                {normalizedOptions.length === 0 && <p className="text-[var(--crm-muted)]">Нет доступных услуг</p>}
                 {normalizedOptions.map((option) => {
                   const isActive = hasMultiValueItem(draft, option);
                   return (
                     <label
                       key={option}
                       className={classNames(
-                        'flex items-center justify-between rounded-xl border px-3 py-2',
-                        isActive ? 'border-indigo-500 bg-indigo-500/10 text-white' : 'border-slate-700 text-slate-200 hover:border-indigo-500/60'
+                        'crm-soft-panel flex items-center justify-between px-3 py-2',
+                        isActive ? 'bg-[color:var(--crm-primary-container)] text-white' : 'text-[var(--crm-text)] hover:bg-[color:var(--crm-surface-5)]'
                       )}
                     >
                       <span className="pr-2 text-left">{option}</span>
@@ -102,17 +102,17 @@
                         type="checkbox"
                         checked={isActive}
                         onChange={() => toggleOption(option)}
-                        className="h-4 w-4 rounded border-slate-500 accent-indigo-500"
+                        className="h-4 w-4 rounded border-slate-500 accent-[color:var(--crm-primary)]"
                       />
                     </label>
                   );
                 })}
               </div>
               <div className="mt-3 flex items-center justify-between gap-2">
-                <button type="button" onClick={() => setDraft([])} className="text-xs text-slate-400 hover:text-white">
+                <button type="button" onClick={() => setDraft([])} className="text-xs text-[var(--crm-muted)] hover:text-white">
                   Очистить
                 </button>
-                <button type="button" onClick={handleSave} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500">
+                <button type="button" onClick={handleSave} className="crm-action-btn px-3 py-1.5 text-xs font-semibold">
                   Готово
                 </button>
               </div>
@@ -128,7 +128,7 @@ const TimeRangePicker = ({
   onChange,
   title = 'Выбор времени',
   placeholder = 'Выберите интервал',
-  buttonClassName = 'w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-left text-sm text-white whitespace-nowrap',
+  buttonClassName = 'crm-inline-panel w-full px-2 py-1 text-left text-sm text-white whitespace-nowrap',
   autoDurationMinutes = null,
 }) => {
   const [open, setOpen] = useState(false);
@@ -202,10 +202,10 @@ const TimeRangePicker = ({
         maxWidthClass="max-w-md"
         footer={
           <>
-            <button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-slate-600 px-4 py-2 text-white">
+            <button type="button" onClick={() => setOpen(false)} className={classNames('crm-ghost-btn', SHEET_FOOTER_BUTTON_CLASS)}>
               Отмена
             </button>
-            <button type="button" onClick={handleSave} className="rounded-lg bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-500">
+            <button type="button" onClick={handleSave} className={classNames('crm-action-btn', SHEET_FOOTER_BUTTON_CLASS)}>
               Сохранить
             </button>
           </>
@@ -213,14 +213,14 @@ const TimeRangePicker = ({
       >
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-300">Выберите время начала и окончания</p>
-            <button type="button" onClick={handleClear} className="text-xs text-slate-400 hover:text-slate-100">
+            <p className="text-sm text-[var(--crm-text)]">Выберите время начала и окончания</p>
+            <button type="button" onClick={handleClear} className="text-xs text-[var(--crm-muted)] hover:text-white">
               Очистить
             </button>
           </div>
-          <div className="flex flex-wrap items-center justify-around gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+          <div className="crm-inline-panel flex flex-wrap items-center justify-around gap-4 p-4">
             <div className="text-center">
-              <label className="block text-sm font-medium text-slate-400" htmlFor={startInputId}>Начало</label>
+              <label className="block text-sm font-medium text-[var(--crm-muted)]" htmlFor={startInputId}>Начало</label>
               <input
                 id={startInputId}
                 name="startTime"
@@ -229,12 +229,12 @@ const TimeRangePicker = ({
                 step="60"
                 value={startInputValue}
                 onChange={handleTimeInputChange('start')}
-                className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-900 px-2 py-2 text-center text-lg text-white"
+                className="mt-2 w-32 px-2 py-2 text-center text-lg text-white"
               />
             </div>
-            <span className="text-2xl font-light text-slate-500">-</span>
+            <span className="text-2xl font-light text-[var(--crm-muted)]">-</span>
             <div className="text-center">
-              <label className="block text-sm font-medium text-slate-400" htmlFor={endInputId}>Окончание</label>
+              <label className="block text-sm font-medium text-[var(--crm-muted)]" htmlFor={endInputId}>Окончание</label>
               <input
                 id={endInputId}
                 name="endTime"
@@ -245,7 +245,7 @@ const TimeRangePicker = ({
                 onChange={autoEndEnabled ? undefined : handleTimeInputChange('end')}
                 readOnly={autoEndEnabled}
                 disabled={autoEndEnabled}
-                className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-900 px-2 py-2 text-center text-lg text-white"
+                className="mt-2 w-32 px-2 py-2 text-center text-lg text-white"
               />
             </div>
           </div>
@@ -294,7 +294,7 @@ const AppointmentTimeField = ({
             step="60"
             value={startValue || '00:00'}
             onChange={handleStartChange}
-            className="crm-sheet-control crm-sheet-time h-11 min-w-0 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 pr-10 text-white"
+            className="crm-sheet-control crm-sheet-time h-11 min-w-0 w-full px-3 pr-10 text-white"
           />
           <button
             type="button"
@@ -321,7 +321,7 @@ const AppointmentTimeField = ({
             onChange={manualEndEnabled ? handleEndChange : undefined}
             readOnly={!manualEndEnabled}
             tabIndex={manualEndEnabled ? 0 : -1}
-            className="crm-sheet-control crm-sheet-time h-11 min-w-0 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 pr-10 text-center text-white"
+            className="crm-sheet-control crm-sheet-time h-11 min-w-0 w-full px-3 pr-10 text-center text-white"
           />
           <button
             type="button"
@@ -329,7 +329,7 @@ const AppointmentTimeField = ({
             disabled={!manualEndEnabled}
             className={classNames(
               'absolute right-3 top-1/2 -translate-y-1/2',
-              manualEndEnabled ? 'text-white/90 hover:text-white' : 'cursor-default text-slate-600'
+              manualEndEnabled ? 'text-white/90 hover:text-white' : 'cursor-default text-white/55'
             )}
             aria-label="Показать окно выбора времени"
             title="Показать окно выбора времени"
@@ -344,6 +344,80 @@ const AppointmentTimeField = ({
     </div>
   );
 };
+const CustomSelect = ({
+  value,
+  onChange,
+  options = [],
+  placeholder = 'Выберите',
+  disabled = false,
+  className = '',
+  buttonClassName = '',
+  menuClassName = '',
+  optionClassName = '',
+}) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useOutsideClick(ref, open ? () => setOpen(false) : null);
+  const normalizedOptions = useMemo(
+    () =>
+      (Array.isArray(options) ? options : []).map((option) =>
+        typeof option === 'object'
+          ? { value: option.value, label: option.label ?? String(option.value ?? '') }
+          : { value: option, label: String(option) }
+      ),
+    [options]
+  );
+  const selectedOption = normalizedOptions.find((option) => String(option.value ?? '') === String(value ?? '')) || null;
+  const handleSelect = (nextValue) => {
+    onChange?.(nextValue);
+    setOpen(false);
+  };
+  return (
+    <div ref={ref} className={classNames('relative z-40 w-full', className)}>
+      <button
+        type="button"
+        onClick={() => !disabled && setOpen((prev) => !prev)}
+        disabled={disabled}
+        className={classNames(
+          'crm-soft-panel flex h-11 w-full items-center justify-between gap-3 px-5 text-left text-sm text-white transition hover:bg-[color:var(--crm-surface-5)] focus:outline-none',
+          disabled && 'cursor-not-allowed opacity-60',
+          buttonClassName
+        )}
+      >
+        <span className="min-w-0 truncate">{selectedOption?.label || placeholder}</span>
+        <svg className={classNames('h-4 w-4 shrink-0 text-white/85 transition-transform', open ? 'rotate-180' : 'rotate-0')} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className={classNames('crm-menu-surface absolute left-0 right-0 z-50 mt-2 max-h-64 space-y-2 overflow-y-auto p-3', menuClassName)}>
+          {normalizedOptions.length === 0 ? (
+            <p className="px-3 py-2 text-sm text-[var(--crm-muted)]">Нет вариантов</p>
+          ) : (
+            normalizedOptions.map((option) => {
+              const isActive = String(option.value ?? '') === String(value ?? '');
+              return (
+                <button
+                  type="button"
+                  key={String(option.value)}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => handleSelect(option.value)}
+                  className={classNames(
+                    'crm-soft-panel flex min-h-[52px] w-full items-center justify-between gap-4 rounded-2xl px-4 py-3 text-left text-sm leading-6 text-[var(--crm-text)]',
+                    isActive && 'bg-[color:var(--crm-primary-container)] text-[#eafffb]',
+                    optionClassName
+                  )}
+                >
+                  <span className="min-w-0 truncate">{option.label}</span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableId }) => {
   const recordId = record?.id || record?.Id || record?.ID || record?.recordId;
   const value = record[column.key];
@@ -354,7 +428,7 @@ const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableI
   if (!column.editable) {
     if (column.isProfileLink) {
       return (
-        <button onClick={() => onOpenProfile?.(value)} className="text-left text-indigo-300 hover:text-indigo-100">
+        <button onClick={() => onOpenProfile?.(value)} className="text-left text-[color:var(--crm-primary)] hover:text-white">
           {value || '-'}
         </button>
       );
@@ -376,7 +450,7 @@ const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableI
         onChange={(nextValue) => commit(nextValue)}
         placeholder={tableId === 'Schedules' ? 'Слоты не указаны' : 'Выберите время'}
         title={tableId === 'Schedules' ? 'Редактирование слотов' : 'Выбор времени'}
-        buttonClassName="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-left text-sm text-white"
+        buttonClassName="crm-inline-panel w-full px-2 py-1 text-left text-sm text-white"
       />
     );
   }
@@ -385,14 +459,14 @@ const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableI
     case 'select': {
       const optionList = column.optionsKey ? options[column.optionsKey] || [] : [];
       return (
-        <select value={value || ''} onChange={(event) => commit(event.target.value)} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-white">
-          <option value="">-</option>
-          {optionList.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
+        <CustomSelect
+          value={value || ''}
+          onChange={commit}
+          options={[{ value: '', label: '-' }, ...optionList.map((option) => ({ value: option, label: option }))]}
+          placeholder="-"
+          buttonClassName="h-9 px-3 text-sm"
+          menuClassName="w-full"
+        />
       );
     }
     case 'boolean':
@@ -417,7 +491,7 @@ const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableI
           type="date"
           value={value ? String(value).slice(0, 10) : ''}
           onChange={(event) => commit(event.target.value)}
-          className="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-white"
+          className="w-full px-2 py-1 text-sm text-white"
         />
       );
     default:
@@ -430,7 +504,7 @@ const EditableCell = ({ record, column, options, onUpdate, onOpenProfile, tableI
           onChange={(event) => setDraft(event.target.value)}
           onBlur={() => commit()}
           onKeyDown={(event) => event.key === 'Enter' && commit()}
-          className="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-white"
+          className="w-full px-2 py-1 text-sm text-white"
         />
       );
   }
@@ -441,16 +515,16 @@ const ColumnMenu = ({ columns, hiddenColumns = [], onToggle }) => {
   useOutsideClick(ref, open ? () => setOpen(false) : null);
   return (
     <div className="relative z-40 w-full sm:w-auto">
-      <button
+        <button
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-center rounded-lg border border-slate-600 px-3 py-2 text-sm text-white sm:w-auto"
+        className="crm-ghost-btn flex w-full items-center justify-center px-3 py-2 text-sm sm:w-auto"
       >
         Поля
       </button>
       {open && (
         <div
           ref={ref}
-          className="absolute left-0 z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 shadow-2xl sm:left-auto sm:right-0"
+          className="crm-modal-surface absolute left-0 z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 p-3 shadow-2xl sm:left-auto sm:right-0"
         >
           {columns.map((column) => (
             <label key={column.key} className="flex items-center gap-2 text-sm text-slate-200">
@@ -497,7 +571,7 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
             <button
               type="button"
               key={service}
-              className="flex items-center gap-1 rounded-full bg-indigo-500/10 px-2 py-1 text-xs text-indigo-200"
+              className="flex items-center gap-1 rounded-full bg-[color:var(--crm-primary-container)] px-2 py-1 text-xs text-[color:var(--crm-primary)]"
               onClick={() => toggle(service)}
             >
               {service}
@@ -508,9 +582,9 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
           ))}
         </div>
       )}
-      <div className="w-full min-w-0 rounded-2xl border border-slate-700 bg-slate-900/60">
-        <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-2">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
+      <div className="w-full min-w-0">
+        <div className="relative">
+          <svg xmlns="http://www.w3.org/2000/svg" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--crm-muted)]" viewBox="0 0 20 20" fill="currentColor">
             <path
               fillRule="evenodd"
               d="M9 3.5a5.5 5.5 0 013.995 9.315l3.095 3.095a.75.75 0 11-1.06 1.06l-3.095-3.094A5.5 5.5 0 119 3.5zm0 1.5a4 4 0 100 8 4 4 0 000-8z"
@@ -523,17 +597,12 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Поиск услуги"
-            className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none"
+            className="h-12 w-full min-w-0 bg-transparent pl-10 pr-3 text-sm leading-6 text-white placeholder:text-[var(--crm-muted)] focus:outline-none"
           />
-          {query && (
-            <button type="button" onClick={() => setQuery('')} className="text-xs text-slate-400 hover:text-white">
-              Очистить
-            </button>
-          )}
         </div>
         <div className="max-h-56 overflow-y-auto p-2">
           {filtered.length === 0 ? (
-            <p className="px-1 py-2 text-sm text-slate-500">{placeholder}</p>
+            <p className="px-1 py-2 text-sm text-[var(--crm-muted)]">{placeholder}</p>
           ) : (
             <div className="grid gap-1 sm:grid-cols-2">
               {filtered.map((option) => {
@@ -544,8 +613,8 @@ const MultiSelectCheckboxes = ({ label, options = [], value = [], onChange, plac
                     key={option}
                     onClick={() => toggle(option)}
                     className={classNames(
-                      'flex items-center justify-between rounded-xl border px-3 py-2 text-left text-sm',
-                      isActive ? 'border-indigo-500 bg-indigo-500/10 text-white' : 'border-slate-700 bg-slate-900/40 text-slate-200 hover:border-indigo-500/40'
+                      'flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm',
+                      isActive ? 'bg-[color:var(--crm-primary-container)] text-white' : 'bg-[color:var(--crm-surface-3)] text-[var(--crm-text)] hover:bg-[color:var(--crm-surface-4)]'
                     )}
                   >
                     <span className="truncate">{option}</span>
@@ -613,15 +682,15 @@ const ClientLookupInput = ({
         }}
         onFocus={() => setOpen(true)}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+        className="w-full px-3 py-2 text-white"
       />
       {open && matches.length > 0 && (
-        <div className="absolute z-30 mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/95 shadow-2xl">
+        <div className="crm-modal-surface absolute z-30 mt-1 w-full shadow-2xl">
           {matches.map((client) => (
             <button
               type="button"
               key={client.id}
-              className="flex w-full flex-col items-start border-b border-slate-800 px-3 py-2 text-left text-sm text-slate-200 last:border-none hover:bg-slate-800"
+              className="flex w-full flex-col items-start border-b crm-table-divider px-3 py-2 text-left text-sm text-[var(--crm-text)] last:border-none hover:bg-[color:var(--crm-surface-4)]"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => handleSelect(client)}
             >
@@ -642,29 +711,30 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset }) =
     <div className="relative z-40 w-full sm:w-auto">
       <button
         onClick={() => setOpen((prev) => !prev)}
-        className="flex h-11 w-full items-center justify-center rounded-xl border border-slate-600 px-3 text-sm text-white sm:w-auto"
+        className="crm-ghost-btn flex h-11 w-full items-center justify-center px-3 text-sm sm:w-auto"
       >
         Статусы
       </button>
       {open && (
         <div
           ref={ref}
-          className="absolute left-0 z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 rounded-2xl border border-slate-700 bg-slate-900 p-3 shadow-2xl"
+          className="crm-menu-surface absolute left-0 z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 p-3"
         >
-          {statuses.length === 0 && <p className="text-sm text-slate-500">Нет статусов</p>}
+          {statuses.length === 0 && <p className="text-sm text-[var(--crm-muted)]">Нет статусов</p>}
           {statuses.map((status) => (
-            <label key={status} className="flex items-center gap-2 text-sm text-slate-200">
+            <label key={status} className="crm-soft-panel flex items-center gap-3 rounded-2xl px-3 py-2 text-sm text-[var(--crm-text)]">
             <input
               type="checkbox"
               name={`status-${status}`}
               aria-label={status}
               checked={!hiddenStatuses.includes(status)}
               onChange={() => onToggle(status)}
+              className="h-4 w-4 rounded border-white/10 bg-[color:var(--crm-surface-5)] accent-[color:var(--crm-primary)]"
             />
               {status}
             </label>
           ))}
-          <button onClick={onReset} className="text-sm text-indigo-300 hover:text-indigo-100">
+          <button onClick={onReset} className="w-full rounded-2xl px-3 py-2 text-left text-sm font-semibold text-[color:var(--crm-primary)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white">
             Показать все
           </button>
         </div>

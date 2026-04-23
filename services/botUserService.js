@@ -47,8 +47,16 @@ const createBotUserService = ({
         noShows: 0,
       };
     }
+    const appointmentWhere =
+      typeof appointmentService.buildAppointmentOwnerWhere === "function"
+        ? appointmentService.buildAppointmentOwnerWhere({
+            ...(user || {}),
+            id: normalizeText(user?.id) || safeTelegramId,
+            telegramId: safeTelegramId,
+          })
+        : { UserID: { in: lookupKeys } };
     const appointments = await prisma.appointments.findMany({
-      where: { UserID: { in: lookupKeys } },
+      where: appointmentWhere,
       select: { Status: true, Date: true },
     });
     const threshold = new Date();

@@ -1681,7 +1681,7 @@ const registerHomeRoutes = ({
 
       const [settings, activeAppointments, barbers, servicesCatalog] = await Promise.all([
         getHomeBookingSettings(),
-        appointmentService.countHomeUserActiveAppointments(homeUser.id),
+        appointmentService.countHomeUserActiveAppointments(homeUser),
         getBarbers({ includeInactive: false }),
         getServiceCatalog(false),
       ]);
@@ -1728,7 +1728,7 @@ const registerHomeRoutes = ({
 
       const [settings, activeAppointments, barbers, servicesCatalog] = await Promise.all([
         getHomeBookingSettings(),
-        appointmentService.countHomeUserActiveAppointments(homeUser.id),
+        appointmentService.countHomeUserActiveAppointments(homeUser),
         getBarbers({ includeInactive: false }),
         getServiceCatalog(false),
       ]);
@@ -1812,7 +1812,7 @@ const registerHomeRoutes = ({
 
       const [settings, activeAppointments, barbers, servicesCatalog] = await Promise.all([
         getHomeBookingSettings(),
-        appointmentService.countHomeUserActiveAppointments(homeUser.id),
+        appointmentService.countHomeUserActiveAppointments(homeUser),
         getBarbers({ includeInactive: false }),
         getServiceCatalog(false),
       ]);
@@ -2049,7 +2049,7 @@ const registerHomeRoutes = ({
       if (!existing) {
         return res.status(404).json({ error: "Запись не найдена." });
       }
-      if (normalizeText(existing.UserID) !== normalizeText(homeUser.id)) {
+      if (!appointmentService.doesAppointmentBelongToUser(existing, homeUser)) {
         return res.status(403).json({ error: "Нельзя отменить чужую запись." });
       }
       if (normalizeText(existing.Status) !== normalizeText(STATUS_ACTIVE)) {

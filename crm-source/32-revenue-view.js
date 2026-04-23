@@ -150,7 +150,7 @@
             value={newPosition.name}
             onChange={(event) => setNewPosition((prev) => ({ ...prev, name: event.target.value }))}
             placeholder="Название должности"
-            className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
+            className="w-full px-4 py-2 text-white"
           />
           <input
             name="positionRate"
@@ -162,17 +162,17 @@
             value={newPosition.rate}
             onChange={(event) => setNewPosition((prev) => ({ ...prev, rate: event.target.value }))}
             placeholder="Процент, %"
-            className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
+            className="w-full px-4 py-2 text-white"
           />
           <button
             type="submit"
             disabled={savingKey === 'new'}
-            className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow shadow-emerald-900/30 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="crm-action-btn px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           >
             Добавить
           </button>
         </form>
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-[var(--crm-muted)]">
           Процент применяется к стоимости услуг выбранного барбера и определяет его выплату.
         </p>
         {error && (
@@ -181,14 +181,14 @@
           </div>
         )}
         <div className="mt-6 space-y-3">
-          {sortedPositions.length === 0 && <p className="text-sm text-slate-400">Должности еще не созданы.</p>}
+          {sortedPositions.length === 0 && <p className="text-sm text-[var(--crm-muted)]">Должности еще не созданы.</p>}
           {sortedPositions.map((position) => {
             const draft = getDraft(position);
             const isDirty = pendingChanges.some((change) => change.position.id === position.id);
             return (
               <div
                 key={position.id}
-                className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-inner shadow-black/5"
+                className="crm-soft-card space-y-3 p-4"
               >
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
                   <div className="flex w-full flex-wrap gap-3 md:flex-1">
@@ -197,7 +197,7 @@
                       aria-label="Название должности"
                       value={draft.name}
                       onChange={(event) => handleDraftChange(position.id, 'name', event.target.value)}
-                      className="min-w-[160px] flex-1 rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
+                      className="min-w-[160px] flex-1 px-4 py-2 text-white"
                     />
                     <input
                       name={`positionRate-${position.id}`}
@@ -209,12 +209,12 @@
                       value={draft.rate}
                       onChange={(event) => handleDraftChange(position.id, 'rate', event.target.value)}
                       placeholder="Комиссия, %"
-                      className="w-32 flex-none rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-white focus:border-indigo-400 focus:outline-none"
+                      className="w-32 flex-none px-4 py-2 text-white"
                     />
                   </div>
                   <div className="hidden w-full flex-wrap items-center justify-end gap-3 md:flex md:w-auto md:flex-nowrap">
                     {isDirty && (
-                      <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-200">
+                      <span className="rounded-full bg-[color:var(--crm-highlight-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[color:var(--crm-highlight-text)]">
                         Есть изменения
                       </span>
                     )}
@@ -222,7 +222,7 @@
                       type="button"
                       onClick={() => handleDelete(position)}
                       disabled={savingKey === position.id || bulkSaving}
-                      className="flex-1 rounded-2xl border border-rose-600 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-600/10 disabled:cursor-not-allowed disabled:opacity-50 md:flex-none"
+                      className="crm-danger-btn flex-1 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50 md:flex-none"
                     >
                       Удалить
                     </button>
@@ -230,7 +230,7 @@
                 </div>
                 <div className="flex w-full flex-wrap items-center gap-2 md:hidden">
                   {isDirty && (
-                    <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-200">
+                    <span className="rounded-full bg-[color:var(--crm-highlight-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[color:var(--crm-highlight-text)]">
                       Есть изменения
                     </span>
                   )}
@@ -238,7 +238,7 @@
                     type="button"
                     onClick={() => handleDelete(position)}
                     disabled={savingKey === position.id || bulkSaving}
-                    className="min-w-0 flex-1 rounded-2xl border border-rose-600 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-600/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="crm-danger-btn min-w-0 flex-1 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Удалить
                   </button>
@@ -247,11 +247,11 @@
             );
           })}
         </div>
-        <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+        <div className="crm-soft-card mt-6 p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-semibold text-white">Несохраненные изменения</p>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-[var(--crm-muted)]">
                 {hasPendingChanges ? `Ожидает сохранения: ${pendingCount}` : 'Нет несохраненных изменений'}
               </p>
             </div>
@@ -259,7 +259,7 @@
               type="button"
               onClick={handleBulkSave}
               disabled={!hasPendingChanges || bulkSaving}
-              className="flex items-center justify-center rounded-2xl bg-indigo-600 px-6 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="crm-action-btn flex items-center justify-center px-6 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
             >
               {bulkSaving ? 'Сохраняем...' : 'Сохранить изменения'}
               {hasPendingChanges && !bulkSaving && (
@@ -481,7 +481,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
                 type="date"
                 value={startDate}
                 onChange={(event) => handleFilterChange('start', event.target.value)}
-                className="revenue-date-input w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
+                className="revenue-date-input w-full px-3 py-2 text-white"
               />
             </div>
             <div className="space-y-1">
@@ -495,39 +495,36 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
                 type="date"
                 value={endDate}
                 onChange={(event) => handleFilterChange('end', event.target.value)}
-                className="revenue-date-input w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
+                className="revenue-date-input w-full px-3 py-2 text-white"
               />
             </div>
           </div>
           {isStaffMode ? (
             <div className="space-y-1 sm:col-span-2 lg:col-span-1">
               <label className="text-xs uppercase tracking-wide text-slate-400">Барбер</label>
-              <div className="flex h-11 items-center rounded-2xl border border-slate-700 bg-slate-900/70 px-3 text-sm text-white">
+              <div className="crm-inline-panel flex h-11 items-center px-3 text-sm text-white">
                 {staffBarberName || 'Не указан'}
               </div>
             </div>
           ) : (
             <div className="space-y-1 sm:col-span-2 lg:col-span-1">
               <label className="text-xs uppercase tracking-wide text-slate-400">Барбер</label>
-              <select
+              <CustomSelect
                 value={selectedBarberId}
-                onChange={(event) => handleFilterChange('barberId', event.target.value)}
-                className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
-              >
-                <option value="all">Все барберы</option>
-                {barberOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(nextValue) => handleFilterChange('barberId', nextValue)}
+                options={[
+                  { value: 'all', label: 'Все барберы' },
+                  ...barberOptions.map((option) => ({ value: option.id, label: option.name })),
+                ]}
+                buttonClassName="h-11 px-4"
+              />
             </div>
           )}
           <div className="flex items-stretch sm:col-span-2 sm:items-end sm:justify-end lg:col-span-1">
             <button
               type="button"
               onClick={fetchRevenue}
-              className="w-full rounded-2xl border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-100 hover:border-indigo-400 hover:text-white sm:w-auto sm:px-6"
+              className="crm-ghost-btn w-full px-4 py-2 text-sm font-semibold sm:w-auto sm:px-6"
             >
               Обновить
             </button>
@@ -541,19 +538,19 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
             {!isStaffMode && (
               <div className="mt-6 grid gap-3 md:grid-cols-3">
                 <StatCard label="Общая выручка" value={formatCurrency(totalGross)} />
-                <StatCard label="Начислено сотрудникам" value={formatCurrency(totalCommission)} accent="text-rose-300" />
-                <StatCard label="В кассу" value={formatCurrency(totalNet)} accent="text-emerald-300" />
+                <StatCard label="Начислено сотрудникам" value={formatCurrency(totalCommission)} accent="text-[color:var(--crm-highlight)]" />
+                <StatCard label="В кассу" value={formatCurrency(totalNet)} accent="text-[color:var(--crm-primary)]" />
               </div>
             )}
             <div className="mt-6">
               {items.length === 0 ? (
-                <p className="rounded-2xl border border-slate-800 p-4 text-sm text-slate-400">Нет выполненных услуг за выбранный период.</p>
+                <p className="crm-inline-panel p-4 text-sm text-[var(--crm-muted)]">Нет выполненных услуг за выбранный период.</p>
               ) : (
                 <>
                   {!isMobile && (
-                    <div className="overflow-x-auto rounded-2xl border border-slate-800">
-                      <table className="min-w-full divide-y divide-slate-800 text-sm">
-                        <thead className="bg-slate-900/40 text-slate-400">
+                    <div className="crm-table-shell overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-[color:var(--crm-surface-4)] text-[var(--crm-muted)]">
                           <tr>
                             <th className="px-4 py-3 text-left font-semibold">Барбер</th>
                             <th className="px-4 py-3 text-right font-semibold">Записи</th>
@@ -563,15 +560,15 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
                             <th className="px-4 py-3 text-right font-semibold">В кассу</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-800">
+                        <tbody>
                           {items.map((item) => (
-                            <tr key={item.id} className="hover:bg-slate-900/40">
+                            <tr key={item.id} className="hover:bg-[color:var(--crm-surface-4)]">
                               <td className="px-4 py-3 text-white">{item.name}</td>
                               <td className="px-4 py-3 text-right text-slate-300">{item.appointments}</td>
                               <td className="px-4 py-3 text-right text-slate-100">{formatCurrency(item.gross)}</td>
                               <td className="px-4 py-3 text-right text-slate-300">{formatPercent(item.commissionRate)}</td>
-                              <td className="px-4 py-3 text-right text-emerald-300">{formatCurrency(item.commission)}</td>
-                              <td className="px-4 py-3 text-right text-indigo-300">{formatCurrency(item.net)}</td>
+                              <td className="px-4 py-3 text-right text-[color:var(--crm-highlight)]">{formatCurrency(item.commission)}</td>
+                              <td className="px-4 py-3 text-right text-[color:var(--crm-primary)]">{formatCurrency(item.net)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -582,24 +579,24 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
                     <div className="space-y-4 w-full">
                       {items.map((item) => {
                         const mobileStats = [
-                          { label: 'Выручка', value: formatCurrency(item.gross), accent: 'text-white', wrapper: 'border-slate-800/70 bg-slate-950/40' },
-                          { label: 'Комиссия', value: formatPercent(item.commissionRate), accent: 'text-slate-100', wrapper: 'border-slate-800/70 bg-slate-950/40' },
-                          { label: 'Выплаты', value: formatCurrency(item.commission), accent: 'text-emerald-300', wrapper: 'border-emerald-900/80 bg-emerald-500/5' },
-                          { label: 'В кассу', value: formatCurrency(item.net), accent: 'text-indigo-200', wrapper: 'border-indigo-900/80 bg-indigo-500/5' },
+                          { label: 'Выручка', value: formatCurrency(item.gross), accent: 'text-white', wrapper: 'crm-soft-panel' },
+                          { label: 'Комиссия', value: formatPercent(item.commissionRate), accent: 'text-[var(--crm-text)]', wrapper: 'crm-soft-panel' },
+                          { label: 'Выплаты', value: formatCurrency(item.commission), accent: 'text-[color:var(--crm-highlight)]', wrapper: 'crm-soft-panel' },
+                          { label: 'В кассу', value: formatCurrency(item.net), accent: 'text-[color:var(--crm-primary)]', wrapper: 'crm-soft-panel' },
                         ];
                         return (
-                          <div key={item.id} className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-inner shadow-black/20">
+                          <div key={item.id} className="crm-soft-card p-4">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <p className="text-base font-semibold text-white">{item.name}</p>
-                              <span className="text-xs uppercase tracking-wide text-slate-400">{item.appointments} записей</span>
+                              <span className="text-xs uppercase tracking-wide text-[var(--crm-muted)]">{item.appointments} записей</span>
                             </div>
                             <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-300">
                               {mobileStats.map((metric) => (
                                 <div
                                   key={metric.label}
-                                  className={`rounded-xl border px-3 py-2 ${metric.wrapper}`}
+                                  className={`rounded-xl px-3 py-2 ${metric.wrapper}`}
                                 >
-                                  <p className="text-xs uppercase tracking-wide text-slate-400">{metric.label}</p>
+                                  <p className="text-xs uppercase tracking-wide text-[var(--crm-muted)]">{metric.label}</p>
                                   <p className={`text-lg font-semibold ${metric.accent}`}>{metric.value}</p>
                                 </div>
                               ))}
@@ -619,13 +616,13 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
         {state.loading ? (
           <LoadingState label="Загрузка данных..." />
         ) : normalizedTimeline.length === 0 ? (
-          <p className="text-sm text-slate-400">Нет данных для выбранного периода.</p>
+          <p className="text-sm text-[var(--crm-muted)]">Нет данных для выбранного периода.</p>
         ) : (
           <div className="mt-2">
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+            <div className="crm-soft-card p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs uppercase tracking-wide text-slate-400">Линейный график</p>
-                <p className="text-xs text-slate-300">
+                <p className="text-xs uppercase tracking-wide text-[var(--crm-muted)]">Линейный график</p>
+                <p className="text-xs text-[var(--crm-text)]">
                   Пиковое значение:{' '}
                   <span className="font-semibold text-white">{formatCurrency(chartMax)}</span>
                 </p>
@@ -634,11 +631,11 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
                 <div className="relative inline-block" style={{ minWidth: `${lineChartWidth}px` }}>
                   {activePoint && (
                     <div
-                      className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-3/4 whitespace-nowrap rounded-xl border border-indigo-500/40 bg-slate-900/95 px-3 py-2 text-xs shadow-2xl shadow-black/40"
+                      className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-3/4 whitespace-nowrap rounded-xl bg-[color:var(--crm-surface-5)] px-3 py-2 text-xs shadow-2xl shadow-black/40"
                       style={{ left: `${activePoint.x}px`, top: `${activePoint.y}px` }}
                     >
                       <p className="font-semibold text-white">{formatCurrency(activePoint.value)}</p>
-                      <p className="text-[11px] uppercase tracking-wide text-slate-400">{activePoint.label}</p>
+                      <p className="text-[11px] uppercase tracking-wide text-[var(--crm-muted)]">{activePoint.label}</p>
                     </div>
                   )}
                   <svg
@@ -651,12 +648,12 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
                   >
                     <defs>
                       <linearGradient id="revenueLineFill" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="rgba(129, 140, 248, 0.35)" />
-                        <stop offset="100%" stopColor="rgba(129, 140, 248, 0)" />
+                        <stop offset="0%" stopColor="rgba(0, 191, 175, 0.3)" />
+                        <stop offset="100%" stopColor="rgba(0, 191, 175, 0)" />
                       </linearGradient>
                       <linearGradient id="revenueLineStroke" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#c4b5fd" />
-                        <stop offset="100%" stopColor="#6366f1" />
+                        <stop offset="0%" stopColor="#7be8dc" />
+                        <stop offset="100%" stopColor="#00bfaf" />
                       </linearGradient>
                     </defs>
                     {areaPath && <path d={areaPath} fill="url(#revenueLineFill)" stroke="none" />}
@@ -678,8 +675,8 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
                             cx={point.x}
                             cy={point.y}
                             r={isActive ? 5.5 : 4}
-                            fill={isActive ? '#f8fafc' : '#c4b5fd'}
-                            stroke={isActive ? '#6366f1' : '#312e81'}
+                            fill={isActive ? '#f8fafc' : '#7be8dc'}
+                            stroke={isActive ? '#00bfaf' : '#0a3a35'}
                             strokeWidth={isActive ? 3 : 2}
                             className={isMobile ? 'cursor-pointer' : 'cursor-default'}
                             onMouseEnter={() => handlePointHover(point, index)}
@@ -698,7 +695,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
                             y={lineChartHeight - 6}
                             textAnchor="middle"
                             fontSize="10"
-                            fill={isActive ? '#e0e7ff' : '#94a3b8'}
+                            fill={isActive ? '#ebfffb' : '#94a3b8'}
                           >
                             {point.label}
                           </text>

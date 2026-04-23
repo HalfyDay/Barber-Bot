@@ -96,7 +96,7 @@
   };
   const loginLogoSrc = '/Image/site/login/logo.svg';
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#0b0d0d] text-slate-100" style={shellStyle}>
+    <div className="crm-app-shell relative min-h-screen overflow-hidden text-[var(--crm-text)]" style={shellStyle}>
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-6">
         <div className="w-full max-w-md" style={frameStyle}>
           <div className="relative z-0 flex justify-center">
@@ -109,18 +109,18 @@
           </div>
           <form
             onSubmit={handleSubmit}
-            className="relative z-10 -mt-12 w-full space-y-5 rounded-[32px] bg-[rgba(15,18,18,0.98)] p-7 pt-7 shadow-[0_24px_60px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:-mt-16 sm:pt-9"
+            className="crm-modal-surface relative z-10 -mt-12 w-full space-y-5 rounded-[32px] p-7 pt-7 sm:-mt-16 sm:pt-9"
             style={formStyle}
           >
             <div className="space-y-1 text-center">
               <h1 className="text-[2rem] font-extrabold tracking-tight text-white sm:text-3xl">Вход в CRM</h1>
-              <p className="text-sm text-slate-400">Авторизация для команды BrotherShop</p>
+              <p className="text-sm text-[var(--crm-muted)]">Авторизация для команды BrotherShop</p>
             </div>
             <div className="space-y-4">
               <label className="block">
-                <span className="mb-2 block text-sm text-slate-300">Номер телефона</span>
+                <span className="mb-2 block text-sm text-[var(--crm-text)]">Номер телефона</span>
                 <span className="relative block">
-                  <span className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-[#5ed8ce]">
+                  <span className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-[color:var(--crm-primary)]">
                     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M6.6 2h3.2l1.2 4.7-2 1.6a15.1 15.1 0 0 0 6.7 6.7l1.6-2 4.7 1.2v3.2a2 2 0 0 1-2.2 2A18.2 18.2 0 0 1 4.6 4.2 2 2 0 0 1 6.6 2Z"/>
                     </svg>
@@ -130,15 +130,15 @@
                     value={phone}
                     onChange={(event) => handlePhoneInput(event.target.value)}
                     placeholder="Телефон"
-                    className="crm-login-input w-full rounded-2xl bg-[rgba(7,9,10,0.96)] py-3.5 pl-12 pr-4 text-white shadow-inner shadow-black/20 backdrop-blur placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#00bfaf]/25"
+                    className="crm-login-input w-full py-3.5 pl-12 pr-4 text-white focus:outline-none"
                     style={inputStyle}
                   />
                 </span>
               </label>
               <label className="block">
-                <span className="mb-2 block text-sm text-slate-300">Пароль</span>
+                <span className="mb-2 block text-sm text-[var(--crm-text)]">Пароль</span>
                 <span className="relative block">
-                  <span className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-[#5ed8ce]">
+                  <span className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-[color:var(--crm-primary)]">
                     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M7 10V7a5 5 0 1 1 10 0v3M6 10h12a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-8a1 1 0 0 1 1-1Zm6 4v3"/>
                     </svg>
@@ -150,14 +150,14 @@
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="Пароль"
-                    className="crm-login-input w-full rounded-2xl bg-[rgba(7,9,10,0.96)] py-3.5 pl-12 pr-12 text-white shadow-inner shadow-black/20 backdrop-blur placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#00bfaf]/25"
+                    className="crm-login-input w-full py-3.5 pl-12 pr-12 text-white focus:outline-none"
                     style={inputStyle}
                   />
                   <button
                     type="button"
                     aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
                     onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-4 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:text-white"
+                    className="absolute right-4 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[var(--crm-muted)] transition hover:text-white"
                   >
                     {showPassword ? (
                       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -175,7 +175,7 @@
             {(validationError || error) && <ErrorBanner message={validationError || error} />}
             <button
               type="submit"
-              className="w-full rounded-2xl bg-[#00bfaf] py-3.5 font-semibold text-[#031211] shadow-[0_16px_34px_rgba(0,191,175,0.22)] transition duration-200 hover:scale-[1.01] hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00bfaf]/50"
+              className="crm-action-btn w-full py-3.5 font-semibold transition duration-200 hover:scale-[1.01] focus:outline-none"
               style={submitStyle}
             >
               Войти
@@ -1663,7 +1663,7 @@ const handleBarberFieldChange = (id, field, value) => {
   const liveUpdatedAt = realtimeSnapshot?.updatedAt || null;
   const effectiveLiveStatus = pendingReloadReason ? 'updating' : connectionStatus;
   const mainClassName = classNames(
-    'flex-1 min-w-0 w-full space-y-4 overflow-x-hidden p-4 md:p-8',
+    'flex-1 min-w-0 w-full space-y-4 overflow-x-hidden p-4 md:p-8 md:pt-6',
     isMobile ? 'pb-24' : ''
   );
   const renderActive = () => {
@@ -1748,7 +1748,7 @@ const handleBarberFieldChange = (id, field, value) => {
         if (!canAccessSystem) {
           return (
             <SectionCard title="Недостаточно прав">
-              <p className="text-sm text-slate-400">Раздел доступен только владельцу.</p>
+              <p className="text-sm text-[var(--crm-muted)]">Раздел доступен только владельцу.</p>
             </SectionCard>
           );
         }
@@ -1813,19 +1813,19 @@ const handleBarberFieldChange = (id, field, value) => {
   };
   if (fatalError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950 p-6 text-center text-white">
-        <div className="max-w-lg space-y-3 rounded-2xl border border-rose-500/50 bg-slate-900/80 p-6 shadow-2xl">
+      <div className="crm-app-shell flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center text-white">
+        <div className="crm-modal-surface max-w-lg space-y-3 p-6">
           <p className="text-lg font-semibold text-rose-200">Критическая ошибка интерфейса</p>
-          <p className="text-sm text-slate-300">
+          <p className="text-sm text-[var(--crm-text)]">
             Сообщение ниже можно переслать разработчику. После исправления перезагрузите страницу.
           </p>
-          <pre className="overflow-x-auto rounded-xl bg-slate-950/80 p-4 text-left text-xs text-rose-200">
+          <pre className="crm-inline-panel overflow-x-auto rounded-xl p-4 text-left text-xs text-rose-200">
             {fatalError}
           </pre>
         </div>
         <button
           onClick={() => window.location.reload()}
-          className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800"
+          className="crm-ghost-btn px-4 py-2 text-sm"
         >
           Перезагрузить страницу
         </button>
@@ -1833,7 +1833,7 @@ const handleBarberFieldChange = (id, field, value) => {
     );
   }
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
+    <div className="crm-app-shell min-h-screen text-white">
       {isMobile && (
         <MobileTabs
           activeTab={activeTab}
@@ -1867,7 +1867,9 @@ const handleBarberFieldChange = (id, field, value) => {
         />
         <main className={mainClassName}>
           {globalError && <ErrorBanner message={globalError} />}
-          {renderActive()}
+          <div className="crm-page-switch">
+            {renderActive()}
+          </div>
         </main>
       </div>
       <ProfileModal

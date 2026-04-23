@@ -1,6 +1,6 @@
 ﻿const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [], onOpenProfile }) => {
   if (!groups.length) {
-    return <p className="text-slate-400">Записей пока нет.</p>;
+    return <p className="text-[var(--crm-muted)]">Записей пока нет.</p>;
   }
   const visibleColumns = useMemo(() => columns.filter((column) => !hiddenColumns.includes(column.key)), [columns, hiddenColumns]);
   const renderColumnValue = (record, column) => {
@@ -16,7 +16,7 @@
               event.stopPropagation();
               onOpenProfile(value);
             }}
-            className="text-indigo-300 hover:text-indigo-100"
+            className="text-[color:var(--crm-primary)] hover:text-white"
           >
             {value}
           </button>
@@ -51,10 +51,10 @@
       {groups.map((group) => (
         <section key={group.key} className="space-y-3">
           {group.label && (
-            <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
-              <span className="h-px flex-1 bg-slate-700" />
+            <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--crm-muted)]">
+              <span className="h-px flex-1 bg-[color:var(--crm-outline)]" />
               {group.label}
-              <span className="h-px flex-1 bg-slate-700" />
+              <span className="h-px flex-1 bg-[color:var(--crm-outline)]" />
             </div>
           )}
           <div className="grid gap-3 lg:grid-cols-2">
@@ -70,33 +70,33 @@
                   key={key}
                   onClick={() => onOpen?.(record, { allowDelete: true })}
                   onKeyDown={(event) => event.key === 'Enter' && onOpen?.(record, { allowDelete: true })}
-                  className="flex h-full cursor-pointer flex-col rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-left transition hover:border-indigo-500/70 hover:bg-slate-900/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 sm:p-4"
+                  className="crm-soft-card flex h-full cursor-pointer flex-col p-3 text-left transition hover:-translate-y-0.5 focus:outline-none sm:p-4"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800/70 pb-3">
+                  <div className="flex flex-col gap-2 border-b crm-table-divider pb-3 xl:flex-row xl:items-start xl:justify-between xl:gap-3">
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{formatDateBadgeLabel(record.Date)}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--crm-muted)]">{formatDateBadgeLabel(record.Date)}</p>
                       <div className="flex items-baseline gap-2">
                         <p className="text-2xl font-semibold text-white sm:text-3xl">{start || record.Time || '-'}</p>
-                        {end && <p className="text-xs text-slate-400 sm:text-sm">до {end}</p>}
+                        {end && <p className="text-xs text-[var(--crm-muted)] sm:text-sm">до {end}</p>}
                       </div>
                     </div>
-                    <div className="flex flex-col items-end gap-2 text-right">
+                    <div className="flex flex-col items-start gap-2 text-left xl:items-end xl:text-right">
                       <span className={classNames('inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide', getStatusBadgeClasses(statusLabel))}>
                         {statusLabel || 'Без статуса'}
                       </span>
                       {record.Barber && (
-                        <p className="text-xs text-slate-400 sm:text-sm">
+                        <p className="text-xs text-[var(--crm-muted)] sm:text-sm">
                           Барбер: <span className="font-semibold text-white">{record.Barber}</span>
                         </p>
                       )}
                     </div>
                   </div>
-                  <div className="mt-3 flex flex-col gap-3 text-[13px] text-slate-300 sm:text-sm">
+                  <div className="mt-3 flex flex-col gap-3 text-[13px] text-[var(--crm-text)] sm:text-sm">
                     {visibleColumns.length > 0 ? (
                       <div className="grid gap-2">
                         {visibleColumns.map((column) => (
-                          <div key={`${key}-${column.key}`} className="flex items-center justify-between rounded-xl border border-slate-800/70 bg-slate-950/50 px-2 py-1.5">
-                            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">{column.label}</p>
+                          <div key={`${key}-${column.key}`} className="crm-soft-panel flex items-center justify-between px-2 py-1.5">
+                            <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--crm-muted)]">{column.label}</p>
                             <p className="text-right text-slate-200">{renderColumnValue(record, column)}</p>
                           </div>
                         ))}
@@ -111,7 +111,7 @@
                                 event.stopPropagation();
                                 onOpenProfile(record.CustomerName);
                               }}
-                              className="text-left text-base font-semibold text-white hover:text-indigo-300 sm:text-lg"
+                              className="text-left text-base font-semibold text-white hover:text-[color:var(--crm-primary)] sm:text-lg"
                             >
                               {record.CustomerName}
                             </button>
@@ -124,14 +124,14 @@
                         {servicesList.length ? (
                           <div className="flex flex-wrap gap-2">
                             {servicesList.slice(0, 3).map((service, index) => (
-                              <span key={`${service}-${index}`} className="rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-0.5 text-[11px] text-slate-200 sm:text-xs">
+                              <span key={`${service}-${index}`} className="rounded-full border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-2 py-0.5 text-[11px] text-[var(--crm-text)] sm:text-xs">
                                 {service}
                               </span>
                             ))}
-                            {servicesList.length > 3 && <span className="text-[11px] text-slate-500">+{servicesList.length - 3}</span>}
+                            {servicesList.length > 3 && <span className="text-[11px] text-[var(--crm-muted)]">+{servicesList.length - 3}</span>}
                           </div>
                         ) : (
-                          <p className="text-xs text-slate-500">Услуги не указаны</p>
+                          <p className="text-xs text-[var(--crm-muted)]">Услуги не указаны</p>
                         )}
                       </>
                     )}
@@ -179,7 +179,7 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
           event.stopPropagation();
           onOpenProfile(record.CustomerName);
         }}
-        className={classNames('block w-full min-w-0 text-left font-semibold text-white hover:text-indigo-300', effectiveCompact ? 'truncate text-sm' : 'truncate')}
+        className={classNames('block w-full min-w-0 text-left font-semibold text-white hover:text-[color:var(--crm-primary)]', effectiveCompact ? 'truncate text-sm' : 'truncate')}
       >
         {record.CustomerName}
       </button>
@@ -190,7 +190,7 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
     <p className={classNames('font-semibold text-white', effectiveCompact ? 'text-sm' : 'text-base sm:text-lg')}>Без имени</p>
   );
   const cardClassName = classNames(
-    'flex h-full cursor-pointer flex-col rounded-2xl border border-slate-800 bg-slate-950/40 text-left transition hover:border-indigo-500/70 hover:bg-slate-900/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/60',
+    'crm-soft-panel flex h-full cursor-pointer flex-col text-left transition hover:-translate-y-0.5 hover:bg-[color:var(--crm-surface-5)] focus:outline-none',
     effectiveCompact ? 'p-2.5' : 'p-3 sm:p-4'
   );
   if (effectiveCompact) {
@@ -206,7 +206,7 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-lg font-semibold text-white">{start || record.Time || '-'}</p>
-            {end && <p className="text-[11px] text-slate-400">до {end}</p>}
+            {end && <p className="text-[11px] text-[var(--crm-muted)]">до {end}</p>}
           </div>
           <span
             className={classNames(
@@ -226,14 +226,14 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
         {servicesList.length ? (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {servicesList.slice(0, 2).map((service, index) => (
-              <span key={`${service}-${index}`} className="rounded-full border border-slate-700/70 bg-slate-900/70 px-1.5 py-0.5 text-[10px] text-slate-200">
+              <span key={`${service}-${index}`} className="rounded-full border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-1.5 py-0.5 text-[10px] text-[var(--crm-text)]">
                 {service}
               </span>
             ))}
-            {servicesList.length > 2 && <span className="text-[10px] text-slate-500">+{servicesList.length - 2}</span>}
+            {servicesList.length > 2 && <span className="text-[10px] text-[var(--crm-muted)]">+{servicesList.length - 2}</span>}
           </div>
         ) : (
-          <p className="mt-2 text-[11px] text-slate-500">Услуги не указаны</p>
+          <p className="mt-2 text-[11px] text-[var(--crm-muted)]">Услуги не указаны</p>
         )}
       </div>
     );
@@ -247,15 +247,15 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
       onKeyDown={(event) => event.key === 'Enter' && onOpen?.(record, { allowDelete: true })}
       className={cardClassName}
     >
-      <div className={classNames('border-b border-slate-800/70', compact ? 'pb-2' : 'pb-3')}>
-        <div className={classNames('flex', compact ? 'flex-col gap-2' : 'flex-wrap items-start justify-between gap-3')}>
+      <div className={classNames('border-b crm-table-divider', compact ? 'pb-2' : 'pb-3')}>
+        <div className={classNames('flex', compact ? 'flex-col gap-2' : 'flex-col gap-2 xl:flex-row xl:items-start xl:justify-between xl:gap-3')}>
           <div className="space-y-1">
             <div className="flex items-baseline gap-2">
               <p className={classNames('font-semibold text-white', compact ? 'text-lg' : 'text-2xl sm:text-3xl')}>{start || record.Time || '-'}</p>
-              {end && <p className={classNames('text-slate-400', compact ? 'text-[11px]' : 'text-xs sm:text-sm')}>до {end}</p>}
+              {end && <p className={classNames('text-[var(--crm-muted)]', compact ? 'text-[11px]' : 'text-xs sm:text-sm')}>до {end}</p>}
             </div>
           </div>
-          <div className={classNames('flex gap-2', compact ? 'flex-wrap items-center' : 'flex-col items-end text-right')}>
+          <div className={classNames('flex gap-2', compact ? 'flex-wrap items-center' : 'flex-col items-start text-left xl:items-end xl:text-right')}>
             <span
               className={classNames(
                 'inline-flex items-center rounded-full font-semibold uppercase tracking-wide',
@@ -266,29 +266,29 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
               {statusLabel || 'Без статуса'}
             </span>
             {record.Barber && (
-              <p className={classNames('text-slate-400', compact ? 'min-w-0 text-[11px]' : 'text-xs sm:text-sm')}>
+              <p className={classNames('text-[var(--crm-muted)]', compact ? 'min-w-0 text-[11px]' : 'text-xs sm:text-sm')}>
                 Барбер: <span className="font-semibold text-white">{record.Barber}</span>
               </p>
             )}
           </div>
         </div>
       </div>
-      <div className="mt-3 flex min-w-0 flex-col gap-3 text-[13px] text-slate-300 sm:text-sm">
+      <div className="mt-3 flex min-w-0 flex-col gap-3 text-[13px] text-[var(--crm-text)] sm:text-sm">
         {customerNode}
         {servicesList.length ? (
           <div className="flex flex-wrap gap-2">
             {servicesList.slice(0, 3).map((service, index) => (
               <span
                 key={`${service}-${index}`}
-                className="rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-0.5 text-[11px] text-slate-200 sm:text-xs"
+                className="rounded-full border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-2 py-0.5 text-[11px] text-[var(--crm-text)] sm:text-xs"
               >
                 {service}
               </span>
             ))}
-            {servicesList.length > 3 && <span className="text-[11px] text-slate-500">+{servicesList.length - 3}</span>}
+            {servicesList.length > 3 && <span className="text-[11px] text-[var(--crm-muted)]">+{servicesList.length - 3}</span>}
           </div>
         ) : (
-          <p className="text-xs text-slate-500">Услуги не указаны</p>
+          <p className="text-xs text-[var(--crm-muted)]">Услуги не указаны</p>
         )}
       </div>
     </div>
@@ -388,12 +388,12 @@ const AppointmentsCalendarView = ({
         type="button"
         onClick={() => onCreateAppointment?.({ Barber: slot.Barber, Date: slot.Date, Time: slot.Time })}
         className={classNames(
-          'w-full rounded-2xl border border-dashed border-emerald-500/50 bg-emerald-500/10 text-left text-emerald-100 transition hover:border-emerald-400 hover:bg-emerald-500/15 focus:outline-none focus:ring-2 focus:ring-emerald-400/40',
+          'w-full rounded-[22px] bg-[rgba(0,191,175,0.26)] text-center text-[#eafffb] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_10px_22px_rgba(0,0,0,0.18)] transition hover:bg-[rgba(0,191,175,0.32)] focus:outline-none',
           compact ? 'px-2 py-2' : 'p-3'
         )}
       >
-        <p className={classNames('font-semibold', compact ? 'text-[11px]' : 'text-sm')}>{slot.Time || 'Свободное окно'}</p>
-        {showBarber && slot.Barber && <p className={classNames('mt-1 text-emerald-200/80', compact ? 'text-[10px]' : 'text-xs')}>{slot.Barber}</p>}
+        <p className={classNames('font-semibold text-[#f4fffd]', compact ? 'text-[11px]' : 'text-sm')}>{slot.Time || 'Свободное окно'}</p>
+        {showBarber && slot.Barber && <p className={classNames('mt-1 text-[#c7f8f2]', compact ? 'text-[10px]' : 'text-xs')}>{slot.Barber}</p>}
       </button>
     ),
     [onCreateAppointment]
@@ -502,12 +502,12 @@ const AppointmentsCalendarView = ({
   }, [calendarDate, safeViewMode, safeScaleMode, scrollCalendarToToday]);
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl bg-slate-950/30 p-3 sm:rounded-3xl sm:p-4">
-        <div className="flex flex-col gap-2.5 sm:gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="crm-soft-card p-3 sm:p-4">
+        <div className="flex items-center justify-between gap-3">
           <div className="relative">
             <button type="button" onClick={openDatePicker} className="text-left">
               <p className="text-lg font-semibold text-white sm:text-xl">{headerTitle}</p>
-              <p className="text-xs text-slate-400 sm:text-sm">{headerMeta}</p>
+              <p className="text-xs text-[var(--crm-muted)] sm:text-sm">{headerMeta}</p>
             </button>
             <input
               ref={datePickerInputRef}
@@ -520,11 +520,11 @@ const AppointmentsCalendarView = ({
               tabIndex={-1}
             />
           </div>
-          <div className="inline-flex items-center gap-1 rounded-2xl bg-slate-900/85 p-1">
+          <div className="crm-inline-panel inline-flex flex-shrink-0 items-center gap-1 p-1">
             <button
               type="button"
               onClick={() => shiftCalendar('prev')}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--crm-muted)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white focus:outline-none"
               aria-label="Назад"
               title="Назад"
             >
@@ -533,14 +533,14 @@ const AppointmentsCalendarView = ({
             <button
               type="button"
               onClick={jumpToToday}
-              className="inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 sm:px-5"
+              className="inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-semibold text-[var(--crm-text)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white focus:outline-none"
             >
               Сегодня
             </button>
             <button
               type="button"
               onClick={() => shiftCalendar('next')}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--crm-muted)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white focus:outline-none"
               aria-label="Вперед"
               title="Вперед"
             >
@@ -578,7 +578,7 @@ const AppointmentsCalendarView = ({
             )
           )}
           {!anchorDayEntries.length && (
-            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/30 p-6 text-sm text-slate-400">На этот день записей нет.</div>
+            <div className="crm-inline-panel p-6 text-sm text-[var(--crm-muted)]">На этот день записей нет.</div>
           )}
         </div>
       )}
@@ -596,7 +596,14 @@ const AppointmentsCalendarView = ({
               <section
                 key={dayKey}
                 ref={isToday ? todayMarkerRef : null}
-                className={classNames(scaleConfig.weekSectionMinHeight, scaleConfig.weekSectionPadding, 'space-y-3 rounded-2xl border border-slate-800 bg-slate-950/30', isToday && 'ring-1 ring-indigo-500/50')}
+                className={classNames(
+                  scaleConfig.weekSectionMinHeight,
+                  scaleConfig.weekSectionPadding,
+                  'crm-soft-card space-y-3',
+                  isToday
+                    ? 'bg-[rgba(0,191,175,0.16)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_18px_44px_rgba(4,7,21,0.26)]'
+                    : ''
+                )}
               >
                 <button
                   type="button"
@@ -604,10 +611,11 @@ const AppointmentsCalendarView = ({
                     setCalendarDate?.(dayKey);
                     setViewMode?.('day');
                   }}
-                  className="w-full text-left"
+                  className="w-full text-center"
                 >
-                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{new Intl.DateTimeFormat('ru-RU', { weekday: 'short' }).format(day).replace('.', '')}</p>
-                  <p className="text-lg font-semibold text-white">{new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(day).replace('.', '')}</p>
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white">
+                    {`${new Intl.DateTimeFormat('ru-RU', { weekday: 'short' }).format(day).replace('.', '')} ${new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(day).replace('.', '')}`}
+                  </p>
                 </button>
                 <div className="space-y-2">
                   {dayEntries.map((entry) =>
@@ -626,7 +634,7 @@ const AppointmentsCalendarView = ({
                       })
                     )
                   )}
-                  {!dayEntries.length && <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-center text-xs text-slate-500">Пусто</div>}
+                  {!dayEntries.length && <div className="crm-inline-panel px-3 py-4 text-center text-xs text-[var(--crm-muted)]">Пусто</div>}
                 </div>
               </section>
             );
@@ -650,7 +658,14 @@ const AppointmentsCalendarView = ({
               <section
                 key={dayKey}
                 ref={isToday ? todayMarkerRef : null}
-                className={classNames(scaleConfig.monthSectionMinHeight, scaleConfig.monthSectionPadding, 'space-y-2 rounded-2xl border border-slate-800 bg-slate-950/30', isToday && 'ring-1 ring-indigo-500/50')}
+                className={classNames(
+                  scaleConfig.monthSectionMinHeight,
+                  scaleConfig.monthSectionPadding,
+                  'crm-soft-card space-y-2',
+                  isToday
+                    ? 'bg-[rgba(0,191,175,0.16)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_18px_44px_rgba(4,7,21,0.26)]'
+                    : ''
+                )}
               >
                 <div className="flex items-center justify-between gap-2">
                   <button
@@ -659,11 +674,11 @@ const AppointmentsCalendarView = ({
                       setCalendarDate?.(dayKey);
                       setViewMode?.('day');
                     }}
-                    className="text-left"
+                    className="text-left transition hover:text-[color:var(--crm-primary)]"
                   >
-                    <p className={classNames('text-sm font-semibold', isCurrentMonth ? 'text-white' : 'text-slate-500')}>{day.getDate()}</p>
+                    <p className={classNames('text-sm font-semibold', isCurrentMonth ? 'text-white' : 'text-[var(--crm-muted)]')}>{day.getDate()}</p>
                   </button>
-                  {!!dayEntries.length && <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300">{dayEntries.length}</span>}
+                  {!!dayEntries.length && <span className="rounded-full bg-[color:var(--crm-surface-5)] px-2 py-0.5 text-[10px] text-[var(--crm-text)]">{dayEntries.length}</span>}
                 </div>
                 <div className="space-y-2">
                   {visibleEntries.map((entry) =>
@@ -689,12 +704,12 @@ const AppointmentsCalendarView = ({
                         setCalendarDate?.(dayKey);
                         setViewMode?.('day');
                       }}
-                      className="text-xs text-indigo-300 hover:text-indigo-100"
+                      className="text-xs text-[color:var(--crm-primary)] hover:text-white"
                     >
                       + еще {dayEntries.length - 3}
                     </button>
                   )}
-                  {!dayEntries.length && <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-center text-xs text-slate-600">-</div>}
+                  {!dayEntries.length && <div className="crm-inline-panel px-3 py-4 text-center text-xs text-[var(--crm-muted)]">-</div>}
                 </div>
               </section>
             );

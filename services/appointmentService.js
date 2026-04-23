@@ -121,6 +121,70 @@ const createAppointmentService = ({
     return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
   };
 
+  const resolveAppointmentOwnerKeys = (userLike) => {
+    const userIds = new Set();
+    const names = new Set();
+    const pushUserId = (value) => {
+      const safeValue = normalizeText(value);
+      if (safeValue) userIds.add(safeValue);
+    };
+    const pushName = (value) => {
+      const safeValue = normalizeText(value);
+      if (safeValue) names.add(safeValue);
+    };
+    if (typeof userLike === "string") {
+      pushUserId(userLike);
+      return {
+        userIds: [...userIds],
+        names: [...names],
+        phone: "",
+      };
+    }
+    pushUserId(userLike?.id);
+    pushUserId(userLike?.userId);
+    pushUserId(userLike?.telegramId);
+    pushUserId(userLike?.TelegramID);
+    pushName(userLike?.Name);
+    pushName(userLike?.name);
+    pushName(userLike?.displayName);
+    return {
+      userIds: [...userIds],
+      names: [...names],
+      phone: normalizePhone(userLike?.Phone || userLike?.phone || ""),
+    };
+  };
+
+  const buildAppointmentOwnerWhere = (userLike) => {
+    const keys = resolveAppointmentOwnerKeys(userLike);
+    const ors = [];
+    if (keys.userIds.length) {
+      ors.push({ UserID: { in: keys.userIds } });
+    }
+    if (keys.phone) {
+      ors.push({ Phone: keys.phone });
+    }
+    keys.names.forEach((name) => {
+      ors.push({ CustomerName: name });
+    });
+    if (!ors.length) return null;
+    return ors.length === 1 ? ors[0] : { OR: ors };
+  };
+
+  const doesAppointmentBelongToUser = (appointment, userLike) => {
+    if (!appointment) return false;
+    const keys = resolveAppointmentOwnerKeys(userLike);
+    if (keys.userIds.length && keys.userIds.includes(normalizeText(appointment.UserID))) {
+      return true;
+    }
+    if (keys.phone && normalizePhone(appointment.Phone || "") === keys.phone) {
+      return true;
+    }
+    if (keys.names.length && keys.names.includes(normalizeText(appointment.CustomerName))) {
+      return true;
+    }
+    return false;
+  };
+
   const canFitTimeRange = (startMinute, duration, busyIntervals = []) => {
     const endMinute = startMinute + duration;
     if (endMinute > 24 * 60) return false;
@@ -236,11 +300,11 @@ const createAppointmentService = ({
     return slots;
   };
 
-  const countHomeUserActiveAppointments = async (userId, prismaClient = prisma) => {
-    const safeUserId = normalizeText(userId);
-    if (!safeUserId) return 0;
+  const countHomeUserActiveAppointments = async (userLike, prismaClient = prisma) => {
+    const where = buildAppointmentOwnerWhere(userLike);
+    if (!where) return 0;
     const rows = await prismaClient.appointments.findMany({
-      where: { UserID: safeUserId },
+      where,
       select: { Status: true },
     });
     return rows.reduce((acc, row) => (isActiveStatus(row?.Status) ? acc + 1 : acc), 0);
@@ -339,7 +403,7 @@ const createAppointmentService = ({
     }
 
     return prisma.$transaction(async (tx) => {
-      const activeCount = await countHomeUserActiveAppointments(homeUser.id, tx);
+      const activeCount = await countHomeUserActiveAppointments(homeUser, tx);
       if (activeCount >= settings.bookingLimit) {
         throw createError("LIMIT_REACHED");
       }
@@ -373,8 +437,10 @@ const createAppointmentService = ({
 
   return {
     buildTimeSlotsForDate,
+    buildAppointmentOwnerWhere,
     countHomeUserActiveAppointments,
     createHomeAppointment,
+    doesAppointmentBelongToUser,
     formatMinutesAsClock,
     getBusyIntervalsForBarberDate,
     getWorkingHoursForBarberDate,

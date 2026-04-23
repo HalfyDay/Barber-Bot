@@ -307,7 +307,17 @@ const registerBotInternalRoutes = ({
       if (!summary.lookupKeys.length) {
         return res.json({ appointments: [], user: null });
       }
-      const where = { UserID: { in: summary.lookupKeys } };
+      const where =
+        typeof appointmentService.buildAppointmentOwnerWhere === "function"
+          ? appointmentService.buildAppointmentOwnerWhere({
+              ...(summary.user || {}),
+              id: summary.userRecordId || summary.user?.id || safeTelegramId,
+              telegramId: safeTelegramId,
+            })
+          : { UserID: { in: summary.lookupKeys } };
+      if (!where) {
+        return res.json({ appointments: [], user: summary.user });
+      }
       if (activeOnly) where.Status = STATUS_ACTIVE;
       const appointments = await prisma.appointments.findMany({
         where,

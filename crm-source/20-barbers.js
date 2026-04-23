@@ -305,7 +305,7 @@
       <span
         className={classNames(
           'rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide',
-          barber.isActive !== false ? 'bg-emerald-500/15 text-emerald-200' : 'bg-slate-700 text-slate-300'
+          barber.isActive !== false ? 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]' : 'bg-[color:var(--crm-surface-3)] text-[var(--crm-muted)]'
         )}
       >
         {barber.isActive !== false ? ACTIVE_BARBER_LABEL : HIDDEN_BARBER_LABEL}
@@ -320,7 +320,7 @@
           canManageBarbers ? (
             <button
               onClick={() => openEditor('create')}
-              className="rounded-full bg-emerald-600/90 px-4 py-2 text-sm font-semibold text-white shadow shadow-emerald-900/40 hover:bg-emerald-500"
+              className="crm-action-btn px-4 py-2 text-sm"
             >
               + Добавить барбера
             </button>
@@ -328,7 +328,7 @@
         }
       >
         {sortedBarbers.length === 0 ? (
-          <p className="text-slate-400">Список барберов пока пуст. Добавьте первого сотрудника.</p>
+          <p className="text-[var(--crm-muted)]">Список барберов пока пуст. Добавьте первого сотрудника.</p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {visibleBarbers.map((barber, index) => {
@@ -360,8 +360,8 @@
                     }
                   }}
                   className={classNames(
-                    'group flex w-full items-center gap-4 rounded-2xl border border-slate-700/70 bg-slate-900/50 p-4 text-left transition hover:border-indigo-500/70 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500',
-                    isDragging && 'border-indigo-400/80 bg-slate-900 shadow-[0_18px_40px_rgba(49,46,129,0.22)]'
+                    'group crm-soft-card flex w-full items-center gap-4 p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)]',
+                    isDragging && 'bg-[color:var(--crm-surface-4)] shadow-[0_18px_40px_rgba(4,7,21,0.24)]'
                   )}
                 >
                   {canManageBarbers ? (
@@ -374,8 +374,8 @@
                       }}
                       onPointerDown={(event) => handleReorderPointerDown(event, barber.id)}
                       className={classNames(
-                        'flex h-11 w-11 flex-shrink-0 touch-none items-center justify-center rounded-xl border border-slate-700/80 bg-slate-950/80 text-slate-500 transition',
-                        reorderBusy ? 'cursor-wait opacity-60' : 'cursor-grab hover:border-indigo-400 hover:bg-slate-900 hover:text-white active:cursor-grabbing'
+                        'crm-soft-panel flex h-11 w-11 flex-shrink-0 touch-none items-center justify-center text-[var(--crm-muted)] transition',
+                        reorderBusy ? 'cursor-wait opacity-60' : 'cursor-grab hover:bg-[color:var(--crm-surface-4)] hover:text-white active:cursor-grabbing'
                       )}
                       disabled={reorderBusy}
                     >
@@ -388,42 +388,53 @@
                   ) : null}
                   <div className="relative h-16 w-16 flex-shrink-0">
                     {avatarSrc ? (
-                      <img src={avatarSrc} alt={barber.name || 'avatar'} className="h-16 w-16 rounded-2xl object-cover" />
+                      <img
+                        src={avatarSrc}
+                        alt={barber.name || 'avatar'}
+                        className={classNames(
+                          'h-16 w-16 rounded-2xl object-cover transition',
+                          barber.isActive !== false ? '' : 'grayscale opacity-80'
+                        )}
+                      />
                     ) : (
-                      <DefaultProfileIcon className="h-16 w-16 rounded-2xl border border-slate-700/70 text-slate-400" iconClassName="h-8 w-8" />
+                      <DefaultProfileIcon
+                        className={classNames(
+                          'h-16 w-16 rounded-2xl text-[var(--crm-muted)] transition',
+                          barber.isActive !== false ? '' : 'grayscale opacity-80'
+                        )}
+                        iconClassName="h-8 w-8"
+                      />
                     )}
                     <span
                       className={classNames(
-                        'absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-slate-900',
-                        barber.isActive !== false ? 'bg-emerald-400' : 'bg-slate-600'
+                        'absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[color:var(--crm-surface)]',
+                        barber.isActive !== false ? 'bg-[color:var(--crm-primary)]' : 'bg-[color:var(--crm-muted)]'
                       )}
                     />
                   </div>
                   <div className="flex-1 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex h-7 min-w-[1.9rem] items-center justify-center rounded-full bg-indigo-500/15 px-2 text-[11px] font-semibold text-indigo-100">
+                      <span className="inline-flex h-7 min-w-[1.9rem] items-center justify-center rounded-full bg-[color:var(--crm-primary-container)] px-2 text-[11px] font-semibold text-[color:var(--crm-primary)]">
                         {index + 1}
                       </span>
                       <p className="text-base font-semibold text-white sm:text-lg">{barber.name || 'Без имени'}</p>
-                      {renderStatusBadge(barber)}
                       {reorderBusy && isDragging ? (
-                        <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200">
+                        <span className="rounded-full bg-[color:var(--crm-highlight-soft)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--crm-highlight-text)]">
                           Сохраняем
                         </span>
                       ) : null}
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 sm:text-sm">
-                      <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-200">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--crm-muted)] sm:text-sm">
+                      <span className="px-0 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--crm-primary)]">
                         <IconStar className="mr-1 inline h-3.5 w-3.5 text-amber-300" /> {ratingLabel}
                       </span>
                       {positionName && (
-                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-200">
+                        <span className="px-0 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--crm-highlight-text)]">
                           {positionName}
                           {commissionLabel ? ` · ${commissionLabel}` : ''}
                         </span>
                       )}
                       {phoneLabel && <span className="text-slate-300">{phoneLabel}</span>}
-                      {barber.telegramId && <span className="text-slate-400">@{barber.telegramId}</span>}
                     </div>
                     {barber.description && <p className="text-sm text-slate-400">{barber.description}</p>}
                   </div>
@@ -441,19 +452,19 @@
         footer={
           <>
             {!isCreateMode && (
-              <button onClick={handleDelete} className="rounded-lg border border-rose-600 px-4 py-2 text-sm text-rose-200 hover:bg-rose-500/10">
+              <button onClick={handleDelete} className={classNames('crm-danger-btn', SHEET_FOOTER_BUTTON_CLASS)}>
                 Удалить
               </button>
             )}
-            <button onClick={closeEditor} className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800">
+            <button onClick={closeEditor} className={classNames('crm-ghost-btn', SHEET_FOOTER_BUTTON_CLASS)}>
               Отмена
             </button>
             <button
               onClick={handleSave}
               disabled={!canSubmit || savingBarber}
               className={classNames(
-                'rounded-lg px-4 py-2 text-sm font-semibold text-white',
-                canSubmit && !savingBarber ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-slate-700 text-slate-300'
+                SHEET_FOOTER_BUTTON_CLASS,
+                canSubmit && !savingBarber ? 'crm-action-btn' : 'crm-ghost-btn opacity-60'
               )}
             >
               {savingBarber ? 'Сохранение...' : isCreateMode ? 'Добавить' : 'Сохранить'}
@@ -484,7 +495,7 @@
               onCardModeChange={handleCardModeChange}
               onCardImageChange={handleCardImageChange}
             />
-            <div className="space-y-5 rounded-3xl border border-slate-800 bg-slate-950/80 p-6 shadow-inner shadow-black/10">
+            <div className="crm-soft-card space-y-5 p-6">
               <div className="grid grid-cols-2 gap-4">
                 <input
                   name="barberName"
@@ -492,7 +503,7 @@
                   value={workingBarber.name || ''}
                   onChange={(event) => handleFieldChange('name', event.target.value)}
                   placeholder="Имя"
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                  className="w-full px-4 py-3 text-white placeholder:text-slate-500"
                 />
                 <div className="w-full">
                   <FixedRatingSlider dense value={workingBarber.rating} onChange={(event) => handleFieldChange('rating', event.target.value)} />
@@ -505,7 +516,7 @@
                     value={workingBarber.password || ""}
                     onChange={(event) => handleFieldChange('password', event.target.value)}
                     placeholder="Пароль"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 pr-12 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                    className="w-full px-4 py-3 pr-12 text-white placeholder:text-slate-500"
                   />
                   <button
                     type="button"
@@ -520,63 +531,50 @@
                   type="button"
                   onClick={() => handleFieldChange('isActive', !(workingBarber.isActive !== false))}
                   className={classNames(
-                    'flex h-[52px] items-center justify-between rounded-2xl border px-4 text-sm font-semibold transition',
+                    'crm-inline-panel flex h-[52px] items-center justify-between px-4 text-sm font-semibold transition',
                     workingBarber.isActive !== false
-                      ? 'border-emerald-400 bg-emerald-500/10 text-emerald-200'
-                      : 'border-slate-700 bg-slate-900/60 text-slate-400'
+                      ? 'text-[color:var(--crm-primary)]'
+                      : 'text-[var(--crm-muted)]'
                   )}
                 >
                   <span>{workingBarber.isActive !== false ? ACTIVE_BARBER_LABEL : HIDDEN_BARBER_LABEL}</span>
                   <span
                     className={classNames(
-                      'flex h-5 w-5 items-center justify-center rounded-full border',
+                      'flex h-5 w-5 items-center justify-center rounded-full',
                       workingBarber.isActive !== false
-                        ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100'
-                        : 'border-slate-600 text-slate-500'
+                        ? 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]'
+                        : 'bg-[color:var(--crm-surface-3)] text-[var(--crm-muted)]'
                     )}
                   >
                     {workingBarber.isActive !== false ? <IconCheck className="h-3.5 w-3.5" /> : <IconX className="h-3.5 w-3.5" />}
                   </span>
                 </button>
-                <div className="col-span-2 grid gap-3 md:grid-cols-2">
+                <div className="col-span-2 grid grid-cols-2 gap-3">
                   <div className="space-y-2">
                     <label className="text-sm text-slate-300">Права доступа</label>
-                    <select
+                    <CustomSelect
                       value={normalizeRoleValue(workingBarber.role)}
-                      onChange={(event) => handleFieldChange('role', normalizeRoleValue(event.target.value))}
-                      className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white focus:border-indigo-400 focus:outline-none"
-                    >
-                      {ROLE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(nextValue) => handleFieldChange('role', normalizeRoleValue(nextValue))}
+                      options={ROLE_OPTIONS}
+                      buttonClassName="h-12 px-4"
+                    />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm text-slate-300">Должность</label>
-                    <select
+                    <CustomSelect
                       value={workingBarber.positionId || ''}
-                      onChange={(event) => handleFieldChange('positionId', event.target.value || null)}
-                      className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white focus:border-indigo-400 focus:outline-none"
-                    >
-                      <option value="">Без должности</option>
-                      {sortedPositions.map((position) => (
-                        <option key={position.id} value={position.id}>
-                          {position.name}
-                          {typeof position.commissionRate === 'number' ? ` · ${formatPercent(position.commissionRate)}` : ''}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(nextValue) => handleFieldChange('positionId', nextValue || null)}
+                      options={[
+                        { value: '', label: 'Без должности' },
+                        ...sortedPositions.map((position) => ({
+                          value: position.id,
+                          label: `${position.name}${typeof position.commissionRate === 'number' ? ` · ${formatPercent(position.commissionRate)}` : ''}`,
+                        })),
+                      ]}
+                      buttonClassName="h-12 px-4"
+                    />
                   </div>
                 </div>
-                <textarea
-                  value={workingBarber.description || ''}
-                  onChange={(event) => handleFieldChange('description', event.target.value)}
-                  placeholder="Описание"
-                  rows={4}
-                  className="col-span-2 w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
-                />
                 <input
                   name="barberPhone"
                   aria-label="Телефон"
@@ -584,7 +582,7 @@
                   value={formatPhoneDisplay(workingBarber.phone || '')}
                   onChange={(event) => handlePhoneChange(event.target.value)}
                   placeholder="Телефон"
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                  className="w-full px-4 py-3 text-white placeholder:text-slate-500"
                 />
                 <input
                   name="barberTelegram"
@@ -592,13 +590,13 @@
                   value={workingBarber.telegramId || ''}
                   onChange={(event) => handleFieldChange('telegramId', event.target.value)}
                   placeholder="Telegram ID"
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                  className="w-full px-4 py-3 text-white placeholder:text-slate-500"
                 />
               </div>
             </div>
           </div>
         ) : (
-          <p className="text-slate-300">Выберите барбера, чтобы отредактировать данные.</p>
+          <p className="text-[var(--crm-text)]">Выберите барбера, чтобы отредактировать данные.</p>
         )}
       </Modal>
     </div>
@@ -649,7 +647,7 @@ const BarberProfileView = ({
   if (!barber) {
     return (
       <SectionCard title="Профиль сотрудника">
-        <p className="text-sm text-slate-400">Данные профиля недоступны. Обратитесь к администратору.</p>
+        <p className="text-sm text-[var(--crm-muted)]">Данные профиля недоступны. Обратитесь к администратору.</p>
       </SectionCard>
     );
   }
@@ -714,7 +712,7 @@ const BarberProfileView = ({
             onCardModeChange={(mode) => handleFieldChange('cardMode', normalizeCardMode(mode))}
             onCardImageChange={(path) => handleFieldChange('cardImageUrl', normalizeImagePath(path || ''))}
           />
-          <div className="space-y-5 rounded-3xl border border-slate-800 bg-slate-950/80 p-6 shadow-inner shadow-black/10">
+          <div className="crm-soft-card space-y-5 p-6">
             <div className="grid gap-4 md:grid-cols-2">
               <input
                 name="barberName"
@@ -722,7 +720,7 @@ const BarberProfileView = ({
                 value={barber.name || ''}
                 onChange={(event) => handleFieldChange('name', event.target.value)}
                 placeholder="Имя"
-                className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                className="w-full px-4 py-3 text-white placeholder:text-slate-500"
               />
               <div className="w-full">
                 <FixedRatingSlider
@@ -740,7 +738,7 @@ const BarberProfileView = ({
                   value={barber.password || ""}
                   onChange={(event) => handleFieldChange('password', event.target.value)}
                   placeholder="Пароль"
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 pr-12 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                  className="w-full px-4 py-3 pr-12 text-white placeholder:text-slate-500"
                 />
                 <button
                   type="button"
@@ -755,26 +753,26 @@ const BarberProfileView = ({
                 type="button"
                 onClick={() => handleFieldChange('isActive', !(barber.isActive !== false))}
                 className={classNames(
-                  'flex h-[52px] items-center justify-between rounded-2xl border px-4 text-sm font-semibold transition',
+                  'crm-inline-panel flex h-[52px] items-center justify-between px-4 text-sm font-semibold transition',
                   barber.isActive !== false
-                    ? 'border-emerald-400 bg-emerald-500/10 text-emerald-200'
-                    : 'border-slate-700 bg-slate-900/60 text-slate-400'
+                    ? 'text-[color:var(--crm-primary)]'
+                    : 'text-[var(--crm-muted)]'
                 )}
               >
                 <span>{barber.isActive !== false ? ACTIVE_BARBER_LABEL : HIDDEN_BARBER_LABEL}</span>
                 <span
                   className={classNames(
-                    'flex h-5 w-5 items-center justify-center rounded-full border',
+                    'flex h-5 w-5 items-center justify-center rounded-full',
                     barber.isActive !== false
-                      ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100'
-                      : 'border-slate-600 text-slate-500'
+                      ? 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]'
+                      : 'bg-[color:var(--crm-surface-3)] text-[var(--crm-muted)]'
                   )}
                 >
                   {barber.isActive !== false ? <IconCheck className="h-3.5 w-3.5" /> : <IconX className="h-3.5 w-3.5" />}
                 </span>
               </button>
-              <div className="col-span-2 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3">
-                <p className="text-sm text-slate-300">Должность</p>
+              <div className="crm-inline-panel col-span-2 px-4 py-3">
+                <p className="text-sm text-[var(--crm-muted)]">Должность</p>
                 <p className="text-base font-semibold text-white">{normalizeText(barber.position?.name) || 'Не назначена'}</p>
                 {typeof barber.position?.commissionRate === 'number'}
               </div>
@@ -783,7 +781,7 @@ const BarberProfileView = ({
                 onChange={(event) => handleFieldChange('description', event.target.value)}
                 placeholder="Описание"
                 rows={4}
-                className="col-span-2 w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                className="col-span-2 w-full px-4 py-3 text-white placeholder:text-slate-500"
               />
               <input
                 name="barberPhone"
@@ -792,7 +790,7 @@ const BarberProfileView = ({
                 value={formatPhoneDisplay(barber.phone || '')}
                 onChange={(event) => handlePhoneChange(event.target.value)}
                 placeholder="Телефон"
-                className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                className="w-full px-4 py-3 text-white placeholder:text-slate-500"
               />
               <input
                 name="barberTelegram"
@@ -800,7 +798,7 @@ const BarberProfileView = ({
                 value={barber.telegramId || ''}
                 onChange={(event) => handleFieldChange('telegramId', event.target.value)}
                 placeholder="Telegram"
-                className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                className="w-full px-4 py-3 text-white placeholder:text-slate-500"
               />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
@@ -819,7 +817,7 @@ const BarberProfileView = ({
                 type="button"
                 onClick={handleSaveProfile}
                 disabled={!hasChanges || saveState === 'saving'}
-                className="rounded-lg border border-slate-600 px-4 py-2 text-xs font-semibold text-white transition disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500 hover:border-emerald-400 hover:text-emerald-50"
+                className="crm-action-btn px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saveState === 'saving' ? 'Сохраняю...' : 'Сохранить'}
               </button>

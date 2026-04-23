@@ -43,7 +43,7 @@
         <div className="flex flex-nowrap items-center justify-end gap-2 sm:gap-3">
           <button
             onClick={onClose}
-            className={classNames(RESPONSIVE_ACTION_BUTTON_CLASS, 'border border-slate-600 text-white hover:bg-slate-800')}
+            className={classNames(RESPONSIVE_ACTION_BUTTON_CLASS, SHEET_FOOTER_BUTTON_CLASS, 'crm-ghost-btn')}
             aria-label="Отмена"
             title="Отмена"
           >
@@ -52,7 +52,7 @@
           </button>
           <button
             onClick={handleSubmit}
-            className={classNames(RESPONSIVE_ACTION_BUTTON_CLASS, 'bg-emerald-600 text-white hover:bg-emerald-500')}
+            className={classNames(RESPONSIVE_ACTION_BUTTON_CLASS, SHEET_FOOTER_BUTTON_CLASS, 'crm-action-btn')}
             aria-label="Сохранить"
             title="Сохранить"
           >
@@ -81,14 +81,13 @@
             return (
               <div key={column.key} className="space-y-1">
                 <label className="text-sm text-slate-300">{column.label}</label>
-                <select value={value || ''} onChange={(event) => setDraft((prev) => ({ ...prev, [column.key]: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white">
-                  <option value="">-</option>
-                  {(options[column.optionsKey] || []).map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+                <CustomSelect
+                  value={value || ''}
+                  onChange={(nextValue) => setDraft((prev) => ({ ...prev, [column.key]: nextValue }))}
+                  options={[{ value: '', label: '-' }, ...((options[column.optionsKey] || []).map((option) => ({ value: option, label: option })))]}
+                  placeholder="-"
+                  buttonClassName="h-10 px-4"
+                />
               </div>
             );
           }
@@ -127,7 +126,7 @@
                 type={column.type === 'date' ? 'date' : 'text'}
                 value={value || ''}
                 onChange={(event) => setDraft((prev) => ({ ...prev, [column.key]: event.target.value }))}
-                className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                className="w-full px-3 py-2 text-white"
               />
             </div>
           );
@@ -193,9 +192,10 @@ const ProfileModal = ({ state, onClose, onBlockClient }) => {
               disabled={blockBusy}
             className={classNames(
               RESPONSIVE_ACTION_BUTTON_CLASS,
+              SHEET_FOOTER_BUTTON_CLASS,
               isBlocked
-                ? 'border border-amber-500 text-amber-200 hover:bg-amber-500/10'
-                : 'border border-rose-500 text-rose-200 hover:bg-rose-500/10',
+                ? 'crm-tonal-btn text-[color:var(--crm-highlight-text)]'
+                : 'crm-danger-btn',
               blockBusy && 'cursor-not-allowed opacity-60'
             )}
           >
@@ -203,7 +203,7 @@ const ProfileModal = ({ state, onClose, onBlockClient }) => {
               <span className="hidden sm:inline">{isBlocked ? 'Разблокировать' : 'Заблокировать'}</span>
             </button>
           )}
-          <button onClick={onClose} className="rounded-lg border border-slate-600 px-4 py-2 text-white">Закрыть</button>
+          <button onClick={onClose} className={classNames('crm-ghost-btn', SHEET_FOOTER_BUTTON_CLASS)}>Закрыть</button>
         </div>
       }
     >
@@ -211,20 +211,20 @@ const ProfileModal = ({ state, onClose, onBlockClient }) => {
       {!state.loading && state.data?.error && <ErrorBanner message={state.data.error} />}
       {!state.loading && user && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2">
+          <div className="crm-inline-panel flex flex-wrap items-center justify-between gap-3 px-3 py-2">
             <div className="text-sm text-white">
               <p className="font-semibold">Предупреждения: {warningCount}</p>
               {blockError && <p className="text-xs text-rose-300">{blockError}</p>}
             </div>
             {isBlocked && (
-              <span className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-200">Заблокирован</span>
+              <span className="rounded-full bg-[color:var(--crm-highlight-soft)] px-3 py-1 text-xs font-semibold text-[color:var(--crm-highlight-text)]">Заблокирован</span>
             )}
           </div>
           <div className="grid gap-2 text-sm text-slate-200">
             <div>
-              <span className="text-slate-400">Телефон:</span>{" "}
+              <span className="text-[var(--crm-muted)]">Телефон:</span>{" "}
               {phoneLabel && phoneHref ? (
-                <a href={phoneHref} className="text-indigo-300 hover:text-indigo-100">
+                <a href={phoneHref} className="text-[color:var(--crm-primary)] hover:text-white">
                   {phoneLabel}
                 </a>
               ) : (
@@ -232,19 +232,19 @@ const ProfileModal = ({ state, onClose, onBlockClient }) => {
               )}
             </div>
             <div>
-              <span className="text-slate-400">Телеграм:</span>{" "}
+              <span className="text-[var(--crm-muted)]">Телеграм:</span>{" "}
               {telegramHandle && telegramHref ? (
-                <a href={telegramHref} target={telegramTarget} rel={telegramRel} className="text-indigo-300 hover:text-indigo-100">
+                <a href={telegramHref} target={telegramTarget} rel={telegramRel} className="text-[color:var(--crm-primary)] hover:text-white">
                   {telegramHandle}
                 </a>
               ) : (
                 "-"
               )}
             </div>
-            <div><span className="text-slate-400">Любимый барбер:</span> {user.Barber || "-"}</div>
+            <div><span className="text-[var(--crm-muted)]">Любимый барбер:</span> {user.Barber || "-"}</div>
           </div>
           <div>
-            <p className="text-sm text-slate-400">История визитов</p>
+            <p className="text-sm text-[var(--crm-muted)]">История визитов</p>
             <div className="mt-2">
               <VisitHistoryList visits={visitHistory} emptyMessage="История пуста." />
             </div>
@@ -258,32 +258,32 @@ const BackupsPanel = ({ backups = [], onRestore, onCreate, onDelete }) => (
   <SectionCard
     title="Резервные копии"
     actions={
-      <button onClick={onCreate} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500">
+      <button onClick={onCreate} className="crm-action-btn px-3 py-2 text-sm">
         Создать копию
       </button>
     }
   >
     {backups.length === 0 ? (
-      <p className="text-slate-400">История пуста.</p>
+      <p className="text-[var(--crm-muted)]">История пуста.</p>
     ) : (
       <div className="space-y-2">
         {backups.map((backup) => {
           const label = formatBackupLabel(backup);
           const meta = formatBackupMeta(backup);
           return (
-            <div key={backup} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-slate-200">
+            <div key={backup} className="crm-inline-panel flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm text-[var(--crm-text)]">
               <div>
                 <p className="font-semibold text-white">{label}</p>
-                <p className="text-xs text-slate-500">{meta}</p>
+                <p className="text-xs text-[var(--crm-muted)]">{meta}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button onClick={() => onRestore(backup)} className="rounded-lg border border-slate-600 px-3 py-1 text-xs font-semibold text-indigo-200 hover:border-indigo-400 hover:text-white">
+                <button onClick={() => onRestore(backup)} className="crm-ghost-btn px-3 py-1 text-xs font-semibold">
                   Восстановить
                 </button>
                 {onDelete && (
                   <button
                     onClick={() => onDelete(backup)}
-                    className="inline-flex items-center rounded-lg border border-rose-600 px-3 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-500/10"
+                    className="crm-danger-btn inline-flex items-center px-3 py-1 text-xs font-semibold"
                   >
                     <IconTrash className="mr-1 h-3.5 w-3.5" />
                     Удалить
@@ -562,7 +562,7 @@ const AppointmentModal = ({
   };
   const isReminderSent = (value) => value === true || value === 'true' || value === 1 || value === '1';
   const getReminderLabel = (value) => (isReminderSent(value) ? 'Напомнено' : 'Не напомнено');
-  const getReminderAccent = (value) => (isReminderSent(value) ? 'text-emerald-300' : 'text-slate-500');
+  const getReminderAccent = (value) => (isReminderSent(value) ? 'text-[color:var(--crm-primary)]' : 'text-[var(--crm-muted)]');
   const resolvedTelegramUserId = normalizeText(linkedClient?.telegramId || linkedClient?.TelegramID);
   const storedUserId = normalizeText(draft?.UserID);
   const recordDetails = [
@@ -672,7 +672,7 @@ const AppointmentModal = ({
           {!isNew && (
             <button
               onClick={handleMarkCompleted}
-              className={classNames(actionButtonClass, 'border border-emerald-500 text-emerald-200 hover:bg-emerald-500/10')}
+              className={classNames(actionButtonClass, SHEET_FOOTER_BUTTON_CLASS, 'border border-[color:var(--crm-primary)] text-[color:var(--crm-primary)] hover:bg-[color:var(--crm-primary-container)]')}
               aria-label="Выполнено"
               title="Выполнено"
             >
@@ -682,7 +682,7 @@ const AppointmentModal = ({
           )}
           <button
             onClick={onClose}
-            className={classNames(actionButtonClass, 'border border-slate-600 text-white hover:bg-slate-800')}
+            className={classNames(actionButtonClass, SHEET_FOOTER_BUTTON_CLASS, 'border border-slate-600 text-white hover:bg-slate-800')}
             aria-label="Отмена"
             title="Отмена"
           >
@@ -691,7 +691,7 @@ const AppointmentModal = ({
           </button>
           <button
             onClick={handleSubmit}
-            className={classNames(actionButtonClass, 'bg-emerald-600 text-white hover:bg-emerald-500')}
+            className={classNames(actionButtonClass, SHEET_FOOTER_BUTTON_CLASS, 'bg-[color:var(--crm-primary)] text-[color:var(--crm-primary-on)] hover:brightness-110')}
             aria-label="Сохранить"
             title="Сохранить"
           >
@@ -721,17 +721,16 @@ const AppointmentModal = ({
             value={draft.Phone || ''}
             onChange={(event) => handleChange('Phone', event.target.value)}
             placeholder="+7..."
-            className="h-11 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 text-white"
+            className="h-11 w-full px-3 text-white"
           />
         </div>
-        <select value={draft.Barber || ''} onChange={(event) => handleChange('Barber', event.target.value)} className="crm-sheet-control crm-sheet-select h-11 rounded-lg border border-slate-600 bg-slate-900 px-3 pr-10 text-white">
-          <option value="">Барбер</option>
-          {(options.barbers || []).map((barber) => (
-            <option key={barber} value={barber}>
-              {barber}
-            </option>
-          ))}
-        </select>
+        <CustomSelect
+          value={draft.Barber || ''}
+          onChange={(nextValue) => handleChange('Barber', nextValue)}
+          options={[{ value: '', label: 'Барбер' }, ...((options.barbers || []).map((barber) => ({ value: barber, label: barber })))]}
+          placeholder="Барбер"
+          buttonClassName="h-11 px-4"
+        />
         <div className="relative">
           <input
             ref={appointmentDateInputRef}
@@ -740,7 +739,7 @@ const AppointmentModal = ({
             type="date"
             value={draft.Date ? String(draft.Date).slice(0, 10) : ''}
             onChange={(event) => handleChange('Date', event.target.value)}
-            className="crm-sheet-control crm-sheet-date h-11 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 pr-10 text-white"
+            className="crm-sheet-control crm-sheet-date h-11 w-full px-3 pr-10 text-white"
           />
           <button
             type="button"
@@ -764,21 +763,20 @@ const AppointmentModal = ({
             manualEndEnabled={hasOtherService}
           />
           {validationWarning && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            <div className="rounded-[18px] bg-[rgba(0,191,175,0.16)] px-3 py-2 text-xs text-white">
               {validationWarning}
             </div>
           )}
         </div>
         <div className="space-y-1">
           <label className="text-sm text-slate-300">Статус</label>
-          <select value={draft.Status || ''} onChange={(event) => handleChange('Status', event.target.value)} className="crm-sheet-control crm-sheet-select h-11 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 pr-10 text-white">
-            <option value="">Статус</option>
-            {(options.statuses || []).map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-	        </select>
+          <CustomSelect
+            value={draft.Status || ''}
+            onChange={(nextValue) => handleChange('Status', nextValue)}
+            options={[{ value: '', label: 'Статус' }, ...((options.statuses || []).map((status) => ({ value: status, label: status })))]}
+            placeholder="Статус"
+            buttonClassName="h-11 px-4"
+          />
         </div>
 	        <div className="col-span-full w-full min-w-0">
 	          <MultiSelectCheckboxes
@@ -790,7 +788,7 @@ const AppointmentModal = ({
           />
         </div>
       </div>
-      <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/60">
+      <div className="crm-inline-panel mt-4">
         <button
           type="button"
           onClick={() => setDetailsOpen((prev) => !prev)}
@@ -808,8 +806,8 @@ const AppointmentModal = ({
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
           </svg>
         </button>
-        <div className={classNames('overflow-hidden transition-all duration-200', detailsOpen ? 'max-h-64 border-t border-slate-800' : 'max-h-0')}>
-          <dl className="divide-y divide-slate-800 px-4 py-2 text-sm text-slate-300">
+        <div className={classNames('overflow-hidden transition-all duration-200', detailsOpen ? 'max-h-64 border-t crm-table-divider' : 'max-h-0')}>
+          <dl className="px-4 py-2 text-sm text-slate-300">
             {recordDetails.map((item) => (
               <div key={item.key} className="flex items-center justify-between gap-3 py-2">
                 <dt className="text-xs text-slate-400">{item.label}</dt>

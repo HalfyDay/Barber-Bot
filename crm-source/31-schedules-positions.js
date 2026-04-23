@@ -34,6 +34,8 @@ const SchedulesView = ({
   const [directScheduleEditSlot, setDirectScheduleEditSlot] = useState(null);
   const [directScheduleDraft, setDirectScheduleDraft] = useState({ start: '', end: '' });
   const [directSchedulePristine, setDirectSchedulePristine] = useState({ start: true, end: true });
+  const [scheduleFillMenuOpen, setScheduleFillMenuOpen] = useState(false);
+  const scheduleFillMenuRef = useRef(null);
   const directScheduleStartInputId = useMemo(() => `schedule-start-${Math.random().toString(36).slice(2, 8)}`, []);
   const directScheduleEndInputId = useMemo(() => `schedule-end-${Math.random().toString(36).slice(2, 8)}`, []);
   const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
@@ -43,6 +45,19 @@ const SchedulesView = ({
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
+  useEffect(() => {
+    if (!scheduleFillMenuOpen) return undefined;
+    const handlePointerDown = (event) => {
+      if (scheduleFillMenuRef.current?.contains(event.target)) return;
+      setScheduleFillMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
+  }, [scheduleFillMenuOpen]);
   const normalizedUserKey = useMemo(() => {
     const baseName = canonicalizeName(
       currentUser?.barberName || currentUser?.displayName || currentUser?.username || '',
@@ -258,9 +273,9 @@ const SchedulesView = ({
     const hasWorkingHours = normalizeText(slot?.Week).trim() && normalizeText(slot?.Week).trim() !== '0';
     return hasWorkingHours
       ? {
-          dot: 'bg-emerald-300',
-          chip: 'bg-emerald-500/20 text-emerald-100',
-          sheet: 'bg-emerald-500/15 text-emerald-100',
+          dot: 'bg-[color:var(--crm-primary)]',
+          chip: 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]',
+          sheet: 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]',
         }
       : {
           dot: 'bg-rose-300',
@@ -299,7 +314,7 @@ const SchedulesView = ({
               type="button"
               onClick={openDatePicker}
               className={classNames(
-                'inline-flex items-center gap-2 rounded-full px-3 py-2 text-left text-2xl font-semibold capitalize text-white transition hover:bg-slate-800/80',
+                'inline-flex items-center gap-2 rounded-full px-3 py-2 text-left text-2xl font-semibold capitalize text-white transition hover:bg-[color:var(--crm-surface-4)]',
                 isMobileViewport && 'min-w-0 flex-1 gap-1 px-1.5 py-1.5 text-[18px] leading-none'
               )}
             >
@@ -311,7 +326,7 @@ const SchedulesView = ({
               ) : (
                 <span>{monthLabel}</span>
               )}
-              <svg className={classNames('h-4 w-4 text-slate-400', isMobileViewport && 'flex-shrink-0')} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <svg className={classNames('h-4 w-4 text-[var(--crm-muted)]', isMobileViewport && 'flex-shrink-0')} viewBox="0 0 20 20" fill="none" aria-hidden="true">
                 <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
@@ -326,27 +341,55 @@ const SchedulesView = ({
           </div>
           <div className={classNames('flex items-center gap-1', isMobileViewport && 'gap-0.5 flex-shrink-0')}>
             {typeof onScheduleFillDaysChange === 'function' && (
-              <select
-                value={normalizeScheduleFillDays(scheduleFillDays)}
-                onChange={(event) => onScheduleFillDaysChange(normalizeScheduleFillDays(event.target.value))}
-                className={classNames(
-                  'h-10 rounded-full border border-slate-700 bg-slate-950 px-3 text-sm font-semibold text-slate-200 focus:border-indigo-400 focus:outline-none',
-                  isMobileViewport && 'h-9 px-2 text-[11px]'
+              <div className="relative" ref={scheduleFillMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setScheduleFillMenuOpen((prev) => !prev)}
+                  className={classNames(
+                    'inline-flex h-10 items-center gap-2 rounded-full px-3 text-sm font-semibold text-[var(--crm-text)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white',
+                    isMobileViewport && 'h-9 px-2 text-[11px]'
+                  )}
+                  aria-haspopup="menu"
+                  aria-expanded={scheduleFillMenuOpen}
+                  aria-label="На сколько дней заполнять расписание"
+                >
+                  <span>{normalizeScheduleFillDays(scheduleFillDays)} дн.</span>
+                  <svg className="h-4 w-4 text-[var(--crm-muted)]" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                {scheduleFillMenuOpen && (
+                  <div className="crm-soft-card absolute right-0 top-[calc(100%+0.5rem)] z-30 min-w-[110px] overflow-hidden p-1 shadow-[0_18px_40px_rgba(0,0,0,0.28)]">
+                    {SCHEDULE_FILL_DAYS_OPTIONS.map((days) => {
+                      const isActive = normalizeScheduleFillDays(scheduleFillDays) === days;
+                      return (
+                        <button
+                          key={days}
+                          type="button"
+                          onClick={() => {
+                            onScheduleFillDaysChange(days);
+                            setScheduleFillMenuOpen(false);
+                          }}
+                          className={classNames(
+                            'flex w-full items-center justify-between rounded-2xl px-3 py-2 text-left text-sm font-semibold transition',
+                            isActive
+                              ? 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]'
+                              : 'text-white hover:bg-[color:var(--crm-surface-4)]'
+                          )}
+                        >
+                          <span>{days} дн.</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
-                aria-label="На сколько дней заполнять расписание"
-              >
-                {SCHEDULE_FILL_DAYS_OPTIONS.map((days) => (
-                  <option key={days} value={days}>
-                    {days} дн.
-                  </option>
-                ))}
-              </select>
+              </div>
             )}
             <button
               type="button"
               onClick={() => shiftMonth(-1)}
               className={classNames(
-                'inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-300 transition hover:bg-slate-800 hover:text-white',
+                'inline-flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-[var(--crm-muted)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white',
                 isMobileViewport && 'h-9 w-9'
               )}
               aria-label="Предыдущий месяц"
@@ -357,7 +400,7 @@ const SchedulesView = ({
               type="button"
               onClick={jumpToToday}
               className={classNames(
-                'inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 hover:text-white',
+                'inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-semibold text-[var(--crm-text)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white',
                 isMobileViewport && 'h-9 px-2.5 text-[11px]'
               )}
             >
@@ -367,7 +410,7 @@ const SchedulesView = ({
               type="button"
               onClick={() => shiftMonth(1)}
               className={classNames(
-                'inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-300 transition hover:bg-slate-800 hover:text-white',
+                'inline-flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-[var(--crm-muted)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white',
                 isMobileViewport && 'h-9 w-9'
               )}
               aria-label="Следующий месяц"
@@ -384,7 +427,7 @@ const SchedulesView = ({
             <div
               key={label}
               className={classNames(
-                'flex h-8 items-center justify-center font-semibold uppercase tracking-wide text-slate-400',
+                'flex h-8 items-center justify-center font-semibold uppercase tracking-wide text-[var(--crm-muted)]',
                 isMobileViewport ? 'text-xs' : 'text-sm'
               )}
             >
@@ -407,7 +450,7 @@ const SchedulesView = ({
               type="button"
               onClick={() => openScheduleSheet(day.key)}
               className={classNames(
-                'min-w-0 h-full flex flex-col rounded-2xl bg-slate-950/70 text-left transition hover:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/40',
+                'crm-soft-panel min-w-0 h-full flex flex-col text-left transition hover:bg-[color:var(--crm-surface-dim)] focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)]/40',
                 isMobileViewport ? 'rounded-[18px] px-1 py-1.5' : 'p-2',
                 day.inCurrentMonth ? 'text-white' : 'text-slate-500',
               )}
@@ -420,9 +463,9 @@ const SchedulesView = ({
                     'inline-flex min-w-[28px] items-center justify-center rounded-full px-2 font-semibold sm:h-9 sm:min-w-[36px] sm:text-base',
                     isMobileViewport ? 'h-6 text-[11px]' : 'h-8 text-sm',
                     isSelected
-                      ? 'bg-indigo-200 text-slate-950'
+                      ? 'bg-[color:var(--crm-primary)] text-[color:var(--crm-primary-on)]'
                       : isToday
-                        ? 'border border-indigo-300/50 text-white'
+                        ? 'bg-[color:var(--crm-surface-5)] text-white'
                         : 'text-inherit',
                   )}
                 >
@@ -467,7 +510,7 @@ const SchedulesView = ({
                         <div
                           key={getRecordId(slot) || `${slot.Barber}-${slot.Date}-${slot.Week || 'empty'}`}
                           className={classNames(
-                            'w-full truncate rounded-lg px-2 py-1 text-left text-[11px] font-medium',
+                            'w-full truncate rounded-lg px-2 py-1 text-center text-[11px] font-medium',
                             tone.chip,
                           )}
                         >
@@ -498,18 +541,16 @@ const SchedulesView = ({
           <div className="flex items-center justify-between gap-3 px-1">
             <h2 className="text-xl font-semibold text-white">Расписание</h2>
             {!isStaffUser && (
-              <select
+              <CustomSelect
                 value={barberFilter}
-                onChange={(event) => setBarberFilter(event.target.value)}
-                className="h-10 min-w-[150px] rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-white focus:border-indigo-400 focus:outline-none"
-              >
-                <option value="all">Все мастера</option>
-                {barberOptions.map((barber) => (
-                  <option key={barber.id || barber.name} value={barber.name}>
-                    {barber.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setBarberFilter}
+                options={[
+                  { value: 'all', label: 'Все мастера' },
+                  ...barberOptions.map((barber) => ({ value: barber.name, label: barber.name })),
+                ]}
+                className="min-w-[150px]"
+                buttonClassName="h-10 min-w-[150px] px-4 text-sm"
+              />
             )}
           </div>
           {calendarBlock}
@@ -520,18 +561,16 @@ const SchedulesView = ({
           actions={
             <div className="flex items-center gap-2">
               {!isStaffUser && (
-                <select
+                <CustomSelect
                   value={barberFilter}
-                  onChange={(event) => setBarberFilter(event.target.value)}
-                  className="h-10 min-w-[150px] rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-white focus:border-indigo-400 focus:outline-none"
-                >
-                  <option value="all">Все мастера</option>
-                  {barberOptions.map((barber) => (
-                    <option key={barber.id || barber.name} value={barber.name}>
-                      {barber.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setBarberFilter}
+                  options={[
+                    { value: 'all', label: 'Все мастера' },
+                    ...barberOptions.map((barber) => ({ value: barber.name, label: barber.name })),
+                  ]}
+                  className="min-w-[150px]"
+                  buttonClassName="h-10 min-w-[150px] px-4 text-sm"
+                />
               )}
             </div>
           }
@@ -548,7 +587,7 @@ const SchedulesView = ({
           <button
             type="button"
             onClick={closeScheduleSheet}
-            className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800"
+            className={classNames('crm-ghost-btn', SHEET_FOOTER_BUTTON_CLASS)}
           >
             Закрыть
           </button>
@@ -557,7 +596,7 @@ const SchedulesView = ({
         <div className="space-y-3">
           {scheduleSheetRows.length ? (
             singleScheduleSheetSlot ? (
-              <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+              <div className="crm-soft-card space-y-3 p-4">
                 {!isStaffUser && activeBarberFilter === 'all' && singleScheduleSheetSlot.Barber ? (
                   <p className="text-sm font-semibold text-white">{singleScheduleSheetSlot.Barber}</p>
                 ) : null}
@@ -568,12 +607,12 @@ const SchedulesView = ({
                     title={singleScheduleSheetSlot.Barber || 'Слот'}
                     placeholder="Выходной"
                     buttonClassName={classNames(
-                      'w-full rounded-xl border border-slate-700 px-3 py-3 text-center text-base',
+                      'crm-inline-panel w-full px-3 py-3 text-center text-base',
                       resolveScheduleTone(singleScheduleSheetSlot).sheet
                     )}
                   />
                 ) : (
-                  <div className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-3 text-center text-base text-slate-200">
+                  <div className="crm-inline-panel w-full px-3 py-3 text-center text-base text-[var(--crm-text)]">
                     {singleScheduleSheetSlot.Week && singleScheduleSheetSlot.Week !== '0' ? singleScheduleSheetSlot.Week : 'Слоты не указаны'}
                   </div>
                 )}
@@ -583,11 +622,11 @@ const SchedulesView = ({
                 {scheduleSheetRows.map((slot) => (
                   <div
                     key={getRecordId(slot) || `${slot.Barber}-${slot.Date}`}
-                    className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/50 p-3"
+                    className="crm-soft-card space-y-2 p-3"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <p className="min-w-0 truncate text-sm font-semibold text-white">{slot.Barber || 'Без мастера'}</p>
-                      <span className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                      <span className="text-[11px] uppercase tracking-[0.18em] text-[var(--crm-muted)]">
                         {slot.DayOfWeek || formatScheduleDayShort(slot.Date, slot.DayOfWeek) || 'День'}
                       </span>
                     </div>
@@ -601,14 +640,14 @@ const SchedulesView = ({
                             title={slot.Barber || 'Слот'}
                             placeholder="Выходной"
                             buttonClassName={classNames(
-                              'w-full rounded-xl border border-slate-700 px-3 py-2 text-left text-sm',
+                              'crm-inline-panel w-full px-3 py-2 text-left text-sm',
                               tone.sheet
                             )}
                           />
                         );
                       })()
                     ) : (
-                      <div className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-left text-sm text-slate-200">
+                      <div className="crm-inline-panel w-full px-3 py-2 text-left text-sm text-[var(--crm-text)]">
                         {slot.Week && slot.Week !== '0' ? slot.Week : 'Слоты не указаны'}
                       </div>
                     )}
@@ -617,7 +656,7 @@ const SchedulesView = ({
               </div>
             )
           ) : (
-            <p className="text-sm text-slate-400">Для этого дня расписание не найдено.</p>
+            <p className="text-sm text-[var(--crm-muted)]">Для этого дня расписание не найдено.</p>
           )}
         </div>
       </Modal>
@@ -628,7 +667,7 @@ const SchedulesView = ({
         maxWidthClass="max-w-md"
         footer={
           <>
-            <button type="button" onClick={closeDirectScheduleEditor} className="rounded-lg border border-slate-600 px-4 py-2 text-white">
+            <button type="button" onClick={closeDirectScheduleEditor} className={classNames('crm-ghost-btn', SHEET_FOOTER_BUTTON_CLASS)}>
               Отмена
             </button>
             <button
@@ -638,7 +677,7 @@ const SchedulesView = ({
                 handleTimeChange(directScheduleEditSlot, buildTimeRangeValue(directScheduleDraft.start, directScheduleDraft.end));
                 closeDirectScheduleEditor();
               }}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-500"
+              className={classNames('crm-action-btn', SHEET_FOOTER_BUTTON_CLASS)}
             >
               Сохранить
             </button>
@@ -655,14 +694,14 @@ const SchedulesView = ({
                 handleTimeChange(directScheduleEditSlot, '0');
                 closeDirectScheduleEditor();
               }}
-              className="text-xs text-slate-400 hover:text-slate-100"
+              className="text-xs text-[var(--crm-muted)] hover:text-white"
             >
               Очистить
             </button>
           </div>
-          <div className="flex flex-wrap items-center justify-around gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+          <div className="crm-inline-panel flex flex-wrap items-center justify-around gap-4 p-4">
             <div className="text-center">
-              <label className="block text-sm font-medium text-slate-400" htmlFor={directScheduleStartInputId}>Начало</label>
+              <label className="block text-sm font-medium text-[var(--crm-muted)]" htmlFor={directScheduleStartInputId}>Начало</label>
               <input
                 id={directScheduleStartInputId}
                 name="directScheduleStartTime"
@@ -675,12 +714,12 @@ const SchedulesView = ({
                   setDirectScheduleDraft((prev) => ({ ...prev, start: nextStart }));
                   setDirectSchedulePristine((prev) => ({ ...prev, start: !nextStart }));
                 }}
-                className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-900 px-2 py-2 text-center text-lg text-white"
+                className="mt-2 w-32 px-2 py-2 text-center text-lg text-white"
               />
             </div>
-            <span className="text-2xl font-light text-slate-500">-</span>
+            <span className="text-2xl font-light text-[var(--crm-muted)]">-</span>
             <div className="text-center">
-              <label className="block text-sm font-medium text-slate-400" htmlFor={directScheduleEndInputId}>Окончание</label>
+              <label className="block text-sm font-medium text-[var(--crm-muted)]" htmlFor={directScheduleEndInputId}>Окончание</label>
               <input
                 id={directScheduleEndInputId}
                 name="directScheduleEndTime"
@@ -693,7 +732,7 @@ const SchedulesView = ({
                   setDirectScheduleDraft((prev) => ({ ...prev, end: nextEnd }));
                   setDirectSchedulePristine((prev) => ({ ...prev, end: !nextEnd }));
                 }}
-                className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-900 px-2 py-2 text-center text-lg text-white"
+                className="mt-2 w-32 px-2 py-2 text-center text-lg text-white"
               />
             </div>
           </div>

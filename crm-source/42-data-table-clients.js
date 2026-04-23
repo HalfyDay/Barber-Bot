@@ -20,7 +20,7 @@ const DataTable = ({
   onCreateAppointment,
 }) => {
   if (!rows.length) {
-    return <p className="text-slate-400">Нет записей.</p>;
+    return <p className="text-[var(--crm-muted)]">Нет записей.</p>;
   }
   const visibleColumns = columns.filter((column) => !hiddenColumns.includes(column.key));
   const isAppointmentsTable = tableId === 'Appointments';
@@ -56,10 +56,10 @@ const DataTable = ({
           const recordId = getRecordId(record);
           const cardKey = recordId || `${tableId}-card-${index}`;
           return (
-            <article key={cardKey} className="space-y-3 rounded-3xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg shadow-black/10">
+            <article key={cardKey} className="crm-soft-card space-y-3 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--crm-muted)]">
                     {tableId === 'Users' ? 'Клиент' : tableId === 'Schedules' ? 'Расписание' : 'Запись'}
                   </p>
                   <p className="text-base font-semibold text-white">{record[visibleColumns[0]?.key] || '-'}</p>
@@ -67,7 +67,7 @@ const DataTable = ({
                 {onDelete && (
                   <button
                     onClick={() => onDelete(record)}
-                    className="rounded-full border border-rose-600/70 p-2 text-rose-200 hover:bg-rose-500/10"
+                    className="crm-danger-btn rounded-full p-2"
                     aria-label="Удалить запись"
                   >
                     <IconTrash className="h-4 w-4" />
@@ -76,8 +76,8 @@ const DataTable = ({
               </div>
               <div className="grid gap-3">
                 {visibleColumns.map((column) => (
-                  <div key={`${cardKey}-${column.key}`} className="space-y-1 rounded-2xl border border-slate-800/80 bg-slate-950/50 p-2">
-                    <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">{column.label}</p>
+                  <div key={`${cardKey}-${column.key}`} className="crm-soft-panel space-y-1 p-2">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--crm-muted)]">{column.label}</p>
                     <EditableCell record={record} column={column} options={options} onUpdate={onUpdate} onOpenProfile={onOpenProfile} tableId={tableId} />
                   </div>
                 ))}
@@ -87,9 +87,9 @@ const DataTable = ({
         })}
       </div>
       <div className="hidden 2xl:block -mx-4 overflow-x-auto overflow-y-visible pb-3 sm:mx-0">
-        <table className="min-w-[760px] w-full table-auto text-[13px] leading-tight sm:text-sm">
+        <table className="crm-table-shell min-w-[760px] w-full table-auto text-[13px] leading-tight sm:text-sm">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-[0.25em] text-slate-400">
+            <tr className="text-left text-[11px] uppercase tracking-[0.25em] text-[var(--crm-muted)]">
               {visibleColumns.map((column) => (
                 <th
                   key={column.key}
@@ -111,16 +111,16 @@ const DataTable = ({
                 {group.label && (
                   <tr className="bg-transparent">
                     <td colSpan={visibleColumns.length + (onDelete ? 1 : 0)} className="px-2 py-2">
-                      <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
-                        <span className="h-px flex-1 bg-slate-700" />
+                      <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--crm-muted)]">
+                        <span className="h-px flex-1 bg-[color:var(--crm-outline)]" />
                         {group.label}
-                        <span className="h-px flex-1 bg-slate-700" />
+                        <span className="h-px flex-1 bg-[color:var(--crm-outline)]" />
                       </div>
                     </td>
                   </tr>
                 )}
                 {group.rows.map((record) => (
-                  <tr key={getRecordId(record)} className="border-t border-slate-800">
+                  <tr key={getRecordId(record)} className="border-t crm-table-divider">
                     {visibleColumns.map((column) => (
                       <td
                         key={column.key}
@@ -137,7 +137,7 @@ const DataTable = ({
                       <td className="px-2 py-1.5 text-right">
                         <button
                           onClick={() => onDelete(record)}
-                          className="inline-flex items-center rounded-lg border border-rose-500 px-2 py-1.5 text-xs text-rose-300 hover:bg-rose-500/10"
+                          className="crm-danger-btn inline-flex items-center rounded-full px-2 py-1.5 text-xs"
                           aria-label="Удалить запись"
                         >
                           <IconTrash />
@@ -209,8 +209,8 @@ const ClientsList = ({
       return {
         key: 'regular',
         label: 'Постоянный',
-        accent: 'text-emerald-200',
-        nameClassName: 'text-emerald-300',
+        accent: 'text-[color:var(--crm-primary)]',
+        nameClassName: 'text-[color:var(--crm-primary)]',
       };
     }
     if (lastVisit >= sixMonthsAgo) {
@@ -392,16 +392,16 @@ const ClientsList = ({
   };
   const renderClientsSection = (items, emptyMessage, sectionTone = 'default') => {
     if (!items.length) {
-      return <p className="text-slate-400">{emptyMessage}</p>;
+      return <p className="text-[var(--crm-muted)]">{emptyMessage}</p>;
     }
     return (
       <div
         className={classNames(
-          'rounded-3xl border bg-slate-950/40 shadow-inner shadow-black/10',
-          sectionTone === 'archived' ? 'border-slate-700/80' : 'border-slate-800',
+          'crm-soft-card',
+          sectionTone === 'archived' && 'opacity-90',
         )}
       >
-        <div className="divide-y divide-slate-900">
+        <div className="space-y-1 p-1">
           {items.map((client, index) => {
             const clientNumber = String(index + 1).padStart(2, '0');
             const phoneDisplay = client.Phone ? formatPhoneInput(client.Phone) : '';
@@ -413,10 +413,10 @@ const ClientsList = ({
                 type="button"
                 key={client.id}
                 onClick={() => openClientModal(client)}
-                className="flex w-full flex-col gap-2 px-4 py-3 text-left transition hover:bg-slate-900/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                className="flex w-full cursor-pointer flex-col gap-2 rounded-[22px] px-4 py-3 text-left transition hover:bg-[color:var(--crm-surface-4)] focus:outline-none"
               >
                 <div className="flex items-start gap-4">
-                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-indigo-300">
+                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[color:var(--crm-primary-container)] text-sm font-semibold text-[color:var(--crm-primary)]">
                     {clientNumber}
                   </div>
                   <div className="flex flex-1 flex-col gap-2">
@@ -425,8 +425,8 @@ const ClientsList = ({
                         <p className={classNames('text-base font-semibold', client.activity?.nameClassName || 'text-white')}>
                           {client.Name || 'Нет имени'}
                         </p>
-                        {client.Barber && <p className="text-xs text-slate-400">Любимый барбер: {client.Barber}</p>}
-                        <p className="text-xs text-slate-500">
+                        {client.Barber && <p className="text-xs text-[var(--crm-muted)]">Любимый барбер: {client.Barber}</p>}
+                        <p className="text-xs text-[var(--crm-muted)]">
                           Последний визит:{' '}
                           <span className="font-medium text-slate-300">
                             {lastVisitLabel}
@@ -449,14 +449,14 @@ const ClientsList = ({
   return (
     <div className="space-y-6">
       {clients.length === 0 ? (
-        <p className="text-slate-400">Список клиентов пуст.</p>
+        <p className="text-[var(--crm-muted)]">Список клиентов пуст.</p>
       ) : (
         <>
           {renderClientsSection(
             categorizedClients.visible,
             'Нет клиентов, которые посещали салон за последние 6 месяцев.',
           )}
-          <div className="space-y-3 rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
+          <div className="crm-soft-card space-y-3 p-4">
             <button
               type="button"
               onClick={() => setShowArchivedClients((prev) => !prev)}
@@ -464,11 +464,11 @@ const ClientsList = ({
             >
               <div>
                 <p className="text-sm font-semibold text-white">Скрытые категории клиентов</p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-[var(--crm-muted)]">
                   Не ходят и ни разу не посещали: {categorizedClients.hidden.length}
                 </p>
               </div>
-              <span className="rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-300">
+              <span className="rounded-full bg-[color:var(--crm-surface-5)] px-3 py-1 text-xs font-semibold text-[var(--crm-text)]">
                 {showArchivedClients ? 'Скрыть' : 'Показать'}
               </span>
             </button>
@@ -507,9 +507,10 @@ const ClientsList = ({
               disabled={modalState.blockBusy || !onBlockClient || !modalState.record?.id}
               className={classNames(
                 RESPONSIVE_ACTION_BUTTON_CLASS,
+                SHEET_FOOTER_BUTTON_CLASS,
                 isBlocked
-                  ? 'border border-amber-500 text-amber-200 hover:bg-amber-500/10'
-                  : 'border border-rose-500 text-rose-200 hover:bg-rose-500/10',
+                  ? 'crm-tonal-btn text-[color:var(--crm-highlight-text)]'
+                  : 'crm-danger-btn',
                 (modalState.blockBusy || !onBlockClient || !modalState.record?.id) && 'cursor-not-allowed opacity-60'
               )}
               aria-label={isBlocked ? 'Разблокировать клиента' : 'Заблокировать клиента'}
@@ -523,7 +524,8 @@ const ClientsList = ({
               disabled={modalState.saveBusy}
               className={classNames(
                 RESPONSIVE_ACTION_BUTTON_CLASS,
-                'border border-slate-600 text-white hover:bg-slate-800',
+                SHEET_FOOTER_BUTTON_CLASS,
+                'crm-ghost-btn',
                 modalState.saveBusy && 'cursor-not-allowed opacity-60'
               )}
               aria-label="Отмена"
@@ -537,7 +539,8 @@ const ClientsList = ({
               disabled={modalState.saveBusy}
               className={classNames(
                 RESPONSIVE_ACTION_BUTTON_CLASS,
-                'bg-emerald-600 text-white hover:bg-emerald-500',
+                SHEET_FOOTER_BUTTON_CLASS,
+                'crm-action-btn',
                 modalState.saveBusy && 'cursor-not-allowed opacity-60'
               )}
               aria-label="Сохранить"
@@ -550,17 +553,17 @@ const ClientsList = ({
         }
       >
         {!modalState.record ? (
-          <p className="text-slate-400">Выберите клиента.</p>
+          <p className="text-[var(--crm-muted)]">Выберите клиента.</p>
         ) : (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+            <div className="crm-inline-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div>
                 <p className="text-sm font-semibold text-white">
                   Предупреждения: {warningCount}{isBlocked ? ' (Заблокирован)' : ''}
                 </p>
                 {modalState.error && <p className="text-xs text-rose-300">{modalState.error}</p>}
               </div>
-              {isBlocked && <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-200">Заблокирован</span>}
+              {isBlocked && <span className="rounded-full bg-[color:var(--crm-highlight-soft)] px-3 py-1 text-xs font-semibold text-[color:var(--crm-highlight-text)]">Заблокирован</span>}
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-1 text-sm text-slate-300">
@@ -570,7 +573,7 @@ const ClientsList = ({
                   aria-label="Имя клиента"
                   value={modalState.record.Name || ''}
                   onChange={(event) => handleFieldChange('Name', event.target.value)}
-                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                  className="w-full px-3 py-2 text-white"
                 />
               </label>
               <label className="space-y-1 text-sm text-slate-300">
@@ -580,7 +583,7 @@ const ClientsList = ({
                   aria-label="Телефон клиента"
                   value={modalState.record.Phone || ''}
                   onChange={(event) => handleFieldChange('Phone', event.target.value)}
-                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                  className="w-full px-3 py-2 text-white"
                 />
               </label>
               <label className="space-y-1 text-sm text-slate-300">
@@ -590,7 +593,7 @@ const ClientsList = ({
                   aria-label="Telegram ID"
                   value={modalState.record.TelegramID || ''}
                   onChange={(event) => handleFieldChange('TelegramID', event.target.value)}
-                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                  className="w-full px-3 py-2 text-white"
                 />
               </label>
               <label className="space-y-1 text-sm text-slate-300">
@@ -598,7 +601,7 @@ const ClientsList = ({
                 <select
                   value={modalState.record.Barber || ''}
                   onChange={(event) => handleFieldChange('Barber', event.target.value)}
-                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                  className="w-full px-3 py-2 text-white"
                 >
                   <option value="">Не выбран</option>
                   {barberOptions.map((barber) => (
@@ -609,14 +612,14 @@ const ClientsList = ({
                 </select>
               </label>
             </div>
-            <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+            <div className="crm-soft-card space-y-3 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-white">Баланс BS</p>
-                  <p className="text-xs text-slate-400">Можно установить новое значение или быстро прибавить/списать BS.</p>
+                  <p className="text-xs text-[var(--crm-muted)]">Можно установить новое значение или быстро прибавить/списать BS.</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Сейчас</p>
+                  <p className="text-xs uppercase tracking-[0.24em] text-[var(--crm-muted)]">Сейчас</p>
                   <p className="text-2xl font-semibold text-white">{currentBsBalance} BS</p>
                 </div>
               </div>
@@ -626,7 +629,7 @@ const ClientsList = ({
                   <select
                     value={modalState.bsMode}
                     onChange={(event) => handleBsFieldChange('bsMode', event.target.value)}
-                    className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                    className="w-full px-3 py-2 text-white"
                   >
                     <option value="adjust">Прибавить / списать</option>
                     <option value="set">Установить вручную</option>
@@ -640,7 +643,7 @@ const ClientsList = ({
                     value={modalState.bsInput}
                     onChange={(event) => handleBsFieldChange('bsInput', event.target.value)}
                     placeholder={modalState.bsMode === 'set' ? 'Например, 120' : 'Например, +15 или -10'}
-                    className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                    className="w-full px-3 py-2 text-white"
                   />
                 </label>
               </div>
@@ -650,7 +653,7 @@ const ClientsList = ({
                     key={value}
                     type="button"
                     onClick={() => handleBsQuickFill(value)}
-                    className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-800"
+                    className="crm-ghost-btn rounded-full px-3 py-1 text-xs font-semibold"
                   >
                     {value} BS
                   </button>
@@ -664,18 +667,18 @@ const ClientsList = ({
                   value={modalState.bsComment}
                   onChange={(event) => handleBsFieldChange('bsComment', event.target.value)}
                   placeholder="Например, ручная корректировка или списание за услугу"
-                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white"
+                  className="w-full px-3 py-2 text-white"
                 />
               </label>
               <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                <p className="text-slate-400">
+                <p className="text-[var(--crm-muted)]">
                   После сохранения будет: <span className={classNames('font-semibold', projectedBsBalance < 0 ? 'text-rose-300' : 'text-white')}>{Number.isNaN(projectedBsBalance) ? '—' : `${projectedBsBalance} BS`}</span>
                 </p>
                 {modalState.bsError && <p className="text-rose-300">{modalState.bsError}</p>}
               </div>
             </div>
             <div className="space-y-2">
-              <p className="text-sm text-slate-400">История визитов</p>
+              <p className="text-sm text-[var(--crm-muted)]">История визитов</p>
               <VisitHistoryList
                 visits={modalState.history}
                 loading={modalState.loading}

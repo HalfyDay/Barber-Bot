@@ -44,8 +44,10 @@
   const effectiveScaleValue = isMobileViewport && appointmentCalendarScale === 'large' ? 'normal' : appointmentCalendarScale;
   const chipClass = (active) =>
     classNames(
-      'inline-flex h-11 items-center justify-center rounded-xl border px-4 text-xs font-semibold uppercase tracking-wide transition whitespace-nowrap text-center',
-      active ? 'border-indigo-400 bg-indigo-500/10 text-indigo-100' : 'border-slate-700 text-slate-300 hover:border-slate-500'
+      'crm-ghost-btn inline-flex h-11 items-center justify-center px-4 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-center',
+      active
+        ? 'bg-[color:var(--crm-primary-container)] text-[#eafffb]'
+        : 'text-[var(--crm-text)] hover:bg-[color:var(--crm-surface-4)]'
     );
   const cycleOptionValue = (items, currentValue) => {
     const currentIndex = items.findIndex((item) => item.id === currentValue);
@@ -59,15 +61,15 @@
       <button
         type="button"
         onClick={() => onChange?.(cycleOptionValue(items, value))}
-        className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-700 bg-slate-900 px-3 text-left text-white transition hover:border-indigo-500/60 hover:bg-slate-900/90 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+        className="crm-soft-panel flex h-11 w-full items-center justify-between gap-3 px-4 text-left text-white transition hover:bg-[color:var(--crm-surface-5)] focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)]/40"
         title={`${label}: ${currentItem?.label || ''}`}
         aria-label={`${label}: ${currentItem?.label || ''}`}
       >
-        <div className="flex flex-col">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">{label}</span>
-          <span className="text-xs font-semibold text-slate-200">{currentItem?.label || '-'}</span>
+        <div className="min-w-0 flex flex-col">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--crm-muted)]">{label}</span>
+          <span className="truncate text-xs font-semibold text-white">{currentItem?.label || '-'}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="shrink-0 flex items-center gap-2.5">
           {IconComponent ? <IconComponent className="h-5 w-5 text-white" /> : null}
           <div className="flex items-center gap-1">
             {items.map((item) => (
@@ -75,7 +77,7 @@
                 key={item.id}
                 className={classNames(
                   'h-1.5 w-1.5 rounded-full transition',
-                  item.id === currentItem?.id ? 'bg-indigo-300' : 'bg-slate-700'
+                  item.id === currentItem?.id ? 'bg-[color:var(--crm-primary)]' : 'bg-[color:var(--crm-outline-strong)]'
                 )}
               />
             ))}
@@ -134,29 +136,29 @@
         )
       : null;
   const getBarberSelect = (extraClassName = '') => (
-    <select
+    <CustomSelect
       value={selectedBarber}
-      onChange={(event) => setSelectedBarber(event.target.value)}
+      onChange={setSelectedBarber}
+      options={[
+        ...(allowAllBarbersOption ? [{ value: 'all', label: 'Все мастера' }] : []),
+        ...barbers.map((barber) => ({ value: barber, label: barber })),
+      ]}
+      placeholder="Выберите мастера"
       className={classNames(
-        'h-11 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-left text-sm text-white',
+        'w-full',
         tableId !== 'Appointments' && 'sm:w-48',
         extraClassName
       )}
-    >
-      {allowAllBarbersOption && <option value="all">Все мастера</option>}
-      {barbers.map((barber) => (
-        <option key={barber} value={barber}>
-          {barber}
-        </option>
-      ))}
-    </select>
+      buttonClassName="h-11 px-4 text-sm"
+      menuClassName="w-full"
+    />
   );
   if (tableId === 'Appointments') {
     return (
-      <div className="space-y-3 rounded-2xl bg-slate-950/30 p-3 sm:space-y-3 sm:rounded-3xl sm:p-4">
+      <div className="crm-soft-card space-y-3 p-3 sm:space-y-3 sm:p-4">
         <div className="flex items-stretch gap-2 md:flex-row md:items-stretch">
           <label className="relative min-w-0 flex-1">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--crm-muted)]">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                 <path
                   fillRule="evenodd"
@@ -171,7 +173,7 @@
               onChange={(event) => setSearchTerm(event.target.value)}
               placeholder="Поиск..."
               aria-label="Поиск по таблице"
-              className="h-11 w-full rounded-xl border border-slate-700 bg-slate-900 pl-9 pr-3 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              className="h-11 w-full pl-9 pr-3 text-sm text-white placeholder:text-[var(--crm-muted)] focus:outline-none"
             />
           </label>
           {supportsBarberFilter && (
@@ -185,7 +187,7 @@
           <button
             type="button"
             onClick={() => setMobileFiltersOpen((prev) => !prev)}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-white transition hover:border-indigo-500/60 hover:bg-slate-900/90 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 md:hidden"
+            className="crm-ghost-btn inline-flex h-11 w-11 min-h-0 shrink-0 items-center justify-center p-0 text-white focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)]/40 md:hidden"
             aria-label={mobileFiltersOpen ? 'Скрыть фильтры' : 'Показать фильтры'}
             title={mobileFiltersOpen ? 'Скрыть фильтры' : 'Показать фильтры'}
           >
@@ -194,11 +196,11 @@
           {canCreate && (
             <button
               onClick={onOpenCreate}
-              className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 hover:bg-emerald-500 sm:px-5"
+              className="crm-action-btn inline-flex h-11 w-11 min-h-0 shrink-0 items-center justify-center p-0 text-sm sm:h-11 sm:w-auto sm:px-5"
               aria-label="Добавить запись"
             >
               <span className="hidden sm:inline">+ Добавить</span>
-              <span className="sm:hidden">+</span>
+              <span className="sm:hidden text-lg leading-none">+</span>
             </button>
           )}
         </div>
@@ -226,19 +228,27 @@
       { key: 'group', node: groupingControl },
       { key: 'columns', node: columnControl },
     ];
+  const visibleControls = controlOrder.filter((control) => Boolean(control.node));
+  const hasSecondaryToolbarRow = visibleControls.length > 0;
   return (
-    <div className="space-y-2 rounded-2xl bg-slate-950/30 p-3 sm:space-y-3 sm:rounded-3xl sm:p-4">
+    <div className={classNames('crm-soft-card p-3 sm:p-4', hasSecondaryToolbarRow ? 'space-y-2 sm:space-y-3' : 'space-y-0')}>
       <div className="flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex-1 space-y-2.5 sm:space-y-3">
-          <div className={classNames('flex flex-col gap-2 sm:flex-row sm:items-center', tableId === 'Appointments' ? 'lg:flex-row lg:items-center lg:gap-3' : '')}>
+        <div className={classNames('flex-1', hasSecondaryToolbarRow ? 'space-y-2.5 sm:space-y-3' : 'space-y-0')}>
+          <div
+            className={classNames(
+              tableId === 'Appointments'
+                ? 'flex flex-col gap-2 sm:flex-row sm:items-center lg:flex-row lg:items-center lg:gap-3'
+                : 'flex min-h-[44px] items-center gap-2'
+            )}
+          >
             <div
               className={classNames(
                 'flex w-full items-stretch gap-2',
                 tableId === 'Appointments' ? 'lg:flex-[2] lg:gap-3' : ''
               )}
             >
-              <label className="relative flex-1 min-w-[200px] lg:min-w-[260px]">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+              <label className="relative min-w-0 flex-1 lg:min-w-[260px]">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--crm-muted)]">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                     <path
                       fillRule="evenodd"
@@ -253,14 +263,14 @@
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Поиск..."
                 aria-label="Поиск по таблице"
-                  className="h-11 w-full rounded-xl border border-slate-700 bg-slate-900 pl-9 pr-3 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  className="h-10 w-full pl-9 pr-3 text-sm text-white placeholder:text-[var(--crm-muted)] focus:outline-none"
                 />
               </label>
               {inlineCreateForMobile && (
                 <button
                   onClick={onOpenCreate}
                   aria-label="Добавить запись"
-                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-lg font-semibold text-white shadow-sm shadow-emerald-900/20 hover:bg-emerald-500 sm:hidden"
+                  className="crm-action-btn inline-flex h-10 w-10 min-h-0 shrink-0 items-center justify-center self-center p-0 text-lg font-semibold sm:hidden"
                 >
                   +
                 </button>
@@ -273,7 +283,7 @@
                 {canCreate && (
                   <button
                     onClick={onOpenCreate}
-                    className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-6 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 hover:bg-emerald-500"
+                    className="crm-action-btn inline-flex h-11 items-center justify-center px-6 text-sm"
                   >
                     + Добавить
                   </button>
@@ -281,17 +291,19 @@
               </div>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {controlOrder.map((control) =>
+          {visibleControls.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {visibleControls.map((control) =>
               control.node ? <Fragment key={control.key}>{control.node}</Fragment> : null
-            )}
-          </div>
+              )}
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {allowManualRefresh && (
             <button
               onClick={onRefresh}
-              className="rounded-full border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800 sm:px-5"
+              className="crm-ghost-btn px-4 py-2 text-sm sm:px-5"
               title="Обновить данные"
             >
               <span className="hidden sm:inline">Обновить</span>
@@ -302,7 +314,7 @@
             <button
               onClick={onOpenCreate}
               className={classNames(
-                'rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500',
+                'crm-action-btn px-4 py-2 text-sm',
                 inlineCreateForMobile ? 'hidden sm:inline-flex' : '',
                 tableId === 'Appointments' ? 'lg:hidden' : ''
               )}
@@ -367,7 +379,7 @@ const SortIndicator = ({ direction }) => (
       fill="none"
       stroke="currentColor"
       strokeWidth="1.5"
-      className={classNames('h-3 w-3 text-slate-600', direction === 'asc' && 'text-indigo-300')}
+      className={classNames('h-3 w-3 text-[var(--crm-muted)]', direction === 'asc' && 'text-[color:var(--crm-primary)]')}
     >
       <path d="M4 10l4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -376,7 +388,7 @@ const SortIndicator = ({ direction }) => (
       fill="none"
       stroke="currentColor"
       strokeWidth="1.5"
-      className={classNames('h-3 w-3 -mt-0.5 text-slate-600', direction === 'desc' && 'text-indigo-300')}
+      className={classNames('h-3 w-3 -mt-0.5 text-[var(--crm-muted)]', direction === 'desc' && 'text-[color:var(--crm-primary)]')}
     >
       <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -410,18 +422,18 @@ const SchedulesBoard = ({ rows = [], columns = [], onUpdate, options }) => {
       .sort((a, b) => a.sortValue - b.sortValue);
   }, [rows]);
   if (!groupedByDate.length) {
-    return <p className="text-slate-400">Расписание пусто.</p>;
+    return <p className="text-[var(--crm-muted)]">Расписание пусто.</p>;
   }
   return (
     <div className="space-y-4">
       {groupedByDate.map((group) => (
-        <section key={group.key} className="space-y-2 rounded-2xl border border-slate-800/80 bg-slate-950/30 p-4 shadow-inner shadow-black/10">
+        <section key={group.key} className="crm-soft-card space-y-2 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">{group.badge}</p>
+              <p className="text-[10px] uppercase tracking-[0.4em] text-[var(--crm-muted)]">{group.badge}</p>
               <p className="text-base font-semibold text-white">{group.title}</p>
             </div>
-            <span className="rounded-full border border-slate-700 px-2.5 py-0.5 text-[11px] text-slate-300">
+            <span className="rounded-full bg-[color:var(--crm-surface-4)] px-2.5 py-0.5 text-[11px] text-[var(--crm-text)]">
               {group.slots.length} {pluralize(group.slots.length, ['слот', 'слота', 'слотов'])}
             </span>
           </div>
@@ -429,23 +441,23 @@ const SchedulesBoard = ({ rows = [], columns = [], onUpdate, options }) => {
             {group.slots.map((slot) => (
               <article
                 key={slot.id || `${slot.Barber || 'no-barber'}-${slot.Date || slot.DayOfWeek || slot.Week}`}
-                className="rounded-2xl border border-slate-800/70 bg-slate-950/50 p-3 text-sm text-slate-200"
+                className="crm-soft-panel p-3 text-sm text-[var(--crm-text)]"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{slot.DayOfWeek || 'День не указан'}</p>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--crm-muted)]">{slot.DayOfWeek || 'День не указан'}</p>
                     <p className="text-base font-semibold text-white">{slot.Barber || 'Не назначен'}</p>
                   </div>
                     <div className="text-right">
                       <p className="text-lg font-semibold text-white">{slot.Week || 'Слоты не указаны'}</p>
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500">{slot.Date ? formatDate(slot.Date) : 'Без даты'}</p>
+                    <p className="text-[11px] uppercase tracking-wide text-[var(--crm-muted)]">{slot.Date ? formatDate(slot.Date) : 'Без даты'}</p>
                   </div>
                 </div>
                 {editableColumns.length > 0 && (
-                  <div className="mt-2 grid gap-2 text-xs text-slate-400">
+                  <div className="mt-2 grid gap-2 text-xs text-[var(--crm-text)]">
                     {editableColumns.map((column) => (
-                      <div key={`${slot.id || slot.Date}-${column.key}`} className="flex items-center justify-between rounded-xl border border-slate-800/60 bg-slate-950/60 px-2 py-1.5">
-                        <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">{column.label}</p>
+                      <div key={`${slot.id || slot.Date}-${column.key}`} className="crm-inline-panel flex items-center justify-between px-2 py-1.5">
+                        <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--crm-muted)]">{column.label}</p>
                         <EditableCell record={slot} column={column} options={options} onUpdate={onUpdate} tableId="Schedules" />
                       </div>
                     ))}

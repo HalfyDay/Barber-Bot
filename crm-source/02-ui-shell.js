@@ -1,10 +1,10 @@
 ﻿const LoadingState = ({ label = 'Загружаю данные...' } = {}) => (
-  <div className="flex items-center justify-center py-12 text-slate-300">
+  <div className="flex items-center justify-center py-12 text-[var(--crm-muted)]">
     <span className="animate-pulse">{label}</span>
   </div>
 );
 const ErrorBanner = ({ message }) => (
-  <div className="rounded-lg bg-rose-600 px-4 py-3 text-white">{message}</div>
+  <div className="crm-error-banner px-4 py-3 text-sm font-medium">{message}</div>
 );
 const VisitHistoryList = ({
   visits = [],
@@ -15,7 +15,7 @@ const VisitHistoryList = ({
   showSummary = true,
 }) => {
   if (loading) {
-    return <p className="text-sm text-slate-500">Загружаем историю...</p>;
+    return <p className="text-sm text-[var(--crm-muted)]">Загружаем историю...</p>;
   }
   if (error) {
     return <ErrorBanner message={error} />;
@@ -23,7 +23,7 @@ const VisitHistoryList = ({
   return (
     <div className="space-y-2">
       {showSummary && (
-        <div className="flex items-center justify-between text-xs text-slate-400">
+        <div className="flex items-center justify-between text-xs text-[var(--crm-muted)]">
           <span>
             Записей за 12 месяцев: <span className="font-semibold text-white">{visits.length}</span>
           </span>
@@ -38,32 +38,32 @@ const VisitHistoryList = ({
               <div
                 key={`${visit.id || visit.dateLabel}-${visit.orderNumber}`}
                 className={classNames(
-                  'rounded-lg border p-3 text-xs transition',
-                  isActive ? 'border-emerald-400/60 bg-emerald-500/10 shadow-inner shadow-emerald-900/30' : 'border-slate-800 bg-slate-900/40'
+                  'crm-inline-panel p-3 text-xs transition',
+                  isActive ? 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]' : 'text-[var(--crm-text)]'
                 )}
               >
-                <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-slate-400">
+                <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-[var(--crm-muted)]">
                   <span className="font-semibold text-white">Визит №{visit.orderNumber || '—'}</span>
                   <span>{visit.dateLabel}</span>
                 </div>
-                <p className="mt-1 text-sm text-slate-100">{visit.Barber || '—'}</p>
-                <p className="text-slate-400">{visit.Services || '—'}</p>
-                {visit.Status && <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-slate-500">{visit.Status}</p>}
+                <p className="mt-1 text-sm text-white">{visit.Barber || '—'}</p>
+                <p className="text-[var(--crm-muted)]">{visit.Services || '—'}</p>
+                {visit.Status && <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-[var(--crm-muted)]">{visit.Status}</p>}
               </div>
             );
           })
         ) : (
-          <p className="text-sm text-slate-500">{emptyMessage}</p>
+          <p className="text-sm text-[var(--crm-muted)]">{emptyMessage}</p>
         )}
       </div>
     </div>
   );
 };
 const SectionCard = ({ title, actions, children }) => (
-  <div className="space-y-4 rounded-2xl border border-slate-700 bg-slate-800/70 p-6 shadow-lg">
+  <div className="crm-section-card space-y-5 p-5 sm:p-6">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:flex-1 sm:min-w-0">
-        <h2 className="text-xl font-semibold text-white">{title}</h2>
+        <h2 className="crm-section-title">{title}</h2>
         {actions && <div className="ml-auto sm:hidden">{actions}</div>}
       </div>
       {actions && <div className="hidden sm:block sm:flex-shrink-0">{actions}</div>}
@@ -71,8 +71,8 @@ const SectionCard = ({ title, actions, children }) => (
     {children}
   </div>
 );
-const DefaultProfileIcon = ({ className = '', iconClassName = 'h-10 w-10 text-slate-500' }) => (
-  <div className={classNames('flex items-center justify-center bg-slate-800 text-slate-500', className)}>
+const DefaultProfileIcon = ({ className = '', iconClassName = 'h-10 w-10 text-[var(--crm-muted)]' }) => (
+  <div className={classNames('crm-soft-panel flex items-center justify-center text-[var(--crm-muted)]', className)}>
     <svg
       viewBox="0 0 24 24"
       fill="currentColor"
@@ -92,16 +92,16 @@ const LiveBadge = ({ timestamp, status = 'unknown' }) => {
   const label = isOffline ? 'OFFLINE' : isUpdating ? 'UPDATING' : 'LIVE';
   const timeLabel = isOnline && timestamp ? formatLiveTimestamp(timestamp, tickingNow) : null;
   const badgeToneClass = (() => {
-    if (isOffline) return 'border-rose-500/50 bg-rose-500/10 text-rose-200';
-    if (isUpdating) return 'border-amber-400/60 bg-amber-500/10 text-amber-50';
-    return 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200';
+    if (isOffline) return 'bg-rose-500/12 text-rose-100';
+    if (isUpdating) return 'bg-amber-500/14 text-amber-50';
+    return 'bg-[color:var(--crm-primary-container)] text-[#eafffb]';
   })();
-  const dotToneClass = isOffline ? 'bg-rose-400' : isUpdating ? 'animate-pulse bg-amber-300' : 'animate-pulse bg-emerald-400';
-  const timeToneClass = isOffline ? 'text-rose-100/80' : isUpdating ? 'text-amber-100/80' : 'text-emerald-100/80';
+  const dotToneClass = isOffline ? 'bg-rose-400' : isUpdating ? 'animate-pulse bg-amber-300' : 'animate-pulse bg-[color:var(--crm-primary)]';
+  const timeToneClass = isOffline ? 'text-rose-100/80' : isUpdating ? 'text-amber-100/80' : 'text-[#eafffb]/82';
   return (
     <span
       className={classNames(
-        'flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em]',
+        'flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em]',
         badgeToneClass
       )}
     >
@@ -163,23 +163,7 @@ const IconClose = ({ className = 'h-5 w-5' }) => (
     <line x1="6" y1="6" x2="18" y2="18" />
   </svg>
 );
-const IconSave = ({ className = 'h-5 w-5' }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.6"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M5 3h11l3 3v15a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
-    <path d="M14 3v5H6V3" />
-    <path d="M6 17h12" />
-    <path d="M12 11v6" />
-  </svg>
-);
+const IconSave = ({ className = 'h-5 w-5' }) => <MaterialNavIcon name="save" className={className} />;
 const IconBan = ({ className = 'h-5 w-5' }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -196,36 +180,27 @@ const IconBan = ({ className = 'h-5 w-5' }) => (
   </svg>
 );
 const RESPONSIVE_ACTION_BUTTON_CLASS =
-  'inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 sm:px-4 sm:py-2 sm:text-sm';
+  'inline-flex items-center justify-center gap-2 rounded-full px-3.5 py-2.5 text-sm font-semibold whitespace-nowrap transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00bfaf]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent sm:px-4 sm:py-2.5 sm:text-sm';
+const SHEET_FOOTER_BUTTON_CLASS = 'crm-sheet-footer-btn';
+const MaterialNavIcon = ({ name, className = 'h-5 w-5' }) => {
+  const fontSize = className.includes('h-6')
+    ? 24
+    : className.includes('h-4')
+      ? 16
+      : className.includes('h-3.5')
+        ? 14
+        : 20;
+  return (
+    <span className={classNames('crm-material-symbol shrink-0', className)} style={{ fontSize: `${fontSize}px` }} aria-hidden="true">
+      {name}
+    </span>
+  );
+};
 const IconDashboard = ({ className = 'h-5 w-5' }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.6"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M3.5 11 12 4l8.5 7" />
-    <path d="M6 10v10h5v-5h2v5h5V10" />
-  </svg>
+  <MaterialNavIcon name="home" className={className} />
 );
 const IconData = ({ className = 'h-5 w-5' }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.6"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
-    <path d="M3.5 9h17M3.5 13h17M8 5v14M13 5v14" />
-  </svg>
+  <MaterialNavIcon name="table_chart" className={className} />
 );
 const IconBot = ({ className = 'h-5 w-5' }) => (
   <svg
@@ -247,31 +222,10 @@ const IconBot = ({ className = 'h-5 w-5' }) => (
   </svg>
 );
 const IconSystem = ({ className = 'h-5 w-5' }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.6"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <circle cx="12" cy="12" r="3" />
-    <path d="M12 2.5v3M12 18.5v3M4.2 7.5l2.6 1.5M17.2 15l2.6 1.5M4.2 16.5l2.6-1.5M17.2 9l2.6-1.5M2.5 12h3M18.5 12h3" />
-  </svg>
+  <MaterialNavIcon name="settings" className={className} />
 );
 const IconProfile = ({ className = 'h-5 w-5' }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth="1.6"
-    stroke="currentColor"
-    className={className}
-  >
-    <path strokeLinecap="round" strokeLinejoin="round" d="M12 14c-3.866 0-7 1.791-7 4v1h14v-1c0-2.209-3.134-4-7-4Zm0-2a4 4 0 1 0-0.001-8.001A4 4 0 0 0 12 12Z" />
-  </svg>
+  <MaterialNavIcon name="person" className={className} />
 );
 const IconCalendarDay = ({ className = 'h-4 w-4' }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
@@ -366,54 +320,55 @@ const UI_TEXT = Object.freeze({
   liveFallback: 'LIVE',
 });
 const BotMenuBuilder = (typeof window !== 'undefined' && window.BotMenuBuilder) || (() => (
-  <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6 text-slate-200">
+  <div className="crm-soft-card p-6 text-[var(--crm-text)]">
     Конструктор меню временно недоступен.
   </div>
 ));
 const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-w-3xl' }) => {
   if (!isOpen) return null;
-  return (
+  const modalNode = (
     <div
-      className="fixed inset-0 z-50 flex items-stretch justify-stretch overflow-y-auto bg-black/60 p-0 sm:items-center sm:justify-center sm:px-4 sm:py-6"
-      onMouseDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (typeof window !== 'undefined' && window.innerWidth >= 640) {
-          onClose?.();
-        }
-      }}
+      className="crm-app-shell fixed inset-0 z-50 overflow-hidden bg-black/60 text-[var(--crm-text)]"
     >
       <div
-        className={`flex h-full max-h-[100dvh] min-h-0 w-full ${maxWidthClass} flex-col overflow-hidden border border-slate-700 bg-slate-900 shadow-2xl rounded-none sm:h-auto sm:rounded-2xl`}
-        onMouseDown={(event) => event.stopPropagation()}
+        className="flex h-full w-full items-stretch justify-stretch sm:items-center sm:justify-center sm:px-4 sm:py-6"
+        onMouseDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          onClose?.();
+        }}
       >
-        <div className="flex min-w-0 items-center justify-between gap-3 border-b border-slate-800 px-4 py-3 sm:px-6 sm:py-4">
-          <h3 className="min-w-0 flex-1 truncate text-lg font-semibold text-white">{title}</h3>
-          <button type="button" onClick={onClose} className="flex-shrink-0 text-slate-400 hover:text-white" aria-label="Закрыть">
-            x
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4 sm:px-6">{children}</div>
-        {footer && (
-          <div className="flex flex-wrap justify-end gap-2 border-t border-slate-800 px-4 py-3 pb-[env(safe-area-inset-bottom)] sm:gap-3 sm:px-6 sm:py-4">
-            {footer}
+        <div
+          className={`crm-modal-surface flex h-full max-h-full min-h-0 w-full ${maxWidthClass} flex-col overflow-hidden rounded-none sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-[32px]`}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <div className="flex min-w-0 items-center justify-between gap-3 border-b border-white/5 px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)] sm:px-6 sm:py-4">
+            <h3 className="min-w-0 flex-1 truncate text-lg font-extrabold tracking-[-0.03em] text-white">{title}</h3>
+            <button
+              type="button"
+              onClick={onClose}
+              className="crm-ghost-btn h-10 w-10 min-h-0 flex-shrink-0 p-0 text-[var(--crm-muted)] hover:text-white"
+              aria-label="Закрыть"
+            >
+              <IconClose className="h-4 w-4" />
+            </button>
           </div>
-        )}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4 sm:px-6">{children}</div>
+          {footer && (
+            <div className="flex flex-wrap justify-end gap-2 border-t border-white/5 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 sm:gap-3 sm:px-6 sm:py-4">
+              {footer}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
+  if (typeof document !== 'undefined' && document.body) {
+    return createPortal(modalNode, document.body);
+  }
+  return modalNode;
 };
 const ConfirmDialog = ({ open, title, message, confirmLabel = 'Подтвердить', cancelLabel = 'Отмена', tone = 'neutral', onResult }) => {
   if (!open) return null;
-  const confirmToneClass = (() => {
-    switch (tone) {
-      case 'danger':
-        return 'bg-rose-600 hover:bg-rose-500';
-      case 'success':
-        return 'bg-emerald-600 hover:bg-emerald-500';
-      default:
-        return 'bg-indigo-600 hover:bg-indigo-500';
-    }
-  })();
   return (
     <Modal
       isOpen={open}
@@ -422,35 +377,41 @@ const ConfirmDialog = ({ open, title, message, confirmLabel = 'Подтверд�
       maxWidthClass="max-w-md"
       footer={
         <div className="flex justify-end gap-3">
-          <button onClick={() => onResult(false)} className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-800">
+          <button onClick={() => onResult(false)} className={classNames('crm-ghost-btn', SHEET_FOOTER_BUTTON_CLASS)}>
             {cancelLabel}
           </button>
-          <button onClick={() => onResult(true)} className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${confirmToneClass}`}>
+          <button
+            onClick={() => onResult(true)}
+            className={classNames(
+              SHEET_FOOTER_BUTTON_CLASS,
+              tone === 'danger' ? 'crm-danger-btn' : tone === 'success' ? 'crm-action-btn' : 'crm-tonal-btn'
+            )}
+          >
             {confirmLabel}
           </button>
         </div>
       }
     >
-      <p className="text-sm text-slate-200">{message || 'Вы уверены, что хотите продолжить?'}</p>
+      <p className="text-sm text-[var(--crm-text)]">{message || 'Вы уверены, что хотите продолжить?'}</p>
     </Modal>
   );
 };
-const StatCard = ({ label, value, accent = 'text-indigo-300', onClick }) => {
+const StatCard = ({ label, value, accent = 'text-[color:var(--crm-primary)]', onClick }) => {
   const interactive = typeof onClick === 'function';
   const Wrapper = interactive ? 'button' : 'div';
   return (
-    <Wrapper
-      type={interactive ? 'button' : undefined}
-      onClick={onClick}
-      className={classNames(
-        'rounded-xl border border-slate-700 bg-slate-900/40 p-3 text-left sm:p-4',
-        interactive &&
-          'cursor-pointer transition hover:border-indigo-400/70 hover:bg-slate-900/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/60'
-      )}
-    >
-      <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
-      <p className={classNames('mt-1 text-2xl font-semibold sm:mt-2 sm:text-3xl', accent)}>{value}</p>
-    </Wrapper>
+      <Wrapper
+        type={interactive ? 'button' : undefined}
+        onClick={onClick}
+        className={classNames(
+          'crm-stat-card p-4 text-left sm:p-5',
+          interactive &&
+            'cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#00bfaf]/30'
+        )}
+      >
+        <p className="text-xs uppercase tracking-[0.18em] text-[var(--crm-muted)]">{label}</p>
+        <p className={classNames('mt-1 text-2xl font-semibold sm:mt-2 sm:text-3xl', accent)}>{value}</p>
+      </Wrapper>
   );
 };
 const Sidebar = ({
@@ -472,37 +433,41 @@ const Sidebar = ({
   const sidebarShortcuts =
     Array.isArray(tableShortcuts) && tableShortcuts.length ? tableShortcuts : DEFAULT_TABLE_SHORTCUTS;
   return (
-    <aside className="hidden w-72 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950/90 p-5 lg:sticky lg:top-0 lg:flex lg:h-screen lg:overflow-y-auto">
-      <div className="space-y-2 border-b border-slate-800 pb-4">
-        <p className="text-xs uppercase tracking-wide text-slate-500">{UI_TEXT.accountTitle}</p>
-        <p className="text-lg font-semibold text-white">{username}</p>
+    <aside className="crm-sidebar hidden w-72 flex-shrink-0 flex-col p-5 lg:sticky lg:top-0 lg:flex lg:h-screen lg:overflow-y-auto">
+      <div className="border-b border-white/5 pb-5">
+        <div className="space-y-3 px-1">
+          <div className="space-y-1.5">
+            <p className="text-[10px] uppercase tracking-[0.26em] text-[var(--crm-muted)]/90">{UI_TEXT.accountTitle}</p>
+            <p className="text-[1.7rem] font-semibold tracking-[-0.04em] text-white">{username}</p>
+          </div>
         <button
           onClick={onLogout}
-          className="mt-2 w-full rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-100 hover:border-indigo-500 hover:text-white"
+            className="crm-inline-panel flex h-11 w-full items-center justify-center px-4 text-sm font-semibold text-[var(--crm-text)] transition hover:bg-[color:var(--crm-surface-5)] hover:text-white"
         >
           {UI_TEXT.logout}
         </button>
         {(liveUpdatedAt || liveStatus !== 'unknown') && (
-          <div className="pt-2">
+            <div>
             <LiveBadge timestamp={liveUpdatedAt} status={liveStatus} />
           </div>
         )}
+        </div>
       </div>
       <nav className="mt-6 flex-1 space-y-2 overflow-y-auto">
         {sidebarTabs.map((tab) => {
           const isActive = activeTab === tab.id;
+          const IconComponent = VIEW_TAB_ICONS[tab.id] || IconDots;
           return (
             <div key={tab.id} className="space-y-1">
-              <button
-                onClick={() => onChange?.(tab.id)}
-                className={classNames(
-                  'w-full rounded-xl px-4 py-3 text-left text-sm font-semibold transition',
-                  isActive
-                    ? 'bg-indigo-600/90 text-white shadow-lg shadow-indigo-900/40'
-                    : 'bg-slate-900/40 text-slate-300 hover:bg-slate-800/60 hover:text-white'
-                )}
-              >
-                {tab.label}
+                <button
+                  onClick={() => onChange?.(tab.id)}
+                  className={classNames(
+                    'crm-sidebar-tab flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold',
+                    isActive && 'crm-sidebar-tab-active'
+                  )}
+                >
+                  <IconComponent className="h-5 w-5 shrink-0" />
+                  {tab.label}
               </button>
               {tab.id === 'tables' && (
                 <div className="space-y-1 pl-4">
@@ -513,10 +478,8 @@ const Sidebar = ({
                         key={shortcut.id}
                         onClick={() => onSelectTable?.(shortcut.id)}
                         className={classNames(
-                          'w-full rounded-lg px-3 py-2 text-left text-xs font-semibold transition',
-                          isShortcutActive
-                            ? 'bg-indigo-600/20 text-indigo-100'
-                            : 'text-slate-400 hover:bg-slate-900/60 hover:text-white'
+                          'crm-subnav-pill w-full px-3 py-2 text-left text-xs font-semibold',
+                          isShortcutActive && 'crm-subnav-pill-active'
                         )}
                         disabled={!onSelectTable}
                       >
@@ -538,10 +501,8 @@ const Sidebar = ({
                           onSelectSystemSection?.(section.id);
                         }}
                         className={classNames(
-                          'w-full rounded-lg px-3 py-2 text-left text-xs font-semibold transition',
-                          isSectionActive
-                            ? 'bg-indigo-600/20 text-indigo-100'
-                            : 'text-slate-400 hover:bg-slate-900/60 hover:text-white'
+                          'crm-subnav-pill w-full px-3 py-2 text-left text-xs font-semibold',
+                          isSectionActive && 'crm-subnav-pill-active'
                         )}
                       >
                         {section.label}
@@ -631,13 +592,13 @@ const MobileTabs = ({
   const hasVisibleSubmenus = showSubmenus && (canRenderTableSubmenu || canRenderSystemSubmenu);
   const renderLiveIndicator = () =>
     liveStatus === 'unknown' && !liveUpdatedAt ? (
-      <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500">{UI_TEXT.liveFallback}</span>
+      <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[var(--crm-muted)]">{UI_TEXT.liveFallback}</span>
     ) : (
       <LiveBadge timestamp={liveUpdatedAt} status={liveStatus} />
     );
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/80 backdrop-blur lg:hidden">
+      <header className="crm-mobile-header sticky top-0 z-30 lg:hidden">
         <div className="relative px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-[88px] justify-start">
@@ -649,12 +610,12 @@ const MobileTabs = ({
                   type="button"
                   onClick={handleToggleLogoutMenu}
                   aria-expanded={showLogoutMenu}
-                  className="flex items-center gap-2 rounded-2xl border border-slate-800/0 px-4 py-2 text-base font-semibold text-white transition hover:border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+                  className="crm-ghost-btn px-4 py-2 text-base"
                 >
                   <span className="max-w-[60vw] truncate text-right">{username}</span>
                   <svg
                     className={classNames(
-                      'h-4 w-4 text-slate-400 transition-transform',
+                      'h-4 w-4 text-[var(--crm-muted)] transition-transform',
                       showLogoutMenu ? 'rotate-180' : 'rotate-0'
                     )}
                     viewBox="0 0 20 20"
@@ -673,7 +634,7 @@ const MobileTabs = ({
                   <button
                     type="button"
                     onClick={handleLogoutClick}
-                    className="w-full rounded-2xl border border-slate-600/80 bg-slate-900/95 px-4 py-2 text-base font-semibold text-rose-200 shadow-lg shadow-black/30 transition hover:border-rose-400 hover:text-white"
+                      className="crm-danger-btn w-full px-4 py-2 text-base"
                   >
                     {UI_TEXT.logout}
                   </button>
@@ -693,7 +654,7 @@ const MobileTabs = ({
               )}
               aria-hidden="true"
             />
-            <div className="relative rounded-[32px] bg-[#050916] px-4 py-3">
+            <div className="crm-mobile-nav-shell relative px-4 py-3">
               <div
                 className={classNames(
                   'space-y-2 overflow-hidden transition-[max-height,opacity,transform,padding] duration-300 ease-out',
@@ -722,10 +683,8 @@ const MobileTabs = ({
                           }}
                           disabled={!canSelectTable}
                           className={classNames(
-                            'flex-shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors',
-                            isShortcutActive
-                              ? 'bg-[#5a57ff] text-white'
-                              : 'bg-white/10 text-slate-200/80 hover:bg-white/15 hover:text-white',
+                            'crm-subnav-pill flex-shrink-0 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide',
+                            isShortcutActive && 'crm-subnav-pill-active',
                             !canSelectTable && 'opacity-50'
                           )}
                         >
@@ -755,10 +714,8 @@ const MobileTabs = ({
                           }}
                           disabled={!canSelect}
                           className={classNames(
-                            'flex-shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors',
-                            isSectionActive
-                              ? 'bg-[#5a57ff] text-white'
-                              : 'bg-white/10 text-slate-200/80 hover:bg-white/15 hover:text-white',
+                            'crm-subnav-pill flex-shrink-0 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide',
+                            isSectionActive && 'crm-subnav-pill-active',
                             !canSelect && 'opacity-50'
                           )}
                         >
@@ -769,7 +726,7 @@ const MobileTabs = ({
                   </div>
                 )}
               </div>
-              <div className="flex w-full items-center gap-3 rounded-[32px] bg-[#050916] px-4 py-3 transition-all duration-300">
+              <div className="flex w-full items-center gap-3 px-2 py-1 transition-all duration-300">
                 {availableTabs.map((tab) => {
                   const IconComponent = VIEW_TAB_ICONS[tab.id] || IconDots;
                   const isActive = activeTab === tab.id;
@@ -778,14 +735,12 @@ const MobileTabs = ({
                       key={tab.id}
                       onClick={() => handleSelect(tab.id)}
                       className={classNames(
-                        'flex-1 rounded-full px-3 py-2 text-center text-sm font-semibold transition-colors',
-                        isActive ? 'bg-[#37267a] text-[#ebe9ff]' : 'text-slate-500/80 hover:text-white'
+                        'crm-mobile-tab flex-1 px-3 py-2 text-center text-sm font-semibold',
+                        isActive && 'crm-mobile-tab-active'
                       )}
                       aria-label={tab.label}
                     >
-                      <IconComponent
-                        className={classNames('mx-auto h-6 w-6', isActive ? 'text-[#ebe9ff]' : 'text-slate-500/80')}
-                      />
+                      <IconComponent className="mx-auto h-6 w-6" />
                       <span className="sr-only">{tab.label}</span>
                     </button>
                   );

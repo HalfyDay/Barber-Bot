@@ -125,7 +125,7 @@ const HIDDEN_SERVICE_LABEL = String.fromCharCode(0x0421, 0x043a, 0x0440, 0x044b,
 const buildVisitHistory = (appointments = []) => {
   if (!appointments.length) return [];
   const cutoff = Date.now() - YEAR_IN_MS;
-  const completed = appointments
+  const history = appointments
     .map((appt) => {
       const dateValue = normalizeText(appt?.Date || appt?.date);
       const timeValue = normalizeText(appt?.Time || appt?.time);
@@ -148,11 +148,10 @@ const buildVisitHistory = (appointments = []) => {
     .filter(
       (appt) =>
         appt.startDate &&
-        appt.startDate.getTime() >= cutoff &&
-        (isCompletedAppointmentStatus(appt.Status) || isActiveAppointmentStatus(appt.Status))
+        appt.startDate.getTime() >= cutoff
     )
     .sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
-  return completed.map((appt, index) => ({
+  return history.map((appt, index) => ({
     ...appt,
     orderNumber: completed.length - index,
     dateLabel: formatDateTime(appt.Date, appt.Time),
@@ -743,15 +742,15 @@ const normalizeUpdateInfo = (payload) => {
   };
 };
 const STATUS_BADGE_MAP = {
-  [STATUS_ACTIVE]: 'border border-sky-500/30 bg-sky-500/10 text-sky-100',
-  [STATUS_DONE]: 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-100',
-  [STATUS_CANCELLED]: 'border border-rose-500/30 bg-rose-500/10 text-rose-100',
-  [STATUS_NO_SHOW]: 'border border-amber-500/30 bg-amber-500/10 text-amber-100',
+  [STATUS_ACTIVE]: 'bg-[color:var(--crm-primary-container)] text-[#eafffb]',
+  [STATUS_DONE]: 'bg-[color:var(--crm-primary-container)] text-[#eafffb]',
+  [STATUS_CANCELLED]: 'bg-[rgba(127,29,29,0.62)] text-[#fff1f1]',
+  [STATUS_NO_SHOW]: 'bg-amber-500/12 text-amber-100',
 };
 const getStatusBadgeClasses = (status) => {
   const normalized = normalizeStatusValue(status);
   return (
-    STATUS_BADGE_MAP[normalized] || 'border border-slate-600/60 bg-slate-800/70 text-slate-200'
+    STATUS_BADGE_MAP[normalized] || 'bg-[color:var(--crm-surface-4)] text-[var(--crm-text)]'
   );
 };
 const getCompactStatusLabel = (status) => {

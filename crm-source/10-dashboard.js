@@ -161,7 +161,7 @@
   const upcomingActions = onCreateAppointment ? (
     <button
       onClick={onCreateAppointment}
-      className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-500 sm:px-4 whitespace-nowrap"
+      className="crm-action-btn px-3 py-2 text-sm whitespace-nowrap sm:px-4"
     >
       <span className="sm:hidden">+ Запись</span>
       <span className="hidden sm:inline">+ Новая запись</span>
@@ -184,26 +184,26 @@
   return (
     <div className="space-y-6 overflow-x-hidden">
       <SectionCard title="Ключевые показатели">
-        <div className="grid gap-4 stat-grid">
+        <div className="grid gap-3 grid-cols-2 xl:grid-cols-4">
           {isStaffView ? (
             <>
               <StatCard label="Всего клиентов" value={stats.totalUsers ?? 0} onClick={resolveStatHandler('Users')} />
               <StatCard
                 label="Активных записей"
                 value={stats.activeAppointments ?? 0}
-                accent="text-emerald-300"
+                accent="text-[color:var(--crm-primary)]"
                 onClick={resolveStatHandler('Appointments')}
               />
               <StatCard
                 label="Заработано за месяц"
                 value={stats.earningsMonth == null ? '—' : formatCurrencyValue(stats.earningsMonth)}
-                accent="text-amber-200"
+                accent="text-[color:var(--crm-highlight)]"
                 onClick={resolveStatHandler('Revenue')}
               />
               <StatCard
                 label="Мой уровень"
                 value={stats.positionName || '—'}
-                accent="text-indigo-200"
+                accent="text-[var(--crm-text)]"
               />
             </>
           ) : (
@@ -216,19 +216,19 @@
               <StatCard
                 label="На сегодня"
                 value={stats.todaysAppointments ?? 0}
-                accent="text-cyan-300"
+                accent="text-[color:var(--crm-primary)]"
                 onClick={resolveStatHandler('Appointments')}
               />
               <StatCard
                 label="Подтверждено за месяц"
                 value={stats.confirmedMonth ?? 0}
-                accent="text-fuchsia-300"
+                accent="text-[color:var(--crm-highlight)]"
                 onClick={resolveStatHandler('Appointments')}
               />
               <StatCard
                 label="Доход за месяц"
                 value={stats.incomeMonth == null ? '—' : formatCurrencyValue(stats.incomeMonth)}
-                accent="text-amber-200"
+                accent="text-[color:var(--crm-highlight)]"
                 onClick={resolveStatHandler('Revenue')}
               />
             </>
@@ -237,17 +237,17 @@
       </SectionCard>
       <SectionCard title="Ближайшие записи" actions={upcomingActions}>
         {groupedUpcoming.length === 0 ? (
-          <p className="text-slate-400">Нет ближайших записей.</p>
+          <p className="text-[var(--crm-muted)]">Нет ближайших записей.</p>
         ) : (
           <div className="space-y-5">
             {groupedUpcoming.map((group) => (
               <div key={group.key} className="space-y-3">
-                <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                  <span className="h-px flex-1 bg-slate-700" />
+                <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--crm-muted)]">
+                  <span className="h-px flex-1 bg-[color:var(--crm-outline)]" />
                   {group.label}
-                  <span className="h-px flex-1 bg-slate-700" />
+                  <span className="h-px flex-1 bg-[color:var(--crm-outline)]" />
                 </div>
-                <div className="grid gap-3 lg:grid-cols-2">
+                <div className="grid gap-3 xl:grid-cols-2">
                   {group.items.map((appt) => {
                     const inProgress = isAppointmentOngoing(appt, nowTs);
                     const cardProps = {
@@ -256,8 +256,8 @@
                       onClick: () => onOpenAppointment?.(appt, { allowDelete: true }),
                       onKeyDown: (event) => event.key === 'Enter' && onOpenAppointment?.(appt, { allowDelete: true }),
                       className: classNames(
-                        'group upcoming-card relative w-full cursor-pointer overflow-hidden rounded-3xl border border-slate-700/60 bg-slate-900/70 p-4 text-left transition hover:border-indigo-500/70 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:p-5',
-                        inProgress && 'border-emerald-400/80 shadow-[0_0_25px_rgba(16,185,129,0.25)]'
+                        'group upcoming-card crm-soft-card relative w-full cursor-pointer overflow-hidden p-4 text-left transition hover:-translate-y-0.5 hover:border-[color:var(--crm-primary)]/70 focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)] sm:p-5',
+                        inProgress && 'border-[color:var(--crm-primary)]/80 shadow-[0_0_25px_rgba(0,191,175,0.22)]'
                       ),
                     };
                     const { start, end } = parseTimeRangeParts(appt.Time);
@@ -265,14 +265,14 @@
                     const servicesList = parseMultiValue(appt.Services);
                     return (
                       <div key={appt.id || `${group.key}-${appt.CustomerName}-${appt.Time}`} {...cardProps}>
-                        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-800/80 pb-4">
+                        <div className="flex flex-wrap items-end justify-between gap-4 border-b crm-table-divider pb-4">
                           <div className="space-y-2">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--crm-muted)]">
                               {formatDateBadgeLabel(appt.Date)}
                             </p>
                             <div className="flex items-baseline gap-3">
                               <p className="text-3xl font-bold leading-none text-white sm:text-4xl">{start || '—'}</p>
-                              {end && <p className="text-sm text-slate-400 sm:text-base">до {end}</p>}
+                              {end && <p className="text-sm text-[var(--crm-muted)] sm:text-base">до {end}</p>}
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-2 text-right">
@@ -285,14 +285,14 @@
                               {statusLabel || 'Без статуса'}
                             </span>
                             {appt.Barber && (
-                              <p className="text-xs text-slate-400 sm:text-sm">
+                              <p className="text-xs text-[var(--crm-muted)] sm:text-sm">
                                 Барбер:{' '}
                                 <span className="font-semibold text-white">{appt.Barber}</span>
                               </p>
                             )}
                           </div>
                         </div>
-                        <div className="mt-4 space-y-4 text-[13px] text-slate-300 sm:text-sm">
+                        <div className="mt-4 space-y-4 text-[13px] text-[var(--crm-text)] sm:text-sm">
                           <div className="space-y-3 min-w-0">
                             {appt.CustomerName ? (
                               <button
@@ -301,7 +301,7 @@
                                   event.stopPropagation();
                                   onOpenProfile?.(appt.CustomerName);
                                 }}
-                                className="text-left text-base font-semibold text-white hover:text-indigo-300 sm:text-lg"
+                                className="text-left text-base font-semibold text-white hover:text-[color:var(--crm-primary)] sm:text-lg"
                               >
                                 {appt.CustomerName}
                               </button>
@@ -314,16 +314,16 @@
                               {servicesList.map((service, index) => (
                                 <span
                                   key={`${service}-${index}`}
-                                  className="rounded-full border border-slate-700/70 bg-slate-800/70 px-3 py-1 text-[11px] text-slate-200 sm:text-xs"
-                                >
-                                  {service}
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-slate-400 sm:text-sm">Нет выбранных услуг</p>
-                          )}
-                        </div>
+                                className="rounded-full border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-3 py-1 text-[11px] text-[var(--crm-text)] sm:text-xs"
+                              >
+                                {service}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-[var(--crm-muted)] sm:text-sm">Нет выбранных услуг</p>
+                        )}
+                      </div>
                       </div>
                     );
                   })}
@@ -335,9 +335,9 @@
       </SectionCard>
       <SectionCard title="Прошедшие">
         {overdueList.length === 0 ? (
-          <p className="text-slate-400">Нет активных записей, время которых уже прошло.</p>
+          <p className="text-[var(--crm-muted)]">Нет активных записей, время которых уже прошло.</p>
         ) : (
-          <div className="space-y-3">
+          <div className="grid gap-3 xl:grid-cols-2">
             {overdueList.map((appt) => {
               const apptId = String(
                 getRecordId(appt) || `${appt.Date || 'no-date'}-${appt.Time || 'no-time'}-${appt.CustomerName || 'no-name'}`
@@ -354,11 +354,11 @@
                   tabIndex={0}
                   onClick={handleOpen}
                   onKeyDown={(event) => event.key === 'Enter' && handleOpen()}
-                  className="rounded-2xl border border-amber-500/50 bg-amber-500/5 p-4 shadow-inner shadow-amber-900/20 transition hover:border-amber-400/80 hover:bg-amber-500/10 focus:outline-none focus:ring-2 focus:ring-amber-400/60"
+                  className="crm-soft-card rounded-[24px] bg-[rgba(78,28,38,0.6)] p-4 transition hover:-translate-y-0.5 hover:bg-[rgba(96,34,46,0.74)] focus:outline-none focus:ring-2 focus:ring-[rgba(132,48,64,0.22)]"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-1">
-                      <p className="text-[11px] uppercase tracking-[0.25em] text-amber-200/80">{formatDateBadgeLabel(appt.Date)}</p>
+                      <p className="text-[11px] uppercase tracking-[0.25em] text-[#f0c8ce]/80">{formatDateBadgeLabel(appt.Date)}</p>
                       <p className="text-xl font-semibold text-white sm:text-2xl">{timeLabel || 'Время не указано'}</p>
                     </div>
                     <span
@@ -374,7 +374,7 @@
                     <div className="space-y-1">
                       <p className="text-base font-semibold text-white">{appt.CustomerName || 'Без имени'}</p>
                       {appt.Barber ? (
-                        <p className="text-sm text-slate-300">
+                      <p className="text-sm text-[var(--crm-text)]">
                           Барбер: <span className="font-semibold text-white">{appt.Barber}</span>
                         </p>
                       ) : null}
@@ -390,8 +390,8 @@
 	                        onKeyDown={(event) => event.stopPropagation()}
 	                        disabled={isPending}
 	                        className={classNames(
-	                          'w-full justify-center rounded-lg px-4 py-3 text-sm font-semibold text-white transition sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
-	                          isPending ? 'cursor-wait bg-emerald-700/50' : 'bg-emerald-600 hover:bg-emerald-500'
+	                          'crm-action-btn w-full justify-center px-4 py-3 text-sm sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
+	                          isPending && 'cursor-wait opacity-70'
 	                        )}
                       >
                         {isPending ? 'Сохраняю...' : 'Выполнена'}
@@ -406,8 +406,8 @@
 	                        onKeyDown={(event) => event.stopPropagation()}
 	                        disabled={isPending}
 	                        className={classNames(
-	                          'w-full justify-center rounded-lg px-4 py-3 text-sm font-semibold text-white transition sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
-	                          isPending ? 'cursor-wait bg-amber-700/60' : 'bg-amber-600 hover:bg-amber-500'
+	                          'crm-tonal-btn w-full justify-center px-4 py-3 text-sm text-rose-200 sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
+	                          isPending && 'cursor-wait opacity-70'
 	                        )}
                       >
                         {isPending ? 'Сохраняю...' : 'Неявка'}
@@ -1215,7 +1215,7 @@ const BarberAvatarPicker = ({
   );
   const [cardDetailsOpen, setCardDetailsOpen] = useState(false);
   return (
-    <div className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 shadow-2xl">
+    <div className="crm-soft-card overflow-hidden">
       <input
         ref={photoInputRef}
         type="file"
@@ -1247,15 +1247,15 @@ const BarberAvatarPicker = ({
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Источник:</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-[var(--crm-muted)]">Источник:</span>
               <button
                 type="button"
                 onClick={() => handleCardModeSelect(CARD_MODE_GENERATED)}
                 className={classNames(
-                  'rounded-xl border px-3 py-1.5 text-xs font-semibold transition',
+                  'crm-ghost-btn px-3 py-1.5 text-xs',
                   isGeneratedMode
-                    ? 'border-emerald-400 bg-emerald-500/10 text-emerald-100'
-                    : 'border-slate-700 text-slate-300 hover:border-slate-500',
+                    ? 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]'
+                    : '',
                 )}
               >
                 Редактор
@@ -1267,24 +1267,24 @@ const BarberAvatarPicker = ({
                   customCardInputRef.current?.click();
                 }}
                 className={classNames(
-                  'rounded-xl border px-3 py-1.5 text-xs font-semibold transition',
+                  'crm-ghost-btn px-3 py-1.5 text-xs',
                   isCustomMode
-                    ? 'border-amber-400 bg-amber-500/10 text-amber-100'
-                    : 'border-slate-700 text-slate-300 hover:border-slate-500',
+                    ? 'bg-[color:var(--crm-highlight-soft)] text-[color:var(--crm-highlight-text)]'
+                    : '',
                 )}
               >
                 Свое изобр.
               </button>
             </div>
           </div>
-          <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-900">
+          <div className="crm-inline-panel relative overflow-hidden">
             <canvas
               ref={canvasRef}
-              className="block h-full w-full max-w-full bg-slate-900/60"
+              className="block h-full w-full max-w-full bg-[color:var(--crm-surface-4)]/60"
               style={{ aspectRatio: '16 / 9' }}
             />
             {!cardPreview && (
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-900/70 p-6 text-center text-sm text-slate-300">
+              <div className="absolute inset-0 flex items-center justify-center bg-[color:var(--crm-surface-4)]/70 p-6 text-center text-sm text-[var(--crm-text)]">
                 <p>Загрузите фото барбера и заполните поля — карточка соберется автоматически.</p>
               </div>
             )}
@@ -1295,7 +1295,7 @@ const BarberAvatarPicker = ({
                 type="button"
                 onClick={handleDownloadCard}
                 disabled={!cardPreview}
-                className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-indigo-200 transition hover:border-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+                className="crm-ghost-btn px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Скачать
               </button>
@@ -1306,7 +1306,7 @@ const BarberAvatarPicker = ({
                     handleCardModeSelect(CARD_MODE_CUSTOM_IMAGE);
                     customCardInputRef.current?.click();
                   }}
-                  className="rounded-2xl border border-emerald-500/70 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-400 hover:text-white"
+                  className="crm-action-btn px-4 py-2 text-sm"
                 >
                   +
                 </button>
@@ -1315,7 +1315,7 @@ const BarberAvatarPicker = ({
                 <button
                   type="button"
                   onClick={handleResetDesign}
-                  className="rounded-2xl border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-400"
+                  className="crm-ghost-btn px-3 py-2 text-xs font-semibold"
                 >
                   Вернуться к редактору
                 </button>
@@ -1324,7 +1324,7 @@ const BarberAvatarPicker = ({
             <button
               type="button"
               onClick={() => setCardDetailsOpen((prev) => !prev)}
-              className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 transition hover:border-indigo-400 hover:text-white"
+              className="crm-ghost-btn px-3 py-2 text-xs font-semibold uppercase tracking-wide"
             >
               {cardDetailsOpen ? 'Скрыть' : 'Раскрыть'}
             </button>
@@ -1332,7 +1332,7 @@ const BarberAvatarPicker = ({
         </div>
         <div
           className={classNames(
-            'overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-900/60 transition-all duration-200',
+            'crm-inline-panel overflow-hidden transition-all duration-200',
             cardDetailsOpen ? 'max-h-[2200px] opacity-100 p-4' : 'max-h-0 opacity-0 p-0'
           )}
         >
@@ -1344,7 +1344,7 @@ const BarberAvatarPicker = ({
                   value={cardFields.name}
                   onChange={(event) => setCardFields((prev) => ({ ...prev, name: event.target.value }))}
                   placeholder="BARBER"
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                  className="w-full px-4 py-3 text-white placeholder:text-[var(--crm-muted)]"
                 />
               </div>
               <div className="space-y-2">
@@ -1354,9 +1354,9 @@ const BarberAvatarPicker = ({
                   value={cardFields.description}
                   onChange={(event) => setCardFields((prev) => ({ ...prev, description: event.target.value }))}
                   placeholder="Аккуратен в деталях и доводит стрижку до идеала"
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                  className="w-full px-4 py-3 text-white placeholder:text-[var(--crm-muted)]"
                 />
-                <p className="text-xs text-slate-500">Каждая строка станет пунктом списка.</p>
+                <p className="text-xs text-[var(--crm-muted)]">Каждая строка станет пунктом списка.</p>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-white">Любимая фраза</label>
@@ -1364,28 +1364,28 @@ const BarberAvatarPicker = ({
                   value={cardFields.phrase}
                   onChange={(event) => setCardFields((prev) => ({ ...prev, phrase: event.target.value }))}
                   placeholder="Комфорт клиента превыше всего"
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none"
+                  className="w-full px-4 py-3 text-white placeholder:text-[var(--crm-muted)]"
                 />
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-semibold text-white">Фото барбера</p>
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/70 p-3">
-                  <div className="h-16 w-16 overflow-hidden rounded-xl border border-slate-800 bg-slate-800">
+                <div className="crm-inline-panel flex items-center gap-3 p-3">
+                  <div className="crm-soft-panel h-16 w-16 overflow-hidden rounded-xl">
                     {photoPreview ? (
                       <img src={photoPreview} alt="Фото барбера" className="h-full w-full object-cover" />
                     ) : (
-                      <DefaultProfileIcon className="h-full w-full bg-slate-900/60 text-slate-500" iconClassName="h-10 w-10" />
+                      <DefaultProfileIcon className="h-full w-full bg-[color:var(--crm-surface-4)]/60" iconClassName="h-10 w-10" />
                     )}
                   </div>
                   <div className="flex-1 space-y-1">
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-[var(--crm-muted)]">
                       Портретное фото.
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={() => photoInputRef.current?.click()}
-                        className="rounded-xl border border-emerald-500/70 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:border-emerald-400 hover:text-white"
+                        className="crm-action-btn px-3 py-1.5 text-xs"
                       >
                         Загрузить фото
                       </button>
@@ -1393,10 +1393,10 @@ const BarberAvatarPicker = ({
                         type="button"
                         onClick={() => setPhotoGrayscale((prev) => !prev)}
                         className={classNames(
-                          'rounded-xl px-3 py-1.5 text-xs font-semibold transition',
+                          'rounded-full px-3 py-1.5 text-xs font-semibold transition',
                           photoGrayscale
-                            ? 'border border-slate-600 bg-slate-800/70 text-slate-100 hover:border-slate-400'
-                            : 'border border-emerald-500/70 bg-emerald-500/10 text-emerald-200 hover:border-emerald-400 hover:text-white',
+                            ? 'crm-ghost-btn'
+                            : 'crm-action-btn',
                         )}
                       >
                         {photoGrayscale ? 'Ч/Б эффект' : 'Цветное фото'}
@@ -1405,10 +1405,10 @@ const BarberAvatarPicker = ({
                         type="button"
                         onClick={() => setPhotoOutlineEnabled((prev) => !prev)}
                         className={classNames(
-                          'rounded-xl px-3 py-1.5 text-xs font-semibold transition',
+                          'rounded-full px-3 py-1.5 text-xs font-semibold transition',
                           photoOutlineEnabled
-                            ? 'border border-slate-500 bg-slate-800/70 text-slate-100 hover:border-slate-300'
-                            : 'border border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
+                            ? 'crm-tonal-btn'
+                            : 'crm-ghost-btn'
                         )}
                       >
                         {photoOutlineEnabled ? 'С рамкой' : 'Без рамки'}
@@ -1416,7 +1416,7 @@ const BarberAvatarPicker = ({
                       <button
                         type="button"
                         onClick={() => setShowGallery((prev) => !prev)}
-                        className="rounded-xl border border-slate-700 px-3 py-1.5 text-xs font-semibold text-indigo-200 transition hover:border-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+                        className="crm-ghost-btn px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={loading || (!avatarOptions.length && !normalizedValue)}
                       >
                         {loading ? 'Загрузка...' : showGallery ? 'Скрыть галерею' : 'Показать галерею'}
@@ -1435,8 +1435,8 @@ const BarberAvatarPicker = ({
                           key={preset}
                           onClick={() => applyAvatarValue(normalizedPreset)}
                           className={classNames(
-                            'group relative overflow-hidden rounded-2xl border p-1.5 transition hover:border-indigo-400 hover:bg-slate-800',
-                            isSelected ? 'border-indigo-500 bg-indigo-500/15' : 'border-slate-700 bg-slate-900',
+                            'group crm-soft-panel relative overflow-hidden p-1.5 transition hover:bg-[color:var(--crm-surface-4)]',
+                            isSelected ? 'bg-[color:var(--crm-primary-container)]' : 'bg-[color:var(--crm-surface-3)]',
                           )}
                         >
                           <img src={resolveAssetUrl(normalizedPreset)} alt="card preset" className="h-20 w-full rounded-xl object-cover" />
@@ -1447,7 +1447,7 @@ const BarberAvatarPicker = ({
                                 event.stopPropagation();
                                 handleDeleteImage(normalizedPreset);
                               }}
-                              className="absolute right-1 top-1 rounded-full bg-slate-900/70 p-1 text-slate-200 opacity-0 transition hover:bg-rose-600/80 hover:text-white group-hover:opacity-100 disabled:cursor-not-allowed"
+                              className="absolute right-1 top-1 rounded-full bg-[color:var(--crm-surface-4)]/80 p-1 text-[var(--crm-text)] opacity-0 transition hover:bg-rose-600/80 hover:text-white group-hover:opacity-100 disabled:cursor-not-allowed"
                               disabled={actionBusy}
                             >
                               <IconTrash className="h-3.5 w-3.5" />
@@ -1459,7 +1459,7 @@ const BarberAvatarPicker = ({
                   </div>
                 )}
                 {!avatarOptions.length && !loading && (
-                  <p className="text-sm text-slate-500">Карточек пока нет. Сохраните одну, чтобы увидеть здесь.</p>
+                  <p className="text-sm text-[var(--crm-muted)]">Карточек пока нет. Сохраните одну, чтобы увидеть здесь.</p>
                 )}
               </div>
             </div>
@@ -1549,11 +1549,11 @@ const RatingSlider = ({ value, onChange, dense = false, disabled = false }) => {
   const ratingValue = clampRatingValue(value ?? RATING_MAX);
   const sliderId = useMemo(() => `rating-slider-${Math.random().toString(36).slice(2, 8)}`, []);
   const wrapperClass = dense
-    ? 'space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-1.5'
-    : 'space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2';
+    ? 'crm-inline-panel space-y-1 px-3 py-1.5'
+    : 'crm-inline-panel space-y-1 px-3 py-2';
   const labelClass = dense
-    ? 'flex items-center justify-between text-xs text-slate-300'
-    : 'flex items-center justify-between text-sm text-slate-300';
+    ? 'flex items-center justify-between text-xs text-[var(--crm-text)]'
+    : 'flex items-center justify-between text-sm text-[var(--crm-text)]';
   return (
     <div className={classNames(wrapperClass, disabled ? 'opacity-60' : '')}>
       <label className={labelClass} htmlFor={sliderId}>
@@ -1571,7 +1571,7 @@ const RatingSlider = ({ value, onChange, dense = false, disabled = false }) => {
         onChange={disabled ? undefined : onChange}
         disabled={disabled}
         aria-label="Рейтинг"
-        className={classNames('w-full accent-indigo-500', disabled ? 'cursor-not-allowed' : '')}
+        className={classNames('w-full accent-[color:var(--crm-primary)]', disabled ? 'cursor-not-allowed' : '')}
       />
     </div>
   );
@@ -1580,11 +1580,11 @@ const FixedRatingSlider = ({ value, onChange, dense = false, disabled = false })
   const ratingValue = clampRatingValue(value ?? RATING_MAX);
   const sliderId = useMemo(() => `rating-slider-fixed-${Math.random().toString(36).slice(2, 8)}`, []);
   const wrapperClass = dense
-    ? 'space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-1.5'
-    : 'space-y-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2';
+    ? 'crm-inline-panel space-y-1 px-3 py-1.5'
+    : 'crm-inline-panel space-y-1 px-3 py-2';
   const labelClass = dense
-    ? 'flex items-center justify-between text-xs text-slate-300'
-    : 'flex items-center justify-between text-sm text-slate-300';
+    ? 'flex items-center justify-between text-xs text-[var(--crm-text)]'
+    : 'flex items-center justify-between text-sm text-[var(--crm-text)]';
   return (
     <div className={classNames(wrapperClass, disabled ? 'opacity-60' : '')}>
       <label className={labelClass} htmlFor={sliderId}>
@@ -1605,7 +1605,7 @@ const FixedRatingSlider = ({ value, onChange, dense = false, disabled = false })
         onChange={disabled ? undefined : onChange}
         disabled={disabled}
         aria-label="Рейтинг"
-        className={classNames('w-full accent-indigo-500', disabled ? 'cursor-not-allowed' : '')}
+        className={classNames('w-full accent-[color:var(--crm-primary)]', disabled ? 'cursor-not-allowed' : '')}
       />
     </div>
   );

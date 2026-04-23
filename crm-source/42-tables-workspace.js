@@ -268,7 +268,11 @@
   const sortConfig = sortConfigs[activeTable] || TABLE_CONFIG[activeTable]?.defaultSort || null;
   const positions = tables.Positions || [];
   const processedRows = useMemo(() => {
-    const source = tables[activeTable] || [];
+    const tableRows = tables[activeTable] || [];
+    const source =
+      activeTable === 'Users' && !tableRows.length && Array.isArray(clients) && clients.length
+        ? clients
+        : tableRows;
     if (!source.length) return [];
     let rows = [...source];
     if (activeTable === 'Users' && clientInsightsLookup.size) {
@@ -311,6 +315,16 @@
     }
     return rows;
   }, [tables, activeTable, selectedBarber, hiddenStatuses, searchTerm, visibleColumns, sortConfig, showPastAppointments, clientInsightsLookup]);
+  const shouldShowLoadingState = isFetching && processedRows.length === 0;
+  const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
+  useEffect(() => {
+    if (!shouldShowLoadingState) {
+      setShowLoadingIndicator(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setShowLoadingIndicator(true), 180);
+    return () => clearTimeout(timer);
+  }, [shouldShowLoadingState]);
   const handleSort = (columnKey) => {
     setSortConfigs((prev) => {
       const current = prev[activeTable];
@@ -449,20 +463,6 @@
   const isCustomTable = tableSettings?.mode === 'custom';
   return (
     <div className="space-y-4">
-      <div className="hidden flex-wrap gap-2 lg:flex">
-        {resolvedVisibleTables.map((table) => (
-          <button
-            key={table}
-            onClick={() => setActiveTable(table)}
-            className={classNames(
-              'rounded-full px-4 py-2 text-sm',
-              activeTable === table ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'
-            )}
-          >
-            {TABLE_CONFIG[table]?.label || table}
-          </button>
-        ))}
-      </div>
       {isCustomTable ? (
         <div className="space-y-6">
           {activeTable === 'Barbers' && (
@@ -562,7 +562,7 @@
             appointmentCalendarScale={activeTable === 'Appointments' ? appointmentCalendarScale : 'normal'}
             setAppointmentCalendarScale={activeTable === 'Appointments' ? setAppointmentCalendarScale : null}
           />
-          {isFetching ? (
+          {showLoadingIndicator ? (
             <LoadingState label="Обновляю таблицы..." />
           ) : (
             <div className="mt-4">

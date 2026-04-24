@@ -308,6 +308,19 @@ const SchedulesView = ({
       }
     >
       <div className="space-y-3">
+        {!isStaffUser && isMobileViewport && (
+          <CustomSelect
+            value={barberFilter}
+            onChange={setBarberFilter}
+            options={[
+              { value: 'all', label: 'Все мастера' },
+              ...barberOptions.map((barber) => ({ value: barber.name, label: barber.name })),
+            ]}
+            className="w-full"
+            buttonClassName="h-10 w-full px-4 text-sm"
+            menuClassName="w-full"
+          />
+        )}
         <div className={classNames('flex items-center justify-between gap-3', isMobileViewport && 'gap-1.5')}>
           <div className={classNames('flex items-center gap-1 min-w-0', isMobileViewport && 'flex-1 gap-0.5')}>
             <button
@@ -537,24 +550,7 @@ const SchedulesView = ({
   return (
     <div className="space-y-4">
       {isMobileViewport ? (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-3 px-1">
-            <h2 className="text-xl font-semibold text-white">Расписание</h2>
-            {!isStaffUser && (
-              <CustomSelect
-                value={barberFilter}
-                onChange={setBarberFilter}
-                options={[
-                  { value: 'all', label: 'Все мастера' },
-                  ...barberOptions.map((barber) => ({ value: barber.name, label: barber.name })),
-                ]}
-                className="min-w-[150px]"
-                buttonClassName="h-10 min-w-[150px] px-4 text-sm"
-              />
-            )}
-          </div>
-          {calendarBlock}
-        </div>
+        <div className="space-y-3">{calendarBlock}</div>
       ) : (
         <SectionCard
           title="Расписание"

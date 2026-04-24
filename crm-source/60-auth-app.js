@@ -48,6 +48,7 @@
     event.preventDefault();
     const normalizedPhone = normalizePhoneValue(phone);
     const normalizedLogin = resolveLogin(phone);
+    const isAppSiteShell = isAppSiteRuntime();
     if (!normalizedPhone && !normalizedLogin) {
       setValidationError('Укажите номер телефона или логин');
       return;
@@ -61,7 +62,7 @@
       phone: normalizedPhone,
       login: normalizedLogin,
       password,
-      remember: false,
+      remember: isAppSiteShell,
     });
   };
   const formatPhoneDisplay = (value) => {
@@ -187,9 +188,10 @@
   );
 };
 const App = () => {
+  const isAppSiteShell = isAppSiteRuntime();
   const persistedAuth = useMemo(() => loadPersistedSession(), []);
   const [session, setSession] = useState(persistedAuth.session);
-  const [rememberSession, setRememberSession] = useState(persistedAuth.remember);
+  const [rememberSession, setRememberSession] = useState(persistedAuth.remember || isAppSiteShell);
   const [activeTab, setActiveTab] = useLocalStorage('barber.activeTab', 'dashboard');
   const [systemSection, setSystemSection] = useLocalStorage('system.section', 'bot');
   const [pendingTableView, setPendingTableView] = useState(null);
@@ -210,8 +212,6 @@ const App = () => {
   const [botSettings, setBotSettings] = useState(null);
   const [botMessages, setBotMessages] = useState([]);
   const [botToken, setBotToken] = useState(null);
-  const [botMenu, setBotMenu] = useState(null);
-  const [botMenuSaving, setBotMenuSaving] = useState(false);
   const [siteConfig, setSiteConfig] = useState(null);
   const [siteConfigSaving, setSiteConfigSaving] = useState(false);
   const [siteOnlineStats, setSiteOnlineStats] = useState(null);
@@ -355,8 +355,6 @@ const App = () => {
     setBotSettings(null);
     setBotMessages([]);
     setBotToken(null);
-    setBotMenu(null);
-    setBotMenuSaving(false);
     setSiteConfig(null);
     setSiteConfigSaving(false);
     setLicenseStatus(null);
@@ -460,9 +458,6 @@ const apiRequest = useCallback(
       const botMessagesPromise = canAccessBot
         ? withFallback(apiRequest('/bot/messages'), [], 'Bot messages')
         : Promise.resolve([]);
-      const botMenuPromise = canAccessBot
-        ? withFallback(apiRequest('/bot/menu'), null, 'Bot menu')
-        : Promise.resolve(null);
       const siteConfigPromise = canAccessSystem
         ? withFallback(apiRequest('/system/site'), null, 'Site config')
         : Promise.resolve(null);
@@ -475,11 +470,10 @@ const apiRequest = useCallback(
       const updatePromise = canAccessSystem
         ? withFallback(apiRequest('/system/update'), null, 'Updates')
         : Promise.resolve(null);
-      const [botState, botMessagesPayload, botMenuPayload, sitePayload, siteOnlinePayload, license, update] =
+      const [botState, botMessagesPayload, sitePayload, siteOnlinePayload, license, update] =
         await Promise.all([
           botStatusPromise,
           botMessagesPromise,
-          botMenuPromise,
           siteConfigPromise,
           siteOnlinePromise,
           licensePromise,
@@ -489,8 +483,6 @@ const apiRequest = useCallback(
       setBotStatus(botState.status);
       setBotToken(botState.token || null);
       setBotMessages(canAccessBot ? botMessagesPayload || [] : []);
-      setBotMenu(canAccessBot ? botMenuPayload : null);
-      setBotMenuSaving(false);
       setSiteConfig(canAccessSystem ? sitePayload : null);
       setSiteConfigSaving(false);
       setSiteOnlineStats(canAccessSystem ? siteOnlinePayload : null);
@@ -500,7 +492,6 @@ const apiRequest = useCallback(
       return {
         botState,
         botMessagesPayload,
-        botMenuPayload,
         sitePayload,
         siteOnlinePayload,
         license,
@@ -1196,75 +1187,6 @@ const handleBarberFieldChange = (id, field, value) => {
       setGlobalError(error.message || 'Не удалось сохранить настройки');
     }
   };
-  const handleReloadBotMenu = useCallback(
-    async () => {
-      if (!canAccessBot) return null;
-      try {
-        const menu = await apiRequest('/bot/menu');
-        setBotMenu(menu);
-        return menu;
-      } catch (error) {
-        setGlobalError(error.message || 'Не удалось загрузить меню бота');
-        throw error;
-      }
-    },
-    [apiRequest, canAccessBot]
-  );
-  const handleLoadMenuImages = useCallback(
-    async () => {
-      if (!canAccessBot) return [];
-      try {
-        const response = await apiRequest('/bot/menu/images');
-        return Array.isArray(response?.images) ? response.images : [];
-      } catch (error) {
-        // При отсутствии эндпоинта/404 просто возвращаем пустую галерею без глобальной ошибки
-        console.warn('Menu images load skipped', error);
-        return [];
-      }
-    },
-    [apiRequest, canAccessBot]
-  );
-  const handleUploadMenuImage = useCallback(
-    async (file) => {
-      if (!canAccessBot || !file) return null;
-      try {
-        const dataUrl = await readFileAsDataUrl(file);
-        const optimizedUpload = await optimizeImageForUpload(dataUrl, {
-          name: file.name,
-          preserveAlpha: false,
-        });
-        const response = await apiRequest('/bot/menu/images', {
-          method: 'POST',
-          body: JSON.stringify({ name: optimizedUpload.name, data: optimizedUpload.dataUrl }),
-        });
-        return response || null;
-      } catch (error) {
-        setGlobalError(error.message || 'Не удалось загрузить изображение меню');
-        throw error;
-      }
-    },
-    [apiRequest, canAccessBot]
-  );
-  const handleSaveBotMenu = useCallback(
-    async (menuDraft) => {
-      if (!canAccessBot) return null;
-      setBotMenuSaving(true);
-      try {
-        const saved = await apiRequest('/bot/menu', {
-          method: 'PUT',
-          body: JSON.stringify(menuDraft || {}),
-        });
-        setBotMenu(saved);
-        return saved;
-      } catch (error) {
-        setGlobalError(error.message || 'Не удалось сохранить меню бота');
-        throw error;
-      } finally {
-        setBotMenuSaving(false);
-      }
-    },
-    [apiRequest, canAccessBot]
-  );
   const handleSaveSiteConfig = useCallback(
     async (draft) => {
       if (!canAccessSystem) return null;
@@ -1771,12 +1693,6 @@ const handleBarberFieldChange = (id, field, value) => {
             updateInfo={updateInfo}
             onRefreshUpdate={handleRefreshUpdate}
             onApplyUpdate={handleApplyUpdate}
-            menu={botMenu}
-            onSaveMenu={handleSaveBotMenu}
-            onReloadMenu={handleReloadBotMenu}
-            loadMenuImages={handleLoadMenuImages}
-            uploadMenuImage={handleUploadMenuImage}
-            menuSaving={botMenuSaving}
             siteConfig={siteConfig}
             siteSaving={siteConfigSaving}
             siteOnlineStats={siteOnlineStats}
@@ -1839,6 +1755,7 @@ const handleBarberFieldChange = (id, field, value) => {
           activeTab={activeTab}
           onChange={setActiveTab}
           session={session}
+          currentBarber={currentBarber}
           onLogout={handleLogout}
           liveUpdatedAt={liveUpdatedAt}
           liveStatus={effectiveLiveStatus}

@@ -59,14 +59,30 @@ const VisitHistoryList = ({
     </div>
   );
 };
-const SectionCard = ({ title, actions, children }) => (
+const SectionCard = ({ title, actions, children, hideTitleOnMobile = false }) => (
   <div className="crm-section-card space-y-5 p-5 sm:p-6">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:flex-1 sm:min-w-0">
-        <h2 className="crm-section-title">{title}</h2>
+    <div
+      className={classNames(
+        'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between',
+        hideTitleOnMobile && !actions && 'hidden sm:flex',
+        hideTitleOnMobile && actions && 'sm:flex'
+      )}
+    >
+      <div
+        className={classNames(
+          'flex w-full flex-wrap items-center gap-3 sm:w-auto sm:flex-1 sm:min-w-0',
+          hideTitleOnMobile && 'sm:flex',
+          hideTitleOnMobile && actions && 'hidden sm:flex'
+        )}
+      >
+        <h2 className={classNames('crm-section-title', hideTitleOnMobile && 'hidden sm:block')}>{title}</h2>
         {actions && <div className="ml-auto sm:hidden">{actions}</div>}
       </div>
-      {actions && <div className="hidden sm:block sm:flex-shrink-0">{actions}</div>}
+      {actions && (
+        <div className={classNames('sm:block sm:flex-shrink-0', hideTitleOnMobile ? 'block' : 'hidden sm:block')}>
+          {actions}
+        </div>
+      )}
     </div>
     {children}
   </div>
@@ -83,14 +99,49 @@ const DefaultProfileIcon = ({ className = '', iconClassName = 'h-10 w-10 text-[v
     </svg>
   </div>
 );
+const formatCompactLiveTimestamp = (value, nowTs = Date.now()) => {
+  if (!value) return '';
+  try {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '';
+    const diffMs = Math.max(0, nowTs - parsed.getTime());
+    const totalSeconds = Math.floor(diffMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  } catch {
+    return '';
+  }
+};
 const LiveBadge = ({ timestamp, status = 'unknown' }) => {
   const tickingNow = useNowTick(1000);
+  const [isPhoneViewport, setIsPhoneViewport] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 640 : false));
+  const [mobileTimeVisible, setMobileTimeVisible] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handleResize = () => setIsPhoneViewport(window.innerWidth < 640);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  useEffect(() => {
+    if (!mobileTimeVisible) return undefined;
+    const timer = setTimeout(() => setMobileTimeVisible(false), 2200);
+    return () => clearTimeout(timer);
+  }, [mobileTimeVisible]);
   if (status === 'unknown' && !timestamp) return null;
   const isOffline = status === 'offline';
   const isOnline = status === 'online';
   const isUpdating = status === 'updating';
   const label = isOffline ? 'OFFLINE' : isUpdating ? 'UPDATING' : 'LIVE';
-  const timeLabel = isOnline && timestamp ? formatLiveTimestamp(timestamp, tickingNow) : null;
+  const resolvedTimeLabel = isOnline && timestamp
+    ? (isPhoneViewport ? formatCompactLiveTimestamp(timestamp, tickingNow) : formatLiveTimestamp(timestamp, tickingNow))
+    : null;
+  const timeLabel = isPhoneViewport ? (mobileTimeVisible ? resolvedTimeLabel : null) : resolvedTimeLabel;
   const badgeToneClass = (() => {
     if (isOffline) return 'bg-rose-500/12 text-rose-100';
     if (isUpdating) return 'bg-amber-500/14 text-amber-50';
@@ -98,17 +149,25 @@ const LiveBadge = ({ timestamp, status = 'unknown' }) => {
   })();
   const dotToneClass = isOffline ? 'bg-rose-400' : isUpdating ? 'animate-pulse bg-amber-300' : 'animate-pulse bg-[color:var(--crm-primary)]';
   const timeToneClass = isOffline ? 'text-rose-100/80' : isUpdating ? 'text-amber-100/80' : 'text-[#eafffb]/82';
+  const handleMobileToggle = () => {
+    if (!isPhoneViewport || !resolvedTimeLabel) return;
+    setMobileTimeVisible(true);
+  };
   return (
-    <span
+    <button
+      type="button"
+      onClick={handleMobileToggle}
+      disabled={!isPhoneViewport || !resolvedTimeLabel}
       className={classNames(
         'flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em]',
+        isPhoneViewport && resolvedTimeLabel ? 'cursor-pointer' : 'cursor-default',
         badgeToneClass
       )}
     >
       <span className={classNames('h-2 w-2 rounded-full', dotToneClass)} />
       {label}
       {timeLabel && <span className={classNames(timeToneClass, 'normal-case tracking-normal')}>{timeLabel}</span>}
-    </span>
+    </button>
   );
 };
 const IconTrash = ({ className = 'h-5 w-5' }) => (
@@ -309,22 +368,28 @@ const SYSTEM_SUB_SECTIONS = Object.freeze([
   { id: 'site', label: 'Сайт' },
   { id: 'system', label: 'Система' },
 ]);
-const BOT_SUB_SECTIONS = Object.freeze([
-  { id: 'status', label: 'Бот' },
-  { id: 'constructor', label: 'Конструктор меню' },
-]);
 const UI_TEXT = Object.freeze({
   accountTitle: 'Ваш аккаунт',
   logout: 'Выйти',
   newAppointmentCta: 'Новая запись',
   liveFallback: 'LIVE',
 });
-const BotMenuBuilder = (typeof window !== 'undefined' && window.BotMenuBuilder) || (() => (
-  <div className="crm-soft-card p-6 text-[var(--crm-text)]">
-    Конструктор меню временно недоступен.
-  </div>
-));
 const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-w-3xl' }) => {
+  useEffect(() => {
+    if (!isOpen || typeof document === 'undefined') return undefined;
+    const { body, documentElement } = document;
+    const prevBodyOverflow = body.style.overflow;
+    const prevBodyTouchAction = body.style.touchAction;
+    const prevHtmlOverflow = documentElement.style.overflow;
+    body.style.overflow = 'hidden';
+    body.style.touchAction = 'none';
+    documentElement.style.overflow = 'hidden';
+    return () => {
+      body.style.overflow = prevBodyOverflow;
+      body.style.touchAction = prevBodyTouchAction;
+      documentElement.style.overflow = prevHtmlOverflow;
+    };
+  }, [isOpen]);
   if (!isOpen) return null;
   const modalNode = (
     <div
@@ -526,6 +591,7 @@ const MobileTabs = ({
   liveUpdatedAt,
   liveStatus = 'unknown',
   tabs,
+  currentBarber = null,
   activeDataTable,
   onSelectTable,
   tableShortcuts,
@@ -533,6 +599,7 @@ const MobileTabs = ({
   onSelectSystemSection,
 }) => {
   const username = session?.displayName || session?.username || '-';
+  const userAvatarSrc = resolveAssetUrl(currentBarber?.avatarUrl);
   const [showLogoutMenu, setShowLogoutMenu] = useState(false);
   const [showSubmenus, setShowSubmenus] = useState(true);
   const submenusVisibleRef = useRef(showSubmenus);
@@ -590,6 +657,15 @@ const MobileTabs = ({
   const canRenderTableSubmenu = activeTab === 'tables' && resolvedShortcuts.length > 0;
   const canRenderSystemSubmenu = activeTab === 'system' && SYSTEM_SUB_SECTIONS.length > 0;
   const hasVisibleSubmenus = showSubmenus && (canRenderTableSubmenu || canRenderSystemSubmenu);
+  const activeTopTabLabel =
+    availableTabs.find((tab) => tab.id === activeTab)?.label ||
+    UI_TEXT.accountTitle;
+  const activeTableLabel =
+    resolvedShortcuts.find((shortcut) => shortcut.id === activeDataTable)?.label || activeTopTabLabel;
+  const activeSystemLabel =
+    SYSTEM_SUB_SECTIONS.find((section) => section.id === systemSection)?.label || activeTopTabLabel;
+  const mobileHeaderTitle =
+    activeTab === 'tables' ? activeTableLabel : activeTab === 'system' ? activeSystemLabel : activeTopTabLabel;
   const renderLiveIndicator = () =>
     liveStatus === 'unknown' && !liveUpdatedAt ? (
       <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[var(--crm-muted)]">{UI_TEXT.liveFallback}</span>
@@ -600,34 +676,31 @@ const MobileTabs = ({
     <>
       <header className="crm-mobile-header sticky top-0 z-30 lg:hidden">
         <div className="relative px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-[88px] justify-start">
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 px-16">
+            <p className="truncate text-center text-base font-semibold tracking-[-0.03em] text-white">{mobileHeaderTitle}</p>
+          </div>
+          <div className="relative z-10 flex items-center justify-between gap-3">
+            <div className="flex min-w-[92px] justify-start">
               {renderLiveIndicator()}
             </div>
-            <div className="flex flex-1 items-center justify-end">
+            <div className="flex items-center justify-end">
               <div className="relative inline-flex">
                 <button
                   type="button"
                   onClick={handleToggleLogoutMenu}
                   aria-expanded={showLogoutMenu}
-                  className="crm-ghost-btn px-4 py-2 text-base"
+                  aria-label={username}
+                  className="crm-ghost-btn h-11 w-11 min-h-0 p-0"
                 >
-                  <span className="max-w-[60vw] truncate text-right">{username}</span>
-                  <svg
-                    className={classNames(
-                      'h-4 w-4 text-[var(--crm-muted)] transition-transform',
-                      showLogoutMenu ? 'rotate-180' : 'rotate-0'
-                    )}
-                    viewBox="0 0 20 20"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+                  {userAvatarSrc ? (
+                    <img src={userAvatarSrc} alt={username} className="h-8 w-8 rounded-full object-cover" />
+                  ) : (
+                    <DefaultProfileIcon className="h-8 w-8 rounded-full" iconClassName="h-4.5 w-4.5 text-[var(--crm-muted)]" />
+                  )}
                 </button>
                 <div
                   className={classNames(
-                    'absolute left-0 right-0 top-full z-40 mt-1 translate-y-0 transition-all duration-150',
+                    'absolute right-0 top-full z-40 mt-1 w-40 translate-y-0 transition-all duration-150',
                     showLogoutMenu ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
                   )}
                 >

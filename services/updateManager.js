@@ -24,7 +24,6 @@ const { schemaPath: PRISMA_SCHEMA_PATH } = PRISMA_RUNTIME_CONFIG;
 const BACKUP_DIR = path.join(PROJECT_ROOT, 'backups');
 const RUNTIME_IMAGE_ROOT = 'Image';
 const WEB_BUILD_OUTPUTS = [
-  path.join(PROJECT_ROOT, 'bot-constructor.bundle.js'),
   path.join(PROJECT_ROOT, 'script.bundle.js'),
   path.join(PROJECT_ROOT, 'styles.css'),
 ];
@@ -523,7 +522,6 @@ const hasChangedFile = (files = [], matcher) => {
 const shouldRebuildWebForChangedFile = (file = '') =>
   [
     'script.js',
-    'bot-constructor.js',
     'styles.tailwind.css',
     'tailwind.config.js',
     'index.html',

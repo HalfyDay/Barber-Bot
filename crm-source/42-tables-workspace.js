@@ -526,7 +526,7 @@
       ) : (
         <>
           {tableSettings && (
-        <SectionCard title={tableSettings.label}>
+        <SectionCard title={tableSettings.label} hideTitleOnMobile>
           {tableError && <ErrorBanner message={tableError} />}
           <TableToolbar
             tableId={activeTable}

@@ -22,15 +22,8 @@
   onUpdateToken = null,
   viewMode = 'bot',
   token = null,
-  menu = null,
-  onSaveMenu = null,
-  onReloadMenu = null,
-  menuSaving = false,
-  loadMenuImages = null,
-  uploadMenuImage = null,
   role = ROLE_OWNER,
 }) => {
-  const [botSubSection, setBotSubSection] = useLocalStorage('bot.subSection', 'status');
   const [description, setDescription] = useState(settings?.botDescription || '');
   const [about, setAbout] = useState(settings?.aboutText || '');
   const [tokenDraft, setTokenDraft] = useState(token || '');
@@ -94,42 +87,6 @@
   const isCreator = role === ROLE_CREATOR;
   const licenseList = Array.isArray(licenseStatus?.licenses) ? licenseStatus.licenses : [];
   const hasLicenseList = isCreator && licenseList.length > 0;
-  const resolvedBotSubSection = BOT_SUB_SECTIONS.some((tab) => tab.id === botSubSection) ? botSubSection : 'status';
-  const showConstructorInsideBot = viewMode === 'bot' && resolvedBotSubSection === 'constructor';
-  if (viewMode === 'constructor' || showConstructorInsideBot) {
-    return (
-      <div className="space-y-4">
-        {viewMode === 'bot' && (
-          <div className="flex flex-wrap gap-2">
-            {BOT_SUB_SECTIONS.map((tab) => {
-              const isActive = tab.id === resolvedBotSubSection;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setBotSubSection(tab.id)}
-                  className={classNames(
-                    'crm-subnav-pill px-4 py-2 text-sm font-semibold',
-                    isActive && 'crm-subnav-pill-active'
-                  )}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        )}
-        <BotMenuBuilder
-          menu={menu}
-          onSave={onSaveMenu}
-          onReload={onReloadMenu}
-          isSaving={menuSaving}
-          loadMenuImages={loadMenuImages}
-          onUploadMenuImage={uploadMenuImage}
-        />
-      </div>
-    );
-  }
   if (viewMode === 'system') {
     return (
       <div className="space-y-6">
@@ -210,26 +167,6 @@
   }
   return (
     <div className="space-y-6">
-      {viewMode === 'bot' && (
-        <div className="flex flex-wrap gap-2">
-          {BOT_SUB_SECTIONS.map((tab) => {
-            const isActive = tab.id === resolvedBotSubSection;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setBotSubSection(tab.id)}
-                className={classNames(
-                  'crm-subnav-pill px-4 py-2 text-sm font-semibold',
-                  isActive && 'crm-subnav-pill-active'
-                )}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
       <SectionCard
         title="Статус бота"
         actions={
@@ -287,7 +224,7 @@
         }
       >
         <div className="space-y-3">
-          <div className="crm-inline-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-1">
             <p className="text-sm text-[var(--crm-text)]">
               Состояние: <span className="font-semibold text-white">{status?.running ? 'работает' : 'остановлен'}</span>
             </p>
@@ -298,6 +235,7 @@
                 aria-label="Автостарт вместе с CRM"
                 checked={settings?.isBotEnabled !== false}
                 onChange={(event) => onToggleEnabled(event.target.checked)}
+                className="crm-toggle-check"
               />
               Автостарт вместе с CRM
             </label>
@@ -312,7 +250,7 @@
                 type={showToken ? 'text' : 'password'}
                 value={tokenDraft}
                 onChange={(event) => setTokenDraft(event.target.value)}
-                className="w-full rounded-[20px] border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-3 py-2 pr-16 font-mono text-sm text-white"
+                className="w-full rounded-[20px] border-0 bg-[color:var(--crm-surface-2)] px-3 py-2 pr-16 font-mono text-sm text-white focus:outline-none"
                 placeholder="1234567890:ABC-DEF"
                 spellCheck={false}
                 autoComplete="off"
@@ -381,24 +319,6 @@ const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
   }, [activeSection, section, onSectionChange]);
   return (
     <div className="space-y-4">
-      <div className="hidden flex-wrap gap-2 lg:flex">
-        {SYSTEM_SUB_SECTIONS.map((tab) => {
-          const isActive = tab.id === activeSection;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => onSectionChange?.(tab.id)}
-              className={classNames(
-                'crm-subnav-pill px-4 py-2 text-sm font-semibold',
-                isActive && 'crm-subnav-pill-active'
-              )}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
       {activeSection === 'site' ? <SiteSettingsView {...props} /> : <BotControlView {...props} viewMode={activeSection} />}
     </div>
   );

@@ -142,7 +142,7 @@
   };
   return (
     <div className="space-y-6">
-      <SectionCard title="Должности">
+      <SectionCard title="Должности" hideTitleOnMobile>
         <form onSubmit={handleCreate} className="grid gap-3 md:grid-cols-3">
           <input
             name="positionName"
@@ -467,7 +467,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
   );
   return (
     <div className="space-y-6 overflow-x-hidden">
-      <SectionCard title="Доходы барберов">
+      <SectionCard title="Доходы барберов" hideTitleOnMobile>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="grid grid-cols-2 gap-3 sm:col-span-2 lg:col-span-2">
             <div className="space-y-1">

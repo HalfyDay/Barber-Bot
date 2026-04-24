@@ -773,7 +773,7 @@ const AppointmentModal = ({
           <CustomSelect
             value={draft.Status || ''}
             onChange={(nextValue) => handleChange('Status', nextValue)}
-            options={[{ value: '', label: 'Статус' }, ...((options.statuses || []).map((status) => ({ value: status, label: status })))]}
+            options={[...((options.statuses || []).map((status) => ({ value: status, label: status })))]}
             placeholder="Статус"
             buttonClassName="h-11 px-4"
           />

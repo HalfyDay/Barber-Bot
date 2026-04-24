@@ -373,7 +373,7 @@ const CustomSelect = ({
     setOpen(false);
   };
   return (
-    <div ref={ref} className={classNames('relative z-40 w-full', className)}>
+    <div ref={ref} className={classNames('relative z-30 w-full', className)}>
       <button
         type="button"
         onClick={() => !disabled && setOpen((prev) => !prev)}
@@ -390,7 +390,7 @@ const CustomSelect = ({
         </svg>
       </button>
       {open && (
-        <div className={classNames('crm-menu-surface absolute left-0 right-0 z-50 mt-2 max-h-64 space-y-2 overflow-y-auto p-3', menuClassName)}>
+        <div className={classNames('crm-menu-surface absolute left-0 right-0 z-[90] mt-2 max-h-64 space-y-2 overflow-y-auto p-3', menuClassName)}>
           {normalizedOptions.length === 0 ? (
             <p className="px-3 py-2 text-sm text-[var(--crm-muted)]">Нет вариантов</p>
           ) : (
@@ -514,7 +514,7 @@ const ColumnMenu = ({ columns, hiddenColumns = [], onToggle }) => {
   const ref = useRef(null);
   useOutsideClick(ref, open ? () => setOpen(false) : null);
   return (
-    <div className="relative z-40 w-full sm:w-auto">
+    <div className="relative z-20 w-full sm:w-auto">
         <button
         onClick={() => setOpen((prev) => !prev)}
         className="crm-ghost-btn flex w-full items-center justify-center px-3 py-2 text-sm sm:w-auto"
@@ -708,7 +708,7 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset }) =
   const ref = useRef(null);
   useOutsideClick(ref, open ? () => setOpen(false) : null);
   return (
-    <div className="relative z-40 w-full sm:w-auto">
+    <div ref={ref} className="relative z-40 w-full sm:w-auto">
       <button
         onClick={() => setOpen((prev) => !prev)}
         className="crm-ghost-btn flex h-11 w-full items-center justify-center px-3 text-sm sm:w-auto"
@@ -717,8 +717,7 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset }) =
       </button>
       {open && (
         <div
-          ref={ref}
-          className="crm-menu-surface absolute left-0 z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 p-3"
+          className="crm-menu-surface absolute left-0 z-[70] mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 p-3"
         >
           {statuses.length === 0 && <p className="text-sm text-[var(--crm-muted)]">Нет статусов</p>}
           {statuses.map((status) => (

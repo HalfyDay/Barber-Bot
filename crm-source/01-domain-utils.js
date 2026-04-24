@@ -476,6 +476,82 @@ const buildSessionPayload = (payload = {}) => {
 };
 const SESSION_STORAGE_KEY = 'barber-session';
 const REMEMBER_STORAGE_KEY = 'barber-session-remember';
+const getNativeSessionBridge = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.BrotherShopSessionBridge || null;
+  } catch (error) {
+    return null;
+  }
+};
+const isAppSiteRuntime = () => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const queryFlag = new URLSearchParams(window.location.search || '').get('appsite');
+    return (
+      /BrotherShopAppSite/i.test(window.navigator?.userAgent || '') ||
+      queryFlag === '1' ||
+      Boolean(getNativeSessionBridge())
+    );
+  } catch (error) {
+    return /BrotherShopAppSite/i.test(window.navigator?.userAgent || '') || Boolean(getNativeSessionBridge());
+  }
+};
+const readNativeSessionPayload = () => {
+  const bridge = getNativeSessionBridge();
+  if (!bridge || typeof bridge.getSessionPayload !== 'function') return null;
+  try {
+    const value = bridge.getSessionPayload();
+    return typeof value === 'string' && value.trim() ? value : null;
+  } catch (error) {
+    console.warn('native session read error', error);
+    return null;
+  }
+};
+const readNativeRememberChoice = () => {
+  const bridge = getNativeSessionBridge();
+  if (!bridge || typeof bridge.getRememberChoice !== 'function') return null;
+  try {
+    const value = bridge.getRememberChoice();
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === 'true' || normalized === '1') return true;
+      if (normalized === 'false' || normalized === '0') return false;
+    }
+    return null;
+  } catch (error) {
+    console.warn('native remember read error', error);
+    return null;
+  }
+};
+const persistNativeRememberChoice = (remember) => {
+  const bridge = getNativeSessionBridge();
+  if (!bridge || typeof bridge.saveRememberChoice !== 'function') return;
+  try {
+    bridge.saveRememberChoice(Boolean(remember));
+  } catch (error) {
+    console.warn('native remember save error', error);
+  }
+};
+const persistNativeSessionPayload = (payload, remember) => {
+  const bridge = getNativeSessionBridge();
+  if (!bridge || typeof bridge.saveSessionPayload !== 'function') return;
+  try {
+    bridge.saveSessionPayload(payload, Boolean(remember));
+  } catch (error) {
+    console.warn('native session save error', error);
+  }
+};
+const clearNativeSessionPayload = () => {
+  const bridge = getNativeSessionBridge();
+  if (!bridge || typeof bridge.clearSessionPayload !== 'function') return;
+  try {
+    bridge.clearSessionPayload();
+  } catch (error) {
+    console.warn('native session clear error', error);
+  }
+};
 const getStorageArea = (type) => {
   if (typeof window === 'undefined') return null;
   try {
@@ -510,6 +586,17 @@ const safeStorageRemove = (storage, key) => {
   }
 };
 const loadPersistedSession = () => {
+  const nativeSessionValue = readNativeSessionPayload();
+  if (nativeSessionValue) {
+    try {
+      const remember =
+        readNativeRememberChoice() ??
+        safeStorageGet(getStorageArea('local'), REMEMBER_STORAGE_KEY) === '1';
+      return { session: buildSessionPayload(JSON.parse(nativeSessionValue)), remember: Boolean(remember) };
+    } catch (error) {
+      console.warn('native session restore error', error);
+    }
+  }
   const localValue = safeStorageGet(getStorageArea('local'), SESSION_STORAGE_KEY);
   if (localValue) {
     try {
@@ -531,6 +618,7 @@ const loadPersistedSession = () => {
 };
 const persistRememberChoice = (remember) => {
   safeStorageSet(getStorageArea('local'), REMEMBER_STORAGE_KEY, remember ? '1' : '0');
+  persistNativeRememberChoice(remember);
 };
 const persistSessionPayload = (payload, remember) => {
   const serialized = JSON.stringify(payload);
@@ -545,10 +633,12 @@ const persistSessionPayload = (payload, remember) => {
     safeStorageRemove(localStore, SESSION_STORAGE_KEY);
     persistRememberChoice(false);
   }
+  persistNativeSessionPayload(serialized, remember);
 };
 const clearStoredSession = () => {
   safeStorageRemove(getStorageArea('local'), SESSION_STORAGE_KEY);
   safeStorageRemove(getStorageArea('session'), SESSION_STORAGE_KEY);
+  clearNativeSessionPayload();
 };
 const pickBarberForUser = (userSession, availableBarbers = []) => {
   const fallback = availableBarbers?.[0] || '';
@@ -745,7 +835,7 @@ const STATUS_BADGE_MAP = {
   [STATUS_ACTIVE]: 'bg-[color:var(--crm-primary-container)] text-[#eafffb]',
   [STATUS_DONE]: 'bg-[color:var(--crm-primary-container)] text-[#eafffb]',
   [STATUS_CANCELLED]: 'bg-[rgba(127,29,29,0.62)] text-[#fff1f1]',
-  [STATUS_NO_SHOW]: 'bg-amber-500/12 text-amber-100',
+  [STATUS_NO_SHOW]: 'bg-[rgba(214,179,106,0.32)] text-[#fffdf8]',
 };
 const getStatusBadgeClasses = (status) => {
   const normalized = normalizeStatusValue(status);

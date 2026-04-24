@@ -205,7 +205,7 @@
           )}
         </div>
         <div className={classNames('grid gap-2 sm:grid-cols-2 md:grid-cols-[auto_minmax(0,360px)] xl:items-center', !mobileFiltersOpen && 'hidden md:grid')}>
-          {supportsBarberFilter ? <div className="md:hidden">{getBarberSelect()}</div> : null}
+          {supportsBarberFilter ? <div className="relative z-[80] md:hidden">{getBarberSelect('z-[80]')}</div> : null}
           {(supportsStatusFilter || pastControl) ? (
             <div className="grid grid-cols-2 gap-2 md:hidden">
               <div>{renderStatusControl()}</div>

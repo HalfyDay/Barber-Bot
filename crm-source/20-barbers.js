@@ -316,11 +316,12 @@
     <div className="space-y-6 overflow-x-hidden">
       <SectionCard
         title="Барберы"
+        hideTitleOnMobile
         actions={
           canManageBarbers ? (
             <button
               onClick={() => openEditor('create')}
-              className="crm-action-btn px-4 py-2 text-sm"
+              className="crm-action-btn w-full px-4 py-2 text-sm sm:w-auto"
             >
               + Добавить барбера
             </button>
@@ -646,7 +647,7 @@ const BarberProfileView = ({
   );
   if (!barber) {
     return (
-      <SectionCard title="Профиль сотрудника">
+      <SectionCard title="Профиль сотрудника" hideTitleOnMobile>
         <p className="text-sm text-[var(--crm-muted)]">Данные профиля недоступны. Обратитесь к администратору.</p>
       </SectionCard>
     );
@@ -684,7 +685,7 @@ const BarberProfileView = ({
   };
   return (
     <div className="space-y-6">
-      <SectionCard title="Мой профиль">
+      <SectionCard title="Мой профиль" hideTitleOnMobile>
         <div className="space-y-6">
           <BarberAvatarPicker
             value={pendingAvatar || ''}

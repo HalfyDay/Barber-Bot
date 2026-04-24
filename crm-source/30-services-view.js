@@ -208,11 +208,12 @@
     <div className="space-y-6">
       <SectionCard
         title="Услуги"
+        hideTitleOnMobile
         actions={
           canManageCatalog ? (
             <button
               onClick={() => openEditor('create')}
-              className="crm-action-btn px-4 py-2 text-sm"
+              className="crm-action-btn w-full px-4 py-2 text-sm sm:w-auto"
             >
               + Добавить услугу
             </button>

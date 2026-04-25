@@ -56,12 +56,11 @@
   };
   const renderCycleGroupButton = (items, value, onChange, iconsMap, label) => {
     const currentItem = items.find((item) => item.id === value) || items[0];
-    const IconComponent = currentItem ? iconsMap[currentItem.iconId] : null;
     return (
       <button
         type="button"
         onClick={() => onChange?.(cycleOptionValue(items, value))}
-        className="crm-soft-panel flex h-11 w-full items-center justify-between gap-3 px-4 text-left text-white transition hover:bg-[color:var(--crm-surface-5)] focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)]/40"
+        className="crm-soft-panel flex h-11 w-full items-center justify-between gap-3 px-4 text-left text-white transition hover:bg-[color:var(--crm-surface-5)] focus:outline-none focus:ring-0 focus-visible:ring-0"
         title={`${label}: ${currentItem?.label || ''}`}
         aria-label={`${label}: ${currentItem?.label || ''}`}
       >
@@ -69,8 +68,7 @@
           <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--crm-muted)]">{label}</span>
           <span className="truncate text-xs font-semibold text-white">{currentItem?.label || '-'}</span>
         </div>
-        <div className="shrink-0 flex items-center gap-2.5">
-          {IconComponent ? <IconComponent className="h-5 w-5 text-white" /> : null}
+        <div className="shrink-0 flex items-center gap-2">
           <div className="flex items-center gap-1">
             {items.map((item) => (
               <span

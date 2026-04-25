@@ -581,6 +581,7 @@
                 <DataTable
                   tableId={activeTable}
                   rows={processedRows}
+                  searchTerm={searchTerm}
                   columns={currentColumns}
                   hiddenColumns={hiddenColumns}
                   sortConfig={sortConfig}

@@ -1,6 +1,7 @@
 const DataTable = ({
   tableId,
   rows,
+  searchTerm = '',
   columns,
   hiddenColumns,
   sortConfig,
@@ -34,6 +35,7 @@ const DataTable = ({
     return (
       <AppointmentsCalendarView
         rows={rows}
+        searchTerm={searchTerm}
         schedules={appointmentSchedules}
         onOpen={onOpenAppointment}
         onOpenProfile={onOpenProfile}

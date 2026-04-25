@@ -286,10 +286,10 @@ const SchedulesView = ({
   const scheduleGridStyle = useMemo(
     () => ({
       gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-      gridAutoRows: isMobileViewport ? '84px' : '120px',
+      gridAutoRows: isMobileViewport ? (singleVisibleBarberMode ? '64px' : '76px') : '120px',
       alignItems: 'stretch',
     }),
-    [isMobileViewport]
+    [isMobileViewport, singleVisibleBarberMode]
   );
   const calendarBlock = (
     <div
@@ -307,19 +307,63 @@ const SchedulesView = ({
           : undefined
       }
     >
-      <div className="space-y-3">
+      <div className={classNames('space-y-3', !isMobileViewport && 'mx-auto max-w-[860px]')}>
         {!isStaffUser && isMobileViewport && (
-          <CustomSelect
-            value={barberFilter}
-            onChange={setBarberFilter}
-            options={[
-              { value: 'all', label: 'Все мастера' },
-              ...barberOptions.map((barber) => ({ value: barber.name, label: barber.name })),
-            ]}
-            className="w-full"
-            buttonClassName="h-10 w-full px-4 text-sm"
-            menuClassName="w-full"
-          />
+          <div className="flex items-center gap-2">
+            <CustomSelect
+              value={barberFilter}
+              onChange={setBarberFilter}
+              options={[
+                { value: 'all', label: 'Все мастера' },
+                ...barberOptions.map((barber) => ({ value: barber.name, label: barber.name })),
+              ]}
+              className="min-w-0 flex-1"
+              buttonClassName="h-10 w-full px-4 text-sm"
+              menuClassName="w-full"
+            />
+            {typeof onScheduleFillDaysChange === 'function' && (
+              <div className="relative flex-shrink-0" ref={scheduleFillMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setScheduleFillMenuOpen((prev) => !prev)}
+                  className="crm-soft-panel inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold text-[var(--crm-text)] transition hover:text-white"
+                  aria-haspopup="menu"
+                  aria-expanded={scheduleFillMenuOpen}
+                  aria-label="На сколько дней заполнять расписание"
+                >
+                  <span>{normalizeScheduleFillDays(scheduleFillDays)} дн.</span>
+                  <svg className="h-4 w-4 text-[var(--crm-muted)]" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                {scheduleFillMenuOpen && (
+                  <div className="crm-soft-card absolute right-0 top-[calc(100%+0.5rem)] z-30 min-w-[110px] overflow-hidden p-1 shadow-[0_18px_40px_rgba(0,0,0,0.28)]">
+                    {SCHEDULE_FILL_DAYS_OPTIONS.map((days) => {
+                      const isActive = normalizeScheduleFillDays(scheduleFillDays) === days;
+                      return (
+                        <button
+                          key={days}
+                          type="button"
+                          onClick={() => {
+                            onScheduleFillDaysChange(days);
+                            setScheduleFillMenuOpen(false);
+                          }}
+                          className={classNames(
+                            'flex w-full items-center justify-between rounded-2xl px-3 py-2 text-left text-sm font-semibold transition',
+                            isActive
+                              ? 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]'
+                              : 'text-white hover:bg-[color:var(--crm-surface-4)]'
+                          )}
+                        >
+                          <span>{days} дн.</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
         <div className={classNames('flex items-center justify-between gap-3', isMobileViewport && 'gap-1.5')}>
           <div className={classNames('flex items-center gap-1 min-w-0', isMobileViewport && 'flex-1 gap-0.5')}>
@@ -353,13 +397,13 @@ const SchedulesView = ({
             />
           </div>
           <div className={classNames('flex items-center gap-1', isMobileViewport && 'gap-0.5 flex-shrink-0')}>
-            {typeof onScheduleFillDaysChange === 'function' && (
+            {typeof onScheduleFillDaysChange === 'function' && !isMobileViewport && (
               <div className="relative" ref={scheduleFillMenuRef}>
                 <button
                   type="button"
                   onClick={() => setScheduleFillMenuOpen((prev) => !prev)}
                   className={classNames(
-                    'inline-flex h-10 items-center gap-2 rounded-full px-3 text-sm font-semibold text-[var(--crm-text)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white',
+                    'crm-soft-panel inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold text-[var(--crm-text)] transition hover:text-white',
                     isMobileViewport && 'h-9 px-2 text-[11px]'
                   )}
                   aria-haspopup="menu"
@@ -432,10 +476,13 @@ const SchedulesView = ({
             </button>
           </div>
         </div>
-        <div
-          className={classNames('grid w-full px-1', isMobileViewport ? 'gap-0.5' : 'gap-1')}
-          style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}
-        >
+      <div
+        className={classNames(
+          'grid w-full px-1',
+          isMobileViewport ? 'gap-0.5' : 'mx-auto max-w-[860px] gap-1'
+        )}
+        style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}
+      >
           {weekdayLabels.map((label) => (
             <div
               key={label}
@@ -450,7 +497,10 @@ const SchedulesView = ({
         </div>
       </div>
       <div
-        className={classNames('grid w-full', isMobileViewport ? 'gap-0.5' : 'gap-1')}
+        className={classNames(
+          'grid w-full',
+          isMobileViewport ? 'gap-0.5' : 'mx-auto max-w-[860px] gap-1'
+        )}
         style={scheduleGridStyle}
       >
         {monthDays.map((day) => {
@@ -469,7 +519,7 @@ const SchedulesView = ({
               )}
             >
               <div className={classNames(
-                isMobileViewport ? 'mb-1 flex items-start justify-center' : 'mb-2 flex items-start justify-center'
+                isMobileViewport ? 'mb-1 flex items-start justify-center' : 'mb-1 flex items-start justify-center'
               )}>
                 <span
                   className={classNames(
@@ -485,9 +535,9 @@ const SchedulesView = ({
                   {day.date.getDate()}
                 </span>
               </div>
-              <div className={classNames(isMobileViewport ? 'mt-0 flex flex-1 items-center' : 'flex flex-1 items-center')}>
+              <div className={classNames(isMobileViewport ? 'mt-0 flex items-start' : 'flex items-start')}>
                 {isMobileViewport ? (
-                  <div className="flex w-full flex-col justify-center space-y-0.5 text-center">
+                  <div className="flex w-full flex-col space-y-0.5 text-center">
                     {daySlots.slice(0, 2).map((slot, index) => {
                       const tone = resolveScheduleTone(slot);
                       const { start, end } = parseTimeRangeParts(slot.Week || '');
@@ -552,27 +602,28 @@ const SchedulesView = ({
       {isMobileViewport ? (
         <div className="space-y-3">{calendarBlock}</div>
       ) : (
-        <SectionCard
-          title="Расписание"
-          actions={
-            <div className="flex items-center gap-2">
+        <div className="crm-section-card space-y-5 p-5 sm:p-6">
+          <div className="mx-auto w-full max-w-[860px] space-y-3">
+            <div className="flex w-full items-center justify-between gap-3">
+              <h2 className="crm-section-title">Расписание</h2>
               {!isStaffUser && (
-                <CustomSelect
-                  value={barberFilter}
-                  onChange={setBarberFilter}
-                  options={[
-                    { value: 'all', label: 'Все мастера' },
-                    ...barberOptions.map((barber) => ({ value: barber.name, label: barber.name })),
-                  ]}
-                  className="min-w-[150px]"
-                  buttonClassName="h-10 min-w-[150px] px-4 text-sm"
-                />
+                <div className="ml-auto flex-shrink-0">
+                  <CustomSelect
+                    value={barberFilter}
+                    onChange={setBarberFilter}
+                    options={[
+                      { value: 'all', label: 'Все мастера' },
+                      ...barberOptions.map((barber) => ({ value: barber.name, label: barber.name })),
+                    ]}
+                    className="w-auto min-w-[124px]"
+                    buttonClassName="h-10 w-auto min-w-[124px] max-w-[180px] px-4 text-sm"
+                  />
+                </div>
               )}
             </div>
-          }
-        >
-          <div className="space-y-3">{calendarBlock}</div>
-        </SectionCard>
+            <div className="space-y-3">{calendarBlock}</div>
+          </div>
+        </div>
       )}
       <Modal
         title={scheduleSheetDate ? formatDateHeading(scheduleSheetDate) : 'Расписание'}

@@ -248,14 +248,26 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
       className={cardClassName}
     >
       <div className={classNames('border-b crm-table-divider', compact ? 'pb-2' : 'pb-3')}>
-        <div className={classNames('flex', compact ? 'flex-col gap-2' : 'flex-col gap-2 xl:flex-row xl:items-start xl:justify-between xl:gap-3')}>
+        <div
+          className={classNames(
+            'flex',
+            compact
+              ? 'flex-col gap-2'
+              : 'items-start justify-between gap-3 xl:gap-3'
+          )}
+        >
           <div className="space-y-1">
             <div className="flex items-baseline gap-2">
               <p className={classNames('font-semibold text-white', compact ? 'text-lg' : 'text-2xl sm:text-3xl')}>{start || record.Time || '-'}</p>
               {end && <p className={classNames('text-[var(--crm-muted)]', compact ? 'text-[11px]' : 'text-xs sm:text-sm')}>до {end}</p>}
             </div>
           </div>
-          <div className={classNames('flex gap-2', compact ? 'flex-wrap items-center' : 'flex-col items-start text-left xl:items-end xl:text-right')}>
+          <div
+            className={classNames(
+              'flex gap-2',
+              compact ? 'flex-wrap items-center' : 'flex-col items-end text-right'
+            )}
+          >
             <span
               className={classNames(
                 'inline-flex items-center rounded-full font-semibold uppercase tracking-wide',
@@ -296,6 +308,7 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
 };
 const AppointmentsCalendarView = ({
   rows = [],
+  searchTerm = '',
   schedules = [],
   onOpen,
   onOpenProfile,
@@ -307,6 +320,8 @@ const AppointmentsCalendarView = ({
   setViewMode,
 }) => {
   const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
+  const trimmedSearchTerm = normalizeText(searchTerm).trim();
+  const isSearchMode = Boolean(trimmedSearchTerm);
   const safeViewMode = APPOINTMENT_CALENDAR_VIEW_OPTIONS.some((option) => option.id === viewMode) ? viewMode : 'week';
   const resolvedScaleMode = isMobileViewport && scaleMode === 'large' ? 'normal' : scaleMode;
   const safeScaleMode = APPOINTMENT_CALENDAR_SCALE_OPTIONS.some((option) => option.id === resolvedScaleMode) ? resolvedScaleMode : 'normal';
@@ -318,6 +333,10 @@ const AppointmentsCalendarView = ({
   const todayMarkerRef = useRef(null);
   const dayViewRef = useRef(null);
   const datePickerInputRef = useRef(null);
+  const headerRowRef = useRef(null);
+  const headerInfoRef = useRef(null);
+  const headerNavRef = useRef(null);
+  const [isHeaderWrapped, setIsHeaderWrapped] = useState(false);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const handler = () => setIsMobileViewport(window.innerWidth < 768);
@@ -446,8 +465,20 @@ const AppointmentsCalendarView = ({
     if (safeViewMode === 'week') return weekDays;
     return monthGridDays;
   }, [anchorDate, monthGridDays, safeViewMode, weekDays]);
+  const searchResultDays = useMemo(() => {
+    if (!isSearchMode) return [];
+    return Array.from(
+      new Map(
+        datedRows.map((record) => {
+          const key = getLocalISODateString(record._startDate);
+          return [key, startOfLocalDay(record._startDate)];
+        })
+      ).values()
+    ).sort((a, b) => a.getTime() - b.getTime());
+  }, [datedRows, isSearchMode]);
   const availableSlotsByDate = useMemo(() => {
     const buckets = new Map();
+    if (isSearchMode) return buckets;
     const nowTs = Date.now();
     viewDays.forEach((day) => {
       const key = getLocalISODateString(day);
@@ -462,7 +493,7 @@ const AppointmentsCalendarView = ({
       );
     });
     return buckets;
-  }, [rows, schedules, viewDays]);
+  }, [isSearchMode, rows, schedules, viewDays]);
   const anchorDayEntries = useMemo(
     () =>
       buildCalendarDayEntries(
@@ -472,18 +503,37 @@ const AppointmentsCalendarView = ({
     [anchorDate, availableSlotsByDate, rowsByDate]
   );
   const headerTitle = useMemo(() => {
+    if (isSearchMode) return 'Результаты поиска';
     if (safeViewMode === 'day') {
+      if (isMobileViewport) {
+        return new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' })
+          .format(anchorDate)
+          .replace('.', '');
+      }
       return new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).format(anchorDate);
     }
     if (safeViewMode === 'week') {
       const weekEnd = addDays(weekStart, 6);
+      const sameMonth = weekStart.getMonth() === weekEnd.getMonth() && weekStart.getFullYear() === weekEnd.getFullYear();
+      if (sameMonth) {
+        const leftDay = new Intl.DateTimeFormat('ru-RU', { day: 'numeric' }).format(weekStart);
+        const rightWithMonth = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(weekEnd).replace('.', '');
+        return `${leftDay} - ${rightWithMonth}`;
+      }
       const left = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(weekStart).replace('.', '');
       const right = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(weekEnd).replace('.', '');
       return `${left} - ${right}`;
     }
-    return new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(anchorDate);
-  }, [anchorDate, safeViewMode, weekStart]);
+    if (isMobileViewport) {
+      return new Intl.DateTimeFormat('ru-RU', { month: 'short', year: 'numeric' }).format(anchorDate).replace('.', '');
+    }
+      return new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(anchorDate);
+  }, [anchorDate, isMobileViewport, isSearchMode, safeViewMode, weekStart]);
   const headerMeta = useMemo(() => {
+    if (isSearchMode) {
+      const dayLabel = searchResultDays.length === 1 ? 'день' : searchResultDays.length >= 2 && searchResultDays.length <= 4 ? 'дня' : 'дней';
+      return `${datedRows.length} записей • ${searchResultDays.length} ${dayLabel}`;
+    }
     if (safeViewMode === 'day') {
       return `${rowsByDate.get(getLocalISODateString(anchorDate))?.length || 0} записей`;
     }
@@ -491,7 +541,35 @@ const AppointmentsCalendarView = ({
       return `${weekDays.reduce((sum, day) => sum + (rowsByDate.get(getLocalISODateString(day))?.length || 0), 0)} записей`;
     }
       return `${datedRows.filter((record) => isSameLocalMonth(record._startDate, anchorDate)).length} записей`;
-  }, [anchorDate, datedRows, rowsByDate, safeViewMode, weekDays]);
+  }, [anchorDate, datedRows, isSearchMode, rowsByDate, safeViewMode, searchResultDays.length, weekDays]);
+  const mobileHeaderSummary = useMemo(
+    () => (isMobileViewport ? { title: headerTitle, meta: headerMeta } : null),
+    [headerMeta, headerTitle, isMobileViewport]
+  );
+  useLayoutEffect(() => {
+    if (!isMobileViewport || typeof ResizeObserver === 'undefined') {
+      setIsHeaderWrapped(false);
+      return undefined;
+    }
+    const rowNode = headerRowRef.current;
+    const infoNode = headerInfoRef.current;
+    const navNode = headerNavRef.current;
+    if (!rowNode || !infoNode || !navNode) return undefined;
+    const measureWrap = () => {
+      const infoTop = Math.round(infoNode.getBoundingClientRect().top);
+      const navTop = Math.round(navNode.getBoundingClientRect().top);
+      setIsHeaderWrapped(navTop > infoTop + 2);
+    };
+    const observer = new ResizeObserver(() => measureWrap());
+    observer.observe(rowNode);
+    observer.observe(infoNode);
+    observer.observe(navNode);
+    const frameId = requestAnimationFrame(measureWrap);
+    return () => {
+      cancelAnimationFrame(frameId);
+      observer.disconnect();
+    };
+  }, [headerMeta, headerTitle, isMobileViewport]);
   useEffect(() => {
     if (!todayScrollPendingRef.current) return;
     const frameId = requestAnimationFrame(() => {
@@ -503,11 +581,26 @@ const AppointmentsCalendarView = ({
   return (
     <div className="space-y-4">
       <div className="crm-soft-card p-3 sm:p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="relative">
-            <button type="button" onClick={openDatePicker} className="text-left">
-              <p className="text-lg font-semibold text-white sm:text-xl">{headerTitle}</p>
-              <p className="text-xs text-[var(--crm-muted)] sm:text-sm">{headerMeta}</p>
+        <div
+          ref={headerRowRef}
+          className={classNames(
+            'flex gap-3',
+            isMobileViewport ? 'flex-wrap items-center justify-between gap-y-2' : 'items-center justify-between'
+          )}
+        >
+          <div ref={headerInfoRef} className={classNames('relative min-w-0', isMobileViewport ? 'flex-[1_1_auto]' : '')}>
+            <button type="button" onClick={openDatePicker} className={classNames(isMobileViewport && isHeaderWrapped ? 'block w-full text-center' : 'text-left')}>
+              {isMobileViewport && isHeaderWrapped ? (
+                <p className="text-center text-sm text-white">
+                  <span className="font-semibold">{mobileHeaderSummary?.title || ''}</span>{' '}
+                  <span className="font-normal text-[var(--crm-muted)]">{mobileHeaderSummary?.meta || ''}</span>
+                </p>
+              ) : (
+                <>
+                  <p className={classNames('font-semibold text-white', isMobileViewport ? 'text-base leading-tight' : 'text-lg sm:text-xl')}>{headerTitle}</p>
+                  <p className="text-xs text-[var(--crm-muted)] sm:text-sm">{headerMeta}</p>
+                </>
+              )}
             </button>
             <input
               ref={datePickerInputRef}
@@ -520,7 +613,17 @@ const AppointmentsCalendarView = ({
               tabIndex={-1}
             />
           </div>
-          <div className="crm-inline-panel inline-flex flex-shrink-0 items-center gap-1 p-1">
+          <div
+            ref={headerNavRef}
+            className={classNames(
+              'crm-inline-panel inline-flex items-center gap-1 p-1',
+              isMobileViewport
+                ? isHeaderWrapped
+                  ? 'w-full justify-between'
+                  : 'ml-auto flex-none'
+                : 'flex-shrink-0'
+            )}
+          >
             <button
               type="button"
               onClick={() => shiftCalendar('prev')}
@@ -533,7 +636,10 @@ const AppointmentsCalendarView = ({
             <button
               type="button"
               onClick={jumpToToday}
-              className="inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-semibold text-[var(--crm-text)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white focus:outline-none"
+              className={classNames(
+                'inline-flex h-10 items-center justify-center rounded-full text-sm font-semibold text-[var(--crm-text)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white focus:outline-none',
+                isMobileViewport ? 'min-w-0 px-3' : 'px-4'
+              )}
             >
               Сегодня
             </button>
@@ -549,7 +655,53 @@ const AppointmentsCalendarView = ({
           </div>
         </div>
       </div>
-      {safeViewMode === 'day' && (
+      {isSearchMode && (
+        <div className={classNames('pb-2', isMobileViewport && 'overflow-x-auto')}>
+          {searchResultDays.length ? (
+            <div
+              className={classNames(
+                'grid gap-3',
+                isMobileViewport ? 'grid-cols-1' : 'md:grid-cols-2 xl:grid-cols-3'
+              )}
+            >
+              {searchResultDays.map((day) => {
+                const dayKey = getLocalISODateString(day);
+                const items = rowsByDate.get(dayKey) || [];
+                return (
+                  <section key={dayKey} className="crm-soft-card space-y-3 p-3 sm:p-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCalendarDate?.(dayKey);
+                        setViewMode?.('day');
+                      }}
+                      className="w-full text-center"
+                    >
+                      <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white">
+                        {`${new Intl.DateTimeFormat('ru-RU', { weekday: 'short' }).format(day).replace('.', '')} ${new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(day).replace('.', '')}`}
+                      </p>
+                    </button>
+                    <div className="space-y-2">
+                      {items.map((record) => (
+                        <AppointmentCalendarCard
+                          key={getRecordId(record) || `${dayKey}-${record.CustomerName}-${record.Time}`}
+                          record={record}
+                          onOpen={onOpen}
+                          onOpenProfile={onOpenProfile}
+                          compact={isMobileViewport && safeScaleMode === 'compact'}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="crm-inline-panel p-6 text-sm text-[var(--crm-muted)]">Ничего не найдено.</div>
+          )}
+        </div>
+      )}
+      {!isSearchMode && safeViewMode === 'day' && (
         <div
           ref={dayViewRef}
           className={classNames(
@@ -582,7 +734,7 @@ const AppointmentsCalendarView = ({
           )}
         </div>
       )}
-      {safeViewMode === 'week' && (
+      {!isSearchMode && safeViewMode === 'week' && (
         <div className={classNames('pb-2', isMobileViewport && 'overflow-x-auto')}>
           <div className={classNames('grid', isMobileViewport ? scaleConfig.weekGap : scaleConfig.weekGrid, scaleConfig.weekGap)} style={isMobileViewport ? mobileWeekGridStyle : undefined}>
           {weekDays.map((day) => {
@@ -642,7 +794,7 @@ const AppointmentsCalendarView = ({
           </div>
         </div>
       )}
-      {safeViewMode === 'month' && (
+      {!isSearchMode && safeViewMode === 'month' && (
         <div className={classNames('pb-2', isMobileViewport && 'overflow-x-auto')}>
           <div className={classNames('grid', isMobileViewport ? scaleConfig.monthGap : scaleConfig.monthGrid, scaleConfig.monthGap)} style={isMobileViewport ? mobileMonthGridStyle : undefined}>
           {monthGridDays.map((day) => {

@@ -461,7 +461,7 @@ const ConfirmDialog = ({ open, title, message, confirmLabel = 'Подтверд�
     </Modal>
   );
 };
-const StatCard = ({ label, value, accent = 'text-[color:var(--crm-primary)]', onClick }) => {
+const StatCard = ({ label, value, accent = 'text-[color:var(--crm-primary)]', onClick, compact = false }) => {
   const interactive = typeof onClick === 'function';
   const Wrapper = interactive ? 'button' : 'div';
   return (
@@ -469,13 +469,13 @@ const StatCard = ({ label, value, accent = 'text-[color:var(--crm-primary)]', on
         type={interactive ? 'button' : undefined}
         onClick={onClick}
         className={classNames(
-          'crm-stat-card p-4 text-left sm:p-5',
+          compact ? 'crm-stat-card rounded-[26px] px-4 py-3 text-left sm:px-5 sm:py-3.5' : 'crm-stat-card p-4 text-left sm:p-5',
           interactive &&
             'cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#00bfaf]/30'
         )}
       >
-        <p className="text-xs uppercase tracking-[0.18em] text-[var(--crm-muted)]">{label}</p>
-        <p className={classNames('mt-1 text-2xl font-semibold sm:mt-2 sm:text-3xl', accent)}>{value}</p>
+        <p className={classNames('uppercase text-[var(--crm-muted)]', compact ? 'max-w-[11ch] text-[10px] leading-[1.25] tracking-[0.16em] sm:max-w-none' : 'text-xs tracking-[0.18em]')}>{label}</p>
+        <p className={classNames(compact ? 'mt-2 text-[28px] font-semibold leading-none sm:text-[30px]' : 'mt-1 text-2xl font-semibold sm:mt-2 sm:text-3xl', accent)}>{value}</p>
       </Wrapper>
   );
 };

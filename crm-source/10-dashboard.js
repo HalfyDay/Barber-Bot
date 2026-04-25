@@ -183,24 +183,27 @@
     typeof onNavigateTable === 'function' ? () => handleStatNavigate(tableId) : undefined;
   return (
     <div className="space-y-6 overflow-x-hidden">
-      <SectionCard title="Ключевые показатели">
-        <div className="grid gap-3 grid-cols-2 xl:grid-cols-4">
+      <div className="crm-section-card p-3 sm:p-4">
+        <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-4">
           {isStaffView ? (
             <>
-              <StatCard label="Всего клиентов" value={stats.totalUsers ?? 0} onClick={resolveStatHandler('Users')} />
+              <StatCard compact label="Всего клиентов" value={stats.totalUsers ?? 0} onClick={resolveStatHandler('Users')} />
               <StatCard
+                compact
                 label="Активных записей"
                 value={stats.activeAppointments ?? 0}
                 accent="text-[color:var(--crm-primary)]"
                 onClick={resolveStatHandler('Appointments')}
               />
               <StatCard
+                compact
                 label="Заработано за месяц"
                 value={stats.earningsMonth == null ? '—' : formatCurrencyValue(stats.earningsMonth)}
                 accent="text-[color:var(--crm-highlight)]"
                 onClick={resolveStatHandler('Revenue')}
               />
               <StatCard
+                compact
                 label="Мой уровень"
                 value={stats.positionName || '—'}
                 accent="text-[var(--crm-text)]"
@@ -209,23 +212,27 @@
           ) : (
             <>
               <StatCard
+                compact
                 label="Постоянные клиенты"
                 value={stats.recurringClients ?? 0}
                 onClick={resolveStatHandler('Users')}
               />
               <StatCard
+                compact
                 label="На сегодня"
                 value={stats.todaysAppointments ?? 0}
                 accent="text-[color:var(--crm-primary)]"
                 onClick={resolveStatHandler('Appointments')}
               />
               <StatCard
+                compact
                 label="Подтверждено за месяц"
                 value={stats.confirmedMonth ?? 0}
                 accent="text-[color:var(--crm-highlight)]"
                 onClick={resolveStatHandler('Appointments')}
               />
               <StatCard
+                compact
                 label="Доход за месяц"
                 value={stats.incomeMonth == null ? '—' : formatCurrencyValue(stats.incomeMonth)}
                 accent="text-[color:var(--crm-highlight)]"
@@ -234,7 +241,7 @@
             </>
           )}
         </div>
-      </SectionCard>
+      </div>
       <SectionCard title="Ближайшие записи" actions={upcomingActions}>
         {groupedUpcoming.length === 0 ? (
           <p className="text-[var(--crm-muted)]">Нет ближайших записей.</p>

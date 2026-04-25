@@ -155,7 +155,12 @@
   );
   if (tableId === 'Appointments') {
     return (
-      <div className="crm-soft-card space-y-3 p-3 sm:space-y-3 sm:p-4">
+      <div
+        className={classNames(
+          'crm-soft-card p-3 sm:p-4',
+          mobileFiltersOpen ? 'space-y-3' : 'space-y-0 md:space-y-3'
+        )}
+      >
         <div className="flex items-stretch gap-2 md:flex-row md:items-stretch">
           <label className="relative min-w-0 flex-1">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--crm-muted)]">
@@ -187,7 +192,7 @@
           <button
             type="button"
             onClick={() => setMobileFiltersOpen((prev) => !prev)}
-            className="crm-ghost-btn inline-flex h-11 w-11 min-h-0 shrink-0 items-center justify-center p-0 text-white focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)]/40 md:hidden"
+            className="crm-ghost-btn inline-flex h-11 w-11 min-h-0 shrink-0 items-center justify-center p-0 text-white shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0 active:shadow-none md:hidden"
             aria-label={mobileFiltersOpen ? 'Скрыть фильтры' : 'Показать фильтры'}
             title={mobileFiltersOpen ? 'Скрыть фильтры' : 'Показать фильтры'}
           >
@@ -204,7 +209,14 @@
             </button>
           )}
         </div>
-        <div className={classNames('grid gap-2 sm:grid-cols-2 md:grid-cols-[auto_minmax(0,360px)] xl:items-center', !mobileFiltersOpen && 'hidden md:grid')}>
+        <div
+          className={classNames(
+            'grid gap-2 overflow-hidden transition-[max-height,opacity,transform] duration-200 ease-out sm:grid-cols-2 md:grid-cols-[auto_minmax(0,360px)] md:overflow-visible xl:items-center',
+            mobileFiltersOpen
+              ? 'max-h-64 translate-y-0 opacity-100'
+              : 'max-h-0 -translate-y-1 opacity-0 pointer-events-none md:max-h-none md:translate-y-0 md:opacity-100 md:pointer-events-auto'
+          )}
+        >
           {supportsBarberFilter ? <div className="relative z-[80] md:hidden">{getBarberSelect('z-[80]')}</div> : null}
           {(supportsStatusFilter || pastControl) ? (
             <div className="grid grid-cols-2 gap-2 md:hidden">

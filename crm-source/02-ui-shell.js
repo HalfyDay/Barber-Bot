@@ -602,6 +602,7 @@ const MobileTabs = ({
   const userAvatarSrc = resolveAssetUrl(currentBarber?.avatarUrl);
   const [showLogoutMenu, setShowLogoutMenu] = useState(false);
   const [showSubmenus, setShowSubmenus] = useState(true);
+  const [showHeader, setShowHeader] = useState(true);
   const submenusVisibleRef = useRef(showSubmenus);
   const lastScrollRef = useRef(typeof window !== 'undefined' ? window.scrollY : 0);
   const handleSelect = (tabId, options = {}) => {
@@ -640,6 +641,11 @@ const MobileTabs = ({
       const scrollingDown = current > last + 4;
       const scrollingUp = current < last - 4;
       const nearTop = current < 16;
+      if (scrollingDown && current > 24) {
+        setShowHeader(false);
+      } else if (scrollingUp || nearTop) {
+        setShowHeader(true);
+      }
       if (scrollingDown && current > 4 && submenusVisibleRef.current) {
         setShowSubmenus(false);
       } else if ((scrollingUp || nearTop) && !submenusVisibleRef.current) {
@@ -650,6 +656,16 @@ const MobileTabs = ({
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const root = document.documentElement;
+    root.style.setProperty('--crm-mobile-header-offset', showHeader ? '68px' : '0px');
+    root.style.setProperty('--crm-mobile-secondary-offset', showHeader ? '144px' : '76px');
+    return () => {
+      root.style.removeProperty('--crm-mobile-header-offset');
+      root.style.removeProperty('--crm-mobile-secondary-offset');
+    };
+  }, [showHeader]);
   const resolvedShortcuts = useMemo(
     () => (Array.isArray(tableShortcuts) && tableShortcuts.length ? tableShortcuts : DEFAULT_TABLE_SHORTCUTS),
     [tableShortcuts]
@@ -674,7 +690,12 @@ const MobileTabs = ({
     );
   return (
     <>
-      <header className="crm-mobile-header sticky top-0 z-30 lg:hidden">
+      <header
+        className={classNames(
+          'crm-mobile-header fixed inset-x-0 top-0 z-30 transition-transform duration-200 ease-out lg:hidden',
+          showHeader ? 'translate-y-0' : '-translate-y-full'
+        )}
+      >
         <div className="relative px-4 py-3">
           <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 px-16">
             <p className="truncate text-center text-base font-semibold tracking-[-0.03em] text-white">{mobileHeaderTitle}</p>
@@ -717,6 +738,7 @@ const MobileTabs = ({
           </div>
         </div>
       </header>
+      <div className="h-[68px] lg:hidden" />
       <nav className="fixed inset-x-0 bottom-0 z-30 px-4 pb-6 pt-4 lg:hidden">
         <div className="mx-auto max-w-md">
           <div className="relative">

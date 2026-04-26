@@ -323,10 +323,9 @@ const AppointmentsCalendarView = ({
   const trimmedSearchTerm = normalizeText(searchTerm).trim();
   const isSearchMode = Boolean(trimmedSearchTerm);
   const safeViewMode = APPOINTMENT_CALENDAR_VIEW_OPTIONS.some((option) => option.id === viewMode) ? viewMode : 'week';
-  const resolvedScaleMode = isMobileViewport && scaleMode === 'large' ? 'normal' : scaleMode;
-  const safeScaleMode = APPOINTMENT_CALENDAR_SCALE_OPTIONS.some((option) => option.id === resolvedScaleMode) ? resolvedScaleMode : 'normal';
-  const scaleConfig = APPOINTMENT_CALENDAR_SCALE_CONFIG[safeScaleMode] || APPOINTMENT_CALENDAR_SCALE_CONFIG.normal;
-  const mobileVisibleDayCount = safeScaleMode === 'compact' ? 2 : 1;
+  const safeScaleMode = 'compact';
+  const scaleConfig = APPOINTMENT_CALENDAR_SCALE_CONFIG.compact;
+  const mobileVisibleDayCount = 2;
   const anchorDate = useMemo(() => parseInputDate(calendarDate) || startOfLocalDay(), [calendarDate]);
   const todayKey = getLocalISODateString();
   const todayScrollPendingRef = useRef(false);
@@ -337,6 +336,8 @@ const AppointmentsCalendarView = ({
   const headerInfoRef = useRef(null);
   const headerNavRef = useRef(null);
   const [isHeaderWrapped, setIsHeaderWrapped] = useState(false);
+  const [showStickyDateRow, setShowStickyDateRow] = useState(true);
+  const lastScrollRef = useRef(typeof window !== 'undefined' ? window.scrollY : 0);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const handler = () => setIsMobileViewport(window.innerWidth < 768);
@@ -374,10 +375,10 @@ const AppointmentsCalendarView = ({
   );
   const monthGridStyle = useMemo(
     () => ({
-      gridTemplateColumns: `repeat(7, minmax(${scaleConfig.monthColumnWidth}px, ${scaleConfig.monthColumnWidth}px))`,
-      width: 'max-content',
+      gridTemplateColumns: `repeat(7, minmax(${isMobileViewport ? 0 : 112}px, 1fr))`,
+      width: '100%',
     }),
-    [scaleConfig.monthColumnWidth]
+    [isMobileViewport]
   );
   const datedRows = useMemo(
     () =>
@@ -578,8 +579,44 @@ const AppointmentsCalendarView = ({
     });
     return () => cancelAnimationFrame(frameId);
   }, [calendarDate, safeViewMode, safeScaleMode, scrollCalendarToToday]);
+  useEffect(() => {
+    if (!isMobileViewport) {
+      setShowStickyDateRow(true);
+      return undefined;
+    }
+    const handleScroll = () => {
+      const current = window.scrollY || 0;
+      const last = lastScrollRef.current || 0;
+      const scrollingDown = current > last + 4;
+      const scrollingUp = current < last - 4;
+      const nearTop = current < 16;
+      if (scrollingDown && current > 32) {
+        setShowStickyDateRow(false);
+      } else if (scrollingUp || nearTop) {
+        setShowStickyDateRow(true);
+      }
+      lastScrollRef.current = current;
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isMobileViewport]);
   return (
-    <div className="space-y-4">
+    <div
+      className={classNames('space-y-4', isMobileViewport && 'w-full')}
+      style={
+        isMobileViewport
+          ? {
+              width: '100vw',
+              maxWidth: '100vw',
+              marginLeft: 'calc(50% - 50vw)',
+              marginRight: 'calc(50% - 50vw)',
+              paddingLeft: '16px',
+              paddingRight: '16px',
+            }
+          : undefined
+      }
+    >
+      {!isMobileViewport && (
       <div className="crm-soft-card p-3 sm:p-4">
         <div
           ref={headerRowRef}
@@ -655,6 +692,7 @@ const AppointmentsCalendarView = ({
           </div>
         </div>
       </div>
+      )}
       {isSearchMode && (
         <div className={classNames('pb-2', isMobileViewport && 'overflow-x-auto')}>
           {searchResultDays.length ? (
@@ -795,14 +833,20 @@ const AppointmentsCalendarView = ({
         </div>
       )}
       {!isSearchMode && safeViewMode === 'month' && (
-        <div className={classNames('pb-2', isMobileViewport && 'overflow-x-auto')}>
-          <div className={classNames('grid', isMobileViewport ? scaleConfig.monthGap : scaleConfig.monthGrid, scaleConfig.monthGap)} style={isMobileViewport ? mobileMonthGridStyle : undefined}>
+        <div className="pb-2">
+          <div
+            className={classNames(
+              'grid w-full',
+              isMobileViewport ? 'gap-0.5' : 'mx-auto max-w-[860px] gap-1'
+            )}
+            style={monthGridStyle}
+          >
           {monthGridDays.map((day) => {
             const dayKey = getLocalISODateString(day);
             const items = rowsByDate.get(dayKey) || [];
             const freeSlots = availableSlotsByDate.get(dayKey) || [];
             const dayEntries = buildCalendarDayEntries(items, freeSlots);
-            const visibleEntries = dayEntries.slice(0, 3);
+            const visibleEntries = dayEntries.slice(0, isMobileViewport ? 2 : 2);
             const isToday = isSameLocalDay(day, new Date());
             const isCurrentMonth = isSameLocalMonth(day, anchorDate);
             const showBarber = new Set(freeSlots.map((slot) => normalizeText(slot.Barber)).filter(Boolean)).size > 1;
@@ -811,37 +855,47 @@ const AppointmentsCalendarView = ({
                 key={dayKey}
                 ref={isToday ? todayMarkerRef : null}
                 className={classNames(
-                  scaleConfig.monthSectionMinHeight,
-                  scaleConfig.monthSectionPadding,
-                  'crm-soft-card space-y-2',
+                  'crm-soft-panel flex flex-col text-left',
+                  isMobileViewport ? 'min-h-[76px] rounded-[18px] px-1 py-1.5' : 'min-h-[112px] rounded-[22px] p-2',
                   isToday
                     ? 'bg-[rgba(0,191,175,0.16)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_18px_44px_rgba(4,7,21,0.26)]'
                     : ''
                 )}
               >
-                <div className="flex items-center justify-between gap-2">
+                <div className={classNames(isMobileViewport ? 'mb-1 flex items-start justify-center' : 'mb-1 flex items-start justify-center')}>
                   <button
                     type="button"
                     onClick={() => {
                       setCalendarDate?.(dayKey);
                       setViewMode?.('day');
                     }}
-                    className="text-left transition hover:text-[color:var(--crm-primary)]"
+                    className="transition hover:text-[color:var(--crm-primary)]"
                   >
-                    <p className={classNames('text-sm font-semibold', isCurrentMonth ? 'text-white' : 'text-[var(--crm-muted)]')}>{day.getDate()}</p>
+                    <span
+                      className={classNames(
+                        'inline-flex min-w-[28px] items-center justify-center rounded-full px-2 font-semibold sm:h-9 sm:min-w-[36px] sm:text-base',
+                        isMobileViewport ? 'h-6 text-[11px]' : 'h-8 text-sm',
+                        isToday
+                          ? 'bg-[color:var(--crm-primary)] text-[color:var(--crm-primary-on)]'
+                          : isCurrentMonth
+                            ? 'text-white'
+                            : 'text-[var(--crm-muted)]'
+                      )}
+                    >
+                      {day.getDate()}
+                    </span>
                   </button>
-                  {!!dayEntries.length && <span className="rounded-full bg-[color:var(--crm-surface-5)] px-2 py-0.5 text-[10px] text-[var(--crm-text)]">{dayEntries.length}</span>}
                 </div>
-                <div className="space-y-2">
+                <div className={classNames(isMobileViewport ? 'flex items-start' : 'flex items-start')}>
+                  <div className={classNames('w-full text-center', isMobileViewport ? 'space-y-0.5' : 'space-y-1')}>
                   {visibleEntries.map((entry) =>
                     entry.kind === 'appointment' ? (
-                      <AppointmentCalendarCard
+                      <div
                         key={entry.key}
-                        record={entry.record}
-                        onOpen={onOpen}
-                        onOpenProfile={onOpenProfile}
-                        compact={isMobileViewport && safeScaleMode === 'compact'}
-                      />
+                        className="w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-md bg-[color:var(--crm-surface-4)] px-1 py-0.5 text-center text-[10px] font-semibold leading-tight text-white"
+                      >
+                        {parseTimeRangeParts(entry.record.Time).start || entry.record.Time || '—'}
+                      </div>
                     ) : (
                       renderAvailableSlot(entry.slot, {
                         compact: true,
@@ -856,12 +910,13 @@ const AppointmentsCalendarView = ({
                         setCalendarDate?.(dayKey);
                         setViewMode?.('day');
                       }}
-                      className="text-xs text-[color:var(--crm-primary)] hover:text-white"
+                      className="text-[10px] text-[color:var(--crm-primary)] hover:text-white"
                     >
                       + еще {dayEntries.length - 3}
                     </button>
                   )}
-                  {!dayEntries.length && <div className="crm-inline-panel px-3 py-4 text-center text-xs text-[var(--crm-muted)]">-</div>}
+                  {!dayEntries.length && <div className="px-1 py-0.5 text-center text-[10px] text-[var(--crm-muted)]">-</div>}
+                  </div>
                 </div>
               </section>
             );

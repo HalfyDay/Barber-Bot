@@ -290,11 +290,9 @@
       rows = rows.filter((row) => normalizeText(row.Barber).toLowerCase() === normalizeText(selectedBarber).toLowerCase());
     }
     if (activeTable === 'Appointments') {
-      const nowTs = Date.now();
       rows = rows.filter((row) => {
         if (hiddenStatuses.length && hiddenStatuses.includes(row.Status)) return false;
-        if (showPastAppointments) return true;
-        return shouldDisplayAppointment(row, nowTs);
+        return true;
       });
     }
     if (searchTerm.trim()) {
@@ -347,6 +345,19 @@
     const normalized = normalizeStatusValue(status);
     setHiddenStatuses((prev) => (prev.includes(normalized) ? prev.filter((item) => item !== normalized) : [...prev, normalized]));
   };
+  const appointmentStatusMode = useMemo(() => {
+    const normalizedHidden = new Set((hiddenStatuses || []).map((status) => normalizeStatusValue(status)));
+    const pastHidden = [STATUS_DONE, STATUS_CANCELLED, STATUS_NO_SHOW].every((status) => normalizedHidden.has(status));
+    if (normalizedHidden.has(STATUS_ACTIVE) && !pastHidden) return 'past';
+    return 'active';
+  }, [hiddenStatuses]);
+  const setAppointmentStatusMode = useCallback((mode) => {
+    if (mode === 'past') {
+      setHiddenStatuses([STATUS_ACTIVE]);
+      return;
+    }
+    setHiddenStatuses([STATUS_DONE, STATUS_CANCELLED, STATUS_NO_SHOW]);
+  }, [setHiddenStatuses]);
   const handleUpdate = async (recordId, data, { tableId: overrideTableId } = {}) => {
     if (!recordId) return;
     const tableId = overrideTableId || activeTable;
@@ -525,94 +536,113 @@
         </div>
       ) : (
         <>
-          {tableSettings && (
-        <SectionCard title={tableSettings.label} hideTitleOnMobile>
-          {tableError && <ErrorBanner message={tableError} />}
-          <TableToolbar
-            tableId={activeTable}
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            supportsBarberFilter={tableSettings.supportsBarberFilter}
-            selectedBarber={selectedBarber}
-            setSelectedBarber={setSelectedBarber}
-            barbers={dropdownOptions.barbers}
-            supportsStatusFilter={tableSettings.supportsStatusFilter}
-            statuses={dropdownOptions.statuses}
-            hiddenStatuses={hiddenStatuses}
-            toggleStatus={toggleStatus}
-            resetStatuses={() => setHiddenStatuses([])}
-            columns={currentColumns}
-            hiddenColumns={hiddenColumns}
-            toggleColumn={toggleColumn}
-            canCreate={tableSettings.canCreate}
-            onOpenCreate={
-              activeTable === 'Appointments'
-                ? () => onCreateAppointment?.()
-                : () => setCreateModalOpen(true)
-            }
-            onRefresh={fetchTables}
-            showPastAppointments={showPastAppointments}
-            setShowPastAppointments={setShowPastAppointments}
-            supportsGrouping={activeTable === 'Appointments'}
-            groupByDate={groupAppointmentsByDate}
-            setGroupByDate={setGroupAppointmentsByDate}
-            allowAllBarbersOption={!restrictStaffBarberFilter}
-            appointmentCalendarView={activeTable === 'Appointments' ? appointmentCalendarView : 'week'}
-            setAppointmentCalendarView={activeTable === 'Appointments' ? setAppointmentCalendarView : null}
-            appointmentCalendarScale={activeTable === 'Appointments' ? appointmentCalendarScale : 'normal'}
-            setAppointmentCalendarScale={activeTable === 'Appointments' ? setAppointmentCalendarScale : null}
-          />
-          {showLoadingIndicator ? (
-            <LoadingState label="Обновляю таблицы..." />
-          ) : (
-            <div className="mt-4">
-              {activeTable === 'Users' ? (
-                <ClientsList
-                  clients={processedRows}
-                  barbers={dropdownOptions.barbers || []}
-                  onUpdate={handleUpdate}
-                  onAdjustBs={onAdjustClientBs}
-                  onDelete={handleDelete}
-                  fetchHistory={fetchClientProfile}
-                  onRequestConfirm={onRequestConfirm}
-                  onBlockClient={onBlockClient}
-                />
-              ) : (
-                <DataTable
+          {tableSettings && (() => {
+            const content = (
+              <>
+                {tableError && <ErrorBanner message={tableError} />}
+                <TableToolbar
                   tableId={activeTable}
-                  rows={processedRows}
                   searchTerm={searchTerm}
+                  setSearchTerm={setSearchTerm}
+                  supportsBarberFilter={tableSettings.supportsBarberFilter}
+                  selectedBarber={selectedBarber}
+                  setSelectedBarber={setSelectedBarber}
+                  barbers={dropdownOptions.barbers}
+                  supportsStatusFilter={tableSettings.supportsStatusFilter}
+                  statuses={dropdownOptions.statuses}
+                  hiddenStatuses={hiddenStatuses}
+                  toggleStatus={toggleStatus}
+                  resetStatuses={() => setHiddenStatuses([])}
+                  appointmentStatusMode={activeTable === 'Appointments' ? appointmentStatusMode : 'active'}
+                  setAppointmentStatusMode={activeTable === 'Appointments' ? setAppointmentStatusMode : null}
                   columns={currentColumns}
                   hiddenColumns={hiddenColumns}
-                  sortConfig={sortConfig}
-                  onSort={handleSort}
-                  onUpdate={handleUpdate}
-                  onDelete={tableSettings.canCreate ? handleDelete : null}
-                  options={dropdownOptions}
-                  onOpenProfile={onOpenProfile}
-                  onOpenAppointment={activeTable === 'Appointments' ? onOpenAppointmentRecord : null}
-                  groupByDate={activeTable === 'Appointments' ? groupAppointmentsByDate : false}
+                  toggleColumn={toggleColumn}
+                  canCreate={tableSettings.canCreate}
+                  onOpenCreate={
+                    activeTable === 'Appointments'
+                      ? () => onCreateAppointment?.()
+                      : () => setCreateModalOpen(true)
+                  }
+                  onRefresh={fetchTables}
+                  showPastAppointments={showPastAppointments}
+                  setShowPastAppointments={setShowPastAppointments}
+                  supportsGrouping={activeTable === 'Appointments'}
+                  groupByDate={groupAppointmentsByDate}
+                  setGroupByDate={setGroupAppointmentsByDate}
+                  allowAllBarbersOption={!restrictStaffBarberFilter}
                   appointmentCalendarView={activeTable === 'Appointments' ? appointmentCalendarView : 'week'}
+                  setAppointmentCalendarView={activeTable === 'Appointments' ? setAppointmentCalendarView : null}
                   appointmentCalendarScale={activeTable === 'Appointments' ? appointmentCalendarScale : 'normal'}
+                  setAppointmentCalendarScale={activeTable === 'Appointments' ? setAppointmentCalendarScale : null}
                   appointmentCalendarDate={activeTable === 'Appointments' ? appointmentCalendarDate : ''}
                   setAppointmentCalendarDate={activeTable === 'Appointments' ? setAppointmentCalendarDate : null}
-                  setAppointmentCalendarView={activeTable === 'Appointments' ? setAppointmentCalendarView : null}
-                  appointmentSchedules={
-                    activeTable === 'Appointments'
-                      ? (tables.Schedules || []).filter((row) =>
-                          selectedBarber === 'all'
-                            ? true
-                            : normalizeText(row.Barber).toLowerCase() === normalizeText(selectedBarber).toLowerCase()
-                        )
-                      : []
-                  }
-                  onCreateAppointment={activeTable === 'Appointments' ? onCreateAppointment : null}
+                  appointmentRows={activeTable === 'Appointments' ? processedRows : []}
                 />
-              )}
-            </div>
-          )}
-        </SectionCard>
-      )}
+                {showLoadingIndicator ? (
+                  <LoadingState label="Обновляю таблицы..." />
+                ) : (
+                  <div className={activeTable === 'Appointments' ? 'mt-0' : 'mt-4'}>
+                    {activeTable === 'Users' ? (
+                      <ClientsList
+                        clients={processedRows}
+                        barbers={dropdownOptions.barbers || []}
+                        onUpdate={handleUpdate}
+                        onAdjustBs={onAdjustClientBs}
+                        onDelete={handleDelete}
+                        fetchHistory={fetchClientProfile}
+                        onRequestConfirm={onRequestConfirm}
+                        onBlockClient={onBlockClient}
+                      />
+                    ) : (
+                      <DataTable
+                        tableId={activeTable}
+                        rows={processedRows}
+                        searchTerm={searchTerm}
+                        columns={currentColumns}
+                        hiddenColumns={hiddenColumns}
+                        sortConfig={sortConfig}
+                        onSort={handleSort}
+                        onUpdate={handleUpdate}
+                        onDelete={tableSettings.canCreate ? handleDelete : null}
+                        options={dropdownOptions}
+                        onOpenProfile={onOpenProfile}
+                        onOpenAppointment={activeTable === 'Appointments' ? onOpenAppointmentRecord : null}
+                        groupByDate={activeTable === 'Appointments' ? groupAppointmentsByDate : false}
+                        appointmentCalendarView={activeTable === 'Appointments' ? appointmentCalendarView : 'week'}
+                        appointmentCalendarScale={activeTable === 'Appointments' ? appointmentCalendarScale : 'normal'}
+                        appointmentCalendarDate={activeTable === 'Appointments' ? appointmentCalendarDate : ''}
+                        setAppointmentCalendarDate={activeTable === 'Appointments' ? setAppointmentCalendarDate : null}
+                        setAppointmentCalendarView={activeTable === 'Appointments' ? setAppointmentCalendarView : null}
+                        appointmentSchedules={
+                          activeTable === 'Appointments'
+                            ? (tables.Schedules || []).filter((row) =>
+                                selectedBarber === 'all'
+                                  ? true
+                                  : normalizeText(row.Barber).toLowerCase() === normalizeText(selectedBarber).toLowerCase()
+                              )
+                            : []
+                        }
+                        onCreateAppointment={activeTable === 'Appointments' ? onCreateAppointment : null}
+                      />
+                    )}
+                  </div>
+                )}
+              </>
+            );
+            if (
+              (activeTable === 'Appointments' || activeTable === 'Users') &&
+              typeof window !== 'undefined' &&
+              window.innerWidth < 768
+            ) {
+              return <div className="space-y-4 px-4 pt-3 pb-2">{content}</div>;
+            }
+            return (
+              <SectionCard title={tableSettings.label} hideTitleOnMobile>
+                {content}
+              </SectionCard>
+            );
+          })()}
           {tableSettings.canCreate && activeTable !== 'Appointments' && (
             <CreateRecordModal
               isOpen={createModalOpen}

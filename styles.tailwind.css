@@ -456,8 +456,8 @@
   }
 
   .crm-page-switch {
-    transition: opacity 0.2s ease, transform 0.2s ease;
-    transform: translateY(0);
+    transition: none;
+    transform: none;
     opacity: 1;
   }
 

@@ -1584,9 +1584,16 @@ const handleBarberFieldChange = (id, field, value) => {
   const preferredTableTarget = pendingTableView;
   const liveUpdatedAt = realtimeSnapshot?.updatedAt || null;
   const effectiveLiveStatus = pendingReloadReason ? 'updating' : connectionStatus;
+  const isMobileFlatTablePage =
+    isMobile &&
+    activeTab === 'tables' &&
+    (activeDataTable === 'Appointments' || activeDataTable === 'Users');
   const mainClassName = classNames(
-    'flex-1 min-w-0 w-full space-y-4 overflow-x-hidden p-4 md:p-8 md:pt-6',
-    isMobile ? 'pb-24' : ''
+    'flex-1 min-w-0 w-full overflow-visible md:overflow-x-hidden',
+    isMobileFlatTablePage
+      ? 'space-y-0 px-0 pt-0 pb-24'
+      : 'space-y-4 p-4 md:p-8 md:pt-6',
+    isMobile && !isMobileFlatTablePage ? 'pb-24' : ''
   );
   const renderActive = () => {
     if (loading) return <LoadingState />;

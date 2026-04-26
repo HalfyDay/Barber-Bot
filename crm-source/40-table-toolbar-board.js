@@ -11,6 +11,8 @@
   hiddenStatuses = [],
   toggleStatus,
   resetStatuses,
+  appointmentStatusMode = 'active',
+  setAppointmentStatusMode,
   columns = [],
   hiddenColumns = [],
   toggleColumn,
@@ -27,9 +29,13 @@
   setAppointmentCalendarView,
   appointmentCalendarScale = 'normal',
   setAppointmentCalendarScale,
+  appointmentCalendarDate = '',
+  setAppointmentCalendarDate,
+  appointmentRows = [],
 }) => {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
+  const appointmentDateInputRef = useRef(null);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const handler = () => setIsMobileViewport(window.innerWidth < 768);
@@ -37,11 +43,6 @@
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
-  const mobileScaleOptions = useMemo(
-    () => APPOINTMENT_CALENDAR_SCALE_OPTIONS.filter((option) => option.id !== 'large'),
-    []
-  );
-  const effectiveScaleValue = isMobileViewport && appointmentCalendarScale === 'large' ? 'normal' : appointmentCalendarScale;
   const chipClass = (active) =>
     classNames(
       'crm-ghost-btn inline-flex h-11 items-center justify-center px-4 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-center',
@@ -89,22 +90,19 @@
   const showColumnMenu = columns.length > 0 && !['Users', 'Appointments'].includes(tableId);
   const renderStatusControl = () =>
     supportsStatusFilter ? (
-      <StatusMenu statuses={statuses} hiddenStatuses={hiddenStatuses} onToggle={toggleStatus} onReset={resetStatuses} />
+      <StatusMenu
+        statuses={statuses}
+        hiddenStatuses={hiddenStatuses}
+        onToggle={toggleStatus}
+        onReset={resetStatuses}
+        mode={appointmentStatusMode}
+        onModeChange={setAppointmentStatusMode}
+        compactAppointments={tableId === 'Appointments'}
+      />
     ) : null;
   const statusControl = renderStatusControl();
   const columnControl = showColumnMenu ? <ColumnMenu columns={columns} hiddenColumns={hiddenColumns} onToggle={toggleColumn} /> : null;
-  const pastControl =
-    tableId === 'Appointments' && typeof setShowPastAppointments === 'function'
-      ? (
-        <button
-          type="button"
-          onClick={() => setShowPastAppointments(!showPastAppointments)}
-          className={classNames(chipClass(showPastAppointments), 'w-full sm:w-auto md:justify-self-start')}
-        >
-          Прошедшие
-        </button>
-        )
-      : null;
+  const pastControl = null;
   const groupingControl =
     supportsGrouping && typeof setGroupByDate === 'function'
       ? (
@@ -123,16 +121,92 @@
           'Вид'
         )
       : null;
-  const calendarScaleControl =
-    tableId === 'Appointments' && typeof setAppointmentCalendarScale === 'function'
-      ? renderCycleGroupButton(
-          isMobileViewport ? mobileScaleOptions : APPOINTMENT_CALENDAR_SCALE_OPTIONS,
-          effectiveScaleValue,
-          setAppointmentCalendarScale,
-          APPOINTMENT_CALENDAR_SCALE_ICONS,
-          'Масштаб'
-        )
-      : null;
+  const calendarScaleControl = null;
+  const safeAppointmentView = APPOINTMENT_CALENDAR_VIEW_OPTIONS.some((option) => option.id === appointmentCalendarView) ? appointmentCalendarView : 'week';
+  const appointmentAnchorDate = useMemo(
+    () => parseInputDate(appointmentCalendarDate) || startOfLocalDay(),
+    [appointmentCalendarDate]
+  );
+  const appointmentTodayKey = useMemo(() => getLocalISODateString(), []);
+  const appointmentDatedRows = useMemo(
+    () =>
+      (Array.isArray(appointmentRows) ? appointmentRows : [])
+        .map((record) => ({
+          ...record,
+          _startDate: getAppointmentStartDate(record.Date, record.Time, record.startDateTime) || parseInputDate(record.Date),
+        }))
+        .filter((record) => record._startDate)
+        .sort((a, b) => a._startDate.getTime() - b._startDate.getTime()),
+    [appointmentRows]
+  );
+  const appointmentRowsByDate = useMemo(() => {
+    const buckets = new Map();
+    appointmentDatedRows.forEach((record) => {
+      const key = getLocalISODateString(record._startDate);
+      const next = buckets.get(key) || [];
+      next.push(record);
+      buckets.set(key, next);
+    });
+    return buckets;
+  }, [appointmentDatedRows]);
+  const appointmentWeekStart = useMemo(() => getWeekStartDate(appointmentAnchorDate), [appointmentAnchorDate]);
+  const appointmentWeekDays = useMemo(
+    () => Array.from({ length: 7 }, (_, index) => addDays(appointmentWeekStart, index)),
+    [appointmentWeekStart]
+  );
+  const appointmentHeaderTitle = useMemo(() => {
+    if (safeAppointmentView === 'day') {
+      return new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' })
+        .format(appointmentAnchorDate)
+        .replace('.', '');
+    }
+    if (safeAppointmentView === 'week') {
+      const weekEnd = addDays(appointmentWeekStart, 6);
+      const sameMonth =
+        appointmentWeekStart.getMonth() === weekEnd.getMonth() &&
+        appointmentWeekStart.getFullYear() === weekEnd.getFullYear();
+      if (sameMonth) {
+        const leftDay = new Intl.DateTimeFormat('ru-RU', { day: 'numeric' }).format(appointmentWeekStart);
+        const rightWithMonth = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(weekEnd).replace('.', '');
+        return `${leftDay} - ${rightWithMonth}`;
+      }
+      const left = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(appointmentWeekStart).replace('.', '');
+      const right = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(weekEnd).replace('.', '');
+      return `${left} - ${right}`;
+    }
+    return new Intl.DateTimeFormat('ru-RU', { month: 'short', year: 'numeric' }).format(appointmentAnchorDate).replace('.', '');
+  }, [appointmentAnchorDate, appointmentWeekStart, safeAppointmentView]);
+  const appointmentHeaderMeta = useMemo(() => {
+    if (safeAppointmentView === 'day') {
+      return `${appointmentRowsByDate.get(getLocalISODateString(appointmentAnchorDate))?.length || 0} записей`;
+    }
+    if (safeAppointmentView === 'week') {
+      return `${appointmentWeekDays.reduce((sum, day) => sum + (appointmentRowsByDate.get(getLocalISODateString(day))?.length || 0), 0)} записей`;
+    }
+    return `${appointmentDatedRows.filter((record) => isSameLocalMonth(record._startDate, appointmentAnchorDate)).length} записей`;
+  }, [appointmentAnchorDate, appointmentDatedRows, appointmentRowsByDate, appointmentWeekDays, safeAppointmentView]);
+  const shiftAppointmentCalendar = useCallback((direction) => {
+    const multiplier = direction === 'next' ? 1 : -1;
+    const nextDate = safeAppointmentView === 'day'
+      ? addDays(appointmentAnchorDate, multiplier)
+      : safeAppointmentView === 'week'
+        ? addDays(appointmentAnchorDate, multiplier * 7)
+        : new Date(appointmentAnchorDate.getFullYear(), appointmentAnchorDate.getMonth() + multiplier, 1);
+    setAppointmentCalendarDate?.(getLocalISODateString(nextDate));
+  }, [appointmentAnchorDate, safeAppointmentView, setAppointmentCalendarDate]);
+  const jumpAppointmentCalendarToToday = useCallback(() => {
+    setAppointmentCalendarDate?.(appointmentTodayKey);
+  }, [appointmentTodayKey, setAppointmentCalendarDate]);
+  const openAppointmentDatePicker = useCallback(() => {
+    const input = appointmentDateInputRef.current;
+    if (!input) return;
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+      return;
+    }
+    input.focus();
+    input.click();
+  }, []);
   const getBarberSelect = (extraClassName = '') => (
     <CustomSelect
       value={selectedBarber}
@@ -153,13 +227,17 @@
   );
   if (tableId === 'Appointments') {
     return (
-      <div
-        className={classNames(
-          'crm-soft-card p-3 sm:p-4',
-          mobileFiltersOpen ? 'space-y-3' : 'space-y-0 md:space-y-3'
-        )}
-      >
-        <div className="flex items-stretch gap-2 md:flex-row md:items-stretch">
+      <>
+        {isMobileViewport && <div className="h-[144px]" aria-hidden="true" />}
+        <div
+          className={classNames(
+            'crm-soft-card p-3 sm:p-4',
+            mobileFiltersOpen ? 'space-y-3' : 'space-y-0 md:space-y-3',
+            isMobileViewport ? 'fixed inset-x-4 z-20 transition-[top] duration-200 ease-out' : ''
+          )}
+          style={isMobileViewport ? { top: 'var(--crm-mobile-header-offset, 68px)' } : undefined}
+        >
+          <div className="flex items-stretch gap-2 md:flex-row md:items-stretch">
           <label className="relative min-w-0 flex-1">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--crm-muted)]">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -185,6 +263,9 @@
             </div>
           )}
           <div className="hidden md:block">
+            {calendarViewControl}
+          </div>
+          <div className="hidden md:block">
             {renderStatusControl()}
           </div>
           <button
@@ -207,34 +288,84 @@
             </button>
           )}
         </div>
-        <div
-          className={classNames(
-            'grid gap-2 overflow-hidden transition-[max-height,opacity,transform] duration-200 ease-out sm:grid-cols-2 md:grid-cols-[auto_minmax(0,360px)] md:overflow-visible xl:items-center',
-            mobileFiltersOpen
-              ? 'max-h-64 translate-y-0 opacity-100'
-              : 'max-h-0 -translate-y-1 opacity-0 pointer-events-none md:max-h-none md:translate-y-0 md:opacity-100 md:pointer-events-auto'
-          )}
-        >
-          {supportsBarberFilter ? <div className="relative z-[80] md:hidden">{getBarberSelect('z-[80]')}</div> : null}
-          {(supportsStatusFilter || pastControl) ? (
-            <div className="grid grid-cols-2 gap-2 md:hidden">
-              <div>{renderStatusControl()}</div>
-              <div>{pastControl}</div>
+          <div className="md:hidden">
+            <div className="flex items-center justify-between gap-3 px-1 pt-3">
+              <div className="min-w-0 flex-1">
+                <button type="button" onClick={openAppointmentDatePicker} className="min-w-0 text-left focus:outline-none">
+                  <p className="truncate text-base font-semibold leading-tight text-white">{appointmentHeaderTitle}</p>
+                  <p className="text-xs text-[var(--crm-muted)]">{appointmentHeaderMeta}</p>
+                </button>
+                <input
+                  ref={appointmentDateInputRef}
+                  name="appointmentCalendarDate"
+                  aria-label="Выбрать дату календаря"
+                  type="date"
+                  value={getLocalISODateString(appointmentAnchorDate)}
+                  onChange={(event) => setAppointmentCalendarDate?.(event.target.value || appointmentTodayKey)}
+                  className="pointer-events-none absolute left-0 top-0 h-0 w-0 opacity-0"
+                  tabIndex={-1}
+                />
+              </div>
+              <div className="crm-inline-panel inline-flex shrink-0 items-center gap-1 p-1">
+                <button
+                  type="button"
+                  onClick={() => shiftAppointmentCalendar('prev')}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--crm-muted)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white focus:outline-none"
+                  aria-label="Назад"
+                  title="Назад"
+                >
+                  <IconChevronLeft className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={jumpAppointmentCalendarToToday}
+                  className="inline-flex h-10 min-w-0 items-center justify-center rounded-full px-3 text-sm font-semibold text-[var(--crm-text)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white focus:outline-none"
+                >
+                  Сегодня
+                </button>
+                <button
+                  type="button"
+                  onClick={() => shiftAppointmentCalendar('next')}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--crm-muted)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white focus:outline-none"
+                  aria-label="Вперед"
+                  title="Вперед"
+                >
+                  <IconChevronRight className="h-5 w-5" />
+                </button>
+              </div>
             </div>
-          ) : null}
-          <div className="hidden md:block">{pastControl}</div>
-          <div className="grid grid-cols-2 gap-2 sm:col-span-2 md:col-span-1 xl:w-full">
-            {calendarViewControl}
-            {calendarScaleControl}
+          </div>
+          <div
+            className={classNames(
+              'grid gap-2 transition-[max-height,opacity,transform] duration-200 ease-out md:hidden',
+              mobileFiltersOpen
+                ? 'max-h-64 translate-y-0 overflow-visible opacity-100'
+                : 'max-h-0 overflow-hidden -translate-y-1 opacity-0 pointer-events-none'
+            )}
+          >
+            {supportsBarberFilter ? <div className="relative z-[80] md:hidden">{getBarberSelect('z-[80]')}</div> : null}
+            {supportsStatusFilter ? (
+              <div className="grid grid-cols-1 gap-2 md:hidden">
+                <div>{renderStatusControl()}</div>
+              </div>
+            ) : null}
+            <div className="grid grid-cols-1 gap-2">
+              {calendarViewControl}
+            </div>
           </div>
         </div>
-      </div>
+      </>
     );
   }
   if (tableId === 'Users') {
     return (
-      <div className="crm-soft-card space-y-3 p-3 sm:space-y-3 sm:p-4">
-        <div className="flex items-stretch gap-2 md:flex-row md:items-stretch">
+      <>
+        {isMobileViewport && <div className="h-[76px]" aria-hidden="true" />}
+        <div
+          className={classNames('crm-soft-card space-y-3 p-3 sm:space-y-3 sm:p-4', isMobileViewport ? 'fixed inset-x-4 z-20 transition-[top] duration-200 ease-out' : '')}
+          style={isMobileViewport ? { top: 'var(--crm-mobile-header-offset, 68px)' } : undefined}
+        >
+          <div className="flex items-stretch gap-2 md:flex-row md:items-stretch">
           <label className="relative min-w-0 flex-1">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--crm-muted)]">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -264,8 +395,9 @@
               <span className="sm:hidden text-lg leading-none">+</span>
             </button>
           ) : null}
+          </div>
         </div>
-      </div>
+      </>
     );
   }
   const controlOrder =

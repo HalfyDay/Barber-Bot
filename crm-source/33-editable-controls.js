@@ -373,7 +373,7 @@ const CustomSelect = ({
     setOpen(false);
   };
   return (
-    <div ref={ref} className={classNames('relative z-30 w-full', className)}>
+    <div ref={ref} className={classNames('relative z-[120] w-full', className)}>
       <button
         type="button"
         onClick={() => !disabled && setOpen((prev) => !prev)}
@@ -390,7 +390,7 @@ const CustomSelect = ({
         </svg>
       </button>
       {open && (
-        <div className={classNames('crm-menu-surface absolute left-0 right-0 z-[90] mt-2 max-h-64 space-y-2 overflow-y-auto p-3', menuClassName)}>
+        <div className={classNames('crm-menu-surface absolute left-0 right-0 z-[140] mt-2 max-h-64 space-y-2 overflow-y-auto p-3', menuClassName)}>
           {normalizedOptions.length === 0 ? (
             <p className="px-3 py-2 text-sm text-[var(--crm-muted)]">Нет вариантов</p>
           ) : (
@@ -639,6 +639,8 @@ const ClientLookupInput = ({
   const [query, setQuery] = useState(value || '');
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
+  const menuRef = useRef(null);
+  const [menuStyle, setMenuStyle] = useState(null);
   const inputId = useMemo(() => `client-search-${Math.random().toString(36).slice(2, 8)}`, []);
   useEffect(() => {
     setQuery(value || '');
@@ -655,7 +657,42 @@ const ClientLookupInput = ({
       : clients;
     return shortlist.slice(0, 6);
   }, [clients, query]);
-  useOutsideClick(containerRef, open ? () => setOpen(false) : null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (containerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown, true);
+    document.addEventListener('touchstart', handlePointerDown, true);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown, true);
+      document.removeEventListener('touchstart', handlePointerDown, true);
+    };
+  }, [open]);
+  useLayoutEffect(() => {
+    if (!open || typeof window === 'undefined') return undefined;
+    const updatePosition = () => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setMenuStyle({
+        position: 'fixed',
+        top: rect.bottom + 8,
+        left: rect.left,
+        width: rect.width,
+        maxWidth: 'calc(100vw - 2rem)',
+      });
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [open, matches.length]);
   const handleSelect = (client) => {
     const nextValue = client?.name || '';
     setQuery(nextValue);
@@ -664,7 +701,7 @@ const ClientLookupInput = ({
     setOpen(false);
   };
   return (
-    <div className="relative space-y-1" ref={containerRef}>
+    <div className="relative z-[160] space-y-1" ref={containerRef}>
       {label && (
         <label className="text-sm text-slate-300" htmlFor={inputId}>
           {label}
@@ -684,29 +721,88 @@ const ClientLookupInput = ({
         placeholder={placeholder}
         className="w-full px-3 py-2 text-white"
       />
-      {open && matches.length > 0 && (
-        <div className="crm-modal-surface absolute z-30 mt-1 w-full shadow-2xl">
+      {open && matches.length > 0 && menuStyle && createPortal(
+        <div
+          ref={menuRef}
+          className="crm-menu-surface z-[220] max-h-64 overflow-y-auto p-2 shadow-2xl"
+          style={{
+            ...menuStyle,
+            '--crm-surface-4': '#171818',
+            '--crm-surface-5': '#1c1d1d',
+            '--crm-text': '#e6e8e7',
+            '--crm-muted': '#b7bebc',
+            background: 'color-mix(in srgb, #171818 96%, rgba(12, 15, 15, 0.98))',
+            borderRadius: '26px',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.018), 0 18px 40px rgba(0, 0, 0, 0.28)',
+          }}
+        >
           {matches.map((client) => (
             <button
               type="button"
               key={client.id}
-              className="flex w-full flex-col items-start border-b crm-table-divider px-3 py-2 text-left text-sm text-[var(--crm-text)] last:border-none hover:bg-[color:var(--crm-surface-4)]"
+              className="crm-soft-panel mb-2 flex w-full flex-col items-start rounded-2xl px-4 py-3 text-left text-sm text-[var(--crm-text)] last:mb-0 hover:bg-[color:var(--crm-surface-5)]"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => handleSelect(client)}
             >
               <span className="font-semibold">{client.name || 'Без имени'}</span>
-              <span className="text-xs text-slate-400">{client.phone || 'Телефон не указан'}</span>
+              <span className="text-xs text-[var(--crm-muted)]">{client.phone || 'Телефон не указан'}</span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
 };
-const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset }) => {
+const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset, mode = 'active', onModeChange = null, compactAppointments = false }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useOutsideClick(ref, open ? () => setOpen(false) : null);
+  const modeOptions = [
+    { value: 'active', label: 'Активные' },
+    { value: 'past', label: 'Прошедшие' },
+  ];
+  if (compactAppointments && typeof onModeChange === 'function') {
+    const activeOption = modeOptions.find((option) => option.value === mode) || modeOptions[0];
+    return (
+      <div ref={ref} className="relative z-40 w-full sm:w-auto">
+        <button
+          type="button"
+          onClick={() => setOpen((prev) => !prev)}
+          className="crm-soft-panel flex h-11 w-full min-w-[168px] items-center justify-between gap-3 px-5 text-left text-sm text-white transition hover:bg-[color:var(--crm-surface-5)] focus:outline-none sm:w-auto"
+        >
+          <span className="min-w-0 whitespace-nowrap">{activeOption.label}</span>
+          <svg className={classNames('h-4 w-4 shrink-0 text-white/85 transition-transform', open ? 'rotate-180' : 'rotate-0')} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        {open && (
+          <div className="crm-menu-surface absolute left-0 z-[70] mt-2 w-full min-w-[196px] space-y-2 p-3">
+            {modeOptions.map((option) => {
+              const isActive = option.value === mode;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    onModeChange(option.value);
+                    setOpen(false);
+                  }}
+                  className={classNames(
+                    'crm-soft-panel flex min-h-[52px] w-full items-center rounded-2xl px-4 py-3 text-left text-sm leading-6 text-[var(--crm-text)]',
+                    isActive && 'bg-[color:var(--crm-primary-container)] text-[#eafffb]'
+                  )}
+                >
+                  <span className="min-w-0 whitespace-nowrap">{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <div ref={ref} className="relative z-40 w-full sm:w-auto">
       <button

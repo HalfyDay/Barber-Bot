@@ -754,6 +754,139 @@ const ClientLookupInput = ({
     </div>
   );
 };
+const SearchSuggestInput = ({
+  value = '',
+  onChange,
+  suggestions = [],
+  placeholder = 'Поиск...',
+  ariaLabel = 'Поиск',
+  inputClassName = '',
+  menuClassName = '',
+  onSelectSuggestion = null,
+}) => {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef(null);
+  const menuRef = useRef(null);
+  const [menuStyle, setMenuStyle] = useState(null);
+  const normalizedSuggestions = useMemo(
+    () =>
+      (Array.isArray(suggestions) ? suggestions : [])
+        .map((item) => {
+          if (!item) return null;
+          if (typeof item === 'string') {
+            return { value: item, label: item, secondary: '' };
+          }
+          const nextValue = String(item.value ?? item.label ?? '').trim();
+          const nextLabel = String(item.label ?? nextValue).trim();
+          return {
+            value: nextValue,
+            label: nextLabel,
+            secondary: String(item.secondary ?? '').trim(),
+          };
+        })
+        .filter((item) => item && item.value && item.label),
+    [suggestions]
+  );
+  useEffect(() => {
+    if (!open) return undefined;
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (containerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown, true);
+    document.addEventListener('touchstart', handlePointerDown, true);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown, true);
+      document.removeEventListener('touchstart', handlePointerDown, true);
+    };
+  }, [open]);
+  useLayoutEffect(() => {
+    if (!open || typeof window === 'undefined') return undefined;
+    const updatePosition = () => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setMenuStyle({
+        position: 'fixed',
+        top: rect.bottom + 8,
+        left: rect.left,
+        width: rect.width,
+        maxWidth: 'calc(100vw - 2rem)',
+      });
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [open, normalizedSuggestions.length]);
+  const handleSelect = (item) => {
+    onChange?.(item.value);
+    onSelectSuggestion?.(item);
+    setOpen(false);
+  };
+  return (
+    <div ref={containerRef} className="relative min-w-0 flex-1">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--crm-muted)]">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+          <path
+            fillRule="evenodd"
+            d="M9 3.5a5.5 5.5 0 013.995 9.315l3.095 3.095a.75.75 0 11-1.06 1.06l-3.095-3.094A5.5 5.5 0 119 3.5zm0 1.5a4 4 0 100 8 4 4 0 000-8z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </span>
+      <input
+        name="optionsSearch"
+        value={value}
+        onChange={(event) => {
+          onChange?.(event.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(normalizedSuggestions.length > 0)}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        className={classNames(
+          'h-11 w-full pl-9 pr-3 text-sm text-white placeholder:text-[var(--crm-muted)] focus:outline-none',
+          inputClassName
+        )}
+      />
+      {open && normalizedSuggestions.length > 0 && menuStyle && createPortal(
+        <div
+          ref={menuRef}
+          className={classNames('crm-menu-surface z-[220] max-h-64 overflow-y-auto p-2 shadow-2xl', menuClassName)}
+          style={{
+            ...menuStyle,
+            '--crm-surface-4': '#171818',
+            '--crm-surface-5': '#1c1d1d',
+            '--crm-text': '#e6e8e7',
+            '--crm-muted': '#b7bebc',
+            background: 'color-mix(in srgb, #171818 96%, rgba(12, 15, 15, 0.98))',
+            borderRadius: '26px',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.018), 0 18px 40px rgba(0, 0, 0, 0.28)',
+          }}
+        >
+          {normalizedSuggestions.map((item) => (
+            <button
+              type="button"
+              key={`${item.value}-${item.secondary || 'plain'}`}
+              className="crm-soft-panel mb-2 flex w-full flex-col items-start rounded-2xl px-4 py-3 text-left text-sm text-[var(--crm-text)] last:mb-0 hover:bg-[color:var(--crm-surface-5)]"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => handleSelect(item)}
+            >
+              <span className="font-semibold">{item.label}</span>
+              {item.secondary ? <span className="text-xs text-[var(--crm-muted)]">{item.secondary}</span> : null}
+            </button>
+          ))}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
 const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset, mode = 'active', onModeChange = null, compactAppointments = false }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);

@@ -153,7 +153,7 @@ const buildVisitHistory = (appointments = []) => {
     .sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
   return history.map((appt, index) => ({
     ...appt,
-    orderNumber: completed.length - index,
+    orderNumber: history.length - index,
     dateLabel: formatDateTime(appt.Date, appt.Time),
   }));
 };

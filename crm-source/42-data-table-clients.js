@@ -167,6 +167,7 @@ const ClientsList = ({
   onBlockClient,
 }) => {
   const [showArchivedClients, setShowArchivedClients] = useState(false);
+  const [bsPanelOpen, setBsPanelOpen] = useState(false);
   const [modalState, setModalState] = useState({
     open: false,
     record: null,
@@ -175,7 +176,7 @@ const ClientsList = ({
     error: '',
     blockBusy: false,
     saveBusy: false,
-    bsMode: 'adjust',
+    bsMode: 'add',
     bsInput: '',
     bsComment: '',
     bsError: '',
@@ -254,7 +255,7 @@ const ClientsList = ({
       error: '',
       blockBusy: false,
       saveBusy: false,
-      bsMode: 'adjust',
+      bsMode: 'add',
       bsInput: '',
       bsComment: '',
       bsError: '',
@@ -285,7 +286,7 @@ const ClientsList = ({
       error: '',
       blockBusy: false,
       saveBusy: false,
-      bsMode: 'adjust',
+      bsMode: 'add',
       bsInput: '',
       bsComment: '',
       bsError: '',
@@ -301,17 +302,25 @@ const ClientsList = ({
   const handleBsFieldChange = (field, value) => {
     setModalState((prev) => ({ ...prev, [field]: value, bsError: field === 'bsInput' || field === 'bsMode' ? '' : prev.bsError }));
   };
-  const handleBsQuickFill = (value) => {
-    setModalState((prev) => ({ ...prev, bsInput: value, bsError: '' }));
-  };
+  useEffect(() => {
+    if (!modalState.open) {
+      setBsPanelOpen(false);
+    }
+  }, [modalState.open]);
   const currentBsBalance = Math.max(0, Math.trunc(Number(modalState.record?.bsBalance) || 0));
   const parsedBsAmount = parseBsEditorAmount(modalState.bsInput);
   const hasBsDraft = String(modalState.bsInput || '').trim().length > 0;
-  const projectedBsBalance = !hasBsDraft || Number.isNaN(parsedBsAmount)
+  const normalizedBsAmount = Number.isFinite(parsedBsAmount) ? Math.abs(parsedBsAmount) : parsedBsAmount;
+  const signedBsAmount = !Number.isFinite(normalizedBsAmount)
+    ? normalizedBsAmount
+    : modalState.bsMode === 'subtract'
+      ? -normalizedBsAmount
+      : normalizedBsAmount;
+  const projectedBsBalance = !hasBsDraft || Number.isNaN(normalizedBsAmount)
     ? currentBsBalance
     : modalState.bsMode === 'set'
-      ? parsedBsAmount
-      : currentBsBalance + parsedBsAmount;
+      ? normalizedBsAmount
+      : currentBsBalance + signedBsAmount;
   const handleSave = async () => {
     if (!modalState.record || typeof onUpdate !== 'function') return;
     const recordId = getRecordId(modalState.record);
@@ -324,11 +333,11 @@ const ClientsList = ({
       Barber: modalState.record.Barber,
     };
     if (hasBsDraft) {
-      if (Number.isNaN(parsedBsAmount)) {
+      if (Number.isNaN(normalizedBsAmount)) {
         setModalState((prev) => ({ ...prev, bsError: 'Введите целое число. Например: 120, +15 или -10.' }));
         return;
       }
-      if (modalState.bsMode === 'set' && parsedBsAmount < 0) {
+      if (modalState.bsMode === 'set' && normalizedBsAmount < 0) {
         setModalState((prev) => ({ ...prev, bsError: 'Баланс BS не может быть отрицательным.' }));
         return;
       }
@@ -341,8 +350,8 @@ const ClientsList = ({
     try {
       if (hasBsDraft && typeof onAdjustBs === 'function') {
         await onAdjustBs(recordId, {
-          mode: modalState.bsMode,
-          amountBs: parsedBsAmount,
+          mode: modalState.bsMode === 'set' ? 'set' : 'adjust',
+          amountBs: modalState.bsMode === 'set' ? normalizedBsAmount : signedBsAmount,
           comment: modalState.bsComment,
         });
       }
@@ -599,13 +608,13 @@ const ClientsList = ({
                 />
               </label>
               <label className="space-y-1 text-sm text-slate-300">
-                Любимый барбер
+                {"Любимый барбер"}
                 <select
                   value={modalState.record.Barber || ''}
                   onChange={(event) => handleFieldChange('Barber', event.target.value)}
                   className="w-full px-3 py-2 text-white"
                 >
-                  <option value="">Не выбран</option>
+                  <option value="">{"Не выбран"}</option>
                   {barberOptions.map((barber) => (
                     <option key={barber} value={barber}>
                       {barber}
@@ -614,70 +623,70 @@ const ClientsList = ({
                 </select>
               </label>
             </div>
-            <div className="crm-soft-card space-y-3 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-white">Баланс BS</p>
-                  <p className="text-xs text-[var(--crm-muted)]">Можно установить новое значение или быстро прибавить/списать BS.</p>
+            <div className="crm-soft-card space-y-2 p-3">
+              <button
+                type="button"
+                onClick={() => setBsPanelOpen((prev) => !prev)}
+                className="flex w-full items-center justify-between gap-3 rounded-[22px] text-left"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">{"Баланс BS"}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs uppercase tracking-[0.24em] text-[var(--crm-muted)]">Сейчас</p>
-                  <p className="text-2xl font-semibold text-white">{currentBsBalance} BS</p>
+                <div className="flex items-center gap-3 text-right">
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.22em] text-[var(--crm-muted)]">{"Сейчас BS"}</p>
+                    <p className="text-sm font-semibold text-white">{currentBsBalance} BS</p>
+                  </div>
+                  <svg className={classNames('h-4 w-4 text-[var(--crm-muted)] transition-transform', bsPanelOpen && 'rotate-180')} viewBox="0 0 20 20" fill="none">
+                    <path d="M5 7.5l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </div>
-              </div>
-              <div className="grid gap-3 md:grid-cols-[minmax(0,170px)_minmax(0,1fr)]">
-                <label className="space-y-1 text-sm text-slate-300">
-                  Режим
-                  <select
-                    value={modalState.bsMode}
-                    onChange={(event) => handleBsFieldChange('bsMode', event.target.value)}
-                    className="w-full px-3 py-2 text-white"
-                  >
-                    <option value="adjust">Прибавить / списать</option>
-                    <option value="set">Установить вручную</option>
-                  </select>
-                </label>
-                <label className="space-y-1 text-sm text-slate-300">
-                  {modalState.bsMode === 'set' ? 'Новый баланс' : 'Изменение баланса'}
-                  <input
-                    name="clientBs"
-                    aria-label="Баланс BS"
-                    value={modalState.bsInput}
-                    onChange={(event) => handleBsFieldChange('bsInput', event.target.value)}
-                    placeholder={modalState.bsMode === 'set' ? 'Например, 120' : 'Например, +15 или -10'}
-                    className="w-full px-3 py-2 text-white"
-                  />
-                </label>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {['+5', '+10', '-5', '-10'].map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => handleBsQuickFill(value)}
-                    className="crm-ghost-btn rounded-full px-3 py-1 text-xs font-semibold"
-                  >
-                    {value} BS
-                  </button>
-                ))}
-              </div>
-              <label className="space-y-1 text-sm text-slate-300">
-                Комментарий
-                <input
-                  name="clientBsComment"
-                  aria-label="Комментарий к изменению BS"
-                  value={modalState.bsComment}
-                  onChange={(event) => handleBsFieldChange('bsComment', event.target.value)}
-                  placeholder="Например, ручная корректировка или списание за услугу"
-                  className="w-full px-3 py-2 text-white"
-                />
-              </label>
-              <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                <p className="text-[var(--crm-muted)]">
-                  После сохранения будет: <span className={classNames('font-semibold', projectedBsBalance < 0 ? 'text-rose-300' : 'text-white')}>{Number.isNaN(projectedBsBalance) ? '—' : `${projectedBsBalance} BS`}</span>
-                </p>
-                {modalState.bsError && <p className="text-rose-300">{modalState.bsError}</p>}
-              </div>
+              </button>
+              {bsPanelOpen && (
+                <div className="space-y-3 pt-1">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <label className="space-y-1 text-sm text-slate-300">
+                      {"Режим"}
+                      <select
+                        value={modalState.bsMode}
+                        onChange={(event) => handleBsFieldChange('bsMode', event.target.value)}
+                        className="w-full px-3 py-2 text-white"
+                      >
+                        <option value="add">{"Прибавить"}</option>
+                        <option value="subtract">{"Списать"}</option>
+                        <option value="set">{"Установить вручную"}</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-sm text-slate-300">
+                      {modalState.bsMode === 'set' ? "Новый баланс" : "Сумма изменения"}
+                      <input
+                        name="clientBs"
+                        aria-label={"Баланс BS"}
+                        value={modalState.bsInput}
+                        onChange={(event) => handleBsFieldChange('bsInput', event.target.value)}
+                        placeholder={modalState.bsMode === 'set' ? "Например, 120" : "Например, 15"}
+                        className="w-full px-3 py-2 text-white"
+                      />
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-[color:var(--crm-surface-4)]/70 px-3 py-2 text-sm">
+                    <span className="text-[var(--crm-muted)]">{"Будет"}</span>
+                    <span className={classNames('font-semibold', projectedBsBalance < 0 ? 'text-rose-300' : 'text-white')}>{Number.isNaN(projectedBsBalance) ? '?' : `${projectedBsBalance} BS`}</span>
+                  </div>
+                  <label className="space-y-1 text-sm text-slate-300">
+                    {"Комментарий"}
+                    <input
+                      name="clientBsComment"
+                      aria-label={"Комментарий к изменению BS"}
+                      value={modalState.bsComment}
+                      onChange={(event) => handleBsFieldChange('bsComment', event.target.value)}
+                      placeholder={"Например, ручная корректировка или списание за услугу"}
+                      className="w-full px-3 py-2 text-white"
+                    />
+                  </label>
+                  {modalState.bsError && <p className="text-sm text-rose-300">{modalState.bsError}</p>}
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <p className="text-sm text-[var(--crm-muted)]">История визитов</p>

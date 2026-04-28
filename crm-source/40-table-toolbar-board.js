@@ -2,6 +2,7 @@
   tableId,
   searchTerm,
   setSearchTerm,
+  searchSuggestions = [],
   supportsBarberFilter,
   selectedBarber,
   setSelectedBarber,
@@ -238,25 +239,13 @@
           style={isMobileViewport ? { top: 'var(--crm-mobile-header-offset, 68px)' } : undefined}
         >
           <div className="flex items-stretch gap-2 md:flex-row md:items-stretch">
-          <label className="relative min-w-0 flex-1">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--crm-muted)]">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path
-                  fillRule="evenodd"
-                  d="M9 3.5a5.5 5.5 0 013.995 9.315l3.095 3.095a.75.75 0 11-1.06 1.06l-3.095-3.094A5.5 5.5 0 119 3.5zm0 1.5a4 4 0 100 8 4 4 0 000-8z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </span>
-            <input
-              name="optionsSearch"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Поиск..."
-              aria-label="Поиск по таблице"
-              className="h-11 w-full pl-9 pr-3 text-sm text-white placeholder:text-[var(--crm-muted)] focus:outline-none"
-            />
-          </label>
+          <SearchSuggestInput
+            value={searchTerm}
+            onChange={setSearchTerm}
+            suggestions={searchSuggestions}
+            placeholder="Поиск..."
+            ariaLabel="Поиск по таблице"
+          />
           {supportsBarberFilter && (
             <div className="hidden md:block">
               {getBarberSelect('md:w-auto md:min-w-[180px]')}
@@ -366,25 +355,13 @@
           style={isMobileViewport ? { top: 'var(--crm-mobile-header-offset, 68px)' } : undefined}
         >
           <div className="flex items-stretch gap-2 md:flex-row md:items-stretch">
-          <label className="relative min-w-0 flex-1">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--crm-muted)]">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path
-                  fillRule="evenodd"
-                  d="M9 3.5a5.5 5.5 0 013.995 9.315l3.095 3.095a.75.75 0 11-1.06 1.06l-3.095-3.094A5.5 5.5 0 119 3.5zm0 1.5a4 4 0 100 8 4 4 0 000-8z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </span>
-            <input
-              name="optionsSearch"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Поиск..."
-              aria-label="Поиск по клиентам"
-              className="h-11 w-full pl-9 pr-3 text-sm text-white placeholder:text-[var(--crm-muted)] focus:outline-none"
-            />
-          </label>
+          <SearchSuggestInput
+            value={searchTerm}
+            onChange={setSearchTerm}
+            suggestions={searchSuggestions}
+            placeholder="Поиск..."
+            ariaLabel="Поиск по клиентам"
+          />
           {canCreate && typeof onOpenCreate === 'function' ? (
             <button
               onClick={onOpenCreate}

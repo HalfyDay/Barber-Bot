@@ -313,6 +313,66 @@
     }
     return rows;
   }, [tables, activeTable, selectedBarber, hiddenStatuses, searchTerm, visibleColumns, sortConfig, showPastAppointments, clientInsightsLookup]);
+  const toolbarSearchSuggestions = useMemo(() => {
+    const normalizedQuery = normalizeText(searchTerm).toLowerCase().trim();
+    const dedupeSuggestions = (items) => {
+      const seen = new Set();
+      return items.filter((item) => {
+        const nextValue = String(item?.value || '').trim();
+        const nextLabel = String(item?.label || '').trim();
+        const nextSecondary = String(item?.secondary || '').trim();
+        const key = `${normalizeText(nextValue).toLowerCase()}|${normalizeText(nextSecondary).toLowerCase()}`;
+        if (!nextValue || !nextLabel || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 8);
+    };
+    if (activeTable === 'Appointments') {
+      let rows = [...(tables.Appointments || [])].map((row) => ({
+        ...row,
+        Status: normalizeStatusValue(row.Status),
+      }));
+      if (selectedBarber !== 'all') {
+        rows = rows.filter((row) => normalizeText(row.Barber).toLowerCase() === normalizeText(selectedBarber).toLowerCase());
+      }
+      if (hiddenStatuses.length) {
+        rows = rows.filter((row) => !hiddenStatuses.includes(row.Status));
+      }
+      const items = rows.map((row) => ({
+        value: row.CustomerName || '',
+        label: row.CustomerName || 'Без имени',
+        secondary: [row.Phone ? formatPhoneInput(row.Phone) : '', row.Barber || ''].filter(Boolean).join(' • '),
+      }));
+      return dedupeSuggestions(
+        normalizedQuery
+          ? items.filter((item) =>
+              normalizeText(item.label).toLowerCase().includes(normalizedQuery) ||
+              normalizeText(item.secondary).toLowerCase().includes(normalizedQuery)
+            )
+          : items
+      );
+    }
+    if (activeTable === 'Users') {
+      const sourceRows =
+        processedRows.length
+          ? processedRows
+          : ((tables.Users || []).length ? tables.Users : clients);
+      const items = (Array.isArray(sourceRows) ? sourceRows : []).map((row) => ({
+        value: row.Name || row.name || '',
+        label: row.Name || row.name || 'Без имени',
+        secondary: row.Phone || row.phone ? formatPhoneInput(row.Phone || row.phone) : '',
+      }));
+      return dedupeSuggestions(
+        normalizedQuery
+          ? items.filter((item) =>
+              normalizeText(item.label).toLowerCase().includes(normalizedQuery) ||
+              normalizeText(item.secondary).toLowerCase().includes(normalizedQuery)
+            )
+          : items
+      );
+    }
+    return [];
+  }, [activeTable, tables.Appointments, tables.Users, clients, processedRows, selectedBarber, hiddenStatuses, searchTerm]);
   const shouldShowLoadingState = isFetching && processedRows.length === 0;
   const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
   useEffect(() => {
@@ -544,6 +604,7 @@
                   tableId={activeTable}
                   searchTerm={searchTerm}
                   setSearchTerm={setSearchTerm}
+                  searchSuggestions={toolbarSearchSuggestions}
                   supportsBarberFilter={tableSettings.supportsBarberFilter}
                   selectedBarber={selectedBarber}
                   setSelectedBarber={setSelectedBarber}

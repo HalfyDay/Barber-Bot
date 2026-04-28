@@ -145,15 +145,18 @@
     </div>
   );
 };
-const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = false, showDateBadge = false }) => {
+const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = false, showDateBadge = false, showBarber = true }) => {
   const statusLabel = normalizeStatusValue(record.Status) || '-';
   const compactStatusLabel = getCompactStatusLabel(record.Status);
   const { start, end } = parseTimeRangeParts(record.Time);
   const servicesList = parseMultiValue(record.Services);
   const cardRef = useRef(null);
   const [autoCompact, setAutoCompact] = useState(false);
+  const [statusAsDot, setStatusAsDot] = useState(false);
   const AUTO_COMPACT_ENTER_WIDTH = 250;
   const AUTO_COMPACT_EXIT_WIDTH = 285;
+  const STATUS_DOT_ENTER_WIDTH = 172;
+  const STATUS_DOT_EXIT_WIDTH = 188;
   useLayoutEffect(() => {
     const node = cardRef.current;
     if (!node || typeof ResizeObserver === 'undefined') return undefined;
@@ -165,6 +168,13 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
           return nextWidth < AUTO_COMPACT_EXIT_WIDTH;
         }
         return nextWidth < AUTO_COMPACT_ENTER_WIDTH;
+      });
+      setStatusAsDot((prev) => {
+        if (nextWidth <= 0) return prev;
+        if (prev) {
+          return nextWidth < STATUS_DOT_EXIT_WIDTH;
+        }
+        return nextWidth < STATUS_DOT_ENTER_WIDTH;
       });
     });
     observer.observe(node);
@@ -190,7 +200,7 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
     <p className={classNames('font-semibold text-white', effectiveCompact ? 'text-sm' : 'text-base sm:text-lg')}>Без имени</p>
   );
   const cardClassName = classNames(
-    'crm-soft-panel flex h-full cursor-pointer flex-col text-left transition hover:-translate-y-0.5 hover:bg-[color:var(--crm-surface-5)] focus:outline-none',
+    'crm-soft-panel relative flex h-full cursor-pointer flex-col text-left transition hover:-translate-y-0.5 hover:bg-[color:var(--crm-surface-5)] focus:outline-none',
     effectiveCompact ? 'p-2.5' : 'p-3 sm:p-4'
   );
   if (effectiveCompact) {
@@ -203,22 +213,36 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
         onKeyDown={(event) => event.key === 'Enter' && onOpen?.(record, { allowDelete: true })}
         className={cardClassName}
       >
+        {statusAsDot && (
+          <span
+            className={classNames(
+              'absolute right-2.5 top-2.5 inline-flex h-2.5 w-2.5 rounded-full',
+              getStatusBadgeClasses(statusLabel)
+            )}
+            aria-label={statusLabel || 'Без статуса'}
+            title={statusLabel || 'Без статуса'}
+          />
+        )}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-lg font-semibold text-white">{start || record.Time || '-'}</p>
             {end && <p className="text-[11px] text-[var(--crm-muted)]">до {end}</p>}
           </div>
-          <span
-            className={classNames(
-              'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-              getStatusBadgeClasses(statusLabel)
-            )}
-          >
-            {compactStatusLabel}
-          </span>
+          {!statusAsDot && (
+            <span
+              className={classNames(
+                'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                getStatusBadgeClasses(statusLabel)
+              )}
+              aria-label={statusLabel || 'Без статуса'}
+              title={statusLabel || 'Без статуса'}
+            >
+              {compactStatusLabel}
+            </span>
+          )}
         </div>
       <div className="mt-2 min-w-0">{customerNode}</div>
-        {record.Barber && (
+        {showBarber && record.Barber && (
           <p className="mt-1 truncate text-[11px] font-semibold text-white">
             {record.Barber}
           </p>
@@ -247,6 +271,16 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
       onKeyDown={(event) => event.key === 'Enter' && onOpen?.(record, { allowDelete: true })}
       className={cardClassName}
     >
+      {statusAsDot && (
+        <span
+          className={classNames(
+            'absolute right-3 top-3 inline-flex h-2.5 w-2.5 rounded-full',
+            getStatusBadgeClasses(statusLabel)
+          )}
+          aria-label={statusLabel || 'Без статуса'}
+          title={statusLabel || 'Без статуса'}
+        />
+      )}
       <div className={classNames('border-b crm-table-divider', compact ? 'pb-2' : 'pb-3')}>
         <div
           className={classNames(
@@ -268,16 +302,20 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
               compact ? 'flex-wrap items-center' : 'flex-col items-end text-right'
             )}
           >
-            <span
-              className={classNames(
-                'inline-flex items-center rounded-full font-semibold uppercase tracking-wide',
-                compact ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-1 text-[11px]',
-                getStatusBadgeClasses(statusLabel)
-              )}
-            >
-              {statusLabel || 'Без статуса'}
-            </span>
-            {record.Barber && (
+            {!statusAsDot && (
+              <span
+                className={classNames(
+                  'inline-flex items-center rounded-full font-semibold uppercase tracking-wide',
+                  compact ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-1 text-[11px]',
+                  getStatusBadgeClasses(statusLabel)
+                )}
+                aria-label={statusLabel || 'Без статуса'}
+                title={statusLabel || 'Без статуса'}
+              >
+                {statusLabel || 'Без статуса'}
+              </span>
+            )}
+            {showBarber && record.Barber && (
               <p className={classNames('text-[var(--crm-muted)]', compact ? 'min-w-0 text-[11px]' : 'text-xs sm:text-sm')}>
                 Барбер: <span className="font-semibold text-white">{record.Barber}</span>
               </p>
@@ -318,6 +356,7 @@ const AppointmentsCalendarView = ({
   calendarDate = '',
   setCalendarDate,
   setViewMode,
+  selectedBarber = 'all',
 }) => {
   const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
   const trimmedSearchTerm = normalizeText(searchTerm).trim();
@@ -337,6 +376,7 @@ const AppointmentsCalendarView = ({
   const headerNavRef = useRef(null);
   const [isHeaderWrapped, setIsHeaderWrapped] = useState(false);
   const [showStickyDateRow, setShowStickyDateRow] = useState(true);
+  const showBarberInCards = selectedBarber === 'all';
   const lastScrollRef = useRef(typeof window !== 'undefined' ? window.scrollY : 0);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -412,7 +452,7 @@ const AppointmentsCalendarView = ({
           compact ? 'px-2 py-2' : 'p-3'
         )}
       >
-        <p className={classNames('font-semibold text-[#f4fffd]', compact ? 'text-[11px]' : 'text-sm')}>{slot.Time || 'Свободное окно'}</p>
+        <p className={classNames('font-semibold text-[#f4fffd]', compact ? 'text-[11px]' : 'text-base')}>{slot.Time || 'Свободное окно'}</p>
         {showBarber && slot.Barber && <p className={classNames('mt-1 text-[#c7f8f2]', compact ? 'text-[10px]' : 'text-xs')}>{slot.Barber}</p>}
       </button>
     ),
@@ -727,6 +767,7 @@ const AppointmentsCalendarView = ({
                           onOpen={onOpen}
                           onOpenProfile={onOpenProfile}
                           compact={isMobileViewport && safeScaleMode === 'compact'}
+                          showBarber={showBarberInCards}
                         />
                       ))}
                     </div>
@@ -759,11 +800,12 @@ const AppointmentsCalendarView = ({
                 onOpen={onOpen}
                 onOpenProfile={onOpenProfile}
                 compact={isMobileViewport && safeScaleMode === 'compact'}
+                showBarber={showBarberInCards}
               />
             ) : (
               renderAvailableSlot(entry.slot, {
                 compact: isMobileViewport && safeScaleMode === 'compact',
-                showBarber: Boolean(entry.slot.Barber),
+                showBarber: showBarberInCards && Boolean(entry.slot.Barber),
               })
             )
           )}
@@ -816,11 +858,12 @@ const AppointmentsCalendarView = ({
                         onOpen={onOpen}
                         onOpenProfile={onOpenProfile}
                         compact={isMobileViewport && safeScaleMode === 'compact'}
+                        showBarber={showBarberInCards}
                       />
                     ) : (
                       renderAvailableSlot(entry.slot, {
                         compact: isMobileViewport && safeScaleMode === 'compact',
-                        showBarber,
+                        showBarber: showBarberInCards && showBarber,
                       })
                     )
                   )}
@@ -899,7 +942,7 @@ const AppointmentsCalendarView = ({
                     ) : (
                       renderAvailableSlot(entry.slot, {
                         compact: true,
-                        showBarber,
+                        showBarber: showBarberInCards && showBarber,
                       })
                     )
                   )}

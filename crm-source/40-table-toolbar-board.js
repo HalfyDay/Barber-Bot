@@ -33,10 +33,13 @@
   appointmentCalendarDate = '',
   setAppointmentCalendarDate,
   appointmentRows = [],
+  appointmentScheduleSlot = null,
+  onSaveAppointmentScheduleDay,
 }) => {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
   const appointmentDateInputRef = useRef(null);
+  const scheduleDayEditorRef = useRef(null);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const handler = () => setIsMobileViewport(window.innerWidth < 768);
@@ -124,6 +127,15 @@
       : null;
   const calendarScaleControl = null;
   const safeAppointmentView = APPOINTMENT_CALENDAR_VIEW_OPTIONS.some((option) => option.id === appointmentCalendarView) ? appointmentCalendarView : 'week';
+  const canEditScheduleDay = tableId === 'Appointments' && safeAppointmentView === 'day';
+  const canEditSelectedBarberScheduleDay =
+    canEditScheduleDay &&
+    selectedBarber !== 'all' &&
+    appointmentScheduleSlot &&
+    typeof onSaveAppointmentScheduleDay === 'function';
+  const [scheduleDayEditorOpen, setScheduleDayEditorOpen] = useState(false);
+  const [scheduleDayDraft, setScheduleDayDraft] = useState({ start: '', end: '' });
+  const [scheduleDayPristine, setScheduleDayPristine] = useState({ start: true, end: true });
   const appointmentAnchorDate = useMemo(
     () => parseInputDate(appointmentCalendarDate) || startOfLocalDay(),
     [appointmentCalendarDate]
@@ -198,6 +210,219 @@
   const jumpAppointmentCalendarToToday = useCallback(() => {
     setAppointmentCalendarDate?.(appointmentTodayKey);
   }, [appointmentTodayKey, setAppointmentCalendarDate]);
+  const currentScheduleDayRange = useMemo(
+    () => parseTimeRangeValue(appointmentScheduleSlot?.Week === '0' ? '' : appointmentScheduleSlot?.Week || ''),
+    [appointmentScheduleSlot]
+  );
+  useEffect(() => {
+    setScheduleDayDraft(currentScheduleDayRange);
+    setScheduleDayPristine({
+      start: !currentScheduleDayRange.start,
+      end: !currentScheduleDayRange.end,
+    });
+  }, [currentScheduleDayRange]);
+  useEffect(() => {
+    if (!canEditScheduleDay) {
+      setScheduleDayEditorOpen(false);
+    }
+  }, [canEditScheduleDay]);
+  useEffect(() => {
+    if (selectedBarber === 'all') {
+      setScheduleDayEditorOpen(false);
+    }
+  }, [selectedBarber]);
+  useEffect(() => {
+    if (!scheduleDayEditorOpen || isMobileViewport) return undefined;
+    const handlePointerDown = (event) => {
+      if (scheduleDayEditorRef.current?.contains(event.target)) return;
+      setScheduleDayEditorOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
+  }, [isMobileViewport, scheduleDayEditorOpen]);
+  const saveScheduleDayDraft = useCallback(() => {
+    if (!canEditSelectedBarberScheduleDay || !appointmentScheduleSlot) return;
+    onSaveAppointmentScheduleDay?.(
+      appointmentScheduleSlot,
+      buildTimeRangeValue(scheduleDayDraft.start, scheduleDayDraft.end)
+    );
+  }, [appointmentScheduleSlot, canEditSelectedBarberScheduleDay, onSaveAppointmentScheduleDay, scheduleDayDraft.end, scheduleDayDraft.start]);
+  const clearScheduleDayDraft = useCallback(() => {
+    if (!canEditSelectedBarberScheduleDay || !appointmentScheduleSlot) return;
+    onSaveAppointmentScheduleDay?.(appointmentScheduleSlot, '0');
+  }, [appointmentScheduleSlot, canEditSelectedBarberScheduleDay, onSaveAppointmentScheduleDay]);
+  const renderScheduleDayEditor = (mobile = false) => {
+    if (!canEditScheduleDay) return null;
+    const currentScheduleLabel =
+      appointmentScheduleSlot?.Week && appointmentScheduleSlot.Week !== '0'
+        ? appointmentScheduleSlot.Week
+        : 'Выходной';
+    if (!canEditSelectedBarberScheduleDay) {
+      return (
+        <div
+          className={classNames(
+            'crm-soft-panel flex h-11 items-center justify-center rounded-full px-4 text-center text-sm font-medium text-[var(--crm-muted)]',
+            mobile ? 'w-full' : 'min-w-[180px]'
+          )}
+        >
+          Выберите мастера
+        </div>
+      );
+    }
+    const inputClassName = classNames(
+      'crm-inline-panel h-11 min-h-0 rounded-full px-3 text-center text-sm font-semibold text-white focus:outline-none focus:ring-0 focus-visible:ring-0',
+      mobile ? 'w-full' : 'min-w-0 flex-1'
+    );
+    if (mobile) {
+      return (
+        <div className="w-full space-y-2">
+          <button
+            type="button"
+            onClick={() => setScheduleDayEditorOpen((prev) => !prev)}
+            className="crm-soft-panel flex h-11 w-full items-center justify-between rounded-full px-4 text-left text-white transition hover:bg-[color:var(--crm-surface-5)] focus:outline-none focus:ring-0 focus-visible:ring-0"
+          >
+            <span className="min-w-0 truncate text-sm font-semibold">{currentScheduleLabel}</span>
+            <svg
+              className={classNames('h-4 w-4 shrink-0 text-[var(--crm-muted)] transition-transform', scheduleDayEditorOpen && 'rotate-180')}
+              viewBox="0 0 20 20"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <div
+            className={classNames(
+              'grid transition-[grid-template-rows,opacity,transform] duration-200 ease-out',
+              scheduleDayEditorOpen ? 'grid-rows-[1fr] opacity-100 translate-y-0' : 'grid-rows-[0fr] opacity-0 -translate-y-1 pointer-events-none'
+            )}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <div className="w-full space-y-2 pt-2">
+              <div className="flex w-full items-center gap-2">
+                <input
+                  name="appointmentScheduleDayStartMobile"
+                  aria-label="Начало смены"
+                  type="time"
+                  step="60"
+                  value={scheduleDayPristine.start ? '00:00' : scheduleDayDraft.start || '00:00'}
+                  onChange={(event) => {
+                    const nextStart = normalizeTimeInputValue(event.target.value);
+                    setScheduleDayDraft((prev) => ({ ...prev, start: nextStart }));
+                    setScheduleDayPristine((prev) => ({ ...prev, start: !nextStart }));
+                  }}
+                  className={inputClassName}
+                />
+                <span className="shrink-0 text-sm font-semibold text-[var(--crm-muted)]">-</span>
+                <input
+                  name="appointmentScheduleDayEndMobile"
+                  aria-label="Окончание смены"
+                  type="time"
+                  step="60"
+                  value={scheduleDayPristine.end ? '00:00' : scheduleDayDraft.end || '00:00'}
+                  onChange={(event) => {
+                    const nextEnd = normalizeTimeInputValue(event.target.value);
+                    setScheduleDayDraft((prev) => ({ ...prev, end: nextEnd }));
+                    setScheduleDayPristine((prev) => ({ ...prev, end: !nextEnd }));
+                  }}
+                  className={inputClassName}
+                />
+              </div>
+              <div className="flex w-full min-w-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={saveScheduleDayDraft}
+                  className="crm-action-btn inline-flex h-11 min-h-0 min-w-0 flex-1 items-center justify-center rounded-full px-3 text-sm"
+                >
+                  OK
+                </button>
+                <button
+                  type="button"
+                  onClick={clearScheduleDayDraft}
+                  className="crm-ghost-btn inline-flex h-11 min-h-0 min-w-0 flex-1 items-center justify-center rounded-full px-3 text-sm text-[var(--crm-muted)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white focus:outline-none focus:ring-0 focus-visible:ring-0"
+                >
+                  Выходной
+                </button>
+              </div>
+            </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div ref={scheduleDayEditorRef} className="relative shrink-0">
+        <button
+          type="button"
+          onClick={() => setScheduleDayEditorOpen((prev) => !prev)}
+          className="crm-soft-panel flex h-11 min-w-[190px] items-center justify-between rounded-full px-4 text-left text-white transition hover:bg-[color:var(--crm-surface-5)] focus:outline-none focus:ring-0 focus-visible:ring-0"
+        >
+          <span className="min-w-0 truncate text-sm font-semibold">{currentScheduleLabel}</span>
+          <svg
+            className={classNames('h-4 w-4 shrink-0 text-[var(--crm-muted)] transition-transform', scheduleDayEditorOpen && 'rotate-180')}
+            viewBox="0 0 20 20"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        {scheduleDayEditorOpen ? (
+          <div className="crm-soft-card crm-float-reveal absolute right-0 top-[calc(100%+0.5rem)] z-[90] w-[320px] space-y-2 p-2 shadow-[0_18px_40px_rgba(0,0,0,0.28)]">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+              <input
+                name="appointmentScheduleDayStartDesktop"
+                aria-label="Начало смены"
+                type="time"
+                step="60"
+                value={scheduleDayPristine.start ? '00:00' : scheduleDayDraft.start || '00:00'}
+                onChange={(event) => {
+                  const nextStart = normalizeTimeInputValue(event.target.value);
+                  setScheduleDayDraft((prev) => ({ ...prev, start: nextStart }));
+                  setScheduleDayPristine((prev) => ({ ...prev, start: !nextStart }));
+                }}
+                className={inputClassName}
+              />
+              <span className="shrink-0 text-sm font-semibold text-[var(--crm-muted)]">-</span>
+              <input
+                name="appointmentScheduleDayEndDesktop"
+                aria-label="Окончание смены"
+                type="time"
+                step="60"
+                value={scheduleDayPristine.end ? '00:00' : scheduleDayDraft.end || '00:00'}
+                onChange={(event) => {
+                  const nextEnd = normalizeTimeInputValue(event.target.value);
+                  setScheduleDayDraft((prev) => ({ ...prev, end: nextEnd }));
+                  setScheduleDayPristine((prev) => ({ ...prev, end: !nextEnd }));
+                }}
+                className={inputClassName}
+              />
+            </div>
+            <div className="grid grid-cols-2 items-center gap-2">
+              <button
+                type="button"
+                onClick={saveScheduleDayDraft}
+                className="crm-action-btn inline-flex h-11 min-h-0 flex-1 items-center justify-center rounded-full px-4 text-sm"
+              >
+                OK
+              </button>
+              <button
+                type="button"
+                onClick={clearScheduleDayDraft}
+                className="crm-ghost-btn inline-flex h-11 min-h-0 flex-1 items-center justify-center rounded-full px-4 text-sm text-[var(--crm-muted)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white focus:outline-none focus:ring-0 focus-visible:ring-0"
+              >
+                Выходной
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  };
   const openAppointmentDatePicker = useCallback(() => {
     const input = appointmentDateInputRef.current;
     if (!input) return;
@@ -233,8 +458,8 @@
         <div
           className={classNames(
             'crm-soft-card p-3 sm:p-4',
-            mobileFiltersOpen ? 'space-y-3' : 'space-y-0 md:space-y-3',
-            isMobileViewport ? 'fixed inset-x-4 z-20 transition-[top] duration-200 ease-out' : ''
+            'space-y-0 md:space-y-3',
+            isMobileViewport ? 'fixed inset-x-4 z-20 overflow-visible transition-[top] duration-200 ease-out' : ''
           )}
           style={isMobileViewport ? { top: 'var(--crm-mobile-header-offset, 68px)' } : undefined}
         >
@@ -254,6 +479,7 @@
           <div className="hidden md:block">
             {calendarViewControl}
           </div>
+          {canEditScheduleDay ? <div className="hidden md:flex">{renderScheduleDayEditor(false)}</div> : null}
           <div className="hidden md:block">
             {renderStatusControl()}
           </div>
@@ -326,20 +552,22 @@
           </div>
           <div
             className={classNames(
-              'grid gap-2 transition-[max-height,opacity,transform] duration-200 ease-out md:hidden',
-              mobileFiltersOpen
-                ? 'max-h-64 translate-y-0 overflow-visible opacity-100'
-                : 'max-h-0 overflow-hidden -translate-y-1 opacity-0 pointer-events-none'
+              'absolute inset-x-0 top-[calc(100%+0.5rem)] z-30 md:hidden',
+              'transition-[opacity,transform] duration-200 ease-out',
+              mobileFiltersOpen ? 'translate-y-0 opacity-100' : 'pointer-events-none -translate-y-1 opacity-0'
             )}
           >
-            {supportsBarberFilter ? <div className="relative z-[80] md:hidden">{getBarberSelect('z-[80]')}</div> : null}
-            {supportsStatusFilter ? (
-              <div className="grid grid-cols-1 gap-2 md:hidden">
-                <div>{renderStatusControl()}</div>
+            <div className="crm-soft-card space-y-2 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.28)]">
+              {supportsBarberFilter || supportsStatusFilter ? (
+                <div className="grid grid-cols-2 items-start gap-2">
+                  {supportsBarberFilter ? <div className="relative z-[80] min-w-0">{getBarberSelect('z-[80]')}</div> : <div />}
+                  {supportsStatusFilter ? <div className="min-w-0">{renderStatusControl()}</div> : <div />}
+                </div>
+              ) : null}
+              <div className="grid grid-cols-1 gap-2">
+                {calendarViewControl}
+                {canEditScheduleDay ? <div className="grid grid-cols-1 gap-2">{renderScheduleDayEditor(true)}</div> : null}
               </div>
-            ) : null}
-            <div className="grid grid-cols-1 gap-2">
-              {calendarViewControl}
             </div>
           </div>
         </div>

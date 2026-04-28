@@ -310,6 +310,7 @@ const AppointmentModal = ({
   isNew = false,
   clients = [],
   serviceCatalog = [],
+  onQuickCreateClient = null,
 }) => {
   const buildDraft = useCallback(
     (record) => (record ? { ...record, UserID: record.UserID || record.userId || '', Status: normalizeStatusValue(record.Status) } : null),
@@ -319,13 +320,24 @@ const AppointmentModal = ({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [validationError, setValidationError] = useState('');
   const [validationWarning, setValidationWarning] = useState('');
+  const [manualEndOverride, setManualEndOverride] = useState(false);
+  const [saveWarningConfirmArmed, setSaveWarningConfirmArmed] = useState(false);
+  const [dismissedNoticeKeys, setDismissedNoticeKeys] = useState([]);
+  const [quickCreateBusy, setQuickCreateBusy] = useState(false);
   useEffect(() => {
     if (!open) return;
     setDraft(buildDraft(appointment));
     setDetailsOpen(false);
     setValidationError('');
     setValidationWarning('');
+    setManualEndOverride(false);
+    setSaveWarningConfirmArmed(false);
+    setDismissedNoticeKeys([]);
+    setQuickCreateBusy(false);
   }, [appointment, buildDraft, open]);
+  useEffect(() => {
+    setDismissedNoticeKeys([]);
+  }, [validationError, validationWarning]);
   const currentAppointmentId = appointment ? getRecordId(appointment) : null;
   const validateDraft = useCallback(
     (nextDraft) => {
@@ -376,7 +388,7 @@ const AppointmentModal = ({
           return rangesOverlap(draftRange, { start, end });
         });
         if (conflictExists) {
-          warnings.push('На это время уже есть другая запись для выбранного барбера.');
+          warnings.push('У барбера уже есть запись на это время.');
         }
       }
       if (draftRange && (schedules || []).length && normalizedBarber && dateOnly) {
@@ -389,7 +401,7 @@ const AppointmentModal = ({
             return getDayIndex(slot.DayOfWeek) === dayIndex;
           });
           if (!daySlots.length) {
-            warnings.push('Барбер не работает в выбранный день. Запись будет вне графика.');
+            warnings.push('Барбер не работает в этот день.');
           } else {
             const fitsSchedule = daySlots.some((slot) => {
               const slotTime = slot.Week || slot.Time || '';
@@ -401,7 +413,7 @@ const AppointmentModal = ({
               return draftRange.start >= slotStart && draftRange.end <= slotEnd;
             });
             if (!fitsSchedule) {
-              warnings.push('Выбранное время не входит в рабочую смену барбера. Запись будет создана вне графика.');
+              warnings.push('Время вне смены барбера.');
             }
           }
         }
@@ -433,7 +445,8 @@ const AppointmentModal = ({
   );
   useEffect(() => {
     if (!open) return;
-    updateWarningForDraft(draft);
+    const frameId = requestAnimationFrame(() => updateWarningForDraft(draft));
+    return () => cancelAnimationFrame(frameId);
   }, [
     open,
     draft?.Barber,
@@ -444,12 +457,8 @@ const AppointmentModal = ({
     updateWarningForDraft,
   ]);
   const servicesSelection = parseMultiValue(draft?.Services);
-  const hasOtherService = useMemo(
-    () => servicesSelection.some((service) => canonicalizeName(service).toLowerCase() === canonicalizeName('Другое').toLowerCase()),
-    [servicesSelection]
-  );
   const appointmentServiceOptions = useMemo(
-    () => dedupeOptionList([...(options.services || []), 'Другое']),
+    () => dedupeOptionList(options.services || []),
     [options.services]
   );
   const serviceDurationLookup = useMemo(
@@ -476,27 +485,29 @@ const AppointmentModal = ({
   );
   const draftTimeParts = useMemo(() => parseTimeRangeParts(draft?.Time || ''), [draft?.Time]);
   const appointmentStartTime = draftTimeParts.start;
+  const autoAppointmentEndTime = useMemo(
+    () => (appointmentStartTime && selectedServicesDuration > 0
+      ? addMinutesToTimeToken(appointmentStartTime, selectedServicesDuration)
+      : ''),
+    [appointmentStartTime, selectedServicesDuration]
+  );
   const appointmentEndTime = useMemo(
-    () => (
-      (!hasOtherService && appointmentStartTime && selectedServicesDuration > 0
-        ? addMinutesToTimeToken(appointmentStartTime, selectedServicesDuration)
-        : '') || draftTimeParts.end || ''
-    ),
-    [appointmentStartTime, hasOtherService, selectedServicesDuration, draftTimeParts.end]
+    () => (draftTimeParts.end || autoAppointmentEndTime || ''),
+    [draftTimeParts.end, autoAppointmentEndTime]
   );
   const syncDraftTimeWithServices = useCallback(
-    (nextDraft) => {
+    (nextDraft, { preserveManualEnd = false } = {}) => {
       if (!nextDraft) return nextDraft;
       const start = extractTimeStart(nextDraft.Time || '');
       if (!start) return nextDraft;
-      const manualDurationAllowed = normalizeMultiValueList(nextDraft.Services).some(
-        (serviceName) => canonicalizeName(serviceName).toLowerCase() === canonicalizeName('Другое').toLowerCase()
-      );
-      if (manualDurationAllowed) return nextDraft;
       const duration = getServicesDuration(nextDraft.Services);
-      const nextTime = duration > 0
-        ? buildTimeRangeValue(start, addMinutesToTimeToken(start, duration))
-        : buildTimeRangeValue(start, parseTimeRangeParts(nextDraft.Time || '').end || '');
+      const currentEnd = parseTimeRangeParts(nextDraft.Time || '').end || '';
+      const nextEnd = !preserveManualEnd && duration > 0
+        ? addMinutesToTimeToken(start, duration)
+        : currentEnd;
+      const nextTime = preserveManualEnd
+        ? buildManualTimeRangeValue(start, nextEnd)
+        : buildTimeRangeValue(start, nextEnd);
       if (nextTime === (nextDraft.Time || '')) return nextDraft;
       return { ...nextDraft, Time: nextTime };
     },
@@ -506,9 +517,9 @@ const AppointmentModal = ({
     if (!open) return;
     setDraft((prev) => {
       if (!prev) return prev;
-      return syncDraftTimeWithServices(prev);
+      return syncDraftTimeWithServices(prev, { preserveManualEnd: manualEndOverride });
     });
-  }, [open, hasOtherService, selectedServicesDuration, syncDraftTimeWithServices]);
+  }, [open, selectedServicesDuration, syncDraftTimeWithServices, manualEndOverride]);
   const linkedClient = useMemo(() => {
     const safeUserId = normalizeText(draft?.UserID);
     const safePhone = normalizePhoneValue(draft?.Phone);
@@ -539,26 +550,42 @@ const AppointmentModal = ({
   const actionButtonClass = RESPONSIVE_ACTION_BUTTON_CLASS;
   const handleChange = (field, value) => {
     setValidationError('');
+    setSaveWarningConfirmArmed(false);
+    if (field === 'Services') {
+      setManualEndOverride(false);
+    }
     setDraft((prev) => {
       if (!prev) return prev;
       const nextDraft = field === 'Services' || field === 'Time'
-        ? syncDraftTimeWithServices({ ...prev, [field]: value })
+        ? syncDraftTimeWithServices({ ...prev, [field]: value }, { preserveManualEnd: field !== 'Services' && manualEndOverride })
         : { ...prev, [field]: value };
       updateWarningForDraft(nextDraft);
       return nextDraft;
     });
   };
   const handleStartTimeChange = (nextStart) => {
+    const autoEnd = nextStart && selectedServicesDuration > 0 ? addMinutesToTimeToken(nextStart, selectedServicesDuration) : '';
     const nextTime = nextStart
-      ? (hasOtherService
+      ? (manualEndOverride
           ? buildManualTimeRangeValue(nextStart, appointmentEndTime)
-          : buildTimeRangeValue(nextStart, ''))
+          : buildTimeRangeValue(nextStart, autoEnd || appointmentEndTime))
       : '';
+    if (autoEnd) {
+      setManualEndOverride(false);
+    }
     handleChange('Time', nextTime);
   };
   const handleEndTimeChange = (nextEnd) => {
+    setValidationError('');
+    setSaveWarningConfirmArmed(false);
+    setManualEndOverride(true);
     const nextTime = appointmentStartTime ? buildManualTimeRangeValue(appointmentStartTime, nextEnd) : '';
-    handleChange('Time', nextTime);
+    setDraft((prev) => {
+      if (!prev) return prev;
+      const nextDraft = { ...prev, Time: nextTime };
+      updateWarningForDraft(nextDraft);
+      return nextDraft;
+    });
   };
   const isReminderSent = (value) => value === true || value === 'true' || value === 1 || value === '1';
   const getReminderLabel = (value) => (isReminderSent(value) ? 'Напомнено' : 'Не напомнено');
@@ -611,10 +638,17 @@ const AppointmentModal = ({
     });
   };
   const handleSubmit = async () => {
-    const { error } = validateDraft(draft);
+    const { error, warning } = validateDraft(draft);
     if (error) {
       setValidationError(error);
       return;
+    }
+    if (warning) {
+      if (!saveWarningConfirmArmed) {
+        setSaveWarningConfirmArmed(true);
+        setValidationError('Нажмите «Сохранить» ещё раз, чтобы подтвердить запись с предупреждением по времени.');
+        return;
+      }
     }
     setValidationError('');
     try {
@@ -627,6 +661,7 @@ const AppointmentModal = ({
     if (!draft) return;
     setValidationError('');
     setValidationWarning('');
+    setSaveWarningConfirmArmed(false);
     const nextDraft = { ...draft, Status: 'Выполнена' };
     setDraft(nextDraft);
     try {
@@ -638,6 +673,7 @@ const AppointmentModal = ({
   const handleClientAutoFill = (client) => {
     if (!client) return;
     setValidationError('');
+    setSaveWarningConfirmArmed(false);
     setDraft((prev) => {
       if (!prev) return prev;
       const nextDraft = {
@@ -651,6 +687,42 @@ const AppointmentModal = ({
       return nextDraft;
     });
   };
+  const quickCreateAvailable = Boolean(
+    onQuickCreateClient &&
+    normalizeText(draft?.CustomerName) &&
+    normalizePhoneValue(draft?.Phone) &&
+    !linkedClient
+  );
+  const handleQuickCreateClient = async () => {
+    if (!quickCreateAvailable || quickCreateBusy) return;
+    setQuickCreateBusy(true);
+    setValidationError('');
+    try {
+      const createdClient = await onQuickCreateClient({
+        Name: normalizeText(draft?.CustomerName),
+        Phone: normalizePhoneValue(draft?.Phone),
+        Barber: draft?.Barber || '',
+      });
+      if (createdClient) {
+        handleClientAutoFill({
+          id: createdClient.id,
+          name: createdClient.Name || createdClient.name || draft?.CustomerName,
+          phone: createdClient.Phone || createdClient.phone || draft?.Phone,
+          preferredBarber: createdClient.Barber || createdClient.barber || draft?.Barber || '',
+          telegramId: createdClient.TelegramID || createdClient.telegramId || '',
+          TelegramID: createdClient.TelegramID || createdClient.telegramId || '',
+        });
+      }
+    } catch (error) {
+      setValidationError(error?.message || 'Не удалось быстро добавить клиента.');
+    } finally {
+      setQuickCreateBusy(false);
+    }
+  };
+  const sheetNotices = [
+    validationError ? { key: 'error', tone: 'error', message: validationError } : null,
+    validationWarning ? { key: 'warning', tone: 'warning', message: validationWarning } : null,
+  ].filter(Boolean).filter((notice) => !dismissedNoticeKeys.includes(notice.key));
   return (
     <Modal
 	      title={isNew ? 'Новая запись' : (draft.CustomerName || 'Без имени')}
@@ -701,8 +773,55 @@ const AppointmentModal = ({
         </div>
       }
     >
-      {validationError && (
-        <div className="mb-4 rounded-xl border border-rose-600 bg-rose-500/10 px-4 py-2 text-sm text-rose-200">{validationError}</div>
+      {sheetNotices.length > 0 && (
+        <>
+          <div className="hidden space-y-2 md:block">
+            {sheetNotices.map((notice) => (
+              <div
+                key={`desktop-${notice.key}`}
+                className={classNames(
+                  'flex items-start justify-between gap-3 rounded-[18px] px-4 py-3 text-sm shadow-2xl',
+                  notice.tone === 'error'
+                    ? 'bg-rose-500/95 text-white'
+                    : 'bg-[color:var(--crm-highlight)] text-[color:var(--crm-primary-on)]'
+                )}
+              >
+                <span>{notice.message}</span>
+                <button
+                  type="button"
+                  onClick={() => setDismissedNoticeKeys((prev) => [...prev, notice.key])}
+                  className="pointer-events-auto mt-0.5 shrink-0 opacity-80 transition hover:opacity-100"
+                  aria-label="Закрыть уведомление"
+                >
+                  <IconClose className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="pointer-events-none fixed inset-x-4 bottom-[calc(max(env(safe-area-inset-bottom),0.75rem)+4.95rem)] z-[90] flex flex-col gap-2 md:hidden">
+            {sheetNotices.map((notice) => (
+              <div
+                key={`mobile-${notice.key}`}
+                className={classNames(
+                  'pointer-events-auto flex items-start justify-between gap-3 rounded-[18px] px-4 py-3 text-sm shadow-2xl',
+                  notice.tone === 'error'
+                    ? 'bg-rose-500/95 text-white'
+                    : 'bg-[color:var(--crm-highlight)] text-[color:var(--crm-primary-on)]'
+                )}
+              >
+                <span>{notice.message}</span>
+                <button
+                  type="button"
+                  onClick={() => setDismissedNoticeKeys((prev) => [...prev, notice.key])}
+                  className="mt-0.5 shrink-0 opacity-80 transition hover:opacity-100"
+                  aria-label="Закрыть уведомление"
+                >
+                  <IconClose className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 	        <ClientLookupInput
@@ -724,6 +843,21 @@ const AppointmentModal = ({
             className="h-11 w-full px-3 text-white"
           />
         </div>
+        {quickCreateAvailable && (
+          <div className="col-span-full">
+            <button
+              type="button"
+              onClick={handleQuickCreateClient}
+              disabled={quickCreateBusy}
+              className={classNames(
+                'crm-tonal-btn h-10 min-h-0 px-4 text-sm text-white',
+                quickCreateBusy && 'cursor-not-allowed opacity-60'
+              )}
+            >
+              {quickCreateBusy ? 'Добавляю клиента...' : 'Быстро добавить нового клиента'}
+            </button>
+          </div>
+        )}
         <CustomSelect
           value={draft.Barber || ''}
           onChange={(nextValue) => handleChange('Barber', nextValue)}
@@ -760,13 +894,8 @@ const AppointmentModal = ({
             endValue={appointmentEndTime}
             onChange={handleStartTimeChange}
             onEndChange={handleEndTimeChange}
-            manualEndEnabled={hasOtherService}
+            manualEndEnabled
           />
-          {validationWarning && (
-            <div className="rounded-[18px] bg-[rgba(0,191,175,0.16)] px-3 py-2 text-xs text-white">
-              {validationWarning}
-            </div>
-          )}
         </div>
         <div className="space-y-1">
           <label className="text-sm text-slate-300">Статус</label>

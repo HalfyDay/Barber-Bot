@@ -145,6 +145,26 @@
     }
     onPreferredTableConsumed?.();
   }, [preferredTable, resolvedVisibleTables, setActiveTable, onPreferredTableConsumed]);
+  const appointmentScheduleDaySlot = useMemo(() => {
+    if (activeTable !== 'Appointments' || appointmentCalendarView !== 'day' || selectedBarber === 'all') return null;
+    const dateKey = normalizeText(appointmentCalendarDate);
+    const barberName = normalizeText(selectedBarber);
+    if (!dateKey || !barberName) return null;
+    const existing = (tables.Schedules || []).find(
+      (slot) =>
+        normalizeText(slot.Date) === dateKey &&
+        normalizeText(slot.Barber).toLowerCase() === barberName.toLowerCase()
+    );
+    return (
+      existing || {
+        id: `${barberName}-${dateKey}`,
+        Barber: barberName,
+        Date: dateKey,
+        DayOfWeek: formatScheduleDayShort(dateKey, ''),
+        Week: '0',
+      }
+    );
+  }, [activeTable, appointmentCalendarDate, appointmentCalendarView, selectedBarber, tables.Schedules]);
   useEffect(() => {
     if (!restrictStaffBarberFilter) return;
     const fallback =
@@ -496,6 +516,24 @@
       setTables((prev) => ({ ...prev, [tableId]: original }));
     }
   };
+  const handleSaveAppointmentScheduleDay = useCallback(
+    (slot, nextWeek) => {
+      if (!slot) return;
+      const recordId = getRecordId(slot) || `${normalizeText(slot.Barber)}-${normalizeText(slot.Date)}`;
+      handleUpdate(
+        recordId,
+        {
+          Barber: slot.Barber,
+          Date: slot.Date,
+          DayOfWeek: slot.DayOfWeek || formatScheduleDayShort(slot.Date, ''),
+          Week: nextWeek,
+          Time: nextWeek,
+        },
+        { tableId: 'Schedules' }
+      );
+    },
+    [handleUpdate]
+  );
   const handleCreateRecord = async (payload) => {
     const tableId = activeTable;
     setCreateModalOpen(false);
@@ -640,6 +678,8 @@
                   appointmentCalendarDate={activeTable === 'Appointments' ? appointmentCalendarDate : ''}
                   setAppointmentCalendarDate={activeTable === 'Appointments' ? setAppointmentCalendarDate : null}
                   appointmentRows={activeTable === 'Appointments' ? processedRows : []}
+                  appointmentScheduleSlot={activeTable === 'Appointments' ? appointmentScheduleDaySlot : null}
+                  onSaveAppointmentScheduleDay={activeTable === 'Appointments' ? handleSaveAppointmentScheduleDay : null}
                 />
                 {showLoadingIndicator ? (
                   <LoadingState label="Обновляю таблицы..." />
@@ -687,6 +727,7 @@
                             : []
                         }
                         onCreateAppointment={activeTable === 'Appointments' ? onCreateAppointment : null}
+                        selectedBarber={activeTable === 'Appointments' ? selectedBarber : 'all'}
                       />
                     )}
                   </div>

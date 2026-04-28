@@ -931,3 +931,19 @@ body::-webkit-scrollbar-button,
     caret-color: #ffffff;
     transition: background-color 9999s ease-in-out 0s;
 }
+
+.crm-float-reveal {
+    transform-origin: top;
+    animation: crmFloatReveal 0.18s ease-out;
+}
+
+@keyframes crmFloatReveal {
+    0% {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.98);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}

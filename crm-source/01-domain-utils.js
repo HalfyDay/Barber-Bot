@@ -833,9 +833,9 @@ const normalizeUpdateInfo = (payload) => {
 };
 const STATUS_BADGE_MAP = {
   [STATUS_ACTIVE]: 'bg-[color:var(--crm-primary-container)] text-[#eafffb]',
-  [STATUS_DONE]: 'bg-[color:var(--crm-primary-container)] text-[#eafffb]',
+  [STATUS_DONE]: 'bg-[color:var(--crm-surface-4)] text-[var(--crm-text)]',
   [STATUS_CANCELLED]: 'bg-[rgba(127,29,29,0.62)] text-[#fff1f1]',
-  [STATUS_NO_SHOW]: 'bg-[rgba(214,179,106,0.32)] text-[#fffdf8]',
+  [STATUS_NO_SHOW]: 'bg-[color:var(--crm-highlight)] text-[color:var(--crm-primary-on)]',
 };
 const getStatusBadgeClasses = (status) => {
   const normalized = normalizeStatusValue(status);

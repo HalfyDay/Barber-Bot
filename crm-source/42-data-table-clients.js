@@ -19,6 +19,7 @@ const DataTable = ({
   setAppointmentCalendarView,
   appointmentSchedules = [],
   onCreateAppointment,
+  selectedBarber = 'all',
 }) => {
   if (!rows.length) {
     return <p className="text-[var(--crm-muted)]">Нет записей.</p>;
@@ -45,6 +46,7 @@ const DataTable = ({
         calendarDate={appointmentCalendarDate}
         setCalendarDate={setAppointmentCalendarDate}
         setViewMode={setAppointmentCalendarView}
+        selectedBarber={selectedBarber}
       />
     );
   }
@@ -225,8 +227,8 @@ const ClientsList = ({
       return {
         key: 'rare',
         label: 'Редкий',
-        accent: 'text-amber-200',
-        nameClassName: 'text-amber-200',
+        accent: 'text-[color:var(--crm-highlight-text)]',
+        nameClassName: 'text-[color:var(--crm-highlight-text)]',
       };
     }
     return {

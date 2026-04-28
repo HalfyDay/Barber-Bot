@@ -1447,6 +1447,23 @@ const handleBarberFieldChange = (id, field, value) => {
 	      throw error;
 	    }
 	  };
+  const handleQuickCreateClient = useCallback(
+    async (payload) => {
+      const result = await apiRequest('/Users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          Name: payload?.Name || '',
+          Phone: payload?.Phone || '',
+          Barber: payload?.Barber || '',
+          TelegramID: null,
+        }),
+      });
+      fetchAll({ silent: true });
+      return result;
+    },
+    [apiRequest, fetchAll]
+  );
 	  const handleQuickUpdateAppointmentStatus = useCallback(
 	    async (appointment, nextStatus) => {
 	      const id = getRecordId(appointment);
@@ -1828,6 +1845,7 @@ const handleBarberFieldChange = (id, field, value) => {
         serviceCatalog={services}
         canDelete={appointmentModal.allowDelete}
         onDelete={appointmentModal.allowDelete ? handleDeleteAppointment : null}
+        onQuickCreateClient={handleQuickCreateClient}
       />
       <ConfirmDialog {...confirmDialog} onResult={handleConfirmResult} />
     </div>

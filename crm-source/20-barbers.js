@@ -427,7 +427,7 @@
                     </div>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--crm-muted)] sm:text-sm">
                       <span className="px-0 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--crm-primary)]">
-                        <IconStar className="mr-1 inline h-3.5 w-3.5 text-amber-300" /> {ratingLabel}
+                        <IconStar className="mr-1 inline h-3.5 w-3.5 text-[color:var(--crm-highlight)]" /> {ratingLabel}
                       </span>
                       {positionName && (
                         <span className="px-0 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--crm-highlight-text)]">

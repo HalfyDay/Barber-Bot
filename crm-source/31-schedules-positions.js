@@ -27,6 +27,9 @@ const SchedulesView = ({
   scheduleFillDays = 14,
   onScheduleFillDaysChange,
   onScheduleUpdate,
+  requestedDate = '',
+  requestedBarber = '',
+  onRequestHandled,
 }) => {
   const isStaffUser = currentUser?.role === ROLE_STAFF;
   const datePickerInputRef = useRef(null);
@@ -79,6 +82,14 @@ const SchedulesView = ({
   useEffect(() => {
     setBarberFilter(defaultBarberFilter);
   }, [defaultBarberFilter]);
+  useEffect(() => {
+    if (isStaffUser) return;
+    const nextBarber = normalizeText(requestedBarber);
+    if (!nextBarber || nextBarber === 'all') return;
+    if (!barberOptions.some((barber) => normalizeText(barber.name) === nextBarber)) return;
+    if (normalizeText(barberFilter) === nextBarber) return;
+    setBarberFilter(nextBarber);
+  }, [barberFilter, barberOptions, isStaffUser, requestedBarber]);
   const anchorDate = useMemo(
     () => parseInputDate(calendarDate) || startOfLocalDay(new Date()),
     [calendarDate],
@@ -260,6 +271,37 @@ const SchedulesView = ({
   const closeDirectScheduleEditor = useCallback(() => {
     setDirectScheduleEditSlot(null);
   }, []);
+  useEffect(() => {
+    const nextDate = normalizeText(requestedDate);
+    if (!nextDate) return;
+    const targetBarber =
+      !isStaffUser && normalizeText(requestedBarber) && normalizeText(requestedBarber) !== 'all'
+        ? normalizeText(requestedBarber)
+        : '';
+    if (targetBarber && normalizeText(activeBarberFilter) !== targetBarber) return;
+    setCalendarDate(nextDate);
+    if (targetBarber) {
+      setDirectScheduleEditSlot(buildScheduleSheetSlot(nextDate, targetBarber));
+      setScheduleSheetDate('');
+    } else if (singleVisibleBarberMode && visibleBarberNames[0]) {
+      setDirectScheduleEditSlot(buildScheduleSheetSlot(nextDate, visibleBarberNames[0]));
+      setScheduleSheetDate('');
+    } else {
+      setDirectScheduleEditSlot(null);
+      setScheduleSheetDate(nextDate);
+    }
+    onRequestHandled?.();
+  }, [
+    activeBarberFilter,
+    buildScheduleSheetSlot,
+    isStaffUser,
+    onRequestHandled,
+    requestedBarber,
+    requestedDate,
+    setCalendarDate,
+    singleVisibleBarberMode,
+    visibleBarberNames,
+  ]);
   useEffect(() => {
     if (!directScheduleEditSlot) return;
     const nextRange = parseTimeRangeValue(directScheduleEditSlot.Week === '0' ? '' : directScheduleEditSlot.Week || '');

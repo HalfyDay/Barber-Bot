@@ -219,16 +219,16 @@
               />
               <StatCard
                 compact
-                label="На сегодня"
-                value={stats.todaysAppointments ?? 0}
-                accent="text-[color:var(--crm-primary)]"
+                label="Подтверждено за месяц"
+                value={stats.confirmedMonth ?? 0}
+                accent="text-[color:var(--crm-highlight)]"
                 onClick={resolveStatHandler('Appointments')}
               />
               <StatCard
                 compact
-                label="Подтверждено за месяц"
-                value={stats.confirmedMonth ?? 0}
-                accent="text-[color:var(--crm-highlight)]"
+                label="На сегодня"
+                value={stats.todaysAppointments ?? 0}
+                accent="text-rose-300"
                 onClick={resolveStatHandler('Appointments')}
               />
               <StatCard
@@ -1596,7 +1596,7 @@ const FixedRatingSlider = ({ value, onChange, dense = false, disabled = false })
     <div className={classNames(wrapperClass, disabled ? 'opacity-60' : '')}>
       <label className={labelClass} htmlFor={sliderId}>
         <span className="inline-flex items-center gap-1.5">
-          <IconStar className="h-4 w-4 text-amber-300" />
+          <IconStar className="h-4 w-4 text-[color:var(--crm-highlight)]" />
           <span>Рейтинг</span>
         </span>
         <span className="font-semibold text-white">{ratingValue}</span>

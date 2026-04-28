@@ -414,7 +414,7 @@ const CustomSelect = ({
     <div
       ref={menuRef}
       className={classNames(
-        'crm-menu-surface mt-2 max-h-64 space-y-2 overflow-y-auto p-3',
+        'crm-menu-surface crm-float-reveal mt-2 max-h-64 space-y-2 overflow-y-auto p-3',
         portalMenu ? 'z-[220] shadow-2xl' : 'absolute left-0 right-0 z-[140]',
         menuClassName
       )}
@@ -971,7 +971,7 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset, mod
           </svg>
         </button>
         {open && (
-          <div className="crm-menu-surface absolute left-0 z-[70] mt-2 w-full min-w-[196px] space-y-2 p-3">
+          <div className="crm-menu-surface crm-float-reveal absolute left-0 z-[70] mt-2 w-full min-w-[196px] space-y-2 p-3">
             {modeOptions.map((option) => {
               const isActive = option.value === mode;
               return (
@@ -1007,7 +1007,7 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset, mod
       </button>
       {open && (
         <div
-          className="crm-menu-surface absolute left-0 z-[70] mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 p-3"
+          className="crm-menu-surface crm-float-reveal absolute left-0 z-[70] mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-2 p-3"
         >
           {statuses.length === 0 && <p className="text-sm text-[var(--crm-muted)]">Нет статусов</p>}
           {statuses.map((status) => (

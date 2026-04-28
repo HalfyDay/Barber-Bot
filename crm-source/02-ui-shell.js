@@ -144,11 +144,11 @@ const LiveBadge = ({ timestamp, status = 'unknown' }) => {
   const timeLabel = isPhoneViewport ? (mobileTimeVisible ? resolvedTimeLabel : null) : resolvedTimeLabel;
   const badgeToneClass = (() => {
     if (isOffline) return 'bg-rose-500/12 text-rose-100';
-    if (isUpdating) return 'bg-amber-500/14 text-amber-50';
+    if (isUpdating) return 'bg-[color:var(--crm-highlight-soft)] text-[color:var(--crm-highlight-text)]';
     return 'bg-[color:var(--crm-primary-container)] text-[#eafffb]';
   })();
-  const dotToneClass = isOffline ? 'bg-rose-400' : isUpdating ? 'animate-pulse bg-amber-300' : 'animate-pulse bg-[color:var(--crm-primary)]';
-  const timeToneClass = isOffline ? 'text-rose-100/80' : isUpdating ? 'text-amber-100/80' : 'text-[#eafffb]/82';
+  const dotToneClass = isOffline ? 'bg-rose-400' : isUpdating ? 'animate-pulse bg-[color:var(--crm-highlight)]' : 'animate-pulse bg-[color:var(--crm-primary)]';
+  const timeToneClass = isOffline ? 'text-rose-100/80' : isUpdating ? 'text-[color:var(--crm-highlight-text)]/90' : 'text-[#eafffb]/82';
   const handleMobileToggle = () => {
     if (!isPhoneViewport || !resolvedTimeLabel) return;
     setMobileTimeVisible(true);

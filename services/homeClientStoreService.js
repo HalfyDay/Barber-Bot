@@ -633,10 +633,21 @@ const createHomeClientStoreService = ({
     };
   };
 
+  const sanitizeManualWarning = (warning = {}) => ({
+    id: normalizeText(warning.id) || randomUUID(),
+    createdAt: toIsoString(warning.createdAt) || new Date().toISOString(),
+    title: normalizeText(warning.title) || "Предупреждение",
+    description: normalizeText(warning.description) || "",
+    actorName: normalizeText(warning.actorName) || "",
+  });
+
   const sanitizeUserMeta = (input = {}) => {
     const gender = normalizeText(input.gender).toLowerCase();
     const transactions = Array.isArray(input.transactions)
       ? input.transactions.map(sanitizeTransaction)
+      : [];
+    const manualWarnings = Array.isArray(input.manualWarnings)
+      ? input.manualWarnings.map(sanitizeManualWarning).filter((warning) => warning.id)
       : [];
     const bookingNotificationsEnabled =
       input.bookingNotificationsEnabled === undefined ? true : Boolean(input.bookingNotificationsEnabled);
@@ -655,6 +666,7 @@ const createHomeClientStoreService = ({
       privacyConsentSource: normalizeText(input.privacyConsentSource) || "",
       privacyConsentVersion: normalizeText(input.privacyConsentVersion) || "",
       transactions,
+      manualWarnings,
     };
   };
 
@@ -847,6 +859,19 @@ const createHomeClientStoreService = ({
   };
 
   const countNoShowWarnings = (appointments = []) => buildNotices(appointments).length;
+  const buildManualNotices = (userMeta = {}) =>
+    (Array.isArray(userMeta.manualWarnings) ? userMeta.manualWarnings : [])
+      .map(sanitizeManualWarning)
+      .map((warning) => ({
+        id: warning.id,
+        createdAt: warning.createdAt,
+        title: warning.title,
+        description: warning.actorName
+          ? `${warning.description} (${warning.actorName})`.trim()
+          : warning.description,
+        manual: true,
+      }))
+      .sort((left, right) => normalizeText(right.createdAt).localeCompare(normalizeText(left.createdAt)));
 
   const buildUserInsightsMap = async (users = [], appointments = [], blockedUsers = new Set()) => {
     const store = await readStore();
@@ -858,7 +883,7 @@ const createHomeClientStoreService = ({
       const completedAppointments = relatedAppointments
         .filter((appointment) => appointment?.isConfirmed || isCompletedStatus(appointment?.Status))
         .sort((left, right) => (right?.sortKey || 0) - (left?.sortKey || 0));
-      const warningCount = countNoShowWarnings(relatedAppointments);
+      const warningCount = countNoShowWarnings(relatedAppointments) + buildManualNotices(meta).length;
       const manualBlocked = blockedUsers.has(user.id);
       const isBlocked = manualBlocked || warningCount >= warningBlockThreshold;
       const lastCompleted = resolveLastCompletedAppointment(completedAppointments);
@@ -1399,6 +1424,27 @@ const createHomeClientStoreService = ({
     };
   };
 
+  const addUserWarning = async ({ userId, comment = "", actorName = "" } = {}) => {
+    const safeUserId = normalizeText(userId);
+    const safeComment = normalizeText(comment);
+    if (!safeUserId) throw new Error("USER_REQUIRED");
+    if (!safeComment) throw new Error("COMMENT_REQUIRED");
+    const store = await readStore();
+    const userMeta = ensureUserMeta(store, safeUserId);
+    const warning = sanitizeManualWarning({
+      description: safeComment,
+      actorName,
+    });
+    userMeta.manualWarnings = [warning, ...(Array.isArray(userMeta.manualWarnings) ? userMeta.manualWarnings : [])];
+    store.users[safeUserId] = sanitizeUserMeta(userMeta);
+    await writeStore(store);
+    return {
+      success: true,
+      warning,
+      warnings: userMeta.manualWarnings.length,
+    };
+  };
+
   const buildHomeAppPayload = async (userId) => {
     const safeUserId = normalizeText(userId);
     if (!safeUserId) return null;
@@ -1413,16 +1459,24 @@ const createHomeClientStoreService = ({
     const appointments = appointmentsRaw.map(mapAppointment);
     const relatedAppointments = collectUserAppointments(user, appointments);
     const completedAppointments = relatedAppointments
-      .filter((appointment) => appointment?.isConfirmed || isCompletedStatus(appointment?.Status))
+      .filter(
+        (appointment) =>
+          appointment?.isConfirmed ||
+          isCompletedStatus(appointment?.Status) ||
+          normalizeText(appointment?.Status) === "no_show",
+      )
       .sort((left, right) => (right?.sortKey || 0) - (left?.sortKey || 0));
     const activeAppointments = relatedAppointments
       .filter((appointment) => appointment?.isActive)
       .sort((left, right) => (left?.sortKey || 0) - (right?.sortKey || 0));
-    const warningCount = countNoShowWarnings(relatedAppointments);
-    const notices = buildNotices(relatedAppointments);
     const manualBlocked = blockedUsers.has(user.id);
-    const isBlocked = manualBlocked || warningCount >= warningBlockThreshold;
     const userMeta = ensureUserMeta(store, user.id);
+    const manualNotices = buildManualNotices(userMeta);
+    const warningCount = countNoShowWarnings(relatedAppointments) + manualNotices.length;
+    const notices = [...buildNotices(relatedAppointments), ...manualNotices].sort((left, right) =>
+      normalizeText(right.createdAt).localeCompare(normalizeText(left.createdAt)),
+    );
+    const isBlocked = manualBlocked || warningCount >= warningBlockThreshold;
     const { barberLookup, serviceLookup, barbers, services } = await buildCatalogHelpers();
     const bookingBarbers = await buildBookableBarbersPayload(barbers, services);
     const visitHistory = completedAppointments.map((appointment) => {
@@ -1544,6 +1598,7 @@ const createHomeClientStoreService = ({
     resolveBsTransferRecipient,
     transferBsBalance,
     adjustUserBsBalance,
+    addUserWarning,
     applyBsToBookingAppointment,
     refundBsForCancelledAppointment,
     buildHomeAppPayload,

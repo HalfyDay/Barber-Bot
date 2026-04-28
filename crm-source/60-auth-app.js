@@ -575,6 +575,19 @@ const apiRequest = useCallback(
     },
     [apiRequest, fetchAll]
   );
+  const handleAddClientWarning = useCallback(
+    async (clientId, payload) => {
+      if (!clientId) throw new Error('Не выбран клиент');
+      const result = await apiRequest(`/users/${encodeURIComponent(clientId)}/warnings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {}),
+      });
+      fetchAll({ silent: true });
+      return result;
+    },
+    [apiRequest, fetchAll]
+  );
   useEffect(() => {
     if (session?.token) {
       fetchAllRef.current?.();
@@ -1651,6 +1664,7 @@ const handleBarberFieldChange = (id, field, value) => {
             onRequestConfirm={requestConfirm}
             onBlockClient={handleBlockClient}
             onAdjustClientBs={handleAdjustClientBs}
+            onAddClientWarning={handleAddClientWarning}
             uploadAvatar={handleUploadAvatar}
             uploadCard={handleUploadCard}
             deleteAvatar={handleDeleteAvatar}

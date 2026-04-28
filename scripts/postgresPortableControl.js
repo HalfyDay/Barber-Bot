@@ -65,6 +65,72 @@ const runPgIsReady = (config) =>
     encoding: "utf8",
   });
 
+const runPowerShellJson = (script) => {
+  const result = spawnSync(
+    "powershell",
+    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+    {
+      stdio: "pipe",
+      encoding: "utf8",
+      shell: false,
+    },
+  );
+  if (result.status !== 0) {
+    return [];
+  }
+  const stdout = String(result.stdout || "").trim();
+  if (!stdout) return [];
+  try {
+    const parsed = JSON.parse(stdout);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return [];
+  }
+};
+
+const escapePowerShellString = (value) => String(value || "").replace(/'/g, "''");
+
+const listPortablePostgresProcesses = (config) => {
+  if (process.platform !== "win32") return [];
+
+  const escapedRoot = escapePowerShellString(normalizePath(config.postgresRoot || config.portableHome));
+  const script = [
+    `$root = '${escapedRoot}'`,
+    `Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |`,
+    `Where-Object {`,
+    `  $_.Name -in @('postgres.exe', 'pg_ctl.exe') -and`,
+    `  $_.CommandLine -and`,
+    `  $_.CommandLine.ToLower().Replace('\\\\','/') -like "*$root*"` ,
+    `} |`,
+    `Select-Object ProcessId, Name, CommandLine |`,
+    `ConvertTo-Json -Compress`,
+  ].join(" ");
+
+  return runPowerShellJson(script)
+    .map((entry) => ({
+      pid: Number(entry.ProcessId),
+      name: String(entry.Name || ""),
+      commandLine: String(entry.CommandLine || ""),
+    }))
+    .filter((entry) => Number.isInteger(entry.pid) && entry.pid > 0);
+};
+
+const cleanupPortablePostgresProcesses = (config) => {
+  const processes = listPortablePostgresProcesses(config);
+  if (processes.length === 0) {
+    return { cleaned: false, count: 0, processes: [] };
+  }
+
+  for (const entry of processes) {
+    spawnSync("taskkill", ["/PID", String(entry.pid), "/T", "/F"], {
+      stdio: "ignore",
+      shell: false,
+    });
+  }
+
+  return { cleaned: true, count: processes.length, processes };
+};
+
 const parsePostmasterPid = (dataDir) => {
   const pidFile = `${dataDir}\\postmaster.pid`;
   if (!fs.existsSync(pidFile)) return null;
@@ -155,6 +221,22 @@ const runPgCtl = (config, action) => {
     if (cleanup.cleaned) {
       console.log(`[postgres-portable] Removed stale lock file: ${cleanup.pidFile}`);
     }
+    const readyResult = runPgIsReady(config);
+    if (readyResult.status !== 0) {
+      const processCleanup = cleanupPortablePostgresProcesses(config);
+      if (processCleanup.cleaned) {
+        console.log(
+          `[postgres-portable] Stopped lingering PostgreSQL processes: ${processCleanup.processes
+            .map((entry) => entry.pid)
+            .join(", ")}`,
+        );
+      }
+    }
+    fs.mkdirSync(config.logsDir, { recursive: true });
+    try {
+      fs.rmSync(config.logFile, { force: true });
+    } catch {}
+    fs.closeSync(fs.openSync(config.logFile, "a"));
   }
   if (action === "stop") {
     const readyResult = runPgIsReady(config);
@@ -167,19 +249,33 @@ const runPgCtl = (config, action) => {
       return;
     }
   }
-  const result = spawnSync(
-    config.pgCtlPath,
-    buildPgCtlArgs({
-      action,
-      dataDir: config.dataDir,
-      logFile: config.logFile,
-      port: config.port,
-    }),
-    {
-      stdio: "inherit",
-      shell: false,
-    },
-  );
+  const pgCtlArgs = buildPgCtlArgs({
+    action,
+    dataDir: config.dataDir,
+    logFile: config.logFile,
+    port: config.port,
+  });
+  let result = spawnSync(config.pgCtlPath, pgCtlArgs, {
+    stdio: "inherit",
+    shell: false,
+  });
+  if (action === "start" && result.status !== 0) {
+    const logOutput = fs.existsSync(config.logFile) ? fs.readFileSync(config.logFile, "utf8") : "";
+    if (/pre-existing shared memory block is still in use/i.test(logOutput)) {
+      const processCleanup = cleanupPortablePostgresProcesses(config);
+      if (processCleanup.cleaned) {
+        console.log(
+          `[postgres-portable] Retrying start after stopping lingering PostgreSQL processes: ${processCleanup.processes
+            .map((entry) => entry.pid)
+            .join(", ")}`,
+        );
+        result = spawnSync(config.pgCtlPath, pgCtlArgs, {
+          stdio: "inherit",
+          shell: false,
+        });
+      }
+    }
+  }
   if (result.status !== 0) {
     if (action === "stop") {
       const readyResult = runPgIsReady(config);
@@ -220,8 +316,10 @@ if (require.main === module) {
 }
 
 module.exports = {
+  cleanupPortablePostgresProcesses,
   cleanupStalePidIfNeeded,
   describePgIsReadyStatus,
+  listPortablePostgresProcesses,
   normalizePath,
   parsePostmasterPid,
   parseCliArgs,

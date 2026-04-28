@@ -165,9 +165,11 @@ const ClientsList = ({
   fetchHistory,
   onRequestConfirm,
   onBlockClient,
+  onAddWarning,
 }) => {
   const [showArchivedClients, setShowArchivedClients] = useState(false);
   const [bsPanelOpen, setBsPanelOpen] = useState(false);
+  const [warningPanelOpen, setWarningPanelOpen] = useState(false);
   const [modalState, setModalState] = useState({
     open: false,
     record: null,
@@ -180,6 +182,9 @@ const ClientsList = ({
     bsInput: '',
     bsComment: '',
     bsError: '',
+    warningComment: '',
+    warningBusy: false,
+    warningError: '',
   });
   const barberOptions = useMemo(() => (Array.isArray(barbers) ? barbers.filter(Boolean) : []), [barbers]);
   const getClientLastVisitDate = useCallback((client) => {
@@ -259,6 +264,9 @@ const ClientsList = ({
       bsInput: '',
       bsComment: '',
       bsError: '',
+      warningComment: '',
+      warningBusy: false,
+      warningError: '',
     });
     try {
       if (fetchHistory && client.Name) {
@@ -290,6 +298,9 @@ const ClientsList = ({
       bsInput: '',
       bsComment: '',
       bsError: '',
+      warningComment: '',
+      warningBusy: false,
+      warningError: '',
     });
   const warningCount = Number(modalState.record?.warningCount ?? 0);
   const manualBlocked = Boolean(modalState.record?.manualBlocked);
@@ -305,6 +316,7 @@ const ClientsList = ({
   useEffect(() => {
     if (!modalState.open) {
       setBsPanelOpen(false);
+      setWarningPanelOpen(false);
     }
   }, [modalState.open]);
   const currentBsBalance = Math.max(0, Math.trunc(Number(modalState.record?.bsBalance) || 0));
@@ -334,7 +346,7 @@ const ClientsList = ({
     };
     if (hasBsDraft) {
       if (Number.isNaN(normalizedBsAmount)) {
-        setModalState((prev) => ({ ...prev, bsError: 'Введите целое число. Например: 120, +15 или -10.' }));
+        setModalState((prev) => ({ ...prev, bsError: 'Введите целое число. Например: 120 или 15.' }));
         return;
       }
       if (modalState.bsMode === 'set' && normalizedBsAmount < 0) {
@@ -386,6 +398,56 @@ const ClientsList = ({
         ...prev,
         blockBusy: false,
         error: error.message || 'Не удалось изменить блокировку клиента',
+      }));
+    }
+  };
+  const handleWarningCommentChange = (value) => {
+    setModalState((prev) => ({ ...prev, warningComment: value, warningError: '' }));
+  };
+  const handleAddWarning = async () => {
+    const comment = String(modalState.warningComment || '').trim();
+    if (!modalState.record?.id || typeof onAddWarning !== 'function') return;
+    if (!comment) {
+      setModalState((prev) => ({ ...prev, warningError: 'Введите комментарий к предупреждению.' }));
+      return;
+    }
+    setModalState((prev) => ({ ...prev, warningBusy: true, warningError: '' }));
+    try {
+      const result = await onAddWarning(modalState.record.id, { comment });
+      setModalState((prev) => ({
+        ...prev,
+        warningBusy: false,
+        warningComment: '',
+        record: {
+          ...prev.record,
+          warningCount: Number(prev.record?.warningCount || 0) + 1,
+          noticeCount: Number(prev.record?.noticeCount || 0) + 1,
+        },
+      }));
+      if (result?.warning) {
+        setModalState((prev) => ({
+          ...prev,
+          history: [
+            {
+              id: result.warning.id,
+              Date: result.warning.createdAt,
+              Time: '',
+              Status: 'warning',
+              Barber: 'Предупреждение',
+              Services: result.warning.description || comment,
+              startDate: new Date(result.warning.createdAt),
+              dateLabel: formatDateTime(result.warning.createdAt, ''),
+              orderNumber: prev.history.length + 1,
+            },
+            ...prev.history,
+          ],
+        }));
+      }
+    } catch (error) {
+      setModalState((prev) => ({
+        ...prev,
+        warningBusy: false,
+        warningError: error.message || 'Не удалось добавить предупреждение.',
       }));
     }
   };
@@ -567,34 +629,72 @@ const ClientsList = ({
           <p className="text-[var(--crm-muted)]">Выберите клиента.</p>
         ) : (
           <div className="space-y-4">
-            <div className="crm-inline-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold text-white">
-                  Предупреждения: {warningCount}{isBlocked ? ' (Заблокирован)' : ''}
-                </p>
-                {modalState.error && <p className="text-xs text-rose-300">{modalState.error}</p>}
+            <div className="crm-inline-panel px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setWarningPanelOpen((prev) => !prev)}
+                className="flex w-full items-center justify-between gap-3 text-left"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-white">
+                    Предупреждения: {warningCount}{isBlocked ? ' (Заблокирован)' : ''}
+                  </p>
+                  {modalState.error && <p className="text-xs text-rose-300">{modalState.error}</p>}
+                </div>
+                <div className="flex items-center gap-2">
+                  {isBlocked && <span className="rounded-full bg-[color:var(--crm-highlight-soft)] px-3 py-1 text-xs font-semibold text-[color:var(--crm-highlight-text)]">Заблокирован</span>}
+                  <svg className={classNames('h-4 w-4 text-[var(--crm-muted)] transition-transform', warningPanelOpen && 'rotate-180')} viewBox="0 0 20 20" fill="none">
+                    <path d="M5 7.5l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+              </button>
+              <div className={classNames('crm-sheet-disclosure', warningPanelOpen && 'crm-sheet-disclosure-open')}>
+                <div className="crm-sheet-disclosure-inner">
+                  <div className="grid gap-2 pt-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                  <label className="space-y-1 text-sm text-slate-300">
+                    Комментарий
+                    <input
+                      value={modalState.warningComment}
+                      onChange={(event) => handleWarningCommentChange(event.target.value)}
+                      placeholder="Например, грубое опоздание или нарушение правил"
+                      className="h-10 w-full px-3 text-white"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddWarning}
+                    disabled={modalState.warningBusy || !onAddWarning}
+                    className={classNames(
+                      'crm-action-btn h-10 min-h-0 px-4 text-sm',
+                      (modalState.warningBusy || !onAddWarning) && 'cursor-not-allowed opacity-60'
+                    )}
+                  >
+                    Добавить
+                  </button>
+                  {modalState.warningError && <p className="text-sm text-rose-300 sm:col-span-2">{modalState.warningError}</p>}
+                  </div>
+                </div>
               </div>
-              {isBlocked && <span className="rounded-full bg-[color:var(--crm-highlight-soft)] px-3 py-1 text-xs font-semibold text-[color:var(--crm-highlight-text)]">Заблокирован</span>}
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="space-y-1 text-sm text-slate-300">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="col-span-2 space-y-1 text-sm text-slate-300 md:col-span-1">
                 Имя
                 <input
                   name="clientName"
                   aria-label="Имя клиента"
                   value={modalState.record.Name || ''}
                   onChange={(event) => handleFieldChange('Name', event.target.value)}
-                  className="w-full px-3 py-2 text-white"
+                  className="h-10 w-full px-3 text-white"
                 />
               </label>
-              <label className="space-y-1 text-sm text-slate-300">
+              <label className="col-span-2 space-y-1 text-sm text-slate-300 md:col-span-1">
                 Телефон
                 <input
                   name="clientPhone"
                   aria-label="Телефон клиента"
                   value={modalState.record.Phone || ''}
                   onChange={(event) => handleFieldChange('Phone', event.target.value)}
-                  className="w-full px-3 py-2 text-white"
+                  className="h-10 w-full px-3 text-white"
                 />
               </label>
               <label className="space-y-1 text-sm text-slate-300">
@@ -604,26 +704,25 @@ const ClientsList = ({
                   aria-label="Telegram ID"
                   value={modalState.record.TelegramID || ''}
                   onChange={(event) => handleFieldChange('TelegramID', event.target.value)}
-                  className="w-full px-3 py-2 text-white"
+                  className="h-10 w-full px-3 text-white"
                 />
               </label>
               <label className="space-y-1 text-sm text-slate-300">
                 {"Любимый барбер"}
-                <select
+                <CustomSelect
                   value={modalState.record.Barber || ''}
-                  onChange={(event) => handleFieldChange('Barber', event.target.value)}
-                  className="w-full px-3 py-2 text-white"
-                >
-                  <option value="">{"Не выбран"}</option>
-                  {barberOptions.map((barber) => (
-                    <option key={barber} value={barber}>
-                      {barber}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => handleFieldChange('Barber', value)}
+                  buttonClassName="!h-10 min-h-0 px-3"
+                  portalMenu
+                  placeholder="Не выбран"
+                  options={[
+                    { value: '', label: 'Не выбран' },
+                    ...barberOptions.map((barber) => ({ value: barber, label: barber })),
+                  ]}
+                />
               </label>
             </div>
-            <div className="crm-soft-card space-y-2 p-3">
+            <div className="crm-soft-card p-3">
               <button
                 type="button"
                 onClick={() => setBsPanelOpen((prev) => !prev)}
@@ -642,30 +741,37 @@ const ClientsList = ({
                   </svg>
                 </div>
               </button>
-              {bsPanelOpen && (
-                <div className="space-y-3 pt-1">
-                  <div className="grid gap-2 sm:grid-cols-2">
+              <div className={classNames('crm-sheet-disclosure', bsPanelOpen && 'crm-sheet-disclosure-open')}>
+                <div className="crm-sheet-disclosure-inner">
+                  <div className="space-y-3 pt-1">
+                  <div className="grid grid-cols-2 gap-2">
                     <label className="space-y-1 text-sm text-slate-300">
                       {"Режим"}
-                      <select
+                      <CustomSelect
                         value={modalState.bsMode}
-                        onChange={(event) => handleBsFieldChange('bsMode', event.target.value)}
-                        className="w-full px-3 py-2 text-white"
-                      >
-                        <option value="add">{"Прибавить"}</option>
-                        <option value="subtract">{"Списать"}</option>
-                        <option value="set">{"Установить вручную"}</option>
-                      </select>
+                        onChange={(value) => handleBsFieldChange('bsMode', value)}
+                        buttonClassName="!h-10 min-h-0 px-3"
+                        portalMenu
+                        options={[
+                          { value: 'add', label: 'Прибавить' },
+                          { value: 'subtract', label: 'Списать' },
+                          { value: 'set', label: 'Установить вручную' },
+                        ]}
+                      />
                     </label>
                     <label className="space-y-1 text-sm text-slate-300">
-                      {modalState.bsMode === 'set' ? "Новый баланс" : "Сумма изменения"}
+                      {modalState.bsMode === 'set'
+                        ? "Новый баланс"
+                        : modalState.bsMode === 'subtract'
+                          ? "Сумма списания"
+                          : "Сумма начисления"}
                       <input
                         name="clientBs"
                         aria-label={"Баланс BS"}
                         value={modalState.bsInput}
                         onChange={(event) => handleBsFieldChange('bsInput', event.target.value)}
                         placeholder={modalState.bsMode === 'set' ? "Например, 120" : "Например, 15"}
-                        className="w-full px-3 py-2 text-white"
+                        className="h-10 w-full px-3 text-white"
                       />
                     </label>
                   </div>
@@ -681,12 +787,13 @@ const ClientsList = ({
                       value={modalState.bsComment}
                       onChange={(event) => handleBsFieldChange('bsComment', event.target.value)}
                       placeholder={"Например, ручная корректировка или списание за услугу"}
-                      className="w-full px-3 py-2 text-white"
+                      className="h-10 w-full px-3 text-white"
                     />
                   </label>
                   {modalState.bsError && <p className="text-sm text-rose-300">{modalState.bsError}</p>}
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
             <div className="space-y-2">
               <p className="text-sm text-[var(--crm-muted)]">История визитов</p>

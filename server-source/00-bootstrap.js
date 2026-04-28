@@ -158,10 +158,8 @@ const POST_RESTART_HEALTHCHECK_URL = (process.env.POST_RESTART_HEALTHCHECK_URL |
   .toString()
   .trim();
 const BOT_MENU_PATH = path.join(__dirname, "data", "bot-menu.json");
-const DEFAULT_BOT_DESCRIPTION =
-  "РўРµРєСЃС‚ РІ Р“Р»Р°РІРЅРѕРј РјРµРЅСЋ";
-const DEFAULT_ABOUT_TEXT =
-  "РўРµРєСЃС‚ РІ Р±Р»РѕРєРµ В«Рћ РЅР°СЃВ»";
+const DEFAULT_BOT_DESCRIPTION = "Текст в Главном меню";
+const DEFAULT_ABOUT_TEXT = "Текст в блоке «О нас»";
 const IMAGE_DIR = path.join(__dirname, "Image");
 const CARD_IMAGE_DIR = path.join(IMAGE_DIR, "tgbot");
 const MENU_IMAGE_DIR = path.join(IMAGE_DIR, "menu_bots");
@@ -231,7 +229,7 @@ const CREATOR_ACCOUNT = CREATOR_ACCOUNT_ENABLED
       enabled: true,
       phone: (process.env.CREATOR_PHONE || "").toString().trim(),
       password: (process.env.CREATOR_PASSWORD || "").toString().trim(),
-      name: (process.env.CREATOR_NAME || "РЎРѕР·РґР°С‚РµР»СЊ").toString().trim() || "РЎРѕР·РґР°С‚РµР»СЊ",
+      name: (process.env.CREATOR_NAME || "Создатель").toString().trim() || "Создатель",
       username: (process.env.CREATOR_LOGIN || "creator").toString().trim() || "creator",
     }
   : null;

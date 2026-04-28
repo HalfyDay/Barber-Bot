@@ -37,6 +37,7 @@
   loadAvatarOptions,
   onBlockClient,
   onAdjustClientBs,
+  onAddClientWarning,
   dataTables = DEFAULT_DATA_TABLES,
   visibleTableOrder = DEFAULT_VISIBLE_TABLE_ORDER,
   role = ROLE_OWNER,
@@ -654,6 +655,7 @@
                         fetchHistory={fetchClientProfile}
                         onRequestConfirm={onRequestConfirm}
                         onBlockClient={onBlockClient}
+                        onAddWarning={onAddClientWarning}
                       />
                     ) : (
                       <DataTable

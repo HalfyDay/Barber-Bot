@@ -449,6 +449,7 @@ registerAdminCrudRoutes({
   respondWithLegacyCrudBlock,
   buildUserInsightsMap,
   adjustUserBsBalance,
+  addUserWarning,
 });
 app.get("/api/options/appointments", authenticateToken, async (req, res) => {
   try {

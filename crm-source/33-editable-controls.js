@@ -354,10 +354,12 @@ const CustomSelect = ({
   buttonClassName = '',
   menuClassName = '',
   optionClassName = '',
+  portalMenu = false,
 }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-  useOutsideClick(ref, open ? () => setOpen(false) : null);
+  const menuRef = useRef(null);
+  const [menuStyle, setMenuStyle] = useState(null);
   const normalizedOptions = useMemo(
     () =>
       (Array.isArray(options) ? options : []).map((option) =>
@@ -367,11 +369,95 @@ const CustomSelect = ({
       ),
     [options]
   );
+  useEffect(() => {
+    if (!open) return undefined;
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (ref.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown, true);
+    document.addEventListener('touchstart', handlePointerDown, true);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown, true);
+      document.removeEventListener('touchstart', handlePointerDown, true);
+    };
+  }, [open]);
+  useLayoutEffect(() => {
+    if (!open || !portalMenu || typeof window === 'undefined') return undefined;
+    const updatePosition = () => {
+      const rect = ref.current?.getBoundingClientRect();
+      if (!rect) return;
+      setMenuStyle({
+        position: 'fixed',
+        top: rect.bottom + 8,
+        left: rect.left,
+        width: rect.width,
+        maxWidth: 'calc(100vw - 2rem)',
+      });
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [open, portalMenu, normalizedOptions.length]);
   const selectedOption = normalizedOptions.find((option) => String(option.value ?? '') === String(value ?? '')) || null;
   const handleSelect = (nextValue) => {
     onChange?.(nextValue);
     setOpen(false);
   };
+  const menuContent = (
+    <div
+      ref={menuRef}
+      className={classNames(
+        'crm-menu-surface mt-2 max-h-64 space-y-2 overflow-y-auto p-3',
+        portalMenu ? 'z-[220] shadow-2xl' : 'absolute left-0 right-0 z-[140]',
+        menuClassName
+      )}
+      style={
+        portalMenu
+          ? {
+              ...menuStyle,
+              '--crm-surface-4': '#171818',
+              '--crm-surface-5': '#1c1d1d',
+              '--crm-text': '#e6e8e7',
+              '--crm-muted': '#b7bebc',
+              '--crm-primary-container': '#103b39',
+              background: 'color-mix(in srgb, #171818 96%, rgba(12, 15, 15, 0.98))',
+              borderRadius: '26px',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.018), 0 18px 40px rgba(0, 0, 0, 0.28)',
+            }
+          : undefined
+      }
+    >
+      {normalizedOptions.length === 0 ? (
+        <p className="px-3 py-2 text-sm text-[var(--crm-muted)]">Нет вариантов</p>
+      ) : (
+        normalizedOptions.map((option) => {
+          const isActive = String(option.value ?? '') === String(value ?? '');
+          return (
+            <button
+              type="button"
+              key={String(option.value)}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => handleSelect(option.value)}
+              className={classNames(
+                'crm-soft-panel flex min-h-[40px] w-full items-center justify-between gap-4 rounded-2xl px-4 py-2.5 text-left text-sm leading-5 text-[var(--crm-text)]',
+                isActive && 'bg-[color:var(--crm-primary-container)] text-[#eafffb]',
+                optionClassName
+              )}
+            >
+              <span className="min-w-0 truncate">{option.label}</span>
+            </button>
+          );
+        })
+      )}
+    </div>
+  );
   return (
     <div ref={ref} className={classNames('relative z-[120] w-full', className)}>
       <button
@@ -389,32 +475,7 @@ const CustomSelect = ({
           <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
-      {open && (
-        <div className={classNames('crm-menu-surface absolute left-0 right-0 z-[140] mt-2 max-h-64 space-y-2 overflow-y-auto p-3', menuClassName)}>
-          {normalizedOptions.length === 0 ? (
-            <p className="px-3 py-2 text-sm text-[var(--crm-muted)]">Нет вариантов</p>
-          ) : (
-            normalizedOptions.map((option) => {
-              const isActive = String(option.value ?? '') === String(value ?? '');
-              return (
-                <button
-                  type="button"
-                  key={String(option.value)}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleSelect(option.value)}
-                  className={classNames(
-                    'crm-soft-panel flex min-h-[52px] w-full items-center justify-between gap-4 rounded-2xl px-4 py-3 text-left text-sm leading-6 text-[var(--crm-text)]',
-                    isActive && 'bg-[color:var(--crm-primary-container)] text-[#eafffb]',
-                    optionClassName
-                  )}
-                >
-                  <span className="min-w-0 truncate">{option.label}</span>
-                </button>
-              );
-            })
-          )}
-        </div>
-      )}
+      {open && (portalMenu ? menuStyle && createPortal(menuContent, document.body) : menuContent)}
     </div>
   );
 };

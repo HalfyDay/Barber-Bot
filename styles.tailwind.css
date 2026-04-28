@@ -477,6 +477,47 @@
       0 18px 40px rgba(0, 0, 0, 0.28);
   }
 
+  .crm-sheet-expand {
+    animation: crmSheetExpand 180ms ease-out both;
+    transform-origin: top;
+  }
+
+  .crm-sheet-disclosure {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    margin-top: 0;
+    padding-top: 0;
+    transition:
+      max-height 240ms ease,
+      opacity 220ms ease,
+      margin-top 220ms ease,
+      padding-top 220ms ease;
+  }
+
+  .crm-sheet-disclosure-open {
+    max-height: 28rem;
+    opacity: 1;
+    pointer-events: auto;
+    margin-top: 0.5rem;
+  }
+
+  .crm-sheet-disclosure-inner {
+    min-height: 0;
+  }
+
+  @keyframes crmSheetExpand {
+    from {
+      opacity: 0;
+      transform: translateY(-6px) scaleY(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scaleY(1);
+    }
+  }
+
   .crm-inline-panel {
     border-radius: 24px;
     background: color-mix(in srgb, var(--crm-surface-4) 94%, rgba(15, 18, 18, 0.98));

@@ -183,6 +183,7 @@ const {
   buildReferralPayload,
   resolveBsTransferRecipient,
   adjustUserBsBalance,
+  addUserWarning,
   transferBsBalance,
   applyBsToBookingAppointment,
   refundBsForCancelledAppointment,

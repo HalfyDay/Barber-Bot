@@ -48,7 +48,8 @@ const resolvePortableConfig = ({
     env.POSTGRES_PORTABLE_DATA_DIR || pathImpl.join(portableHome, "data-smoke"),
   );
   const port = Number(env.POSTGRES_PORTABLE_PORT || DEFAULT_PORTABLE_PORT);
-  const logFile = pathImpl.join(dataDir, "server.log");
+  const logsDir = pathImpl.join(portableHome, "logs");
+  const logFile = pathImpl.join(logsDir, `${pathImpl.basename(dataDir)}.log`);
   const binDir = postgresRoot ? pathImpl.join(postgresRoot, "bin") : null;
   const pgCtlPath = binDir ? pathImpl.join(binDir, getExecutableName("pg_ctl", platform)) : null;
   const pgIsReadyPath = binDir
@@ -60,6 +61,7 @@ const resolvePortableConfig = ({
     postgresRoot,
     dataDir,
     port,
+    logsDir,
     logFile,
     binDir,
     pgCtlPath,

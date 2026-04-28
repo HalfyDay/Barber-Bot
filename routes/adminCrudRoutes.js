@@ -27,6 +27,7 @@ const registerAdminCrudRoutes = ({
   respondWithLegacyCrudBlock,
   buildUserInsightsMap,
   adjustUserBsBalance,
+  addUserWarning,
 }) => {
   const buildScheduleBoard = async (requestedWindowDays = 14) => {
     const barbersList = await getBarbers({ includeInactive: true });
@@ -545,6 +546,38 @@ const registerAdminCrudRoutes = ({
       }
       console.error("BS adjust error:", error);
       return res.status(500).json({ error: "Не удалось изменить баланс BS." });
+    }
+  });
+
+  app.post("/api/users/:id/warnings", authenticateToken, async (req, res) => {
+    if (typeof addUserWarning !== "function") {
+      return res.status(501).json({ error: "Warnings are unavailable." });
+    }
+    if (isStaffIdentity(req.identity)) {
+      return res.status(403).json({ error: "Недостаточно прав для добавления предупреждения." });
+    }
+    const actorName =
+      normalizeText(req.identity?.displayName) ||
+      normalizeText(req.identity?.name) ||
+      normalizeText(req.identity?.login) ||
+      "";
+    try {
+      const result = await addUserWarning({
+        userId: req.params.id,
+        comment: req.body?.comment,
+        actorName,
+      });
+      requestRealtimePush(true);
+      return res.json(result);
+    } catch (error) {
+      if (error?.message === "USER_REQUIRED") {
+        return res.status(400).json({ error: "Не выбран клиент." });
+      }
+      if (error?.message === "COMMENT_REQUIRED") {
+        return res.status(400).json({ error: "Введите комментарий к предупреждению." });
+      }
+      console.error("Warning add error:", error);
+      return res.status(500).json({ error: "Не удалось добавить предупреждение." });
     }
   });
 

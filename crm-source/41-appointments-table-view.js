@@ -356,6 +356,7 @@ const AppointmentsCalendarView = ({
   calendarDate = '',
   setCalendarDate,
   setViewMode,
+  todayJumpSignal = 0,
   selectedBarber = 'all',
 }) => {
   const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
@@ -452,7 +453,7 @@ const AppointmentsCalendarView = ({
           compact ? 'px-2 py-2' : 'p-3'
         )}
       >
-        <p className={classNames('font-semibold text-[#f4fffd]', compact ? 'text-[11px]' : 'text-base')}>{slot.Time || 'Свободное окно'}</p>
+        <p className={classNames('font-semibold text-[#f4fffd]', compact ? 'text-[13px]' : 'text-lg')}>{slot.Time || 'Свободное окно'}</p>
         {showBarber && slot.Barber && <p className={classNames('mt-1 text-[#c7f8f2]', compact ? 'text-[10px]' : 'text-xs')}>{slot.Barber}</p>}
       </button>
     ),
@@ -619,6 +620,16 @@ const AppointmentsCalendarView = ({
     });
     return () => cancelAnimationFrame(frameId);
   }, [calendarDate, safeViewMode, safeScaleMode, scrollCalendarToToday]);
+  useEffect(() => {
+    if (!todayJumpSignal) return;
+    if (safeViewMode !== 'week') return;
+    todayScrollPendingRef.current = true;
+    const frameId = requestAnimationFrame(() => {
+      scrollCalendarToToday();
+      todayScrollPendingRef.current = false;
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [todayJumpSignal, safeViewMode, scrollCalendarToToday]);
   useEffect(() => {
     if (!isMobileViewport) {
       setShowStickyDateRow(true);

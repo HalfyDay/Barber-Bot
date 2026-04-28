@@ -959,19 +959,19 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset, mod
   if (compactAppointments && typeof onModeChange === 'function') {
     const activeOption = modeOptions.find((option) => option.value === mode) || modeOptions[0];
     return (
-      <div ref={ref} className="relative z-40 w-full sm:w-auto">
+      <div ref={ref} className="relative z-40 min-w-0 w-full sm:w-auto">
         <button
           type="button"
           onClick={() => setOpen((prev) => !prev)}
-          className="crm-soft-panel flex h-11 w-full min-w-[168px] items-center justify-between gap-3 px-5 text-left text-sm text-white transition hover:bg-[color:var(--crm-surface-5)] focus:outline-none sm:w-auto"
+          className="crm-soft-panel flex h-11 min-w-0 w-full items-center justify-between gap-2 px-4 text-left text-sm text-white transition hover:bg-[color:var(--crm-surface-5)] focus:outline-none sm:min-w-[168px] sm:gap-3 sm:px-5 sm:w-auto"
         >
-          <span className="min-w-0 whitespace-nowrap">{activeOption.label}</span>
+          <span className="min-w-0 truncate">{activeOption.label}</span>
           <svg className={classNames('h-4 w-4 shrink-0 text-white/85 transition-transform', open ? 'rotate-180' : 'rotate-0')} viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
         {open && (
-          <div className="crm-menu-surface crm-float-reveal absolute left-0 z-[70] mt-2 w-full min-w-[196px] space-y-2 p-3">
+          <div className="crm-menu-surface crm-float-reveal absolute left-0 z-[70] mt-2 min-w-0 w-full sm:min-w-[196px] space-y-2 p-3">
             {modeOptions.map((option) => {
               const isActive = option.value === mode;
               return (
@@ -988,7 +988,7 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset, mod
                     isActive && 'bg-[color:var(--crm-primary-container)] text-[#eafffb]'
                   )}
                 >
-                  <span className="min-w-0 whitespace-nowrap">{option.label}</span>
+                  <span className="min-w-0 truncate">{option.label}</span>
                 </button>
               );
             })}

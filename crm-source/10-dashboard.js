@@ -5,6 +5,7 @@
   onCreateAppointment,
   onNavigateTable,
   onQuickUpdateStatus,
+  onDeleteAppointment,
   availableTables = [],
   currentUser = null,
   currentBarber = null,
@@ -168,19 +169,35 @@
     </button>
   ) : null;
   const handleStatNavigate = useCallback(
-    (preferredTable) => {
-      if (typeof onNavigateTable !== 'function' || !preferredTable) return;
+    (target) => {
+      if (typeof onNavigateTable !== 'function' || !target) return;
       const allowedTables = Array.isArray(availableTables) ? availableTables.filter(Boolean) : [];
+      const preferredTable = typeof target === 'string' ? target : target.tableId;
+      if (!preferredTable) return;
       if (allowedTables.length && !allowedTables.includes(preferredTable)) {
         onNavigateTable(allowedTables[0]);
         return;
       }
-      onNavigateTable(preferredTable);
+      onNavigateTable(target);
     },
     [onNavigateTable, availableTables]
   );
   const resolveStatHandler = (tableId) =>
     typeof onNavigateTable === 'function' ? () => handleStatNavigate(tableId) : undefined;
+  const getDashboardStatusDotClass = useCallback((status) => {
+    switch (normalizeStatusValue(status)) {
+      case STATUS_ACTIVE:
+        return 'bg-[color:var(--crm-primary)]';
+      case STATUS_DONE:
+        return 'bg-[color:var(--crm-muted)]';
+      case STATUS_CANCELLED:
+        return 'bg-[#8d3535]';
+      case STATUS_NO_SHOW:
+        return 'bg-[color:var(--crm-highlight)]';
+      default:
+        return 'bg-[var(--crm-muted)]';
+    }
+  }, []);
   return (
     <div className="space-y-6 overflow-x-hidden">
       <div className="crm-section-card p-3 sm:p-4">
@@ -222,7 +239,16 @@
                 label="Подтверждено за месяц"
                 value={stats.confirmedMonth ?? 0}
                 accent="text-[color:var(--crm-highlight)]"
-                onClick={resolveStatHandler('Appointments')}
+                onClick={
+                  typeof onNavigateTable === 'function'
+                    ? () =>
+                        handleStatNavigate({
+                          tableId: 'Appointments',
+                          calendarView: 'month',
+                          appointmentStatusMode: 'past',
+                        })
+                    : undefined
+                }
               />
               <StatCard
                 compact
@@ -263,26 +289,31 @@
                       onClick: () => onOpenAppointment?.(appt, { allowDelete: true }),
                       onKeyDown: (event) => event.key === 'Enter' && onOpenAppointment?.(appt, { allowDelete: true }),
                       className: classNames(
-                        'group upcoming-card crm-soft-card relative w-full cursor-pointer overflow-hidden p-4 text-left transition hover:-translate-y-0.5 hover:border-[color:var(--crm-primary)]/70 focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)] sm:p-5',
-                        inProgress && 'border-[color:var(--crm-primary)]/80 shadow-[0_0_25px_rgba(0,191,175,0.22)]'
+                        'group upcoming-card crm-soft-card relative w-full cursor-pointer overflow-hidden p-3.5 text-left transition hover:-translate-y-0.5 hover:border-[color:var(--crm-primary)]/70 focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)] sm:p-4',
+                        inProgress && 'border-[color:var(--crm-primary)]/80 !bg-[color:var(--crm-primary-container)] shadow-[0_0_25px_rgba(0,191,175,0.18)] hover:!bg-[color:var(--crm-primary-container)]'
                       ),
                     };
                     const { start, end } = parseTimeRangeParts(appt.Time);
                     const statusLabel = normalizeStatusValue(appt.Status);
                     const servicesList = parseMultiValue(appt.Services);
+                    const apptId = String(
+                      getRecordId(appt) || `${group.key || appt.Date || 'no-date'}-${appt.Time || 'no-time'}-${appt.CustomerName || 'no-name'}`
+                    );
+                    const isPending = pendingStatusId === apptId;
                     return (
                       <div key={appt.id || `${group.key}-${appt.CustomerName}-${appt.Time}`} {...cardProps}>
-                        <div className="flex flex-wrap items-end justify-between gap-4 border-b crm-table-divider pb-4">
-                          <div className="space-y-2">
+                        <span className={classNames('absolute right-4 top-4 h-2.5 w-2.5 rounded-full sm:hidden', getDashboardStatusDotClass(statusLabel))} />
+                        <div className="flex flex-wrap items-start justify-between gap-2.5">
+                          <div className="space-y-1.5 pr-4 sm:pr-0">
                             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--crm-muted)]">
                               {formatDateBadgeLabel(appt.Date)}
                             </p>
-                            <div className="flex items-baseline gap-3">
-                              <p className="text-3xl font-bold leading-none text-white sm:text-4xl">{start || '—'}</p>
+                            <div className="flex items-baseline gap-2.5">
+                              <p className="text-[2rem] font-bold leading-none text-white sm:text-[2.35rem]">{start || '—'}</p>
                               {end && <p className="text-sm text-[var(--crm-muted)] sm:text-base">до {end}</p>}
                             </div>
                           </div>
-                          <div className="flex flex-col items-end gap-2 text-right">
+                          <div className="hidden flex-col items-end gap-2 text-right sm:flex">
                             <span
                               className={classNames(
                                 'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide sm:text-xs',
@@ -291,37 +322,100 @@
                             >
                               {statusLabel || 'Без статуса'}
                             </span>
-                            {appt.Barber && (
-                              <p className="text-xs text-[var(--crm-muted)] sm:text-sm">
-                                Барбер:{' '}
-                                <span className="font-semibold text-white">{appt.Barber}</span>
-                              </p>
-                            )}
                           </div>
                         </div>
-                        <div className="mt-4 space-y-4 text-[13px] text-[var(--crm-text)] sm:text-sm">
-                          <div className="space-y-3 min-w-0">
-                            {appt.CustomerName ? (
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  onOpenProfile?.(appt.CustomerName);
-                                }}
-                                className="text-left text-base font-semibold text-white hover:text-[color:var(--crm-primary)] sm:text-lg"
-                              >
-                                {appt.CustomerName}
-                              </button>
-                            ) : (
-                              <p className="text-base font-semibold text-white sm:text-lg">Без имени</p>
-                            )}
+                        <div className="mt-3 space-y-3 text-[13px] text-[var(--crm-text)] sm:mt-3.5 sm:space-y-3.5 sm:text-sm">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="space-y-2 min-w-0">
+                              {appt.CustomerName ? (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    onOpenProfile?.(appt.CustomerName);
+                                  }}
+                                  className="text-left text-[1.05rem] font-semibold leading-tight text-white hover:text-[color:var(--crm-primary)] sm:text-[1.15rem]"
+                                >
+                                  {appt.CustomerName}
+                                </button>
+                              ) : (
+                                <p className="text-[1.05rem] font-semibold leading-tight text-white sm:text-[1.15rem]">Без имени</p>
+                              )}
+                              {appt.Barber ? (
+                                <p className="text-[13px] leading-tight text-[var(--crm-muted)] sm:text-sm">
+                                  <span className="font-semibold text-white">{appt.Barber}</span>
+                                </p>
+                              ) : null}
+                              {inProgress && servicesList.length ? (
+                                <div className="flex flex-wrap gap-1.5 sm:hidden">
+                                  {servicesList.map((service, index) => (
+                                    <span
+                                      key={`${service}-${index}`}
+                                      className="rounded-full border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-2.5 py-0.5 text-[10px] text-[var(--crm-text)]"
+                                    >
+                                      {service}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                            {inProgress ? (
+                              <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 sm:flex sm:w-auto sm:flex-nowrap sm:items-center sm:justify-end sm:gap-2.5">
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    handleStatusShortcut(appt, STATUS_DONE);
+                                  }}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                  disabled={isPending}
+                                  className={classNames(
+                                    'crm-action-btn w-full justify-center px-3.5 py-2.5 text-sm sm:w-auto sm:min-w-[112px] sm:px-4 sm:py-2 sm:text-sm',
+                                    isPending && 'cursor-wait opacity-70'
+                                  )}
+                                >
+                                  {isPending ? 'Сохраняю...' : 'Выполнена'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    handleStatusShortcut(appt, STATUS_NO_SHOW);
+                                  }}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                  disabled={isPending}
+                                  className={classNames(
+                                    'crm-tonal-btn w-full justify-center px-3.5 py-2.5 text-sm text-rose-200 sm:w-auto sm:min-w-[112px] sm:px-4 sm:py-2 sm:text-sm',
+                                    isPending && 'cursor-wait opacity-70'
+                                  )}
+                                >
+                                  {isPending ? 'Сохраняю...' : 'Неявка'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    onDeleteAppointment?.(appt);
+                                  }}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                  className="crm-ghost-btn inline-flex h-[46px] w-[46px] min-h-0 items-center justify-center rounded-full p-0 text-rose-200 transition hover:bg-[rgba(96,34,46,0.74)] hover:text-white focus:outline-none focus:ring-0 focus-visible:ring-0 sm:h-[42px] sm:w-[42px]"
+                                  aria-label="Удалить запись"
+                                  title="Удалить запись"
+                                >
+                                  <IconTrash className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
                           {servicesList.length ? (
-                            <div className="flex flex-wrap gap-2">
+                            <div className={classNames('flex flex-wrap gap-1.5', inProgress && 'hidden sm:flex')}>
                               {servicesList.map((service, index) => (
                                 <span
                                   key={`${service}-${index}`}
-                                className="rounded-full border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-3 py-1 text-[11px] text-[var(--crm-text)] sm:text-xs"
+                                className="rounded-full border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-2.5 py-0.5 text-[10px] text-[var(--crm-text)] sm:px-3 sm:py-1 sm:text-[11px]"
                               >
                                 {service}
                               </span>
@@ -361,16 +455,17 @@
                   tabIndex={0}
                   onClick={handleOpen}
                   onKeyDown={(event) => event.key === 'Enter' && handleOpen()}
-                  className="crm-soft-card rounded-[24px] bg-[rgba(78,28,38,0.6)] p-4 transition hover:-translate-y-0.5 hover:bg-[rgba(96,34,46,0.74)] focus:outline-none focus:ring-2 focus:ring-[rgba(132,48,64,0.22)]"
+                  className="crm-soft-card relative rounded-[24px] bg-[rgba(78,28,38,0.6)] p-4 transition hover:-translate-y-0.5 hover:bg-[rgba(96,34,46,0.74)] focus:outline-none focus:ring-2 focus:ring-[rgba(132,48,64,0.22)]"
                 >
+                  <span className={classNames('absolute right-4 top-4 h-2.5 w-2.5 rounded-full sm:hidden', getDashboardStatusDotClass(statusLabel))} />
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
+                    <div className="space-y-1 pr-4 sm:pr-0">
                       <p className="text-[11px] uppercase tracking-[0.25em] text-[#f0c8ce]/80">{formatDateBadgeLabel(appt.Date)}</p>
                       <p className="text-xl font-semibold text-white sm:text-2xl">{timeLabel || 'Время не указано'}</p>
                     </div>
                     <span
                       className={classNames(
-                        'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide sm:text-xs',
+                        'hidden items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide sm:inline-flex sm:text-xs',
                         getStatusBadgeClasses(statusLabel)
                       )}
                     >
@@ -382,12 +477,12 @@
                       <p className="text-base font-semibold text-white">{appt.CustomerName || 'Без имени'}</p>
                       {appt.Barber ? (
                       <p className="text-sm text-[var(--crm-text)]">
-                          Барбер: <span className="font-semibold text-white">{appt.Barber}</span>
+                          <span className="font-semibold text-white">{appt.Barber}</span>
                         </p>
                       ) : null}
                     </div>
-                    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-nowrap sm:items-center sm:justify-end sm:gap-3">
-	                      <button
+                    <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 sm:flex sm:w-auto sm:flex-nowrap sm:items-center sm:justify-end sm:gap-3">
+                      <button
 	                        type="button"
 	                        onClick={(event) => {
 	                          event.preventDefault();
@@ -418,6 +513,20 @@
 	                        )}
                       >
                         {isPending ? 'Сохраняю...' : 'Неявка'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onDeleteAppointment?.(appt);
+                        }}
+                        onKeyDown={(event) => event.stopPropagation()}
+                        className="crm-ghost-btn inline-flex h-[46px] w-[46px] min-h-0 items-center justify-center rounded-full p-0 text-rose-200 transition hover:bg-[rgba(96,34,46,0.74)] hover:text-white focus:outline-none focus:ring-0 focus-visible:ring-0 sm:h-[42px] sm:w-[42px]"
+                        aria-label="Удалить запись"
+                        title="Удалить запись"
+                      >
+                        <IconTrash className="h-4 w-4" />
                       </button>
                     </div>
                   </div>

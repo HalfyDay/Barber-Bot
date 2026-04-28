@@ -32,6 +32,7 @@
   setAppointmentCalendarScale,
   appointmentCalendarDate = '',
   setAppointmentCalendarDate,
+  onAppointmentTodayJump,
   appointmentRows = [],
   appointmentScheduleSlot = null,
   onSaveAppointmentScheduleDay,
@@ -208,8 +209,9 @@
     setAppointmentCalendarDate?.(getLocalISODateString(nextDate));
   }, [appointmentAnchorDate, safeAppointmentView, setAppointmentCalendarDate]);
   const jumpAppointmentCalendarToToday = useCallback(() => {
+    onAppointmentTodayJump?.();
     setAppointmentCalendarDate?.(appointmentTodayKey);
-  }, [appointmentTodayKey, setAppointmentCalendarDate]);
+  }, [appointmentTodayKey, onAppointmentTodayJump, setAppointmentCalendarDate]);
   const currentScheduleDayRange = useMemo(
     () => parseTimeRangeValue(appointmentScheduleSlot?.Week === '0' ? '' : appointmentScheduleSlot?.Week || ''),
     [appointmentScheduleSlot]
@@ -279,7 +281,7 @@
     );
     if (mobile) {
       return (
-        <div className="w-full space-y-2">
+        <div className="w-full">
           <button
             type="button"
             onClick={() => setScheduleDayEditorOpen((prev) => !prev)}
@@ -295,62 +297,6 @@
               <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <div
-            className={classNames(
-              'grid transition-[grid-template-rows,opacity,transform] duration-200 ease-out',
-              scheduleDayEditorOpen ? 'grid-rows-[1fr] opacity-100 translate-y-0' : 'grid-rows-[0fr] opacity-0 -translate-y-1 pointer-events-none'
-            )}
-          >
-            <div className="min-h-0 overflow-hidden">
-              <div className="w-full space-y-2 pt-2">
-              <div className="flex w-full items-center gap-2">
-                <input
-                  name="appointmentScheduleDayStartMobile"
-                  aria-label="Начало смены"
-                  type="time"
-                  step="60"
-                  value={scheduleDayPristine.start ? '00:00' : scheduleDayDraft.start || '00:00'}
-                  onChange={(event) => {
-                    const nextStart = normalizeTimeInputValue(event.target.value);
-                    setScheduleDayDraft((prev) => ({ ...prev, start: nextStart }));
-                    setScheduleDayPristine((prev) => ({ ...prev, start: !nextStart }));
-                  }}
-                  className={inputClassName}
-                />
-                <span className="shrink-0 text-sm font-semibold text-[var(--crm-muted)]">-</span>
-                <input
-                  name="appointmentScheduleDayEndMobile"
-                  aria-label="Окончание смены"
-                  type="time"
-                  step="60"
-                  value={scheduleDayPristine.end ? '00:00' : scheduleDayDraft.end || '00:00'}
-                  onChange={(event) => {
-                    const nextEnd = normalizeTimeInputValue(event.target.value);
-                    setScheduleDayDraft((prev) => ({ ...prev, end: nextEnd }));
-                    setScheduleDayPristine((prev) => ({ ...prev, end: !nextEnd }));
-                  }}
-                  className={inputClassName}
-                />
-              </div>
-              <div className="flex w-full min-w-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={saveScheduleDayDraft}
-                  className="crm-action-btn inline-flex h-11 min-h-0 min-w-0 flex-1 items-center justify-center rounded-full px-3 text-sm"
-                >
-                  OK
-                </button>
-                <button
-                  type="button"
-                  onClick={clearScheduleDayDraft}
-                  className="crm-ghost-btn inline-flex h-11 min-h-0 min-w-0 flex-1 items-center justify-center rounded-full px-3 text-sm text-[var(--crm-muted)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white focus:outline-none focus:ring-0 focus-visible:ring-0"
-                >
-                  Выходной
-                </button>
-              </div>
-            </div>
-            </div>
-          </div>
         </div>
       );
     }
@@ -564,10 +510,80 @@
                   {supportsStatusFilter ? <div className="min-w-0">{renderStatusControl()}</div> : <div />}
                 </div>
               ) : null}
-              <div className="grid grid-cols-1 gap-2">
-                {calendarViewControl}
-                {canEditScheduleDay ? <div className="grid grid-cols-1 gap-2">{renderScheduleDayEditor(true)}</div> : null}
-              </div>
+              {canEditScheduleDay ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 items-start gap-2">
+                    <div className="min-w-0">{renderScheduleDayEditor(true)}</div>
+                    <div className="min-w-0">{calendarViewControl}</div>
+                  </div>
+                  <div
+                    className={classNames(
+                      'grid transition-[grid-template-rows,opacity,transform] duration-200 ease-out',
+                      scheduleDayEditorOpen ? 'grid-rows-[1fr] opacity-100 translate-y-0' : 'grid-rows-[0fr] opacity-0 -translate-y-1 pointer-events-none'
+                    )}
+                  >
+                    <div className="min-h-0 overflow-hidden">
+                      <div className="w-full pt-2">
+                        <div className="w-full space-y-2">
+                            <div className="flex w-full min-w-0 items-center gap-2">
+                              <input
+                                name="appointmentScheduleDayStartMobileExpanded"
+                                aria-label="Начало смены"
+                                type="time"
+                                step="60"
+                                value={scheduleDayPristine.start ? '00:00' : scheduleDayDraft.start || '00:00'}
+                                onChange={(event) => {
+                                  const nextStart = normalizeTimeInputValue(event.target.value);
+                                  setScheduleDayDraft((prev) => ({ ...prev, start: nextStart }));
+                                  setScheduleDayPristine((prev) => ({ ...prev, start: !nextStart }));
+                                }}
+                                className={classNames(
+                                  'crm-inline-panel h-11 min-h-0 min-w-0 flex-1 rounded-full px-3 text-center text-sm font-semibold text-white focus:outline-none focus:ring-0 focus-visible:ring-0'
+                                )}
+                              />
+                              <span className="shrink-0 text-sm font-semibold text-[var(--crm-muted)]">-</span>
+                              <input
+                                name="appointmentScheduleDayEndMobileExpanded"
+                                aria-label="Окончание смены"
+                                type="time"
+                                step="60"
+                                value={scheduleDayPristine.end ? '00:00' : scheduleDayDraft.end || '00:00'}
+                                onChange={(event) => {
+                                  const nextEnd = normalizeTimeInputValue(event.target.value);
+                                  setScheduleDayDraft((prev) => ({ ...prev, end: nextEnd }));
+                                  setScheduleDayPristine((prev) => ({ ...prev, end: !nextEnd }));
+                                }}
+                                className={classNames(
+                                  'crm-inline-panel h-11 min-h-0 min-w-0 flex-1 rounded-full px-3 text-center text-sm font-semibold text-white focus:outline-none focus:ring-0 focus-visible:ring-0'
+                                )}
+                              />
+                            </div>
+                            <div className="grid w-full min-w-0 grid-cols-2 gap-2">
+                              <button
+                                type="button"
+                                onClick={saveScheduleDayDraft}
+                                className="crm-action-btn inline-flex h-10 min-h-0 min-w-0 w-full items-center justify-center rounded-full px-2 text-xs font-semibold sm:h-11 sm:px-3 sm:text-sm"
+                              >
+                                OK
+                              </button>
+                              <button
+                                type="button"
+                                onClick={clearScheduleDayDraft}
+                                className="crm-ghost-btn inline-flex h-10 min-h-0 min-w-0 w-full items-center justify-center rounded-full px-2 text-xs font-semibold text-[var(--crm-muted)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white focus:outline-none focus:ring-0 focus-visible:ring-0 sm:h-11 sm:px-3 sm:text-sm"
+                              >
+                                Выходной
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2">
+                  {calendarViewControl}
+                </div>
+              )}
             </div>
           </div>
         </div>

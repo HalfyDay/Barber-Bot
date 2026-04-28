@@ -780,7 +780,7 @@ const AppointmentModal = ({
               <div
                 key={`desktop-${notice.key}`}
                 className={classNames(
-                  'flex items-start justify-between gap-3 rounded-[18px] px-4 py-3 text-sm shadow-2xl',
+                  'crm-sheet-notice-pop flex items-start justify-between gap-3 rounded-[18px] px-4 py-3 text-sm shadow-2xl',
                   notice.tone === 'error'
                     ? 'bg-rose-500/95 text-white'
                     : 'bg-[color:var(--crm-highlight)] text-[color:var(--crm-primary-on)]'
@@ -803,7 +803,7 @@ const AppointmentModal = ({
               <div
                 key={`mobile-${notice.key}`}
                 className={classNames(
-                  'pointer-events-auto flex items-start justify-between gap-3 rounded-[18px] px-4 py-3 text-sm shadow-2xl',
+                  'crm-sheet-notice-pop pointer-events-auto flex items-start justify-between gap-3 rounded-[18px] px-4 py-3 text-sm shadow-2xl',
                   notice.tone === 'error'
                     ? 'bg-rose-500/95 text-white'
                     : 'bg-[color:var(--crm-highlight)] text-[color:var(--crm-primary-on)]'
@@ -935,7 +935,7 @@ const AppointmentModal = ({
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
           </svg>
         </button>
-        <div className={classNames('overflow-hidden transition-all duration-200', detailsOpen ? 'max-h-64 border-t crm-table-divider' : 'max-h-0')}>
+        <div className={classNames('overflow-hidden transition-all duration-200', detailsOpen ? 'max-h-64' : 'max-h-0')}>
           <dl className="px-4 py-2 text-sm text-slate-300">
             {recordDetails.map((item) => (
               <div key={item.key} className="flex items-center justify-between gap-3 py-2">

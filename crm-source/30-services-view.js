@@ -15,6 +15,8 @@
   const [dragState, setDragState] = useState(null);
   const serviceItemRefs = useRef(new Map());
   const dragMetaRef = useRef(null);
+  const layoutRectsRef = useRef(new Map());
+  const suppressOpenUntilRef = useRef(0);
   const isStaffMode = role === ROLE_STAFF;
   const canManageCatalog = !isStaffMode;
   const sortedServices = useMemo(() => sortServicesByOrder(services), [services]);
@@ -73,6 +75,7 @@
       setDragOrderIds([]);
       return;
     }
+    suppressOpenUntilRef.current = Date.now() + 260;
     const finalIds = dragOrderIds.length ? dragOrderIds : meta.sourceIds;
     setDragOrderIds([]);
     if (!shouldSave || !Array.isArray(finalIds) || !finalIds.length) return;
@@ -123,6 +126,31 @@
       window.removeEventListener('pointercancel', handlePointerCancel);
     };
   }, [buildReorderedIds, dragOrderIds, dragState, finishDrag]);
+  useLayoutEffect(() => {
+    const nextRects = new Map();
+    visibleServices.forEach((service) => {
+      const node = serviceItemRefs.current.get(service.id);
+      if (!node) return;
+      const nextRect = node.getBoundingClientRect();
+      nextRects.set(service.id, nextRect);
+      const prevRect = layoutRectsRef.current.get(service.id);
+      if (!prevRect) return;
+      const deltaX = prevRect.left - nextRect.left;
+      const deltaY = prevRect.top - nextRect.top;
+      if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
+      node.animate(
+        [
+          { transform: `translate(${deltaX}px, ${deltaY}px)` },
+          { transform: 'translate(0, 0)' },
+        ],
+        {
+          duration: 220,
+          easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        }
+      );
+    });
+    layoutRectsRef.current = nextRects;
+  }, [visibleServices]);
   const handleReorderPointerDown = useCallback((event, serviceId) => {
     if (!canManageCatalog || reorderBusy) return;
     event.preventDefault();
@@ -242,19 +270,23 @@
                   }}
                   role="button"
                   tabIndex={0}
-                  onClick={() => openEditor('edit', service.id)}
+                  onClick={() => {
+                    if (Date.now() < suppressOpenUntilRef.current) return;
+                    openEditor('edit', service.id);
+                  }}
                   onKeyDown={(event) => {
+                    if (Date.now() < suppressOpenUntilRef.current) return;
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
                       openEditor('edit', service.id);
                     }
                   }}
                   className={classNames(
-                    'group crm-soft-card grid w-full grid-cols-[auto,minmax(0,1fr)] items-start gap-3 px-4 py-3 text-left transition duration-200 focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)] sm:grid-cols-[auto,minmax(0,1fr),auto] sm:items-center',
+                    'group crm-soft-card crm-reorder-item grid w-full grid-cols-[auto,minmax(0,1fr)] items-start gap-3 px-4 py-3 text-left transition duration-200 focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)] sm:grid-cols-[auto,minmax(0,1fr),auto] sm:items-center',
                     isActiveService
                       ? 'hover:bg-[color:var(--crm-surface-4)]'
                       : 'opacity-80 hover:bg-[color:var(--crm-highlight-soft)]/40',
-                    isDragging && 'bg-[color:var(--crm-surface-4)] shadow-[0_18px_40px_rgba(4,7,21,0.24)]'
+                    isDragging && 'crm-reorder-dragging bg-[color:var(--crm-surface-4)] shadow-[0_18px_40px_rgba(4,7,21,0.24)]'
                   )}
                 >
                   {canManageCatalog ? (
@@ -309,14 +341,6 @@
                     </div>
                   </div>
                   <div className="col-start-2 flex flex-wrap items-center justify-start gap-2 pt-1 sm:col-start-auto sm:justify-end sm:pt-0">
-                    <span
-                      className={classNames(
-                        'rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em]',
-                        isActiveService ? 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]' : 'bg-[color:var(--crm-surface-3)] text-[var(--crm-muted)]'
-                      )}
-                    >
-                      {isActiveService ? 'Активна' : 'Скрыта'}
-                    </span>
                     <span className="rounded-full bg-[color:var(--crm-surface-3)] px-2.5 py-1 text-[11px] font-semibold text-[var(--crm-text)]">
                       {service.duration ? `${service.duration} мин` : '—'}
                     </span>

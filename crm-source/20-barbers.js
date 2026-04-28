@@ -19,6 +19,8 @@
   const [dragState, setDragState] = useState(null);
   const barberItemRefs = useRef(new Map());
   const dragMetaRef = useRef(null);
+  const layoutRectsRef = useRef(new Map());
+  const suppressOpenUntilRef = useRef(0);
   const canManageBarbers = role !== ROLE_STAFF;
   const sortedBarbers = useMemo(() => sortServicesByOrder(barbers), [barbers]);
   const visibleBarbers = useMemo(() => {
@@ -99,22 +101,34 @@
   useEffect(() => {
     setShowPassword(false);
   }, [editorState.open, editorState.mode, editorState.targetId]);
-  const buildReorderedIds = useCallback((sourceIds, activeId, clientY) => {
+  const buildReorderedIds = useCallback((sourceIds, activeId, clientX, clientY) => {
     const idleIds = sourceIds.filter((id) => id !== activeId);
-    let targetIndex = idleIds.length;
+    let targetIndex = -1;
+    let insertAfter = false;
     for (let index = 0; index < idleIds.length; index += 1) {
       const currentId = idleIds[index];
       const element = barberItemRefs.current.get(currentId);
       if (!element) continue;
       const rect = element.getBoundingClientRect();
-      const middle = rect.top + rect.height / 2;
-      if (clientY < middle) {
+      const insetX = Math.min(18, rect.width * 0.18);
+      const insetY = Math.min(18, rect.height * 0.18);
+      const containsPointer =
+        clientX >= rect.left + insetX &&
+        clientX <= rect.right - insetX &&
+        clientY >= rect.top + insetY &&
+        clientY <= rect.bottom - insetY;
+      if (containsPointer) {
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const horizontalDominant = Math.abs(clientX - centerX) > Math.abs(clientY - centerY);
+        insertAfter = horizontalDominant ? clientX >= centerX : clientY >= centerY;
         targetIndex = index;
         break;
       }
     }
+    if (targetIndex === -1) return sourceIds;
     const nextIds = [...idleIds];
-    nextIds.splice(targetIndex, 0, activeId);
+    nextIds.splice(targetIndex + (insertAfter ? 1 : 0), 0, activeId);
     return nextIds;
   }, []);
   const finishDrag = useCallback(async (shouldSave = true) => {
@@ -125,6 +139,7 @@
       setDragOrderIds([]);
       return;
     }
+    suppressOpenUntilRef.current = Date.now() + 260;
     const finalIds = dragOrderIds.length ? dragOrderIds : meta.sourceIds;
     setDragOrderIds([]);
     if (!shouldSave || !Array.isArray(finalIds) || !finalIds.length) return;
@@ -153,7 +168,7 @@
         event.preventDefault();
       }
       const baseIds = dragMetaRef.current?.started && dragOrderIds.length ? dragOrderIds : meta.sourceIds;
-      const nextIds = buildReorderedIds(baseIds, meta.activeId, event.clientY);
+      const nextIds = buildReorderedIds(baseIds, meta.activeId, event.clientX, event.clientY);
       setDragOrderIds((prev) => {
         const prevIds = prev.length ? prev : meta.sourceIds;
         const unchanged = prevIds.length === nextIds.length && prevIds.every((id, index) => id === nextIds[index]);
@@ -175,6 +190,31 @@
       window.removeEventListener('pointercancel', handlePointerCancel);
     };
   }, [buildReorderedIds, dragOrderIds, dragState, finishDrag]);
+  useLayoutEffect(() => {
+    const nextRects = new Map();
+    visibleBarbers.forEach((barber) => {
+      const node = barberItemRefs.current.get(barber.id);
+      if (!node) return;
+      const nextRect = node.getBoundingClientRect();
+      nextRects.set(barber.id, nextRect);
+      const prevRect = layoutRectsRef.current.get(barber.id);
+      if (!prevRect) return;
+      const deltaX = prevRect.left - nextRect.left;
+      const deltaY = prevRect.top - nextRect.top;
+      if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
+      node.animate(
+        [
+          { transform: `translate(${deltaX}px, ${deltaY}px)` },
+          { transform: 'translate(0, 0)' },
+        ],
+        {
+          duration: 220,
+          easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        }
+      );
+    });
+    layoutRectsRef.current = nextRects;
+  }, [visibleBarbers]);
   const handleReorderPointerDown = useCallback((event, barberId) => {
     if (!canManageBarbers || reorderBusy) return;
     event.preventDefault();
@@ -353,16 +393,20 @@
                   }}
                   role="button"
                   tabIndex={0}
-                  onClick={() => openEditor('edit', barber.id)}
+                  onClick={() => {
+                    if (Date.now() < suppressOpenUntilRef.current) return;
+                    openEditor('edit', barber.id);
+                  }}
                   onKeyDown={(event) => {
+                    if (Date.now() < suppressOpenUntilRef.current) return;
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
                       openEditor('edit', barber.id);
                     }
                   }}
-                  className={classNames(
-                    'group crm-soft-card flex w-full items-center gap-4 p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)]',
-                    isDragging && 'bg-[color:var(--crm-surface-4)] shadow-[0_18px_40px_rgba(4,7,21,0.24)]'
+                    className={classNames(
+                    'group crm-soft-card crm-reorder-item flex w-full items-center gap-4 p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)]',
+                    isDragging && 'crm-reorder-dragging bg-[color:var(--crm-surface-4)] shadow-[0_18px_40px_rgba(4,7,21,0.24)]'
                   )}
                 >
                   {canManageBarbers ? (

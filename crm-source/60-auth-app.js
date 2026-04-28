@@ -295,10 +295,12 @@ const App = () => {
     });
   }, [barbers, session?.barberId, session?.barberName, setSession, rememberSession]);
   const handleSidebarTableChange = useCallback(
-    (tableId) => {
+    (target) => {
+      if (!target) return;
+      const tableId = typeof target === 'string' ? target : target.tableId;
       if (!tableId) return;
       setActiveDataTable(tableId);
-      setPendingTableView(tableId);
+      setPendingTableView(target);
       setActiveTab('tables');
     },
     [setActiveTab, setPendingTableView]
@@ -1618,6 +1620,11 @@ const handleBarberFieldChange = (id, field, value) => {
     isMobile &&
     activeTab === 'tables' &&
     (activeDataTable === 'Appointments' || activeDataTable === 'Users');
+  const loadingShellStyle = {
+    minHeight: '100vh',
+    background:
+      'linear-gradient(180deg, #0d1010 0%, #111515 38%, #151919 100%)',
+  };
   const mainClassName = classNames(
     'flex-1 min-w-0 w-full overflow-visible md:overflow-x-hidden',
     isMobileFlatTablePage
@@ -1626,7 +1633,13 @@ const handleBarberFieldChange = (id, field, value) => {
     isMobile && !isMobileFlatTablePage ? 'pb-24' : ''
   );
   const renderActive = () => {
-    if (loading) return <LoadingState />;
+    if (loading) {
+      return (
+        <div className="crm-app-shell flex min-h-screen items-center justify-center text-[var(--crm-text)]" style={loadingShellStyle}>
+          <LoadingState />
+        </div>
+      );
+    }
     switch (activeTab) {
       case 'dashboard':
         return (
@@ -1637,6 +1650,7 @@ const handleBarberFieldChange = (id, field, value) => {
             onCreateAppointment={handleCreateAppointment}
             onNavigateTable={handleSidebarTableChange}
             onQuickUpdateStatus={handleQuickUpdateAppointmentStatus}
+            onDeleteAppointment={handleDeleteAppointment}
             availableTables={visibleTableOrder}
             currentUser={session || null}
             currentBarber={currentBarber}
@@ -1756,6 +1770,7 @@ const handleBarberFieldChange = (id, field, value) => {
             onCreateAppointment={handleCreateAppointment}
             onNavigateTable={handleSidebarTableChange}
             onQuickUpdateStatus={handleQuickUpdateAppointmentStatus}
+            onDeleteAppointment={handleDeleteAppointment}
             availableTables={visibleTableOrder}
             currentUser={session || null}
             currentBarber={currentBarber}

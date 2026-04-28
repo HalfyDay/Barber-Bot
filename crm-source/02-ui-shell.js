@@ -374,7 +374,17 @@ const UI_TEXT = Object.freeze({
   newAppointmentCta: 'Новая запись',
   liveFallback: 'LIVE',
 });
-const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-w-3xl' }) => {
+const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-w-3xl', sheetOnMobile = true }) => {
+  const [shouldRender, setShouldRender] = useState(isOpen);
+  useEffect(() => {
+    if (isOpen) {
+      setShouldRender(true);
+      return undefined;
+    }
+    if (!shouldRender) return undefined;
+    const timer = setTimeout(() => setShouldRender(false), 220);
+    return () => clearTimeout(timer);
+  }, [isOpen, shouldRender]);
   useEffect(() => {
     if (!isOpen || typeof document === 'undefined') return undefined;
     const { body, documentElement } = document;
@@ -390,37 +400,62 @@ const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-
       documentElement.style.overflow = prevHtmlOverflow;
     };
   }, [isOpen]);
-  if (!isOpen) return null;
+  if (!shouldRender) return null;
   const modalNode = (
     <div
-      className="crm-app-shell fixed inset-0 z-50 overflow-hidden bg-black/60 text-[var(--crm-text)]"
+      className={classNames(
+        'crm-app-shell fixed inset-0 z-50 overflow-hidden bg-black/60 text-[var(--crm-text)]',
+        isOpen ? 'crm-modal-overlay-open' : 'crm-modal-overlay-close'
+      )}
     >
       <div
-        className="flex h-full w-full items-stretch justify-stretch sm:items-center sm:justify-center sm:px-4 sm:py-6"
+        className={classNames(
+          'flex h-full w-full',
+          sheetOnMobile
+            ? 'items-stretch justify-stretch sm:items-center sm:justify-center sm:px-4 sm:py-6'
+            : 'items-center justify-center px-4 py-4 sm:px-4 sm:py-6'
+        )}
         onMouseDown={(event) => {
           if (event.target !== event.currentTarget) return;
           onClose?.();
         }}
       >
         <div
-          className={`crm-modal-surface flex h-full max-h-full min-h-0 w-full ${maxWidthClass} flex-col overflow-hidden rounded-none sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-[32px]`}
+          className={classNames(
+            'crm-modal-surface flex min-h-0 w-full flex-col overflow-hidden',
+            isOpen ? 'crm-modal-surface-open' : 'crm-modal-surface-close',
+            maxWidthClass,
+            sheetOnMobile
+              ? 'h-full max-h-full rounded-none sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-[32px]'
+              : 'h-auto max-h-[calc(100dvh-2rem)] rounded-[28px] sm:max-h-[calc(100dvh-3rem)] sm:rounded-[32px]'
+          )}
           onMouseDown={(event) => event.stopPropagation()}
         >
-          <div className="flex min-w-0 items-center justify-between gap-3 border-b border-white/5 px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)] sm:px-6 sm:py-4">
-            <h3 className="min-w-0 flex-1 truncate text-lg font-extrabold tracking-[-0.03em] text-white">{title}</h3>
-            <button
-              type="button"
-              onClick={onClose}
-              className="crm-ghost-btn h-10 w-10 min-h-0 flex-shrink-0 p-0 text-[var(--crm-muted)] hover:text-white"
-              aria-label="Закрыть"
+          <div className="pointer-events-none absolute inset-x-3 top-[max(env(safe-area-inset-top),0.5rem)] z-30 sm:pointer-events-auto sm:static sm:inset-auto sm:px-0 sm:pt-0">
+            <div
+              className="pointer-events-auto flex min-w-0 items-center justify-between gap-3 rounded-[26px] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24)] sm:rounded-none sm:bg-transparent sm:px-6 sm:py-4 sm:shadow-none"
+              style={{ background: 'color-mix(in srgb, var(--crm-surface-4) 94%, rgba(14,18,18,0.98))' }}
             >
-              <IconClose className="h-4 w-4" />
-            </button>
+              <h3 className="min-w-0 flex-1 truncate text-lg font-extrabold tracking-[-0.03em] text-white">{title}</h3>
+              <button
+                type="button"
+                onClick={onClose}
+                className="crm-ghost-btn h-10 w-10 min-h-0 flex-shrink-0 p-0 text-[var(--crm-muted)] hover:text-white"
+                aria-label="Закрыть"
+              >
+                <IconClose className="h-4 w-4" />
+              </button>
+            </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4 sm:px-6">{children}</div>
+          <div className="relative z-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[8.25rem] pt-[5.75rem] space-y-4 sm:px-6 sm:py-4">{children}</div>
           {footer && (
-            <div className="flex flex-wrap justify-end gap-2 border-t border-white/5 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 sm:gap-3 sm:px-6 sm:py-4">
-              {footer}
+            <div className="pointer-events-none absolute inset-x-3 bottom-[max(env(safe-area-inset-bottom),0.5rem)] z-30 sm:pointer-events-auto sm:static sm:inset-auto sm:px-0 sm:pb-0 sm:pt-0">
+              <div
+                className="pointer-events-auto flex flex-wrap justify-end gap-2 rounded-[26px] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24)] sm:rounded-none sm:bg-transparent sm:px-6 sm:py-4 sm:shadow-none sm:gap-3"
+                style={{ background: 'color-mix(in srgb, var(--crm-surface-4) 94%, rgba(14,18,18,0.98))' }}
+              >
+                {footer}
+              </div>
             </div>
           )}
         </div>
@@ -440,6 +475,7 @@ const ConfirmDialog = ({ open, title, message, confirmLabel = 'Подтверд�
       title={title || 'Подтвердите действие'}
       onClose={() => onResult(false)}
       maxWidthClass="max-w-md"
+      sheetOnMobile={false}
       footer={
         <div className="flex justify-end gap-3">
           <button onClick={() => onResult(false)} className={classNames('crm-ghost-btn', SHEET_FOOTER_BUTTON_CLASS)}>
@@ -603,6 +639,7 @@ const MobileTabs = ({
   const [showLogoutMenu, setShowLogoutMenu] = useState(false);
   const [showSubmenus, setShowSubmenus] = useState(true);
   const [showHeader, setShowHeader] = useState(true);
+  const logoutMenuRef = useRef(null);
   const submenusVisibleRef = useRef(showSubmenus);
   const lastScrollRef = useRef(typeof window !== 'undefined' ? window.scrollY : 0);
   const handleSelect = (tabId, options = {}) => {
@@ -631,6 +668,9 @@ const MobileTabs = ({
   useEffect(() => {
     setShowLogoutMenu(false);
   }, [activeTab]);
+  useOutsideClick(logoutMenuRef, () => {
+    setShowLogoutMenu(false);
+  });
   useEffect(() => {
     submenusVisibleRef.current = showSubmenus;
   }, [showSubmenus]);
@@ -705,7 +745,7 @@ const MobileTabs = ({
               {renderLiveIndicator()}
             </div>
             <div className="flex items-center justify-end">
-              <div className="relative inline-flex">
+              <div ref={logoutMenuRef} className="relative inline-flex">
                 <button
                   type="button"
                   onClick={handleToggleLogoutMenu}
@@ -721,14 +761,14 @@ const MobileTabs = ({
                 </button>
                 <div
                   className={classNames(
-                    'absolute right-0 top-full z-40 mt-1 w-40 translate-y-0 transition-all duration-150',
+                    'absolute right-0 top-full z-40 mt-1 w-28 translate-y-0 transition-all duration-150',
                     showLogoutMenu ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
                   )}
                 >
                   <button
                     type="button"
                     onClick={handleLogoutClick}
-                      className="crm-danger-btn w-full px-4 py-2 text-base"
+                    className="crm-danger-btn h-9 min-h-0 w-full px-3 py-1.5 text-sm"
                   >
                     {UI_TEXT.logout}
                   </button>

@@ -17,6 +17,7 @@ const DataTable = ({
   appointmentCalendarDate = '',
   setAppointmentCalendarDate,
   setAppointmentCalendarView,
+  appointmentTodayJumpSignal = 0,
   appointmentSchedules = [],
   onCreateAppointment,
   selectedBarber = 'all',
@@ -46,6 +47,7 @@ const DataTable = ({
         calendarDate={appointmentCalendarDate}
         setCalendarDate={setAppointmentCalendarDate}
         setViewMode={setAppointmentCalendarView}
+        todayJumpSignal={appointmentTodayJumpSignal}
         selectedBarber={selectedBarber}
       />
     );

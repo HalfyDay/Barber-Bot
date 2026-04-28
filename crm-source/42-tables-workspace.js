@@ -78,6 +78,7 @@
   const [appointmentCalendarView, setAppointmentCalendarView] = useLocalStorage('tables.appointmentsCalendarView', 'week');
   const [appointmentCalendarScale, setAppointmentCalendarScale] = useLocalStorage('tables.appointmentsCalendarScale', 'normal');
   const [appointmentCalendarDate, setAppointmentCalendarDate] = useLocalStorage('tables.appointmentsCalendarDate', getLocalISODateString());
+  const [appointmentTodayJumpSignal, setAppointmentTodayJumpSignal] = useState(0);
   const previousActiveTableRef = useRef(activeTable);
   const [scheduleFillDays, setScheduleFillDays] = useLocalStorage('tables.schedulesFillDays', 14);
   const restrictStaffBarberFilter = role === ROLE_STAFF && activeTable === 'Appointments';
@@ -139,12 +140,35 @@
   }, [activeTable, appointmentCalendarDate, setAppointmentCalendarDate]);
   useEffect(() => {
     if (!preferredTable) return;
-    const nextTable = preferredTable;
+    const nextTable = typeof preferredTable === 'string' ? preferredTable : preferredTable.tableId;
+    if (!nextTable) {
+      onPreferredTableConsumed?.();
+      return;
+    }
     if (resolvedVisibleTables.includes(nextTable)) {
       setActiveTable(nextTable);
     }
+    if (nextTable === 'Appointments' && preferredTable && typeof preferredTable === 'object') {
+      if (preferredTable.calendarView) {
+        setAppointmentCalendarView(preferredTable.calendarView);
+      }
+      if (preferredTable.calendarDate) {
+        setAppointmentCalendarDate(preferredTable.calendarDate);
+      }
+      if (preferredTable.appointmentStatusMode) {
+        setAppointmentStatusMode(preferredTable.appointmentStatusMode);
+      }
+    }
     onPreferredTableConsumed?.();
-  }, [preferredTable, resolvedVisibleTables, setActiveTable, onPreferredTableConsumed]);
+  }, [
+    onPreferredTableConsumed,
+    preferredTable,
+    resolvedVisibleTables,
+    setActiveTable,
+    setAppointmentCalendarDate,
+    setAppointmentCalendarView,
+    setAppointmentStatusMode,
+  ]);
   const appointmentScheduleDaySlot = useMemo(() => {
     if (activeTable !== 'Appointments' || appointmentCalendarView !== 'day' || selectedBarber === 'all') return null;
     const dateKey = normalizeText(appointmentCalendarDate);
@@ -215,6 +239,11 @@
     [scheduleFillDays]
   );
   const fetchTables = useCallback(async () => {
+    if (activeTable === 'Revenue') {
+      setIsFetching(false);
+      setTableError('');
+      return;
+    }
     setIsFetching(true);
     setTableError('');
     try {
@@ -677,6 +706,7 @@
                   setAppointmentCalendarScale={activeTable === 'Appointments' ? setAppointmentCalendarScale : null}
                   appointmentCalendarDate={activeTable === 'Appointments' ? appointmentCalendarDate : ''}
                   setAppointmentCalendarDate={activeTable === 'Appointments' ? setAppointmentCalendarDate : null}
+                  onAppointmentTodayJump={activeTable === 'Appointments' ? () => setAppointmentTodayJumpSignal((prev) => prev + 1) : null}
                   appointmentRows={activeTable === 'Appointments' ? processedRows : []}
                   appointmentScheduleSlot={activeTable === 'Appointments' ? appointmentScheduleDaySlot : null}
                   onSaveAppointmentScheduleDay={activeTable === 'Appointments' ? handleSaveAppointmentScheduleDay : null}
@@ -717,6 +747,7 @@
                         appointmentCalendarDate={activeTable === 'Appointments' ? appointmentCalendarDate : ''}
                         setAppointmentCalendarDate={activeTable === 'Appointments' ? setAppointmentCalendarDate : null}
                         setAppointmentCalendarView={activeTable === 'Appointments' ? setAppointmentCalendarView : null}
+                        appointmentTodayJumpSignal={activeTable === 'Appointments' ? appointmentTodayJumpSignal : 0}
                         appointmentSchedules={
                           activeTable === 'Appointments'
                             ? (tables.Schedules || []).filter((row) =>

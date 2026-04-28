@@ -469,6 +469,34 @@
     backdrop-filter: blur(24px) saturate(1.04);
   }
 
+  .crm-modal-overlay-open {
+    animation: crmModalOverlayIn 180ms ease-out both;
+  }
+
+  .crm-modal-overlay-close {
+    animation: crmModalOverlayOut 180ms ease-in both;
+  }
+
+  .crm-modal-surface-open {
+    animation: crmModalSurfaceInMobile 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    transform-origin: center;
+  }
+
+  .crm-modal-surface-close {
+    animation: crmModalSurfaceOutMobile 180ms ease-in both;
+    transform-origin: center;
+  }
+
+  @media (min-width: 640px) {
+    .crm-modal-surface-open {
+      animation-name: crmModalSurfaceInDesktop;
+    }
+
+    .crm-modal-surface-close {
+      animation-name: crmModalSurfaceOutDesktop;
+    }
+  }
+
   .crm-menu-surface {
     border-radius: 26px;
     background: color-mix(in srgb, var(--crm-surface-4) 96%, rgba(12, 15, 15, 0.98));
@@ -518,6 +546,84 @@
     }
   }
 
+  @keyframes crmModalOverlayIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes crmModalOverlayOut {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes crmModalSurfaceInMobile {
+    from {
+      opacity: 0;
+      transform: translateY(28px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes crmModalSurfaceOutMobile {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+  }
+
+  @keyframes crmModalSurfaceInDesktop {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes crmModalSurfaceOutDesktop {
+    from {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(10px) scale(0.985);
+    }
+  }
+
+  .crm-sheet-notice-pop {
+    animation: crmSheetNoticePop 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    transform-origin: center;
+  }
+
+  @keyframes crmSheetNoticePop {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
   .crm-inline-panel {
     border-radius: 24px;
     background: color-mix(in srgb, var(--crm-surface-4) 94%, rgba(15, 18, 18, 0.98));
@@ -543,6 +649,19 @@
       inset 0 1px 0 rgba(255,255,255,0.03),
       inset 0 -1px 0 rgba(0,0,0,0.16),
       var(--crm-shadow-1);
+  }
+
+  .crm-reorder-item {
+    will-change: transform;
+    transform-origin: center;
+  }
+
+  .crm-reorder-dragging {
+    z-index: 12;
+    transform: scale(1.02) rotate(-1deg);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.03),
+      0 22px 52px rgba(4, 7, 21, 0.34);
   }
 
   .crm-table-shell {

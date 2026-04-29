@@ -150,6 +150,20 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
   const compactStatusLabel = getCompactStatusLabel(record.Status);
   const { start, end } = parseTimeRangeParts(record.Time);
   const servicesList = parseMultiValue(record.Services);
+  const getStatusDotClass = useCallback((status) => {
+    switch (normalizeStatusValue(status)) {
+      case STATUS_ACTIVE:
+        return 'bg-[color:var(--crm-primary)]';
+      case STATUS_DONE:
+        return 'bg-[color:var(--crm-muted)]';
+      case STATUS_CANCELLED:
+        return 'bg-[color:var(--crm-error-container)]';
+      case STATUS_NO_SHOW:
+        return 'bg-[color:var(--crm-highlight)]';
+      default:
+        return 'bg-[var(--crm-muted)]';
+    }
+  }, []);
   const cardRef = useRef(null);
   const [autoCompact, setAutoCompact] = useState(false);
   const [statusAsDot, setStatusAsDot] = useState(false);
@@ -217,7 +231,7 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
           <span
             className={classNames(
               'absolute right-2.5 top-2.5 inline-flex h-2.5 w-2.5 rounded-full',
-              getStatusBadgeClasses(statusLabel)
+              getStatusDotClass(statusLabel)
             )}
             aria-label={statusLabel || 'Без статуса'}
             title={statusLabel || 'Без статуса'}
@@ -275,7 +289,7 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
         <span
           className={classNames(
             'absolute right-3 top-3 inline-flex h-2.5 w-2.5 rounded-full',
-            getStatusBadgeClasses(statusLabel)
+            getStatusDotClass(statusLabel)
           )}
           aria-label={statusLabel || 'Без статуса'}
           title={statusLabel || 'Без статуса'}
@@ -443,20 +457,37 @@ const AppointmentsCalendarView = ({
     return buckets;
   }, [datedRows]);
   const renderAvailableSlot = useCallback(
-    (slot, { compact = false, showBarber = false } = {}) => (
-      <button
-        key={slot.id || `${slot.Barber}-${slot.Date}-${slot.Time}`}
-        type="button"
-        onClick={() => onCreateAppointment?.({ Barber: slot.Barber, Date: slot.Date, Time: slot.Time })}
-        className={classNames(
-          'w-full rounded-[22px] bg-[rgba(0,191,175,0.26)] text-center text-[#eafffb] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_10px_22px_rgba(0,0,0,0.18)] transition hover:bg-[rgba(0,191,175,0.32)] focus:outline-none',
-          compact ? 'px-2 py-2' : 'p-3'
-        )}
-      >
-        <p className={classNames('font-semibold text-[#f4fffd]', compact ? 'text-[13px]' : 'text-lg')}>{slot.Time || 'Свободное окно'}</p>
-        {showBarber && slot.Barber && <p className={classNames('mt-1 text-[#c7f8f2]', compact ? 'text-[10px]' : 'text-xs')}>{slot.Barber}</p>}
-      </button>
-    ),
+    (slot, { compact = false, showBarber = false, subtleCompact = false, monthCompact = false } = {}) => {
+      const { start, end } = parseTimeRangeParts(slot.Time);
+      const monthCompactLabel = start && end ? `${start}-${end}` : start || slot.Time || 'Свободно';
+      if (monthCompact) {
+        return (
+          <button
+            key={slot.id || `${slot.Barber}-${slot.Date}-${slot.Time}`}
+            type="button"
+            title={slot.Time || 'Свободное окно'}
+            onClick={() => onCreateAppointment?.({ Barber: slot.Barber, Date: slot.Date, Time: slot.Time })}
+            className="w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-md bg-[rgba(0,191,175,0.26)] px-1 py-0.5 text-center text-[10px] font-semibold leading-tight text-[#f4fffd] transition hover:bg-[rgba(0,191,175,0.32)] focus:outline-none"
+          >
+            {monthCompactLabel}
+          </button>
+        );
+      }
+      return (
+        <button
+          key={slot.id || `${slot.Barber}-${slot.Date}-${slot.Time}`}
+          type="button"
+          onClick={() => onCreateAppointment?.({ Barber: slot.Barber, Date: slot.Date, Time: slot.Time })}
+          className={classNames(
+            'w-full rounded-[22px] bg-[rgba(0,191,175,0.26)] text-center text-[#eafffb] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_10px_22px_rgba(0,0,0,0.18)] transition hover:bg-[rgba(0,191,175,0.32)] focus:outline-none',
+            compact ? 'px-2 py-2' : 'p-3'
+          )}
+        >
+          <p className={classNames('font-semibold text-[#f4fffd]', compact ? (subtleCompact ? 'text-[11px]' : 'text-[13px]') : 'text-lg')}>{slot.Time || 'Свободное окно'}</p>
+          {showBarber && slot.Barber && <p className={classNames('mt-1 text-[#c7f8f2]', compact ? (subtleCompact ? 'text-[9px]' : 'text-[10px]') : 'text-xs')}>{slot.Barber}</p>}
+        </button>
+      );
+    },
     [onCreateAppointment]
   );
   const scrollCalendarToToday = useCallback(() => {
@@ -953,6 +984,8 @@ const AppointmentsCalendarView = ({
                     ) : (
                       renderAvailableSlot(entry.slot, {
                         compact: true,
+                        subtleCompact: true,
+                        monthCompact: true,
                         showBarber: showBarberInCards && showBarber,
                       })
                     )

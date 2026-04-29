@@ -431,10 +431,21 @@ const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-
           )}
           onMouseDown={(event) => event.stopPropagation()}
         >
-          <div className="pointer-events-none absolute inset-x-3 top-[max(env(safe-area-inset-top),0.5rem)] z-30 sm:pointer-events-auto sm:static sm:inset-auto sm:px-0 sm:pt-0">
+          <div
+            className={classNames(
+              sheetOnMobile
+                ? 'pointer-events-none absolute inset-x-3 top-[max(env(safe-area-inset-top),0.5rem)] z-30 sm:pointer-events-auto sm:static sm:inset-auto sm:px-0 sm:pt-0'
+                : 'pointer-events-auto static inset-auto z-30 px-0 pt-0'
+            )}
+          >
             <div
-              className="pointer-events-auto flex min-w-0 items-center justify-between gap-3 rounded-[26px] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24)] sm:rounded-none sm:bg-transparent sm:px-6 sm:py-4 sm:shadow-none"
-              style={{ background: 'color-mix(in srgb, var(--crm-surface-4) 94%, rgba(14,18,18,0.98))' }}
+              className={classNames(
+                'pointer-events-auto flex min-w-0 items-center justify-between gap-3',
+                sheetOnMobile
+                  ? 'rounded-[26px] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24)] sm:rounded-none sm:bg-transparent sm:px-6 sm:py-4 sm:shadow-none'
+                  : 'px-4 py-4 sm:px-6 sm:py-4'
+              )}
+              style={sheetOnMobile ? { background: 'color-mix(in srgb, var(--crm-surface-4) 94%, rgba(14,18,18,0.98))' } : undefined}
             >
               <h3 className="min-w-0 flex-1 truncate text-lg font-extrabold tracking-[-0.03em] text-white">{title}</h3>
               <button
@@ -447,12 +458,30 @@ const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-
               </button>
             </div>
           </div>
-          <div className="relative z-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[8.25rem] pt-[5.75rem] space-y-4 sm:px-6 sm:py-4">{children}</div>
+          <div
+            className={classNames(
+              'relative z-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 space-y-4 sm:px-6 sm:py-4',
+              sheetOnMobile ? 'pb-[8.25rem] pt-[5.75rem]' : 'py-4'
+            )}
+          >
+            {children}
+          </div>
           {footer && (
-            <div className="pointer-events-none absolute inset-x-3 bottom-[max(env(safe-area-inset-bottom),0.5rem)] z-30 sm:pointer-events-auto sm:static sm:inset-auto sm:px-0 sm:pb-0 sm:pt-0">
+            <div
+              className={classNames(
+                sheetOnMobile
+                  ? 'pointer-events-none absolute inset-x-3 bottom-[max(env(safe-area-inset-bottom),0.5rem)] z-30 sm:pointer-events-auto sm:static sm:inset-auto sm:px-0 sm:pb-0 sm:pt-0'
+                  : 'pointer-events-auto static inset-auto z-30 px-0 pb-0 pt-0'
+              )}
+            >
               <div
-                className="pointer-events-auto flex flex-wrap justify-end gap-2 rounded-[26px] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24)] sm:rounded-none sm:bg-transparent sm:px-6 sm:py-4 sm:shadow-none sm:gap-3"
-                style={{ background: 'color-mix(in srgb, var(--crm-surface-4) 94%, rgba(14,18,18,0.98))' }}
+                className={classNames(
+                  'pointer-events-auto flex flex-wrap justify-end gap-2 sm:gap-3',
+                  sheetOnMobile
+                    ? 'rounded-[26px] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24)] sm:rounded-none sm:bg-transparent sm:px-6 sm:py-4 sm:shadow-none'
+                    : 'px-4 pb-4 pt-3 sm:px-6 sm:py-4'
+                )}
+                style={sheetOnMobile ? { background: 'color-mix(in srgb, var(--crm-surface-4) 94%, rgba(14,18,18,0.98))' } : undefined}
               >
                 {footer}
               </div>

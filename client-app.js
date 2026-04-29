@@ -2434,7 +2434,7 @@
         <header class="topbar ${state.topbarAnnouncementActive ? "is-announcing" : ""}">
           <div class="topbar-content">
             <div class="brand">
-              <span class="brand-title">${normalizeText(siteHome.logoText || "BrotherShop")}</span>
+              ${normalizeText(siteHome.logoText) ? `<span class="brand-title">${normalizeText(siteHome.logoText)}</span>` : ""}
             </div>
             <div class="topbar-side">
               ${authenticated
@@ -2630,11 +2630,16 @@
         appointmentBarber?.avatarUrl,
       );
       const appointmentEtaLabel = nextAppointment ? formatAppointmentEta(nextAppointment.date, nextAppointment.time) : "";
-      const mapLink = normalizeText(siteHome.mapLink) || "https://go.2gis.com/fPKd6";
-      const bookingButtonText = normalizeText(siteHome.bookingButtonText) || "Записаться";
-      const aboutTitle = normalizeText(siteHome.aboutTitle || "BrotherShop");
+      const mapLink = normalizeText(siteHome.mapLink);
+      const phone = normalizeText(siteHome.phone);
+      const bookingButtonText = normalizeText(siteHome.bookingButtonText);
+      const aboutTitle = normalizeText(siteHome.aboutTitle);
       const aboutText = normalizeText(siteHome.aboutText || "");
       const aboutExpandable = aboutText.length > 110;
+      const hasAboutBlock = Boolean(aboutTitle || aboutText || normalizeText(siteHome.aboutImageUrl));
+      const hasMapBlock = Boolean(normalizeText(siteHome.mapTitle) || normalizeText(siteHome.mapCaption) || normalizeText(siteHome.mapImageUrl) || normalizeText(siteHome.mapLink));
+      const hasContactsBlock = Boolean(normalizeText(siteHome.contactsTitle) || phone || normalizeText(siteHome.telegramUrl) || normalizeText(siteHome.whatsappUrl) || normalizeText(siteHome.email));
+      const hasMapContactsRow = hasMapBlock || hasContactsBlock;
       const aboutCardTag = aboutExpandable ? "button" : "article";
       const aboutCardAttrs = aboutExpandable
         ? `class="content-card home-about-card home-about-toggle ${state.homeAboutExpanded ? "is-expanded" : "is-collapsed"}" type="button" data-action="toggle-home-about" aria-expanded="${state.homeAboutExpanded ? "true" : "false"}"`
@@ -2648,7 +2653,7 @@
               ? promos.length > 1
                 ? `<div class="promo-lane">${promoCards}</div><div class="promo-lane" aria-hidden="true">${promoCards}</div>`
                 : `<div class="promo-lane">${promoCards}</div>`
-              : `<div class="empty-state promo-empty">Скоро здесь появятся актуальные предложения и акции.</div>`}
+                : `<div class="empty-state promo-empty">Скоро здесь появятся актуальные предложения и акции.</div>`}
             </div>
           </section>
         </section>
@@ -2681,48 +2686,50 @@
                 </div>
               </div>
             </button>
-            <div class="appointment-cta-wrap">
+            ${bookingButtonText ? `<div class="appointment-cta-wrap">
               <a class="primary-btn booking-cta booking-cta-compact" href="/booking/">${bookingButtonText}</a>
-            </div>
+            </div>` : ""}
           ` : ``}
-          ${nextAppointment ? "" : `<div class="appointment-cta-wrap"><a class="primary-btn booking-cta" href="/booking/">${bookingButtonText}</a></div>`}
+          ${nextAppointment || !bookingButtonText ? "" : `<div class="appointment-cta-wrap"><a class="primary-btn booking-cta" href="/booking/">${bookingButtonText}</a></div>`}
         </article>
-        <${aboutCardTag} ${aboutCardAttrs}>
+        ${hasAboutBlock ? `<${aboutCardTag} ${aboutCardAttrs}>
           <div>
-            <h2 class="section-title">${aboutTitle}</h2>
-            <div class="home-about-text-wrap"><p class="section-text home-about-text">${aboutText}</p></div>
+            ${aboutTitle ? `<h2 class="section-title">${aboutTitle}</h2>` : ""}
+            ${aboutText ? `<div class="home-about-text-wrap"><p class="section-text home-about-text">${aboutText}</p></div>` : ""}
             ${aboutExpandable ? `<span class="home-about-more">${state.homeAboutExpanded ? "Свернуть" : "Показать еще"}</span>` : ""}
           </div>
-        </${aboutCardTag}>
-        <section class="home-map-contacts-row">
+        </${aboutCardTag}>` : ""}
+        ${hasMapContactsRow ? `<section class="home-map-contacts-row">
+          ${hasMapBlock ? `
           <article class="content-card map-card">
-          <h2 class="map-title">${normalizeText(siteHome.mapTitle || "Карта")}</h2>
-          <a class="map-link-card" href="${mapLink}" target="_blank" rel="noopener noreferrer">
+          ${normalizeText(siteHome.mapTitle) ? `<h2 class="map-title">${normalizeText(siteHome.mapTitle)}</h2>` : ""}
+          <${mapLink ? "a" : "div"} class="map-link-card"${mapLink ? ` href="${mapLink}" target="_blank" rel="noopener noreferrer"` : ""}>
             <div class="map-image" style="${normalizeText(siteHome.mapImageUrl) ? `background-image:url('${normalizeText(siteHome.mapImageUrl)}');` : ""}">
               <div class="map-overlay-card">
                 <div class="map-overlay-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24"><circle cx="6.5" cy="7.5" r="2.5"></circle><circle cx="6.5" cy="16.5" r="2.5"></circle><path d="M8.6 8.9 19 3.5"></path><path d="M8.6 15.1 19 20.5"></path><path d="m11.2 12 7.8-8.5"></path><path d="m11.2 12 7.8 8.5"></path></svg>
                 </div>
                 <div class="map-overlay-copy">
-                  <strong>${normalizeText(siteHome.logoText || "BrotherShop")}</strong>
-                  <span>${normalizeText(siteHome.mapCaption || "Открыть маршрут и посмотреть локацию")}</span>
+                  ${normalizeText(siteHome.logoText) ? `<strong>${normalizeText(siteHome.logoText)}</strong>` : ""}
+                  ${normalizeText(siteHome.mapCaption) ? `<span>${normalizeText(siteHome.mapCaption)}</span>` : ""}
                 </div>
-                <span class="map-overlay-action">На карте</span>
+                ${mapLink ? `<span class="map-overlay-action">На карте</span>` : ""}
               </div>
             </div>
-          </a>
-        </article>
+          </${mapLink ? "a" : "div"}>
+        </article>` : ""}
+          ${hasContactsBlock ? `
           <article class="content-card contacts-card">
-          <h2 class="section-title">${normalizeText(siteHome.contactsTitle || "Контакты")}</h2>
+          ${normalizeText(siteHome.contactsTitle) ? `<h2 class="section-title">${normalizeText(siteHome.contactsTitle)}</h2>` : ""}
           <div class="contact-actions">
-            <a class="ghost-btn square-btn icon-btn contacts-phone phone-link" href="tel:${normalizePhone(siteHome.phone || CONTACT_PHONE)}" aria-label="Телефон">${iconMarkup("phone")}<span>${normalizeText(siteHome.phone || CONTACT_PHONE)}</span></a>
+            ${phone ? `<a class="ghost-btn square-btn icon-btn contacts-phone phone-link" href="tel:${normalizePhone(phone)}" aria-label="Телефон">${iconMarkup("phone")}<span>${phone}</span></a>` : ""}
             ${normalizeText(siteHome.telegramUrl) ? `<a class="ghost-btn square-btn icon-btn" href="${normalizeText(siteHome.telegramUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Telegram">${iconMarkup("telegram")}<span>Telegram</span></a>` : ""}
             ${normalizeText(siteHome.whatsappUrl) ? `<a class="ghost-btn square-btn icon-btn" href="${normalizeText(siteHome.whatsappUrl)}" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp">${iconMarkup("whatsapp")}<span>WhatsApp</span></a>` : ""}
             ${normalizeText(siteHome.email) ? `<a class="ghost-btn square-btn icon-btn" href="mailto:${normalizeText(siteHome.email)}" aria-label="Email">${iconMarkup("mail")}<span>Email</span></a>` : ""}
           </div>
-          ${!normalizeText(siteHome.telegramUrl) && !normalizeText(siteHome.whatsappUrl) && !normalizeText(siteHome.email) ? `<p class="app-note">Сейчас доступен звонок по телефону. Остальные способы связи можно добавить в CRM.</p>` : ""}
-        </article>
-        </section>
+          ${phone && !normalizeText(siteHome.telegramUrl) && !normalizeText(siteHome.whatsappUrl) && !normalizeText(siteHome.email) ? `<p class="app-note">Сейчас доступен звонок по телефону. Остальные способы связи можно добавить в CRM.</p>` : ""}
+        </article>` : ""}
+        </section>` : ""}
         <article class="content-card home-legal-card">
           <div class="section-head">
             <div>
@@ -3903,7 +3910,9 @@
 
   const renderShopPage = () => {
     const shop = state.payload?.site?.shop || {};
-    return `<section class="page shop-page"><article class="soon-card clean-soon-card shop-coming-card"><div class="shop-coming-shell"><div class="hero-eyebrow">Магазин</div><h1 class="hero-title">${normalizeText(shop.teaserTitle || "Скоро.")}</h1><div class="shop-teaser-grid"><div class="teaser-block"></div><div class="teaser-block"></div><div class="teaser-block"></div></div></div></article></section>`;
+    const teaserTitle = normalizeText(shop.teaserTitle);
+    const teaserText = normalizeText(shop.teaserText);
+    return `<section class="page shop-page"><article class="soon-card clean-soon-card shop-coming-card"><div class="shop-coming-shell"><div class="hero-eyebrow">Магазин</div>${teaserTitle ? `<h1 class="hero-title">${teaserTitle}</h1>` : ""}${teaserText ? `<p class="section-text">${teaserText}</p>` : ""}<div class="shop-teaser-grid"><div class="teaser-block"></div><div class="teaser-block"></div><div class="teaser-block"></div></div></div></article></section>`;
   };
 
   const resolveBarberAccentColor = (value, fallback = "#ff8a2a") => {

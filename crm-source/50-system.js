@@ -22,6 +22,9 @@
   onUpdateToken = null,
   viewMode = 'bot',
   token = null,
+  siteConfig = null,
+  siteSaving = false,
+  onSaveSite = null,
   role = ROLE_OWNER,
 }) => {
   const [description, setDescription] = useState(settings?.botDescription || '');
@@ -87,9 +90,83 @@
   const isCreator = role === ROLE_CREATOR;
   const licenseList = Array.isArray(licenseStatus?.licenses) ? licenseStatus.licenses : [];
   const hasLicenseList = isCreator && licenseList.length > 0;
+  const resolveSavedTimeZones = useCallback(
+    () => ({
+      crm: normalizeText(siteConfig?.timeZones?.crm) || 'Asia/Irkutsk',
+      client: normalizeText(siteConfig?.timeZones?.client) || 'Asia/Irkutsk',
+    }),
+    [siteConfig]
+  );
+  const [timeZoneDraft, setTimeZoneDraft] = useState(() => resolveSavedTimeZones().crm);
+  useEffect(() => {
+    setTimeZoneDraft(resolveSavedTimeZones().crm);
+  }, [resolveSavedTimeZones]);
+  const formatTimeZonePreview = useCallback((timeZone) => {
+    try {
+      return new Intl.DateTimeFormat('ru-RU', {
+        timeZone,
+        dateStyle: 'medium',
+        timeStyle: 'medium',
+      }).format(new Date());
+    } catch {
+      return 'Не удалось определить время';
+    }
+  }, []);
+  const timeZoneOptions = useMemo(
+    () => [
+      { value: 'Asia/Irkutsk', label: 'Иркутск' },
+      { value: 'Europe/Moscow', label: 'Москва' },
+      { value: 'Europe/Kaliningrad', label: 'Калининград' },
+      { value: 'Asia/Yekaterinburg', label: 'Екатеринбург' },
+      { value: 'Asia/Omsk', label: 'Омск' },
+      { value: 'Asia/Novosibirsk', label: 'Новосибирск' },
+      { value: 'Asia/Krasnoyarsk', label: 'Красноярск' },
+      { value: 'Asia/Yakutsk', label: 'Якутск' },
+      { value: 'Asia/Vladivostok', label: 'Владивосток' },
+      { value: 'Asia/Kamchatka', label: 'Камчатка' },
+      { value: 'UTC', label: 'UTC' },
+    ],
+    []
+  );
+  const savedTimeZones = resolveSavedTimeZones();
+  const timeZoneDirty = savedTimeZones.crm !== timeZoneDraft || savedTimeZones.client !== timeZoneDraft;
+  const handleSaveTimeZones = useCallback(async () => {
+    if (!onSaveSite) return;
+    await onSaveSite({ timeZones: { crm: timeZoneDraft, client: timeZoneDraft } });
+  }, [onSaveSite, timeZoneDraft]);
   if (viewMode === 'system') {
     return (
       <div className="space-y-6">
+        <SectionCard title="Время и часовой пояс">
+          <div className="crm-soft-card flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
+            <label className="min-w-0 flex-1 space-y-2">
+              <span className="block text-sm text-[var(--crm-text)]">Часовой пояс</span>
+              <select
+                value={timeZoneDraft}
+                onChange={(event) => setTimeZoneDraft(event.target.value)}
+                className="w-full px-4 py-3"
+              >
+                {timeZoneOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} ({option.value})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="crm-inline-panel px-4 py-3 sm:min-w-[240px]">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--crm-muted)]">Сейчас</p>
+              <p className="mt-1 text-sm font-semibold text-white">{formatTimeZonePreview(timeZoneDraft)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleSaveTimeZones}
+              disabled={!timeZoneDirty || siteSaving || typeof onSaveSite !== 'function'}
+              className="crm-action-btn px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {siteSaving ? 'Сохранение...' : 'Сохранить'}
+            </button>
+          </div>
+        </SectionCard>
         <BackupsPanel backups={backups} onRestore={onRestoreBackup} onCreate={onCreateBackup} onDelete={onDeleteBackup} />
         <SectionCard title="Лицензия и обновления">
           <div className="grid gap-4 md:grid-cols-2">
@@ -672,10 +749,6 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_240px]">
                 <div className="grid gap-4">
                   <div className="grid gap-4 lg:grid-cols-2">
-                    <label className="space-y-2 text-sm text-[var(--crm-text)]">
-                      <span>Код акции</span>
-                      <input value={promo.id || ''} onChange={(event) => updatePromoField(index, 'id', event.target.value)} className="w-full px-4 py-3" />
-                    </label>
                     <label className="space-y-2 text-sm text-[var(--crm-text)]">
                       <span>Заголовок</span>
                       <input value={promo.title || ''} onChange={(event) => updatePromoField(index, 'title', event.target.value)} className="w-full px-4 py-3" />

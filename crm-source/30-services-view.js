@@ -330,18 +330,28 @@
                           {service.name || 'Без названия'}
                         </p>
                       </div>
-                      <div className="flex min-w-0 flex-col gap-0.5 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1">
-                        <span className={classNames('font-semibold', isActiveService ? 'text-slate-100' : 'text-slate-500')}>
-                          {summary.label}
-                        </span>
-                        <span className={classNames('text-xs', isActiveService ? 'text-slate-400' : 'text-slate-500')}>
-                          {summary.details}
-                        </span>
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="flex min-w-0 flex-col gap-0.5 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1">
+                          <span className={classNames('font-semibold', isActiveService ? 'text-slate-100' : 'text-slate-500')}>
+                            {summary.label}
+                          </span>
+                          <span className={classNames('text-xs', isActiveService ? 'text-slate-400' : 'text-slate-500')}>
+                            {summary.details}
+                          </span>
+                        </div>
+                        <div className="flex min-w-[44px] flex-col items-end justify-center text-right sm:hidden">
+                          <span className="text-sm font-semibold leading-none text-[var(--crm-text)]">
+                            {service.duration || '—'}
+                          </span>
+                          <span className="mt-1 text-[10px] font-medium uppercase leading-none tracking-[0.14em] text-[var(--crm-muted)]">
+                            мин
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                  <div className="col-start-2 flex flex-wrap items-center justify-start gap-2 pt-1 sm:col-start-auto sm:justify-end sm:pt-0">
-                    <span className="rounded-full bg-[color:var(--crm-surface-3)] px-2.5 py-1 text-[11px] font-semibold text-[var(--crm-text)]">
+                  <div className="hidden col-start-auto row-span-2 items-center justify-end gap-2 self-center pt-0 sm:flex sm:flex-wrap sm:justify-end">
+                    <span className="hidden rounded-full bg-[color:var(--crm-surface-3)] px-2.5 py-1 text-[11px] font-semibold text-[var(--crm-text)] sm:inline-flex">
                       {service.duration ? `${service.duration} мин` : '—'}
                     </span>
                     {reorderBusy && isDragging ? (

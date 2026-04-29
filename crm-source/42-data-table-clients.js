@@ -570,7 +570,8 @@ const ClientsList = ({
                 onClick={handleDelete}
                 className={classNames(
                   RESPONSIVE_ACTION_BUTTON_CLASS,
-                  'border border-rose-600 text-rose-200 hover:bg-rose-500/10'
+                  SHEET_FOOTER_BUTTON_CLASS,
+                  'crm-danger-btn'
                 )}
                 aria-label="Удалить"
                 title="Удалить"

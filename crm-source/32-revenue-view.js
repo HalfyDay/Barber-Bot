@@ -1,5 +1,6 @@
 ﻿const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh, requestConfirm }) => {
   const [newPosition, setNewPosition] = useState({ name: '', rate: '' });
+  const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [drafts, setDrafts] = useState({});
   const [error, setError] = useState('');
   const [savingKey, setSavingKey] = useState(null);
@@ -31,7 +32,7 @@
     return clamped;
   };
   const handleCreate = async (event) => {
-    event.preventDefault();
+    event?.preventDefault?.();
     if (!newPosition.name.trim()) {
       setError('Введите название должности.');
       return;
@@ -45,6 +46,7 @@
         orderIndex: sortedPositions.length,
       });
       setNewPosition({ name: '', rate: '' });
+      setCreateSheetOpen(false);
       await refreshPositionsList();
     } catch (createError) {
       setError(createError.message || 'Не удалось создать должность.');
@@ -67,7 +69,7 @@
       rate: resolvedRate === undefined || resolvedRate === null ? '' : String(resolvedRate),
     };
   };
-  const commitPositionUpdate = async (position, draft) => {
+  const commitPositionUpdate = useCallback(async (position, draft) => {
     if (!position?.id) return;
     const nextName = (draft?.name || '').trim();
     if (!nextName) {
@@ -82,7 +84,7 @@
       delete next[position.id];
       return next;
     });
-  };
+  }, [onUpdate]);
   const pendingChanges = useMemo(
     () =>
       sortedPositions
@@ -100,9 +102,29 @@
         .filter(Boolean),
     [sortedPositions, drafts]
   );
-  const pendingCount = pendingChanges.length;
   const bulkSaving = savingKey === 'bulk';
-  const hasPendingChanges = pendingCount > 0;
+  const saveablePendingChanges = useMemo(
+    () => pendingChanges.filter((change) => change.draft?.name?.trim()),
+    [pendingChanges]
+  );
+  useEffect(() => {
+    if (!saveablePendingChanges.length || savingKey) return undefined;
+    const autosaveTimer = setTimeout(async () => {
+      try {
+        setError('');
+        for (const change of saveablePendingChanges) {
+          setSavingKey(change.position.id);
+          await commitPositionUpdate(change.position, change.draft);
+        }
+        await refreshPositionsList();
+      } catch (autosaveError) {
+        setError(autosaveError.message || 'Не удалось сохранить изменения.');
+      } finally {
+        setSavingKey(null);
+      }
+    }, 450);
+    return () => clearTimeout(autosaveTimer);
+  }, [commitPositionUpdate, refreshPositionsList, saveablePendingChanges, savingKey]);
   const handleDelete = async (position) => {
     if (!position?.id) return;
     const confirmed = requestConfirm
@@ -125,56 +147,25 @@
       setSavingKey(null);
     }
   };
-  const handleBulkSave = async () => {
-    if (!hasPendingChanges) return;
-    try {
-      setSavingKey('bulk');
-      setError('');
-      for (const change of pendingChanges) {
-        await commitPositionUpdate(change.position, change.draft);
-      }
-      await refreshPositionsList();
-    } catch (bulkError) {
-      setError(bulkError.message || 'Не удалось сохранить изменения.');
-    } finally {
-      setSavingKey(null);
-    }
-  };
   return (
     <div className="space-y-6">
-      <SectionCard title="Должности" hideTitleOnMobile>
-        <form onSubmit={handleCreate} className="grid gap-3 md:grid-cols-3">
-          <input
-            name="positionName"
-            aria-label="Название должности"
-            value={newPosition.name}
-            onChange={(event) => setNewPosition((prev) => ({ ...prev, name: event.target.value }))}
-            placeholder="Название должности"
-            className="w-full px-4 py-2 text-white"
-          />
-          <input
-            name="positionRate"
-            aria-label="Процент"
-            type="number"
-            min="0"
-            max="100"
-            step="0.1"
-            value={newPosition.rate}
-            onChange={(event) => setNewPosition((prev) => ({ ...prev, rate: event.target.value }))}
-            placeholder="Процент, %"
-            className="w-full px-4 py-2 text-white"
-          />
+      <SectionCard
+        title="Должности"
+        hideTitleOnMobile
+        actions={(
           <button
-            type="submit"
-            disabled={savingKey === 'new'}
-            className="crm-action-btn px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            type="button"
+            onClick={() => {
+              setError('');
+              setNewPosition({ name: '', rate: '' });
+              setCreateSheetOpen(true);
+            }}
+            className="crm-action-btn w-full px-4 py-2 text-sm sm:w-auto"
           >
             Добавить
           </button>
-        </form>
-        <p className="mt-2 text-xs text-[var(--crm-muted)]">
-          Процент применяется к стоимости услуг выбранного барбера и определяет его выплату.
-        </p>
+        )}
+      >
         {error && (
           <div className="mt-4">
             <ErrorBanner message={error} />
@@ -185,20 +176,44 @@
           {sortedPositions.map((position) => {
             const draft = getDraft(position);
             const isDirty = pendingChanges.some((change) => change.position.id === position.id);
+            const isSaving = savingKey === position.id;
             return (
               <div
                 key={position.id}
-                className="crm-soft-card space-y-3 p-4"
+                className="crm-soft-card p-3.5 md:p-4"
               >
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
-                  <div className="flex w-full flex-wrap gap-3 md:flex-1">
-                    <input
-                      name={`positionName-${position.id}`}
-                      aria-label="Название должности"
-                      value={draft.name}
-                      onChange={(event) => handleDraftChange(position.id, 'name', event.target.value)}
-                      className="min-w-[160px] flex-1 px-4 py-2 text-white"
-                    />
+                <div className="grid grid-cols-[minmax(0,1fr),4.75rem,2.5rem] items-center gap-2.5 md:flex md:items-center md:gap-4">
+                  <div className="min-w-0 md:flex-1">
+                      <input
+                        name={`positionName-${position.id}`}
+                        aria-label="Название должности"
+                        value={draft.name}
+                        onChange={(event) => handleDraftChange(position.id, 'name', event.target.value)}
+                        className="min-w-0 w-full px-4 py-2 text-white md:min-w-[160px]"
+                      />
+                  </div>
+                  <input
+                    name={`positionRateMobile-${position.id}`}
+                    aria-label="Процент"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={draft.rate}
+                    onChange={(event) => handleDraftChange(position.id, 'rate', event.target.value)}
+                    placeholder="—"
+                    className="w-full px-3 py-2 text-center text-white md:hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(position)}
+                    disabled={isSaving || bulkSaving}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--crm-error-container)]/18 text-[color:var(--crm-error)] transition hover:bg-[color:var(--crm-error-container)]/28 disabled:cursor-not-allowed disabled:opacity-50 md:hidden"
+                    aria-label={`Удалить должность ${position.name}`}
+                  >
+                    <IconTrash className="h-4 w-4" />
+                  </button>
+                  <div className="hidden md:block">
                     <input
                       name={`positionRate-${position.id}`}
                       aria-label="Процент"
@@ -209,10 +224,15 @@
                       value={draft.rate}
                       onChange={(event) => handleDraftChange(position.id, 'rate', event.target.value)}
                       placeholder="Комиссия, %"
-                      className="w-32 flex-none px-4 py-2 text-white"
+                      className="w-32 px-4 py-2 text-white"
                     />
                   </div>
                   <div className="hidden w-full flex-wrap items-center justify-end gap-3 md:flex md:w-auto md:flex-nowrap">
+                    {isSaving && (
+                      <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white/70">
+                        Сохраняем...
+                      </span>
+                    )}
                     {isDirty && (
                       <span className="rounded-full bg-[color:var(--crm-highlight-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[color:var(--crm-highlight-text)]">
                         Есть изменения
@@ -221,54 +241,72 @@
                     <button
                       type="button"
                       onClick={() => handleDelete(position)}
-                      disabled={savingKey === position.id || bulkSaving}
+                      disabled={isSaving || bulkSaving}
                       className="crm-danger-btn flex-1 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50 md:flex-none"
                     >
                       Удалить
                     </button>
                   </div>
                 </div>
-                <div className="flex w-full flex-wrap items-center gap-2 md:hidden">
-                  {isDirty && (
-                    <span className="rounded-full bg-[color:var(--crm-highlight-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[color:var(--crm-highlight-text)]">
-                      Есть изменения
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(position)}
-                    disabled={savingKey === position.id || bulkSaving}
-                    className="crm-danger-btn min-w-0 flex-1 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Удалить
-                  </button>
-                </div>
               </div>
             );
           })}
         </div>
-        <div className="crm-soft-card mt-6 p-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-white">Несохраненные изменения</p>
-              <p className="text-xs text-[var(--crm-muted)]">
-                {hasPendingChanges ? `Ожидает сохранения: ${pendingCount}` : 'Нет несохраненных изменений'}
-              </p>
-            </div>
+      </SectionCard>
+      <Modal
+        title="Новая должность"
+        isOpen={createSheetOpen}
+        onClose={() => setCreateSheetOpen(false)}
+        maxWidthClass="max-w-md"
+        footer={(
+          <>
             <button
               type="button"
-              onClick={handleBulkSave}
-              disabled={!hasPendingChanges || bulkSaving}
-              className="crm-action-btn flex items-center justify-center px-6 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => setCreateSheetOpen(false)}
+              className={classNames('crm-ghost-btn', SHEET_FOOTER_BUTTON_CLASS)}
             >
-              {bulkSaving ? 'Сохраняем...' : 'Сохранить изменения'}
-              {hasPendingChanges && !bulkSaving && (
-                <span className="ml-2 rounded-full bg-white/15 px-2 py-0.5 text-xs font-semibold">{pendingCount}</span>
-              )}
+              Отмена
             </button>
+            <button
+              type="button"
+              onClick={handleCreate}
+              disabled={savingKey === 'new'}
+              className={classNames('crm-action-btn disabled:cursor-not-allowed disabled:opacity-50', SHEET_FOOTER_BUTTON_CLASS)}
+            >
+              {savingKey === 'new' ? 'Добавляем...' : 'Добавить'}
+            </button>
+          </>
+        )}
+      >
+        <form onSubmit={handleCreate} className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-slate-300">Название</label>
+            <input
+              name="positionName"
+              aria-label="Название должности"
+              value={newPosition.name}
+              onChange={(event) => setNewPosition((prev) => ({ ...prev, name: event.target.value }))}
+              placeholder="Название должности"
+              className="w-full px-4 py-2 text-white"
+            />
           </div>
-        </div>
-      </SectionCard>
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-slate-300">Процент</label>
+            <input
+              name="positionRate"
+              aria-label="Процент"
+              type="number"
+              min="0"
+              max="100"
+              step="0.1"
+              value={newPosition.rate}
+              onChange={(event) => setNewPosition((prev) => ({ ...prev, rate: event.target.value }))}
+              placeholder="Процент, %"
+              className="w-full px-4 py-2 text-white"
+            />
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

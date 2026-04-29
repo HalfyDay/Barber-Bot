@@ -733,7 +733,7 @@ const AppointmentModal = ({
 	          {!isNew && canDelete && (
 	            <button
 	              onClick={() => onDelete?.(draft)}
-	              className={classNames(actionButtonClass, 'border border-rose-600 text-rose-200 hover:bg-rose-500/10')}
+	              className={classNames(actionButtonClass, SHEET_FOOTER_BUTTON_CLASS, 'crm-danger-btn')}
               aria-label="Удалить"
               title="Удалить"
             >
@@ -744,7 +744,7 @@ const AppointmentModal = ({
           {!isNew && (
             <button
               onClick={handleMarkCompleted}
-              className={classNames(actionButtonClass, SHEET_FOOTER_BUTTON_CLASS, 'border border-[color:var(--crm-primary)] text-[color:var(--crm-primary)] hover:bg-[color:var(--crm-primary-container)]')}
+              className={classNames(actionButtonClass, SHEET_FOOTER_BUTTON_CLASS, 'crm-tonal-btn text-[color:var(--crm-primary)]')}
               aria-label="Выполнено"
               title="Выполнено"
             >
@@ -754,7 +754,7 @@ const AppointmentModal = ({
           )}
           <button
             onClick={onClose}
-            className={classNames(actionButtonClass, SHEET_FOOTER_BUTTON_CLASS, 'border border-slate-600 text-white hover:bg-slate-800')}
+            className={classNames(actionButtonClass, SHEET_FOOTER_BUTTON_CLASS, 'crm-ghost-btn')}
             aria-label="Отмена"
             title="Отмена"
           >

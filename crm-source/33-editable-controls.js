@@ -953,6 +953,7 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset, mod
   const ref = useRef(null);
   useOutsideClick(ref, open ? () => setOpen(false) : null);
   const modeOptions = [
+    { value: 'all', label: 'Все' },
     { value: 'active', label: 'Активные' },
     { value: 'past', label: 'Прошедшие' },
   ];

@@ -112,6 +112,10 @@ const createHomeClientStoreService = ({
       });
   };
   const DEFAULT_SITE_CONFIG = Object.freeze({
+    timeZones: {
+      crm: "Asia/Irkutsk",
+      client: "Asia/Irkutsk",
+    },
     home: {
       logoText: "BrotherShop",
       promos: [
@@ -400,6 +404,7 @@ const createHomeClientStoreService = ({
     const bookingInput = input.booking && typeof input.booking === "object" ? input.booking : {};
     const shopInput = input.shop && typeof input.shop === "object" ? input.shop : {};
     const profileInput = input.profile && typeof input.profile === "object" ? input.profile : {};
+    const timeZonesInput = input.timeZones && typeof input.timeZones === "object" ? input.timeZones : {};
     const promos = Array.isArray(homeInput.promos)
       ? homeInput.promos.map((promo, index) => sanitizeSitePromo(promo, index)).slice(0, 12)
       : DEFAULT_SITE_CONFIG.home.promos.map((promo, index) => sanitizeSitePromo(promo, index));
@@ -410,45 +415,47 @@ const createHomeClientStoreService = ({
       ? referralInput.rewardColumns.map((column, index) => sanitizeReferralRewardColumn(column, index)).filter((column) => column.labels.length > 0).slice(0, 24)
       : DEFAULT_SITE_CONFIG.referral.rewardColumns.map((column, index) => sanitizeReferralRewardColumn(column, index));
     return {
+      timeZones: {
+        crm: normalizeText(timeZonesInput.crm) || DEFAULT_SITE_CONFIG.timeZones.crm,
+        client: normalizeText(timeZonesInput.client) || DEFAULT_SITE_CONFIG.timeZones.client,
+      },
       home: {
-        logoText: normalizeText(homeInput.logoText) || DEFAULT_SITE_CONFIG.home.logoText,
+        logoText: normalizeText(homeInput.logoText),
         promos,
-        aboutTitle: normalizeText(homeInput.aboutTitle) || DEFAULT_SITE_CONFIG.home.aboutTitle,
-        aboutText: normalizeText(homeInput.aboutText) || DEFAULT_SITE_CONFIG.home.aboutText,
+        aboutTitle: normalizeText(homeInput.aboutTitle),
+        aboutText: normalizeText(homeInput.aboutText),
         aboutImageUrl: normalizeText(homeInput.aboutImageUrl) || "",
-        mapTitle: normalizeText(homeInput.mapTitle) || DEFAULT_SITE_CONFIG.home.mapTitle,
+        mapTitle: normalizeText(homeInput.mapTitle),
         mapImageUrl: normalizeText(homeInput.mapImageUrl) || "",
-        mapLink: normalizeText(homeInput.mapLink) || DEFAULT_SITE_CONFIG.home.mapLink,
-        mapCaption: normalizeText(homeInput.mapCaption) || DEFAULT_SITE_CONFIG.home.mapCaption,
-        contactsTitle: normalizeText(homeInput.contactsTitle) || DEFAULT_SITE_CONFIG.home.contactsTitle,
-        phone: normalizeText(homeInput.phone) || DEFAULT_SITE_CONFIG.home.phone,
+        mapLink: normalizeText(homeInput.mapLink),
+        mapCaption: normalizeText(homeInput.mapCaption),
+        contactsTitle: normalizeText(homeInput.contactsTitle),
+        phone: normalizeText(homeInput.phone),
         telegramUrl: normalizeText(homeInput.telegramUrl) || "",
         whatsappUrl: normalizeText(homeInput.whatsappUrl) || "",
         email: normalizeText(homeInput.email) || "",
-        bookingButtonText:
-          normalizeText(homeInput.bookingButtonText) || DEFAULT_SITE_CONFIG.home.bookingButtonText,
+        bookingButtonText: normalizeText(homeInput.bookingButtonText),
       },
       referral: {
-        pageTitle: normalizeText(referralInput.pageTitle) || DEFAULT_SITE_CONFIG.referral.pageTitle,
-        introText: normalizeText(referralInput.introText) || DEFAULT_SITE_CONFIG.referral.introText,
-        participationText:
-          normalizeText(referralInput.participationText) || DEFAULT_SITE_CONFIG.referral.participationText,
+        pageTitle: normalizeText(referralInput.pageTitle),
+        introText: normalizeText(referralInput.introText),
+        participationText: normalizeText(referralInput.participationText),
         friendDiscountRub: Math.max(0, Math.floor(Number(referralInput.friendDiscountRub) || DEFAULT_SITE_CONFIG.referral.friendDiscountRub)),
         bsToRubRate: Math.max(1, Math.floor(Number(referralInput.bsToRubRate) || DEFAULT_SITE_CONFIG.referral.bsToRubRate)),
         rewardColumns,
         levels: referralLevels,
       },
       booking: {
-        pageTitle: normalizeText(bookingInput.pageTitle) || DEFAULT_SITE_CONFIG.booking.pageTitle,
-        commentPlaceholder: normalizeText(bookingInput.commentPlaceholder) || DEFAULT_SITE_CONFIG.booking.commentPlaceholder,
+        pageTitle: normalizeText(bookingInput.pageTitle),
+        commentPlaceholder: normalizeText(bookingInput.commentPlaceholder),
       },
       shop: {
-        teaserTitle: normalizeText(shopInput.teaserTitle) || DEFAULT_SITE_CONFIG.shop.teaserTitle,
-        teaserText: normalizeText(shopInput.teaserText) || DEFAULT_SITE_CONFIG.shop.teaserText,
+        teaserTitle: normalizeText(shopInput.teaserTitle),
+        teaserText: normalizeText(shopInput.teaserText),
       },
       profile: {
-        pageTitle: normalizeText(profileInput.pageTitle) || DEFAULT_SITE_CONFIG.profile.pageTitle,
-        historyTitle: normalizeText(profileInput.historyTitle) || DEFAULT_SITE_CONFIG.profile.historyTitle,
+        pageTitle: normalizeText(profileInput.pageTitle),
+        historyTitle: normalizeText(profileInput.historyTitle),
       },
     };
   };
@@ -720,6 +727,10 @@ const createHomeClientStoreService = ({
       booking: {
         ...current.booking,
         ...(patch.booking && typeof patch.booking === "object" ? patch.booking : {}),
+      },
+      timeZones: {
+        ...(current.timeZones && typeof current.timeZones === "object" ? current.timeZones : {}),
+        ...(patch.timeZones && typeof patch.timeZones === "object" ? patch.timeZones : {}),
       },
       shop: {
         ...current.shop,

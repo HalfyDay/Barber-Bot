@@ -159,6 +159,22 @@
       }))
       .sort((a, b) => a.sortValue - b.sortValue);
   }, [formatGroupLabel, upcomingList]);
+  const showUpcomingBarber = useMemo(() => {
+    const uniqueBarbers = new Set(
+      upcomingList
+        .map((appt) => canonicalizeName(appt.Barber))
+        .filter(Boolean)
+    );
+    return uniqueBarbers.size > 1;
+  }, [upcomingList]);
+  const showOverdueBarber = useMemo(() => {
+    const uniqueBarbers = new Set(
+      overdueList
+        .map((appt) => canonicalizeName(appt.Barber))
+        .filter(Boolean)
+    );
+    return uniqueBarbers.size > 1;
+  }, [overdueList]);
   const upcomingActions = onCreateAppointment ? (
     <button
       onClick={onCreateAppointment}
@@ -191,7 +207,7 @@
       case STATUS_DONE:
         return 'bg-[color:var(--crm-muted)]';
       case STATUS_CANCELLED:
-        return 'bg-[#8d3535]';
+        return 'bg-[color:var(--crm-error-container)]';
       case STATUS_NO_SHOW:
         return 'bg-[color:var(--crm-highlight)]';
       default:
@@ -254,7 +270,7 @@
                 compact
                 label="На сегодня"
                 value={stats.todaysAppointments ?? 0}
-                accent="text-rose-300"
+                accent="text-[#ff617f]"
                 onClick={resolveStatHandler('Appointments')}
               />
               <StatCard
@@ -341,7 +357,7 @@
                               ) : (
                                 <p className="text-[1.05rem] font-semibold leading-tight text-white sm:text-[1.15rem]">Без имени</p>
                               )}
-                              {appt.Barber ? (
+                              {showUpcomingBarber && appt.Barber ? (
                                 <p className="text-[13px] leading-tight text-[var(--crm-muted)] sm:text-sm">
                                   <span className="font-semibold text-white">{appt.Barber}</span>
                                 </p>
@@ -475,7 +491,7 @@
                   <div className="mt-3 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1">
                       <p className="text-base font-semibold text-white">{appt.CustomerName || 'Без имени'}</p>
-                      {appt.Barber ? (
+                      {showOverdueBarber && appt.Barber ? (
                       <p className="text-sm text-[var(--crm-text)]">
                           <span className="font-semibold text-white">{appt.Barber}</span>
                         </p>

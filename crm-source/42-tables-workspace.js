@@ -457,11 +457,16 @@
   };
   const appointmentStatusMode = useMemo(() => {
     const normalizedHidden = new Set((hiddenStatuses || []).map((status) => normalizeStatusValue(status)));
+    if (normalizedHidden.size === 0) return 'all';
     const pastHidden = [STATUS_DONE, STATUS_CANCELLED, STATUS_NO_SHOW].every((status) => normalizedHidden.has(status));
     if (normalizedHidden.has(STATUS_ACTIVE) && !pastHidden) return 'past';
     return 'active';
   }, [hiddenStatuses]);
   const setAppointmentStatusMode = useCallback((mode) => {
+    if (mode === 'all') {
+      setHiddenStatuses([]);
+      return;
+    }
     if (mode === 'past') {
       setHiddenStatuses([STATUS_ACTIVE]);
       return;

@@ -308,9 +308,10 @@ const ClientsList = ({
     });
   const warningCount = Number(modalState.record?.warningCount ?? 0);
   const manualBlocked = Boolean(modalState.record?.manualBlocked);
-  const isBlocked =
-    (modalState.record?.isBlocked ?? manualBlocked) ||
-    warningCount >= CLIENT_BLOCK_THRESHOLD;
+  const isBlocked = modalState.record?.isBlocked ?? manualBlocked;
+  const clientAvatarSrc = resolveAssetUrl(
+    normalizeImagePath(modalState.record?.avatarUrl || modalState.record?.AvatarURL || '')
+  );
   const handleFieldChange = (field, value) => {
     setModalState((prev) => ({ ...prev, record: { ...prev.record, [field]: value } }));
   };
@@ -634,6 +635,28 @@ const ClientsList = ({
           <p className="text-[var(--crm-muted)]">Выберите клиента.</p>
         ) : (
           <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              {clientAvatarSrc ? (
+                <img
+                  src={clientAvatarSrc}
+                  alt={modalState.record?.Name || 'Клиент'}
+                  className="h-14 w-14 rounded-full object-cover"
+                />
+              ) : (
+                <span
+                  className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--crm-surface-3)] text-[var(--crm-muted)]"
+                  aria-hidden="true"
+                >
+                  <IconCalendarDay className="h-6 w-6" />
+                </span>
+              )}
+              <div className="min-w-0">
+                <p className="text-lg font-semibold text-white">{modalState.record?.Name || 'Без имени'}</p>
+                {modalState.record?.Phone && (
+                  <p className="text-sm text-[var(--crm-muted)]">{formatPhoneInput(modalState.record.Phone)}</p>
+                )}
+              </div>
+            </div>
             <div className="crm-inline-panel px-4 py-3">
               <button
                 type="button"

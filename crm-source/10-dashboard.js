@@ -175,6 +175,67 @@
     );
     return uniqueBarbers.size > 1;
   }, [overdueList]);
+  const clientAvatarLookup = useMemo(() => {
+    const lookup = new Map();
+    const sourceClients = Array.isArray(data?.clients) ? data.clients : [];
+    sourceClients.forEach((client) => {
+      const avatarUrl = client?.avatarUrl || client?.AvatarURL || '';
+      if (!avatarUrl) return;
+      [
+        client?.id,
+        client?.telegramId,
+        client?.TelegramID,
+        client?.phone,
+        client?.Phone,
+        client?.name,
+        client?.Name,
+      ]
+        .map((value) => normalizeText(value).toLowerCase())
+        .filter(Boolean)
+        .forEach((key) => {
+          if (!lookup.has(key)) {
+            lookup.set(key, avatarUrl);
+          }
+        });
+    });
+    return lookup;
+  }, [data?.clients]);
+  const getAppointmentAvatarSrc = useCallback(
+    (appointment) => {
+      const avatarCandidate =
+        appointment?.avatarUrl ||
+        appointment?.AvatarURL ||
+        clientAvatarLookup.get(normalizeText(appointment?.UserID).toLowerCase()) ||
+        clientAvatarLookup.get(normalizeText(appointment?.TelegramID).toLowerCase()) ||
+        clientAvatarLookup.get(normalizeText(appointment?.Phone).toLowerCase()) ||
+        clientAvatarLookup.get(normalizeText(appointment?.CustomerName).toLowerCase()) ||
+        '';
+      return resolveAssetUrl(normalizeImagePath(avatarCandidate));
+    },
+    [clientAvatarLookup]
+  );
+  const renderAppointmentAvatar = useCallback(
+    (appointment, size = 40) => {
+      const avatarSrc = getAppointmentAvatarSrc(appointment);
+      return avatarSrc ? (
+        <img
+          src={avatarSrc}
+          alt={appointment?.CustomerName || 'Клиент'}
+          className="object-cover"
+          style={{ width: `${size}px`, height: `${size}px` }}
+        />
+      ) : (
+        <span
+          className="inline-flex items-center justify-center bg-[color:var(--crm-surface-3)] text-[var(--crm-muted)]"
+          style={{ width: `${size}px`, height: `${size}px` }}
+          aria-hidden="true"
+        >
+          <IconCalendarDay className={size <= 36 ? 'h-4 w-4' : 'h-5 w-5'} />
+        </span>
+      );
+    },
+    [getAppointmentAvatarSrc]
+  );
   const upcomingActions = onCreateAppointment ? (
     <button
       onClick={onCreateAppointment}
@@ -305,7 +366,7 @@
                       onClick: () => onOpenAppointment?.(appt, { allowDelete: true }),
                       onKeyDown: (event) => event.key === 'Enter' && onOpenAppointment?.(appt, { allowDelete: true }),
                       className: classNames(
-                        'group upcoming-card crm-soft-card relative w-full cursor-pointer overflow-hidden p-3.5 text-left transition hover:-translate-y-0.5 hover:border-[color:var(--crm-primary)]/70 focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)] sm:p-4',
+                        'group upcoming-card crm-soft-card relative w-full cursor-pointer overflow-hidden px-3.5 pb-3.5 pt-0.5 text-left transition hover:-translate-y-0.5 hover:border-[color:var(--crm-primary)]/70 focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)] sm:px-4 sm:pb-4 sm:pt-1',
                         inProgress && 'border-[color:var(--crm-primary)]/80 !bg-[color:var(--crm-primary-container)] shadow-[0_0_25px_rgba(0,191,175,0.18)] hover:!bg-[color:var(--crm-primary-container)]'
                       ),
                     };
@@ -318,15 +379,15 @@
                     const isPending = pendingStatusId === apptId;
                     return (
                       <div key={appt.id || `${group.key}-${appt.CustomerName}-${appt.Time}`} {...cardProps}>
+                        <div className="absolute left-0 top-0 overflow-hidden rounded-br-[30px] shadow-[0_14px_30px_rgba(0,0,0,0.2)]">
+                          {renderAppointmentAvatar(appt, 64)}
+                        </div>
                         <span className={classNames('absolute right-4 top-4 h-2.5 w-2.5 rounded-full sm:hidden', getDashboardStatusDotClass(statusLabel))} />
-                        <div className="flex flex-wrap items-start justify-between gap-2.5">
-                          <div className="space-y-1.5 pr-4 sm:pr-0">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--crm-muted)]">
-                              {formatDateBadgeLabel(appt.Date)}
-                            </p>
-                            <div className="flex items-baseline gap-2.5">
+                        <div className="flex min-h-[4rem] flex-wrap items-center justify-between gap-2.5">
+                          <div className="pl-[4.1rem] pr-4 sm:pr-0">
+                            <div className="flex items-baseline gap-2">
                               <p className="text-[2rem] font-bold leading-none text-white sm:text-[2.35rem]">{start || '—'}</p>
-                              {end && <p className="text-sm text-[var(--crm-muted)] sm:text-base">до {end}</p>}
+                              {end && <p className="text-sm leading-none text-[var(--crm-muted)] sm:text-base">до {end}</p>}
                             </div>
                           </div>
                           <div className="hidden flex-col items-end gap-2 text-right sm:flex">
@@ -340,23 +401,25 @@
                             </span>
                           </div>
                         </div>
-                        <div className="mt-3 space-y-3 text-[13px] text-[var(--crm-text)] sm:mt-3.5 sm:space-y-3.5 sm:text-sm">
+                        <div className="mt-1.5 space-y-1.5 text-[13px] text-[var(--crm-text)] sm:mt-2 sm:space-y-2 sm:text-sm">
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="space-y-2 min-w-0">
-                              {appt.CustomerName ? (
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    onOpenProfile?.(appt.CustomerName);
-                                  }}
-                                  className="text-left text-[1.05rem] font-semibold leading-tight text-white hover:text-[color:var(--crm-primary)] sm:text-[1.15rem]"
-                                >
-                                  {appt.CustomerName}
-                                </button>
-                              ) : (
-                                <p className="text-[1.05rem] font-semibold leading-tight text-white sm:text-[1.15rem]">Без имени</p>
-                              )}
+                            <div className="space-y-1.5 min-w-0">
+                              <div className="min-w-0">
+                                {appt.CustomerName ? (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      onOpenProfile?.(appt);
+                                    }}
+                                    className="text-left text-[1.05rem] font-semibold leading-tight text-white hover:text-[color:var(--crm-primary)] sm:text-[1.15rem]"
+                                  >
+                                    {appt.CustomerName}
+                                  </button>
+                                ) : (
+                                  <p className="text-[1.05rem] font-semibold leading-tight text-white sm:text-[1.15rem]">Без имени</p>
+                                )}
+                              </div>
                               {showUpcomingBarber && appt.Barber ? (
                                 <p className="text-[13px] leading-tight text-[var(--crm-muted)] sm:text-sm">
                                   <span className="font-semibold text-white">{appt.Barber}</span>
@@ -403,7 +466,7 @@
                                   onKeyDown={(event) => event.stopPropagation()}
                                   disabled={isPending}
                                   className={classNames(
-                                    'crm-tonal-btn w-full justify-center px-3.5 py-2.5 text-sm text-rose-200 sm:w-auto sm:min-w-[112px] sm:px-4 sm:py-2 sm:text-sm',
+                                    'crm-ghost-btn w-full justify-center px-3.5 py-2.5 text-sm text-rose-200 hover:bg-[rgba(96,34,46,0.74)] hover:text-white sm:w-auto sm:min-w-[112px] sm:px-4 sm:py-2 sm:text-sm',
                                     isPending && 'cursor-wait opacity-70'
                                   )}
                                 >
@@ -464,20 +527,27 @@
               const statusLabel = normalizeStatusValue(appt.Status);
               const isPending = pendingStatusId === apptId;
               const handleOpen = () => onOpenAppointment?.(appt, { allowDelete: true });
-              return (
+                return (
                 <div
                   key={apptId}
                   role="button"
                   tabIndex={0}
                   onClick={handleOpen}
                   onKeyDown={(event) => event.key === 'Enter' && handleOpen()}
-                  className="crm-soft-card relative rounded-[24px] bg-[rgba(78,28,38,0.6)] p-4 transition hover:-translate-y-0.5 hover:bg-[rgba(96,34,46,0.74)] focus:outline-none focus:ring-2 focus:ring-[rgba(132,48,64,0.22)]"
+                  className="crm-soft-card relative rounded-[24px] bg-[rgba(78,28,38,0.6)] px-4 pb-4 pt-0 transition hover:-translate-y-0.5 hover:bg-[rgba(96,34,46,0.74)] focus:outline-none focus:ring-2 focus:ring-[rgba(132,48,64,0.22)]"
                 >
+                  <div className="absolute left-0 top-0 overflow-hidden rounded-tl-[24px] rounded-br-[28px] shadow-[0_14px_30px_rgba(0,0,0,0.2)]">
+                    {renderAppointmentAvatar(appt, 56)}
+                  </div>
                   <span className={classNames('absolute right-4 top-4 h-2.5 w-2.5 rounded-full sm:hidden', getDashboardStatusDotClass(statusLabel))} />
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1 pr-4 sm:pr-0">
-                      <p className="text-[11px] uppercase tracking-[0.25em] text-[#f0c8ce]/80">{formatDateBadgeLabel(appt.Date)}</p>
-                      <p className="text-xl font-semibold text-white sm:text-2xl">{timeLabel || 'Время не указано'}</p>
+                  <div className="flex min-h-[3.5rem] flex-wrap items-center justify-between gap-3">
+                    <div className="flex min-h-[56px] flex-col justify-center space-y-0.5 pl-[3.8rem] pr-4 sm:min-h-[56px] sm:space-y-0.5 sm:pr-0">
+                      <p className="text-[11px] uppercase leading-tight tracking-[0.25em] text-[#f0c8ce]/80">{formatDateBadgeLabel(appt.Date)}</p>
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-xl font-semibold leading-none text-white sm:text-2xl">{start || '—'}</p>
+                        {end && <p className="text-xs leading-none text-[var(--crm-muted)] sm:text-sm">до {end}</p>}
+                        {!end && !start && <p className="text-xl font-semibold leading-none text-white sm:text-2xl">{timeLabel || 'Время не указано'}</p>}
+                      </div>
                     </div>
                     <span
                       className={classNames(
@@ -488,11 +558,11 @@
                       {statusLabel || 'Без статуса'}
                     </span>
                   </div>
-                  <div className="mt-3 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="space-y-1">
-                      <p className="text-base font-semibold text-white">{appt.CustomerName || 'Без имени'}</p>
+                  <div className="mt-1.5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 space-y-0.5">
+                        <p className="text-base font-semibold text-white">{appt.CustomerName || 'Без имени'}</p>
                       {showOverdueBarber && appt.Barber ? (
-                      <p className="text-sm text-[var(--crm-text)]">
+                        <p className="text-sm text-[var(--crm-text)]">
                           <span className="font-semibold text-white">{appt.Barber}</span>
                         </p>
                       ) : null}
@@ -524,7 +594,7 @@
 	                        onKeyDown={(event) => event.stopPropagation()}
 	                        disabled={isPending}
 	                        className={classNames(
-	                          'crm-tonal-btn w-full justify-center px-4 py-3 text-sm text-rose-200 sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
+	                          'crm-ghost-btn w-full justify-center px-4 py-3 text-sm text-rose-200 hover:bg-[rgba(96,34,46,0.74)] hover:text-white sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
 	                          isPending && 'cursor-wait opacity-70'
 	                        )}
                       >

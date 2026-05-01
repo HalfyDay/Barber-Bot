@@ -336,6 +336,22 @@
         return match ? { ...row, ...match } : row;
       });
     }
+    if (activeTable === 'Appointments' && clientInsightsLookup.size) {
+      rows = rows.map((row) => {
+        const match =
+          clientInsightsLookup.get(normalizeText(row.UserID).toLowerCase()) ||
+          clientInsightsLookup.get(normalizeText(row.TelegramID).toLowerCase()) ||
+          clientInsightsLookup.get(normalizeText(row.Phone).toLowerCase()) ||
+          clientInsightsLookup.get(normalizeText(row.CustomerName).toLowerCase()) ||
+          null;
+        return match
+          ? {
+              ...row,
+              avatarUrl: row.avatarUrl || row.AvatarURL || match.avatarUrl || match.AvatarURL || '',
+            }
+          : row;
+      });
+    }
     if (TABLE_CONFIG[activeTable]?.supportsBarberFilter && selectedBarber !== 'all') {
       rows = rows.filter((row) => normalizeText(row.Barber).toLowerCase() === normalizeText(selectedBarber).toLowerCase());
     }

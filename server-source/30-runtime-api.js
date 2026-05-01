@@ -148,7 +148,7 @@ const scheduleSelfRestart = (delayMs = 500) => {
       console.error(
         "[update] Relaunch did not start; keeping current process alive.",
       );
-      await appendUpdateAlert("РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРЅСЏС‚СЊ РЅРѕРІС‹Р№ РїСЂРѕС†РµСЃСЃ РїРѕСЃР»Рµ РѕР±РЅРѕРІР»РµРЅРёСЏ.", {
+      await appendUpdateAlert("Не удалось поднять новый процесс после обновления.", {
         strategy: restartStrategy,
       });
       restartScheduled = false;
@@ -367,7 +367,7 @@ app.get("/api/dashboard/overview", authenticateToken, async (req, res) => {
     console.error("Dashboard snapshot error:", error);
     res
       .status(500)
-      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РґР°РЅРЅС‹Рµ РїР°РЅРµР»Рё." });
+      .json({ error: "Не удалось загрузить данные панели." });
   }
 });
 registerServiceCatalogRoutes({
@@ -468,7 +468,7 @@ app.get("/api/options/appointments", authenticateToken, async (req, res) => {
     console.error("Options fetch error:", error);
     res
       .status(500)
-      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ СЃРїСЂР°РІРѕС‡РЅРёРєРё Р·Р°РїРёСЃРё." });
+      .json({ error: "Не удалось получить справочники записи." });
   }
 });
 app.get("/api/revenue/summary", authenticateToken, async (req, res) => {
@@ -483,16 +483,16 @@ app.get("/api/revenue/summary", authenticateToken, async (req, res) => {
     if (!normalizedIdentityBarberId) {
       return res
         .status(403)
-        .json({ error: "РЈ СЃРѕС‚СЂСѓРґРЅРёРєР° РЅРµ СѓРєР°Р·Р°РЅ Р±Р°СЂР±РµСЂ РІ РїСЂРѕС„РёР»Рµ." });
+        .json({ error: "У сотрудника не указан барбер в профиле." });
     }
     if (requestedBarberId && requestedBarberId !== normalizedIdentityBarberId) {
-      return res.status(403).json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РїСЂРѕСЃРјРѕС‚СЂР° РІС‹СЂСѓС‡РєРё." });
+      return res.status(403).json({ error: "Недостаточно прав для просмотра выручки." });
     }
     requestedBarberId = normalizedIdentityBarberId;
   } else if (!isOwner) {
     return res
       .status(403)
-      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РїСЂРѕСЃРјРѕС‚СЂР° РІС‹СЂСѓС‡РєРё." });
+      .json({ error: "Недостаточно прав для просмотра выручки." });
   }
   try {
     const summary = await buildRevenueSummary({
@@ -502,13 +502,13 @@ app.get("/api/revenue/summary", authenticateToken, async (req, res) => {
     });
     const { targetBarber } = summary;
     if (isStaff && !targetBarber) {
-      return res.status(404).json({ error: "Р‘Р°СЂР±РµСЂ РЅРµ РЅР°Р№РґРµРЅ." });
+      return res.status(404).json({ error: "Барбер не найден." });
     }
     res.json(summary);
   } catch (error) {
     console.error("Revenue summary error:", error);
     res.status(500).json({
-      error: "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ СЃРІРѕРґРєСѓ РІС‹СЂСѓС‡РєРё.",
+      error: "Не удалось получить сводку выручки.",
       details: error.message,
     });
   }
@@ -517,34 +517,34 @@ app.get("/api/user-profile/:name", authenticateToken, async (req, res) => {
   try {
     const profile = await buildUserProfile(req.params.name);
     if (!profile)
-      return res.status(404).json({ error: "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ." });
+      return res.status(404).json({ error: "Пользователь не найден." });
     res.json(profile);
   } catch (error) {
     console.error("Profile fetch error:", error);
     res
       .status(500)
-      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РїСЂРѕС„РёР»СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ." });
+      .json({ error: "Не удалось загрузить профиль пользователя." });
   }
 });
 app.post("/api/users/:id/block", authenticateToken, async (req, res) => {
   if (!isOwnerRequest(req)) {
     return res
       .status(403)
-      .json({ error: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ: С‚СЂРµР±СѓРµС‚СЃСЏ РІР»Р°РґРµР»РµС† РїСЂРёР»РѕР¶РµРЅРёСЏ." });
+      .json({ error: "Недостаточно прав: требуется владелец приложения." });
   }
   const { id } = req.params;
   const shouldBlock = req.body?.blocked !== false;
   try {
     const result = await toggleUserBlock({ id, shouldBlock });
     if (!result) {
-      return res.status(404).json({ error: "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ." });
+      return res.status(404).json({ error: "Пользователь не найден." });
     }
     return res.json(result);
   } catch (error) {
     console.error("Block toggle error:", error);
     return res
       .status(500)
-      .json({ error: "РќРµ СѓРґР°Р»РѕСЃСЊ РёР·РјРµРЅРёС‚СЊ СЃС‚Р°С‚СѓСЃ Р±Р»РѕРєРёСЂРѕРІРєРё.", details: error.message });
+      .json({ error: "Не удалось изменить статус блокировки.", details: error.message });
   }
 });
 const {

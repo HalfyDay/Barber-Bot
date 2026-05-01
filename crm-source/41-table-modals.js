@@ -139,6 +139,10 @@ const ProfileModal = ({ state, onClose, onBlockClient }) => {
   const appointments = state.data?.appointments || [];
   const visitHistory = useMemo(() => buildVisitHistory(appointments), [appointments]);
   const user = state.data?.user || null;
+  const avatarSrc = useMemo(
+    () => resolveAssetUrl(normalizeImagePath(user?.avatarUrl || user?.AvatarURL || '')),
+    [user?.AvatarURL, user?.avatarUrl]
+  );
   const [blockState, setBlockState] = useState(null);
   const [blockBusy, setBlockBusy] = useState(false);
   const [blockError, setBlockError] = useState('');
@@ -149,12 +153,11 @@ const ProfileModal = ({ state, onClose, onBlockClient }) => {
   const warningCount = blockState?.warningCount ?? state.data?.warningCount ?? user?.warningCount ?? 0;
   const manualBlocked = blockState?.manualBlocked ?? state.data?.manualBlocked ?? user?.manualBlocked ?? false;
   const isBlocked =
-    (blockState?.isBlocked ??
-      blockState?.blocked ??
-      state.data?.isBlocked ??
-      user?.isBlocked ??
-      manualBlocked) ||
-    warningCount >= CLIENT_BLOCK_THRESHOLD;
+    blockState?.isBlocked ??
+    blockState?.blocked ??
+    state.data?.isBlocked ??
+    user?.isBlocked ??
+    manualBlocked;
   const handleToggleBlock = async () => {
     if (!onBlockClient || !user?.id) return;
     setBlockBusy(true);
@@ -211,6 +214,23 @@ const ProfileModal = ({ state, onClose, onBlockClient }) => {
       {!state.loading && state.data?.error && <ErrorBanner message={state.data.error} />}
       {!state.loading && user && (
         <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            {avatarSrc ? (
+              <img src={avatarSrc} alt={user?.Name || 'Клиент'} className="h-14 w-14 rounded-full object-cover" />
+            ) : (
+              <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--crm-surface-3)] text-[var(--crm-muted)]" aria-hidden="true">
+                <IconCalendarDay className="h-6 w-6" />
+              </span>
+            )}
+            <div className="min-w-0">
+              <p className="text-lg font-semibold text-white">{user?.Name || 'Без имени'}</p>
+              {(phoneLabel || telegramHandle) && (
+                <p className="text-sm text-[var(--crm-muted)]">
+                  {[phoneLabel, telegramHandle].filter(Boolean).join(' • ')}
+                </p>
+              )}
+            </div>
+          </div>
           <div className="crm-inline-panel flex flex-wrap items-center justify-between gap-3 px-3 py-2">
             <div className="text-sm text-white">
               <p className="font-semibold">Предупреждения: {warningCount}</p>

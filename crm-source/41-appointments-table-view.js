@@ -14,7 +14,7 @@
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              onOpenProfile(value);
+              onOpenProfile(record);
             }}
             className="text-[color:var(--crm-primary)] hover:text-white"
           >
@@ -109,7 +109,7 @@
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                onOpenProfile(record.CustomerName);
+                                onOpenProfile(record);
                               }}
                               className="text-left text-base font-semibold text-white hover:text-[color:var(--crm-primary)] sm:text-lg"
                             >
@@ -201,7 +201,7 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
         type="button"
         onClick={(event) => {
           event.stopPropagation();
-          onOpenProfile(record.CustomerName);
+          onOpenProfile(record);
         }}
         className={classNames('block w-full min-w-0 text-left font-semibold text-white hover:text-[color:var(--crm-primary)]', effectiveCompact ? 'truncate text-sm' : 'truncate')}
       >

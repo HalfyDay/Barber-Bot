@@ -1299,18 +1299,33 @@ const handleBarberFieldChange = (id, field, value) => {
     [apiRequest]
   );
   const openProfile = useCallback(
-    async (name) => {
-      if (!name) return;
+    async (target) => {
+      const rawName = typeof target === 'string' ? target : target?.CustomerName || target?.Name || target?.name || '';
+      const clients = Array.isArray(dashboard?.clients) ? dashboard.clients : [];
+      const normalizedPhone = normalizePhoneValue(
+        typeof target === 'object' ? target?.Phone || target?.phone || '' : ''
+      );
+      const normalizedTelegramId = normalizeText(
+        typeof target === 'object' ? target?.TelegramID || target?.telegramId || target?.UserID || target?.id || '' : ''
+      ).toLowerCase();
+      const normalizedName = normalizeText(rawName).toLowerCase();
+      const matchedClient =
+        clients.find((client) => normalizePhoneValue(client?.phone || client?.Phone || '') === normalizedPhone && normalizedPhone) ||
+        clients.find((client) => normalizeText(client?.telegramId || client?.TelegramID || client?.id || '').toLowerCase() === normalizedTelegramId && normalizedTelegramId) ||
+        clients.find((client) => normalizeText(client?.name || client?.Name || '').toLowerCase() === normalizedName && normalizedName) ||
+        null;
+      const profileName = matchedClient?.name || matchedClient?.Name || rawName;
+      if (!profileName) return;
       setProfileModal({ open: true, data: null, loading: true });
       try {
-        const payload = await apiRequest(`/user-profile/${encodeURIComponent(name)}`);
+        const payload = await apiRequest(`/user-profile/${encodeURIComponent(profileName)}`);
         const processed = await applyFavoriteBarberRule(payload);
         setProfileModal({ open: true, data: processed, loading: false });
       } catch (error) {
         setProfileModal({ open: true, data: { error: error.message || 'Не удалось загрузить профиль клиента' }, loading: false });
       }
     },
-    [apiRequest, applyFavoriteBarberRule]
+    [apiRequest, applyFavoriteBarberRule, dashboard?.clients]
   );
   const ensureOptions = useCallback(async () => {
     if (optionsCache) return optionsCache;

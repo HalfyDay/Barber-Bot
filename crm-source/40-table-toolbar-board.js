@@ -422,10 +422,10 @@
               {getBarberSelect('md:w-auto md:min-w-[180px]')}
             </div>
           )}
+          {canEditScheduleDay ? <div className="hidden md:flex">{renderScheduleDayEditor(false)}</div> : null}
           <div className="hidden md:block">
             {calendarViewControl}
           </div>
-          {canEditScheduleDay ? <div className="hidden md:flex">{renderScheduleDayEditor(false)}</div> : null}
           <div className="hidden md:block">
             {renderStatusControl()}
           </div>

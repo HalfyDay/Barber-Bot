@@ -64,6 +64,7 @@
     telegramLinkRequestId: "",
     topbarAnnouncementActive: false,
     topbarAnnouncementText: "",
+    liveClockTick: Date.now(),
     booking: {
       barberId: "",
       services: [],
@@ -115,6 +116,7 @@
     return target.closest("a, img, picture, svg, video, .profile-avatar");
   };
   let homeBarberRotationTimer = null;
+  let appointmentEtaTimer = null;
   let homeBarberTransitionSwapTimer = null;
   let homeBarberTransitionResetTimer = null;
   let homeBarberSwipeHandledAt = 0;
@@ -133,6 +135,45 @@
     referralOperations: { operationsRef: null, transferOut: [], transferIn: [] },
     filteredReferralActivity: { operationsRef: null, filter: "", filtered: [] },
     renderedFragments: new Map(),
+  };
+  const stopAppointmentEtaTimer = () => {
+    if (!appointmentEtaTimer) return;
+    window.clearInterval(appointmentEtaTimer);
+    appointmentEtaTimer = null;
+  };
+  const refreshManageBookingSheetEta = () => {
+    if (normalizeText(state.sheet?.title) !== "Управление записью") return false;
+    const appointment = Array.isArray(state.payload?.booking?.activeAppointments)
+      ? state.payload.booking.activeAppointments.find((item) => normalizeText(item.id) === normalizeText(state.pendingBookingCancellationId))
+      : null;
+    if (!appointment) return false;
+    state.sheet = {
+      ...state.sheet,
+      bodyHtml: buildManageBookingSheet(appointment),
+    };
+    render({ app: false });
+    return true;
+  };
+  const syncAppointmentEtaTimer = () => {
+    const hasHomeActiveAppointment =
+      state.currentPage === "home" &&
+      Array.isArray(state.payload?.booking?.activeAppointments) &&
+      state.payload.booking.activeAppointments.length > 0;
+    const hasManageBookingSheet = normalizeText(state.sheet?.title) === "Управление записью";
+    if (!hasHomeActiveAppointment && !hasManageBookingSheet) {
+      stopAppointmentEtaTimer();
+      return;
+    }
+    if (appointmentEtaTimer) return;
+    appointmentEtaTimer = window.setInterval(() => {
+      state.liveClockTick = Date.now();
+      if (normalizeText(state.sheet?.title) === "Управление записью") {
+        refreshManageBookingSheetEta();
+      }
+      if (state.currentPage === "home") {
+        render({ sheet: false });
+      }
+    }, 1000);
   };
   const lastRenderedHtml = {
     app: "",
@@ -1315,15 +1356,17 @@
     return parsed.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", weekday: "short" });
   };
 
-  const APP_TIME_ZONE = "Europe/Moscow";
+  const DEFAULT_APP_TIME_ZONE = "Asia/Irkutsk";
+  const getAppTimeZone = () => normalizeText(state?.payload?.site?.timeZones?.client) || DEFAULT_APP_TIME_ZONE;
   const dateTimeFormatterCache = new Map();
   const getDateTimeFormatter = (options = {}) => {
-    const cacheKey = JSON.stringify(options);
+    const timeZone = getAppTimeZone();
+    const cacheKey = JSON.stringify({ timeZone, ...options });
     if (!dateTimeFormatterCache.has(cacheKey)) {
       dateTimeFormatterCache.set(
         cacheKey,
         new Intl.DateTimeFormat("ru-RU", {
-          timeZone: APP_TIME_ZONE,
+          timeZone,
           ...options,
         }),
       );
@@ -1349,13 +1392,14 @@
     return { start: startRaw, end: endRaw };
   };
   const timeZoneFormatterCache = new Map();
-  const getTimeZoneFormatter = (zone = APP_TIME_ZONE) => {
-    const cacheKey = zone || "default";
+  const getTimeZoneFormatter = (zone) => {
+    const targetZone = normalizeText(zone) || getAppTimeZone();
+    const cacheKey = targetZone || "default";
     if (!timeZoneFormatterCache.has(cacheKey)) {
       timeZoneFormatterCache.set(
         cacheKey,
         new Intl.DateTimeFormat("en-CA", {
-          timeZone: zone,
+          timeZone: targetZone,
           year: "numeric",
           month: "2-digit",
           day: "2-digit",
@@ -1368,7 +1412,7 @@
     }
     return timeZoneFormatterCache.get(cacheKey);
   };
-  const getTimeZoneParts = (dateObj, zone = APP_TIME_ZONE) => {
+  const getTimeZoneParts = (dateObj, zone) => {
     const formatter = getTimeZoneFormatter(zone);
     return formatter.formatToParts(dateObj).reduce((acc, part) => {
       if (part.type !== "literal") {
@@ -1377,7 +1421,7 @@
       return acc;
     }, {});
   };
-  const getTimeZoneOffsetMs = (dateObj, zone = APP_TIME_ZONE) => {
+  const getTimeZoneOffsetMs = (dateObj, zone) => {
     const parts = getTimeZoneParts(dateObj, zone);
     const asUtc = Date.UTC(
       Number(parts.year || 0),
@@ -1389,7 +1433,8 @@
     );
     return asUtc - dateObj.getTime();
   };
-  const parseZonedDateTime = (dateValue, timeToken, zone = APP_TIME_ZONE) => {
+  const parseZonedDateTime = (dateValue, timeToken, zone) => {
+    const targetZone = normalizeText(zone) || getAppTimeZone();
     const safeDate = normalizeText(dateValue).slice(0, 10);
     const safeTime = sanitizeTimeToken(timeToken) || "00:00";
     const dateMatch = safeDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -1403,9 +1448,9 @@
     const utcMillis = Date.UTC(year, month - 1, day, hours, minutes, 0);
     let candidate = new Date(utcMillis);
     try {
-      let offsetMs = getTimeZoneOffsetMs(candidate, zone);
+      let offsetMs = getTimeZoneOffsetMs(candidate, targetZone);
       candidate = new Date(utcMillis - offsetMs);
-      const adjustedOffsetMs = getTimeZoneOffsetMs(candidate, zone);
+      const adjustedOffsetMs = getTimeZoneOffsetMs(candidate, targetZone);
       if (adjustedOffsetMs !== offsetMs) {
         candidate = new Date(utcMillis - adjustedOffsetMs);
       }
@@ -2591,7 +2636,7 @@
     const siteHome = state.payload?.site?.home || {};
     const activeAppointments = Array.isArray(state.payload?.booking?.activeAppointments) ? state.payload.booking.activeAppointments : [];
     const barbers = getSortedBookingBarbers();
-    return memoizeRenderedFragment("page-home", [siteHome, activeAppointments, barbers], () => {
+    return memoizeRenderedFragment("page-home", [siteHome, activeAppointments, barbers, Math.floor((state.liveClockTick || 0) / 1000)], () => {
       const promos = Array.isArray(siteHome.promos) ? siteHome.promos : [];
       const promoLaneItems = (() => {
         const indexedPromos = promos.map((promo, index) => ({ ...promo, _promoIndex: index }));
@@ -4510,6 +4555,7 @@
     if (state.currentPage === "barber") {
       ensureBarberProfileServices().catch(() => {});
     }
+    syncAppointmentEtaTimer();
     ensureProfileCoverPalette().catch(() => {});
   };
 

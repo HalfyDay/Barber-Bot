@@ -518,7 +518,7 @@
     if (vkIdSdkPromise) return vkIdSdkPromise;
     vkIdSdkPromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = "https://unpkg.com/@vkid/sdk@<2.0.0/dist-sdk/umd/index.js";
+      script.src = "https://unpkg.com/@vkid/sdk/dist-sdk/umd/index.js";
       script.async = true;
       script.onload = () => {
         if (window.VKID) resolve(window.VKID);

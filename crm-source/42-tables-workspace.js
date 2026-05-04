@@ -711,7 +711,12 @@
                   canCreate={tableSettings.canCreate}
                   onOpenCreate={
                     activeTable === 'Appointments'
-                      ? () => onCreateAppointment?.()
+                      ? () =>
+                          onCreateAppointment?.(
+                            appointmentCalendarView === 'day'
+                              ? { Date: appointmentCalendarDate || getLocalISODateString() }
+                              : {}
+                          )
                       : () => setCreateModalOpen(true)
                   }
                   onRefresh={fetchTables}

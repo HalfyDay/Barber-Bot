@@ -411,6 +411,40 @@ const registerHomeRoutes = ({
     return "";
   };
 
+  const pickVkFieldDeep = (sources, fieldNames, maxDepth = 6) => {
+    const visited = new WeakSet();
+    const search = (value, depth) => {
+      if (value == null || depth > maxDepth) return "";
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        return "";
+      }
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          const found = search(item, depth + 1);
+          if (found) return found;
+        }
+        return "";
+      }
+      if (typeof value !== "object") return "";
+      if (visited.has(value)) return "";
+      visited.add(value);
+      for (const fieldName of fieldNames) {
+        const directValue = normalizeText(value[fieldName]);
+        if (directValue) return directValue;
+      }
+      for (const nestedValue of Object.values(value)) {
+        const found = search(nestedValue, depth + 1);
+        if (found) return found;
+      }
+      return "";
+    };
+    for (const source of sources) {
+      const found = search(source, 0);
+      if (found) return found;
+    }
+    return "";
+  };
+
   const extractVkPhoneValue = (value) => {
     if (value == null) return "";
     if (typeof value === "string" || typeof value === "number") {
@@ -440,7 +474,29 @@ const registerHomeRoutes = ({
         if (extracted) return extracted;
       }
     }
+    for (const source of sources) {
+      if (!source || typeof source !== "object") continue;
+      const extracted = extractVkPhoneValue(source);
+      if (extracted) return extracted;
+    }
     return "";
+  };
+
+  const describeVkPayloadShape = (value, depth = 0) => {
+    if (value == null) return value;
+    if (typeof value === "string") return value.length > 120 ? `${value.slice(0, 120)}…` : value;
+    if (typeof value === "number" || typeof value === "boolean") return value;
+    if (Array.isArray(value)) {
+      if (depth >= 2) return `[array:${value.length}]`;
+      return value.slice(0, 4).map((item) => describeVkPayloadShape(item, depth + 1));
+    }
+    if (typeof value !== "object") return typeof value;
+    if (depth >= 2) return Object.keys(value).slice(0, 12);
+    return Object.fromEntries(
+      Object.entries(value)
+        .slice(0, 20)
+        .map(([key, nestedValue]) => [key, describeVkPayloadShape(nestedValue, depth + 1)]),
+    );
   };
 
   const normalizeVkBirthDate = (value) => {
@@ -470,32 +526,45 @@ const registerHomeRoutes = ({
     const allSources = [responsePayload, tokenResponse, tokenPayload];
     const firstName =
       pickVkField(responseSources, ["first_name", "firstName", "name_given"]) ||
+      pickVkFieldDeep(responseSources, ["first_name", "firstName", "name_given"]) ||
       pickVkField(tokenSources, ["first_name", "given_name", "name_given", "firstName"]);
     const lastName =
       pickVkField(responseSources, ["last_name", "lastName", "name_family"]) ||
+      pickVkFieldDeep(responseSources, ["last_name", "lastName", "name_family"]) ||
       pickVkField(tokenSources, ["last_name", "family_name", "name_family", "lastName"]);
     const email =
       pickVkField(responseSources, ["email"]) ||
+      pickVkFieldDeep(responseSources, ["email"]) ||
       pickVkField(tokenSources, ["email"]);
     const phone = normalizePhone(pickVkPhone(allSources)) || "";
     const displayName =
       pickVkField(responseSources, ["name", "display_name", "displayName"]) ||
+      pickVkFieldDeep(responseSources, ["name", "display_name", "displayName"]) ||
       [firstName, lastName].filter(Boolean).join(" ") ||
       pickVkField(tokenSources, ["name", "display_name", "displayName"]) ||
       email ||
       phone;
     return {
-      vkUserId: pickVkField(allSources, ["user_id", "sub", "id", "userId"]) || "",
+      vkUserId:
+        pickVkField(allSources, ["user_id", "sub", "id", "userId", "uid", "uuid"]) ||
+        pickVkFieldDeep(allSources, ["user_id", "sub", "id", "userId", "uid", "uuid"]) ||
+        "",
       firstName,
       lastName,
       displayName,
       phone,
       email,
-      avatarUrl: pickVkField(allSources, ["avatar", "picture", "photo", "avatar_url", "photo_200", "photo_100"]),
+      avatarUrl:
+        pickVkField(allSources, ["avatar", "picture", "photo", "avatar_url", "photo_200", "photo_100"]) ||
+        pickVkFieldDeep(allSources, ["avatar", "picture", "photo", "avatar_url", "photo_200", "photo_100"]),
       birthDate: normalizeVkBirthDate(
-        pickVkField(allSources, ["birth_date", "birthDate", "bdate", "birthday", "date_of_birth"]),
+        pickVkField(allSources, ["birth_date", "birthDate", "bdate", "birthday", "date_of_birth"]) ||
+          pickVkFieldDeep(allSources, ["birth_date", "birthDate", "bdate", "birthday", "date_of_birth"]),
       ),
-      gender: normalizeVkGender(pickVkField(allSources, ["gender", "sex"])),
+      gender: normalizeVkGender(
+        pickVkField(allSources, ["gender", "sex"]) ||
+          pickVkFieldDeep(allSources, ["gender", "sex"]),
+      ),
     };
   };
 
@@ -770,6 +839,12 @@ const registerHomeRoutes = ({
         supplementalVkProfile || tokenPayload,
       );
       if (!vkProfile.vkUserId) {
+        console.error("Home VK ID auth missing user id", {
+          tokenPayload: describeVkPayloadShape(tokenPayload),
+          idTokenPayload: describeVkPayloadShape(idTokenPayload),
+          supplementalVkProfile: describeVkPayloadShape(supplementalVkProfile),
+          resolvedProfile: describeVkPayloadShape(vkProfile),
+        });
         return res.status(409).json({
           success: false,
           message: "VK ID не вернул идентификатор пользователя.",
@@ -965,6 +1040,12 @@ const registerHomeRoutes = ({
         supplementalVkProfile || tokenPayload,
       );
       if (!vkProfile.vkUserId) {
+        console.error("Home VK ID profile link missing user id", {
+          tokenPayload: describeVkPayloadShape(tokenPayload),
+          idTokenPayload: describeVkPayloadShape(idTokenPayload),
+          supplementalVkProfile: describeVkPayloadShape(supplementalVkProfile),
+          resolvedProfile: describeVkPayloadShape(vkProfile),
+        });
         return res.status(409).json({
           success: false,
           message: "VK ID не вернул идентификатор пользователя.",

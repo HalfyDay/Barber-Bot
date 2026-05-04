@@ -2234,11 +2234,11 @@ img.media-wave.is-ready {
 }
 
 .bottom-nav {
-  --nav-gap: 8px;
-  --nav-booking-size: 70px;
-  --nav-booking-cutout: 42px;
-  --nav-booking-cutout-offset: 8px;
-  --nav-booking-lift: 37px;
+  --nav-gap: 6px;
+  --nav-booking-size: 60px;
+  --nav-booking-cutout: 34px;
+  --nav-booking-cutout-offset: 10px;
+  --nav-booking-lift: 27px;
   --nav-surface-bg: rgba(15, 18, 18, 0.98);
   position: fixed;
   left: 50%;
@@ -2248,8 +2248,8 @@ img.media-wave.is-ready {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: var(--nav-gap);
-  padding: 10px;
-  border-radius: 32px;
+  padding: 7px;
+  border-radius: 20px;
   border: 0;
   background: transparent;
   backdrop-filter: none;
@@ -2290,7 +2290,7 @@ img.media-wave.is-ready {
 }
 
 .bottom-nav .nav-pill {
-  min-height: 58px;
+  min-height: 48px;
   border: 0;
   outline: 0;
   background: transparent;
@@ -7210,18 +7210,43 @@ img.media-wave.is-ready {
   justify-content: flex-start;
 }
 
+.profile-security-vkid-row {
+  grid-template-areas:
+    "copy actions"
+    "onetap onetap";
+}
+
+.profile-security-vkid-row .profile-security-row-copy {
+  grid-area: copy;
+}
+
+.profile-security-vkid-row .inline-actions {
+  grid-area: actions;
+  justify-self: end;
+}
+
+.profile-security-vkid-row .profile-vkid-stack {
+  grid-area: onetap;
+  width: 100%;
+  margin-top: 6px;
+}
+
 .profile-vkid-stack {
-  display: grid;
+  display: none;
   gap: 12px;
   width: min(100%, 320px);
   justify-items: start;
   align-items: start;
+  align-self: start;
+}
+
+.profile-vkid-stack.is-visible {
+  display: grid;
 }
 
 .vkid-onetap.profile-vkid-onetap {
   width: 100%;
-  min-height: 52px;
-  display: flex;
+  display: block;
   align-items: stretch;
   justify-self: start;
 }
@@ -7229,6 +7254,10 @@ img.media-wave.is-ready {
 .profile-vkid-fallback {
   width: 100%;
   justify-content: center;
+}
+
+.profile-vkid-inline-btn {
+  min-width: 188px;
 }
 
 .vkid-onetap.profile-vkid-onetap > div,

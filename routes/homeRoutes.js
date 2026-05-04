@@ -600,6 +600,85 @@ const registerHomeRoutes = ({
     return null;
   };
 
+  const resolveVkIdProfile = async ({
+    appId,
+    code,
+    deviceId,
+    codeVerifier,
+    redirectUrl,
+    providedTokenPayload,
+  }) => {
+    const tokenCandidates = [];
+    const safeProvidedTokenPayload =
+      providedTokenPayload && typeof providedTokenPayload === "object" ? providedTokenPayload : null;
+    if (safeProvidedTokenPayload) {
+      tokenCandidates.push({
+        source: "client",
+        tokenPayload: safeProvidedTokenPayload,
+      });
+    }
+    if (normalizeText(code) && normalizeText(deviceId)) {
+      try {
+        const exchangedTokenPayload = await exchangeVkIdAuthorizationCode({
+          appId,
+          code,
+          deviceId,
+          codeVerifier,
+          redirectUrl,
+        });
+        tokenCandidates.push({
+          source: "server",
+          tokenPayload: exchangedTokenPayload,
+        });
+      } catch (error) {
+        if (!tokenCandidates.length) throw error;
+      }
+    }
+    const profileCandidates = [];
+    for (const candidate of tokenCandidates) {
+      const tokenPayload = candidate?.tokenPayload && typeof candidate.tokenPayload === "object"
+        ? candidate.tokenPayload
+        : {};
+      const idTokenPayload = decodeJwtPayload(tokenPayload.id_token);
+      const supplementalVkProfile = await fetchVkIdProfileByToken({
+        appId,
+        accessToken: tokenPayload.access_token,
+        idToken: tokenPayload.id_token,
+      });
+      const vkProfile = buildVkProfileFromTokenPayload(
+        idTokenPayload || {},
+        supplementalVkProfile || tokenPayload,
+      );
+      profileCandidates.push({
+        source: candidate.source,
+        tokenPayload,
+        idTokenPayload,
+        supplementalVkProfile,
+        vkProfile,
+      });
+      if (vkProfile.vkUserId) {
+        return {
+          ...profileCandidates[profileCandidates.length - 1],
+          profileCandidates,
+        };
+      }
+    }
+    if (profileCandidates.length) {
+      return {
+        ...profileCandidates[0],
+        profileCandidates,
+      };
+    }
+    return {
+      source: "",
+      tokenPayload: {},
+      idTokenPayload: null,
+      supplementalVkProfile: null,
+      vkProfile: buildVkProfileFromTokenPayload({}, {}),
+      profileCandidates: [],
+    };
+  };
+
   app.post("/api/home/auth/register", async (req, res) => {
     try {
       const phoneInput = normalizeText(req.body?.phone);
@@ -819,31 +898,25 @@ const registerHomeRoutes = ({
         });
       }
 
-      const tokenPayload =
-        providedTokenPayload ||
-        (await exchangeVkIdAuthorizationCode({
-          appId: vkIdAppId,
-          code,
-          deviceId,
-          codeVerifier,
-          redirectUrl,
-        }));
-      const idTokenPayload = decodeJwtPayload(tokenPayload.id_token);
-      const supplementalVkProfile = await fetchVkIdProfileByToken({
+      const vkResolution = await resolveVkIdProfile({
         appId: vkIdAppId,
-        accessToken: tokenPayload.access_token,
-        idToken: tokenPayload.id_token,
+        code,
+        deviceId,
+        codeVerifier,
+        redirectUrl,
+        providedTokenPayload,
       });
-      const vkProfile = buildVkProfileFromTokenPayload(
-        idTokenPayload || {},
-        supplementalVkProfile || tokenPayload,
-      );
+      const tokenPayload = vkResolution.tokenPayload || {};
+      const idTokenPayload = vkResolution.idTokenPayload;
+      const supplementalVkProfile = vkResolution.supplementalVkProfile;
+      const vkProfile = vkResolution.vkProfile;
       if (!vkProfile.vkUserId) {
         console.error("Home VK ID auth missing user id", {
           tokenPayload: describeVkPayloadShape(tokenPayload),
           idTokenPayload: describeVkPayloadShape(idTokenPayload),
           supplementalVkProfile: describeVkPayloadShape(supplementalVkProfile),
           resolvedProfile: describeVkPayloadShape(vkProfile),
+          profileCandidates: describeVkPayloadShape(vkResolution.profileCandidates),
         });
         return res.status(409).json({
           success: false,
@@ -1020,31 +1093,25 @@ const registerHomeRoutes = ({
         });
       }
 
-      const tokenPayload =
-        providedTokenPayload ||
-        (await exchangeVkIdAuthorizationCode({
-          appId: vkIdAppId,
-          code,
-          deviceId,
-          codeVerifier,
-          redirectUrl,
-        }));
-      const idTokenPayload = decodeJwtPayload(tokenPayload.id_token);
-      const supplementalVkProfile = await fetchVkIdProfileByToken({
+      const vkResolution = await resolveVkIdProfile({
         appId: vkIdAppId,
-        accessToken: tokenPayload.access_token,
-        idToken: tokenPayload.id_token,
+        code,
+        deviceId,
+        codeVerifier,
+        redirectUrl,
+        providedTokenPayload,
       });
-      const vkProfile = buildVkProfileFromTokenPayload(
-        idTokenPayload || {},
-        supplementalVkProfile || tokenPayload,
-      );
+      const tokenPayload = vkResolution.tokenPayload || {};
+      const idTokenPayload = vkResolution.idTokenPayload;
+      const supplementalVkProfile = vkResolution.supplementalVkProfile;
+      const vkProfile = vkResolution.vkProfile;
       if (!vkProfile.vkUserId) {
         console.error("Home VK ID profile link missing user id", {
           tokenPayload: describeVkPayloadShape(tokenPayload),
           idTokenPayload: describeVkPayloadShape(idTokenPayload),
           supplementalVkProfile: describeVkPayloadShape(supplementalVkProfile),
           resolvedProfile: describeVkPayloadShape(vkProfile),
+          profileCandidates: describeVkPayloadShape(vkResolution.profileCandidates),
         });
         return res.status(409).json({
           success: false,

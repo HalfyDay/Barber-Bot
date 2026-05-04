@@ -5156,6 +5156,18 @@
     return payload;
   };
 
+  const exchangeVkIdCodeSafe = async (VKID, code, deviceId, timeoutMs = 3500) => {
+    if (!VKID?.Auth?.exchangeCode || !code || !deviceId) return null;
+    try {
+      return await Promise.race([
+        VKID.Auth.exchangeCode(code, deviceId),
+        new Promise((_, reject) => window.setTimeout(() => reject(new Error("VK_EXCHANGE_TIMEOUT")), timeoutMs)),
+      ]);
+    } catch {
+      return null;
+    }
+  };
+
   const startProfileVkIdLink = async () => {
     const user = state.payload?.user || {};
     const vkAuth = state.payload?.site?.auth || {};
@@ -5172,9 +5184,15 @@
       lang: VKID.Languages.RUS,
       scheme: VKID.Scheme.LIGHT,
     });
+    const tokenPayload = await exchangeVkIdCodeSafe(
+      VKID,
+      authResult?.code,
+      authResult?.device_id,
+    );
     await handleProfileVkIdLinkSuccess({
       code: authResult?.code,
       deviceId: authResult?.device_id,
+      tokenPayload,
     });
   };
 
@@ -5209,9 +5227,15 @@
         })
         .on(VKID.OneTapInternalEvents.LOGIN_SUCCESS, async (payload) => {
           try {
+            const tokenPayload = await exchangeVkIdCodeSafe(
+              VKID,
+              payload?.code,
+              payload?.device_id,
+            );
             await handleProfileVkIdLinkSuccess({
               code: payload?.code,
               deviceId: payload?.device_id,
+              tokenPayload,
             });
           } catch (error) {
             openSheet(

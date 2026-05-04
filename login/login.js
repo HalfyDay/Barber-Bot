@@ -625,6 +625,18 @@
     redirectToHome();
   };
 
+  const exchangeVkIdCodeSafe = async (VKID, code, deviceId, timeoutMs = 3500) => {
+    if (!VKID?.Auth?.exchangeCode || !code || !deviceId) return null;
+    try {
+      return await Promise.race([
+        VKID.Auth.exchangeCode(code, deviceId),
+        new Promise((_, reject) => window.setTimeout(() => reject(new Error("VK_EXCHANGE_TIMEOUT")), timeoutMs)),
+      ]);
+    } catch {
+      return null;
+    }
+  };
+
   const renderVkIdOneTap = async () => {
     if (!vkIdLoginAvailable || !vkIdAppId || telegramSetupState.active || !vkIdContainer) return;
     if (vkIdOneTapRendered) return;
@@ -655,9 +667,15 @@
         .on(VKID.OneTapInternalEvents.LOGIN_SUCCESS, async (payload) => {
           try {
             setStatus("Выполняем вход через VK ID...", "waiting");
+            const tokenPayload = await exchangeVkIdCodeSafe(
+              VKID,
+              payload?.code,
+              payload?.device_id,
+            );
             await handleVkIdOneTapSuccess({
               code: payload?.code,
               deviceId: payload?.device_id,
+              tokenPayload,
             });
           } catch (error) {
             setStatus(normalizeText(error?.message) || "Не удалось выполнить вход через VK ID.", "error");

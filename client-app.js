@@ -330,6 +330,15 @@
   };
 
   const normalizeText = (value) => (value == null ? "" : String(value).trim());
+  const buildCurrentPageRedirectUrl = () => {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    if (url.pathname && url.pathname !== "/") {
+      url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
+    }
+    return url.toString();
+  };
   const isDesktopLikeDevice = () =>
     window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches === true;
   const getHomeBarberTiltSceneStyle = () =>
@@ -4936,7 +4945,7 @@
     if (sheetId === "profile-security") {
       const user = state.payload?.user || {};
       const vkAuth = state.payload?.site?.auth || {};
-      openSheet("Безопасность", `<form class="form-grid" id="profile-password-form"><div class="telegram-sheet-card profile-edit-telegram profile-security-telegram"><div class="profile-security-row-copy"><p class="list-title">${user.telegramId ? "Telegram привязан" : "Telegram не подключен"}</p><p class="subtitle">${user.telegramId ? "Быстрый вход через Telegram уже доступен." : "Подключите Telegram для быстрого входа в личный кабинет."}</p></div><div class="inline-actions"><button class="tonal-btn" type="button" data-action="${user.telegramId ? "unlink-telegram" : "link-telegram"}">${user.telegramId ? "Отвязать Telegram" : "Привязать Telegram"}</button></div></div>${vkAuth.vkIdEnabled === true && normalizeText(vkAuth.vkIdAppId) ? `<div class="telegram-sheet-card profile-edit-telegram profile-security-telegram"><div class="profile-security-row-copy"><p class="list-title">${user.vkIdLinked ? "VK ID подключен" : "Подключить VK ID"}</p><p class="subtitle">${user.vkIdLinked ? "Вход через VK ID уже доступен для этого аккаунта." : "Подключите VK ID, чтобы входить в аккаунт без пароля."}</p></div>${user.vkIdLinked ? `<div class="inline-actions"><span class="tonal-btn" aria-disabled="true">Подключено</span></div>` : `<div id="profile-vkid-onetap" class="vkid-onetap profile-vkid-onetap"></div>`}</div>` : ""}<div class="security-password-toggle"><button class="security-password-trigger" type="button" data-action="show-password-change"><div class="profile-security-row-copy"><p class="list-title">Сменить пароль</p><p class="subtitle">Задайте новый пароль для входа на сайте.</p></div><span class="security-password-trigger-action">Изменить</span></button></div><div id="security-password-fields" hidden><label class="field"><span class="field-label">Новый пароль</span><input type="password" name="password" /></label></div><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
+      openSheet("Безопасность", `<form class="form-grid" id="profile-password-form"><div class="telegram-sheet-card profile-edit-telegram profile-security-telegram"><div class="profile-security-row-copy"><p class="list-title">${user.telegramId ? "Telegram привязан" : "Telegram не подключен"}</p><p class="subtitle">${user.telegramId ? "Быстрый вход через Telegram уже доступен." : "Подключите Telegram для быстрого входа в личный кабинет."}</p></div><div class="inline-actions"><button class="tonal-btn" type="button" data-action="${user.telegramId ? "unlink-telegram" : "link-telegram"}">${user.telegramId ? "Отвязать Telegram" : "Привязать Telegram"}</button></div></div>${vkAuth.vkIdEnabled === true && normalizeText(vkAuth.vkIdAppId) ? `<div class="telegram-sheet-card profile-edit-telegram profile-security-telegram"><div class="profile-security-row-copy"><p class="list-title">${user.vkIdLinked ? "VK ID подключен" : "Подключить VK ID"}</p><p class="subtitle">${user.vkIdLinked ? "Вход через VK ID уже доступен для этого аккаунта." : "Подключите VK ID, чтобы входить в аккаунт без пароля."}</p></div>${user.vkIdLinked ? `<div class="inline-actions"><span class="tonal-btn" aria-disabled="true">Подключено</span></div>` : `<div class="profile-vkid-stack"><div id="profile-vkid-onetap" class="vkid-onetap profile-vkid-onetap"></div><button class="ghost-btn profile-vkid-fallback" type="button" data-action="link-vkid">Привязать через VK ID</button></div>`}</div>` : ""}<div class="security-password-toggle"><button class="security-password-trigger" type="button" data-action="show-password-change"><div class="profile-security-row-copy"><p class="list-title">Сменить пароль</p><p class="subtitle">Задайте новый пароль для входа на сайте.</p></div><span class="security-password-trigger-action">Изменить</span></button></div><div id="security-password-fields" hidden><label class="field"><span class="field-label">Новый пароль</span><input type="password" name="password" /></label></div><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
       profileVkIdOneTapRendered = false;
       void renderProfileVkIdOneTap();
       return;
@@ -5135,7 +5144,7 @@
         code,
         deviceId,
         tokenPayload,
-        redirectUrl: `${window.location.origin}${window.location.pathname}`,
+        redirectUrl: buildCurrentPageRedirectUrl(),
       }),
     });
     commitAppPayload(await apiRequest("/app"));
@@ -5145,6 +5154,28 @@
       `<div class="list-item"><p class="list-title">VK ID успешно подключен.</p><p class="subtitle">Теперь в аккаунт можно входить через VK ID.</p></div>`,
     );
     return payload;
+  };
+
+  const startProfileVkIdLink = async () => {
+    const user = state.payload?.user || {};
+    const vkAuth = state.payload?.site?.auth || {};
+    if (user.vkIdLinked || vkAuth.vkIdEnabled !== true || !normalizeText(vkAuth.vkIdAppId)) return;
+    const VKID = await loadVkIdSdk();
+    VKID.Config.init({
+      app: Number(vkAuth.vkIdAppId),
+      redirectUrl: buildCurrentPageRedirectUrl(),
+      responseMode: VKID.ConfigResponseMode.Callback,
+      source: VKID.ConfigSource.LOWCODE,
+      scope: "phone email",
+    });
+    const authResult = await VKID.Auth.login({
+      lang: VKID.Languages.RUS,
+      scheme: VKID.Scheme.LIGHT,
+    });
+    await handleProfileVkIdLinkSuccess({
+      code: authResult?.code,
+      deviceId: authResult?.device_id,
+    });
   };
 
   const renderProfileVkIdOneTap = async () => {
@@ -5157,7 +5188,7 @@
       const VKID = await loadVkIdSdk();
       VKID.Config.init({
         app: Number(vkAuth.vkIdAppId),
-        redirectUrl: `${window.location.origin}${window.location.pathname}`,
+        redirectUrl: buildCurrentPageRedirectUrl(),
         responseMode: VKID.ConfigResponseMode.Callback,
         source: VKID.ConfigSource.LOWCODE,
         scope: "phone email",
@@ -5178,14 +5209,9 @@
         })
         .on(VKID.OneTapInternalEvents.LOGIN_SUCCESS, async (payload) => {
           try {
-            const tokenPayload = await VKID.Auth.exchangeCode(
-              payload?.code,
-              payload?.device_id,
-            );
             await handleProfileVkIdLinkSuccess({
               code: payload?.code,
               deviceId: payload?.device_id,
-              tokenPayload,
             });
           } catch (error) {
             openSheet(
@@ -5329,6 +5355,15 @@
         case "check-telegram-link":
           event.preventDefault();
           void checkTelegramLink();
+          return;
+        case "link-vkid":
+          event.preventDefault();
+          void startProfileVkIdLink().catch((error) => {
+            openSheet(
+              "Ошибка VK ID",
+              `<div class="list-item"><p class="list-title">${normalizeText(error?.message) || "Не удалось привязать VK ID."}</p></div>`,
+            );
+          });
           return;
         case "show-password-change": {
           event.preventDefault();

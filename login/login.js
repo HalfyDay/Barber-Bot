@@ -145,6 +145,16 @@
 
   const normalizeText = (value) => (value == null ? "" : String(value).trim());
 
+  const buildCurrentPageRedirectUrl = () => {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    if (url.pathname && url.pathname !== "/") {
+      url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
+    }
+    return url.toString();
+  };
+
   const normalizePhone = (value) => {
     const raw = normalizeText(value).replace(/[^\d+]/g, "");
     if (!raw) return "";
@@ -548,7 +558,7 @@
       const stateToken = randomBase64Url(24);
       VKID.Config.init({
         app: Number(vkIdAppId),
-        redirectUrl: `${window.location.origin}${window.location.pathname}`,
+        redirectUrl: buildCurrentPageRedirectUrl(),
         responseMode: VKID.ConfigResponseMode.Callback,
         source: VKID.ConfigSource.LOWCODE,
         scope: "phone email",
@@ -566,7 +576,7 @@
           code: authResult?.code,
           deviceId: authResult?.device_id,
           codeVerifier,
-          redirectUrl: `${window.location.origin}${window.location.pathname}`,
+          redirectUrl: buildCurrentPageRedirectUrl(),
           referralCode: getPendingReferralCode(),
         }),
       });
@@ -596,7 +606,7 @@
         code,
         deviceId,
         tokenPayload,
-        redirectUrl: `${window.location.origin}${window.location.pathname}`,
+        redirectUrl: buildCurrentPageRedirectUrl(),
         referralCode: getPendingReferralCode(),
       }),
     });
@@ -622,7 +632,7 @@
       const VKID = await loadVkIdSdk();
       VKID.Config.init({
         app: Number(vkIdAppId),
-        redirectUrl: `${window.location.origin}${window.location.pathname}`,
+        redirectUrl: buildCurrentPageRedirectUrl(),
         responseMode: VKID.ConfigResponseMode.Callback,
         source: VKID.ConfigSource.LOWCODE,
         scope: "phone email",
@@ -645,14 +655,9 @@
         .on(VKID.OneTapInternalEvents.LOGIN_SUCCESS, async (payload) => {
           try {
             setStatus("Выполняем вход через VK ID...", "waiting");
-            const tokenPayload = await VKID.Auth.exchangeCode(
-              payload?.code,
-              payload?.device_id,
-            );
             await handleVkIdOneTapSuccess({
               code: payload?.code,
               deviceId: payload?.device_id,
-              tokenPayload,
             });
           } catch (error) {
             setStatus(normalizeText(error?.message) || "Не удалось выполнить вход через VK ID.", "error");

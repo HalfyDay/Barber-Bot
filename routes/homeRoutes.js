@@ -332,6 +332,22 @@ const registerHomeRoutes = ({
     }
   };
 
+  const normalizeVkRedirectUrl = (value, fallbackPath = "/login/") => {
+    const baseUrl = process.env.APP_BASE_URL || "https://brothershop.website";
+    const rawValue = normalizeText(value);
+    try {
+      const url = rawValue ? new URL(rawValue, baseUrl) : new URL(fallbackPath, baseUrl);
+      url.search = "";
+      url.hash = "";
+      if (url.pathname && url.pathname !== "/") {
+        url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
+      }
+      return url.toString();
+    } catch {
+      return new URL(fallbackPath, baseUrl).toString();
+    }
+  };
+
   const exchangeVkIdAuthorizationCode = async ({
     appId,
     code,
@@ -351,8 +367,7 @@ const registerHomeRoutes = ({
       client_id: safeAppId,
       code: safeCode,
       device_id: safeDeviceId,
-      redirect_uri:
-        normalizeText(redirectUrl) || `${process.env.APP_BASE_URL || "https://brothershop.website"}/login/`,
+      redirect_uri: normalizeVkRedirectUrl(redirectUrl, "/login/"),
     });
     if (safeCodeVerifier) {
       params.set("code_verifier", safeCodeVerifier);
@@ -396,6 +411,38 @@ const registerHomeRoutes = ({
     return "";
   };
 
+  const extractVkPhoneValue = (value) => {
+    if (value == null) return "";
+    if (typeof value === "string" || typeof value === "number") {
+      return normalizeText(value);
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const extracted = extractVkPhoneValue(item);
+        if (extracted) return extracted;
+      }
+      return "";
+    }
+    if (typeof value === "object") {
+      for (const key of ["phone", "phone_number", "phoneNumber", "number", "value", "msisdn"]) {
+        const extracted = extractVkPhoneValue(value[key]);
+        if (extracted) return extracted;
+      }
+    }
+    return "";
+  };
+
+  const pickVkPhone = (sources) => {
+    for (const source of sources) {
+      if (!source || typeof source !== "object") continue;
+      for (const fieldName of ["phone", "phone_number", "phoneNumber", "phone_info"]) {
+        const extracted = extractVkPhoneValue(source[fieldName]);
+        if (extracted) return extracted;
+      }
+    }
+    return "";
+  };
+
   const normalizeVkBirthDate = (value) => {
     const safeValue = normalizeText(value);
     if (!safeValue) return "";
@@ -418,34 +465,37 @@ const registerHomeRoutes = ({
 
   const buildVkProfileFromTokenPayload = (tokenPayload = {}, tokenResponse = {}) => {
     const responsePayload = unwrapVkProfilePayload(tokenResponse);
-    const sources = [tokenPayload, responsePayload, tokenResponse];
-    const firstName = pickVkField(sources, ["first_name", "given_name", "name_given", "firstName"]);
-    const lastName = pickVkField(sources, ["last_name", "family_name", "name_family", "lastName"]);
-    const email = pickVkField(sources, ["email"]);
-    const phone =
-      normalizePhone(
-        pickVkField(sources, ["phone", "phone_number", "phoneNumber"]),
-      ) || "";
+    const responseSources = [responsePayload, tokenResponse];
+    const tokenSources = [tokenPayload];
+    const allSources = [responsePayload, tokenResponse, tokenPayload];
+    const firstName =
+      pickVkField(responseSources, ["first_name", "firstName", "name_given"]) ||
+      pickVkField(tokenSources, ["first_name", "given_name", "name_given", "firstName"]);
+    const lastName =
+      pickVkField(responseSources, ["last_name", "lastName", "name_family"]) ||
+      pickVkField(tokenSources, ["last_name", "family_name", "name_family", "lastName"]);
+    const email =
+      pickVkField(responseSources, ["email"]) ||
+      pickVkField(tokenSources, ["email"]);
+    const phone = normalizePhone(pickVkPhone(allSources)) || "";
     const displayName =
-      pickVkField(sources, ["name", "display_name", "displayName"]) ||
+      pickVkField(responseSources, ["name", "display_name", "displayName"]) ||
       [firstName, lastName].filter(Boolean).join(" ") ||
+      pickVkField(tokenSources, ["name", "display_name", "displayName"]) ||
       email ||
       phone;
     return {
-      vkUserId:
-        pickVkField(sources, ["user_id", "sub", "id", "userId"]) || "",
+      vkUserId: pickVkField(allSources, ["user_id", "sub", "id", "userId"]) || "",
       firstName,
       lastName,
       displayName,
       phone,
       email,
-      avatarUrl: pickVkField(sources, ["avatar", "picture", "photo", "avatar_url", "photo_200", "photo_100"]),
+      avatarUrl: pickVkField(allSources, ["avatar", "picture", "photo", "avatar_url", "photo_200", "photo_100"]),
       birthDate: normalizeVkBirthDate(
-        pickVkField(sources, ["birth_date", "birthDate", "bdate", "birthday", "date_of_birth"]),
+        pickVkField(allSources, ["birth_date", "birthDate", "bdate", "birthday", "date_of_birth"]),
       ),
-      gender: normalizeVkGender(
-        pickVkField(sources, ["gender", "sex"]),
-      ),
+      gender: normalizeVkGender(pickVkField(allSources, ["gender", "sex"])),
     };
   };
 
@@ -465,7 +515,7 @@ const registerHomeRoutes = ({
     const safeAccessToken = normalizeText(accessToken);
     if (safeAccessToken) {
       const userInfo = await tryFetch(
-        `https://id.vk.ru/oauth2/user_info?client_id=${encodeURIComponent(safeAppId)}`,
+        `https://id.vk.ru/oauth2/user_info?client_id=${encodeURIComponent(safeAppId)}&lang=ru`,
         { access_token: safeAccessToken },
       );
       if (userInfo) return userInfo;
@@ -473,7 +523,7 @@ const registerHomeRoutes = ({
     const safeIdToken = normalizeText(idToken);
     if (safeIdToken) {
       const publicInfo = await tryFetch(
-        `https://id.vk.ru/oauth2/public_info?client_id=${encodeURIComponent(safeAppId)}`,
+        `https://id.vk.ru/oauth2/public_info?client_id=${encodeURIComponent(safeAppId)}&lang=ru`,
         { id_token: safeIdToken },
       );
       if (publicInfo) return publicInfo;
@@ -691,9 +741,7 @@ const registerHomeRoutes = ({
         req.body?.tokenPayload && typeof req.body.tokenPayload === "object"
           ? req.body.tokenPayload
           : null;
-      const redirectUrl =
-        normalizeText(req.body?.redirectUrl) ||
-        `${process.env.APP_BASE_URL || "https://brothershop.website"}/login/`;
+      const redirectUrl = normalizeVkRedirectUrl(req.body?.redirectUrl, "/login/");
       const referralCode = normalizeText(req.body?.referralCode).toUpperCase();
       if ((!code || !deviceId) && !providedTokenPayload) {
         return res.status(400).json({
@@ -747,6 +795,16 @@ const registerHomeRoutes = ({
       if (!existing && vkProfile.phone) {
         existing =
           users.find((user) => normalizePhone(user.Phone || "") === vkProfile.phone) || null;
+        if (existing) {
+          const existingMeta = await getUserMeta(existing.id);
+          const existingVkUserId = normalizeText(existingMeta?.vkIdUserId);
+          if (existingVkUserId && existingVkUserId !== vkProfile.vkUserId) {
+            return res.status(409).json({
+              success: false,
+              message: "Этот номер телефона уже связан с другим VK ID.",
+            });
+          }
+        }
       }
 
       const now = new Date().toISOString();
@@ -879,9 +937,7 @@ const registerHomeRoutes = ({
         req.body?.tokenPayload && typeof req.body.tokenPayload === "object"
           ? req.body.tokenPayload
           : null;
-      const redirectUrl =
-        normalizeText(req.body?.redirectUrl) ||
-        `${process.env.APP_BASE_URL || "https://brothershop.website"}/login/`;
+      const redirectUrl = normalizeVkRedirectUrl(req.body?.redirectUrl, "/profile/");
       if ((!code || !deviceId) && !providedTokenPayload) {
         return res.status(400).json({
           success: false,

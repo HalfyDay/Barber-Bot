@@ -7210,14 +7210,24 @@ img.media-wave.is-ready {
   justify-content: flex-start;
 }
 
+.profile-vkid-stack {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
 .vkid-onetap.profile-vkid-onetap {
   width: min(100%, 320px);
+  min-height: 52px;
+  display: flex;
+  align-items: stretch;
   justify-self: start;
 }
 
 .vkid-onetap.profile-vkid-onetap > div,
 .vkid-onetap.profile-vkid-onetap iframe,
 .vkid-onetap.profile-vkid-onetap section {
+  flex: 1 1 auto;
   width: 100% !important;
   max-width: 100% !important;
   border-radius: 18px !important;

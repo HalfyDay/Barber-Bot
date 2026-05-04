@@ -156,6 +156,7 @@
   let profileAvatarPanelCloseTimer = null;
   let vkIdSdkPromise = null;
   let profileVkIdOneTapRendered = false;
+  let profileVkIdLinkInFlight = false;
   let homeBarberTiltSnapshot = {
     tiltX: "0deg",
     tiltY: "0deg",
@@ -5180,25 +5181,59 @@
   };
 
   const handleProfileVkIdLinkSuccess = async ({ code, deviceId, tokenPayload }) => {
-    const payload = await apiRequest("/profile/vk/link/complete", {
-      method: "POST",
-      body: JSON.stringify({
-        code,
-        deviceId,
-        tokenPayload,
-        redirectUrl: buildCurrentPageRedirectUrl(),
-      }),
-    });
-    commitAppPayload(await apiRequest("/app"));
-    render({ sheet: false });
-    openSheet(
-      "VK ID подключен",
-      `<div class="list-item"><p class="list-title">VK ID успешно подключен.</p><p class="subtitle">Теперь в аккаунт можно входить через VK ID.</p></div>`,
-    );
-    return payload;
+    const waitForVkIdLinkCompletion = async (timeoutMs = 90000, intervalMs = 2500) => {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < timeoutMs) {
+        await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+        try {
+          const appPayload = await apiRequest("/app");
+          if (appPayload?.user?.vkIdLinked) {
+            commitAppPayload(appPayload);
+            render({ sheet: false });
+            openSheet(
+              "VK ID подключен",
+              `<div class="list-item"><p class="list-title">VK ID успешно подключен.</p><p class="subtitle">Теперь в аккаунт можно входить через VK ID.</p></div>`,
+            );
+            return true;
+          }
+        } catch {}
+      }
+      return false;
+    };
+    const isVkIdPendingResolutionError = (message) => {
+      const normalized = normalizeText(message).toLowerCase();
+      return normalized.includes("vk id не вернул идентификатор пользователя");
+    };
+    try {
+      const payload = await apiRequest("/profile/vk/link/complete", {
+        method: "POST",
+        body: JSON.stringify({
+          code,
+          deviceId,
+          tokenPayload,
+          redirectUrl: buildCurrentPageRedirectUrl(),
+        }),
+      });
+      commitAppPayload(await apiRequest("/app"));
+      render({ sheet: false });
+      openSheet(
+        "VK ID подключен",
+        `<div class="list-item"><p class="list-title">VK ID успешно подключен.</p><p class="subtitle">Теперь в аккаунт можно входить через VK ID.</p></div>`,
+      );
+      return payload;
+    } catch (error) {
+      if (!isVkIdPendingResolutionError(error?.message)) throw error;
+      openSheet(
+        "Подключаем VK ID",
+        `<div class="list-item vkid-link-progress"><span class="vkid-link-spinner" aria-hidden="true"></span><div><p class="list-title">Подключаем VK ID…</p><p class="subtitle">Связка подтверждается у VK. Это может занять до минуты, страницу закрывать не нужно.</p></div></div>`,
+      );
+      const linked = await waitForVkIdLinkCompletion();
+      if (linked) return { success: true, pendingResolved: true };
+      throw new Error("Подключение VK ID еще не завершено. Подождите немного и откройте Безопасность снова.");
+    }
   };
 
-  const exchangeVkIdCodeSafe = async (VKID, code, deviceId, timeoutMs = 900) => {
+  const exchangeVkIdCodeSafe = async (VKID, code, deviceId, timeoutMs = 4500) => {
     if (!VKID?.Auth?.exchangeCode || !code || !deviceId) return null;
     try {
       return await Promise.race([
@@ -5213,29 +5248,34 @@
   const startProfileVkIdLink = async () => {
     const user = state.payload?.user || {};
     const vkAuth = state.payload?.site?.auth || {};
-    if (user.vkIdLinked || vkAuth.vkIdEnabled !== true || !normalizeText(vkAuth.vkIdAppId)) return;
-    const VKID = await loadVkIdSdk();
-    VKID.Config.init({
-      app: Number(vkAuth.vkIdAppId),
-      redirectUrl: buildCurrentPageRedirectUrl(),
-      responseMode: VKID.ConfigResponseMode.Callback,
-      source: VKID.ConfigSource.LOWCODE,
-      scope: "phone email",
-    });
-    const authResult = await VKID.Auth.login({
-      lang: VKID.Languages.RUS,
-      scheme: VKID.Scheme.LIGHT,
-    });
-    const tokenPayload = await exchangeVkIdCodeSafe(
-      VKID,
-      authResult?.code,
-      authResult?.device_id,
-    );
-    await handleProfileVkIdLinkSuccess({
-      code: authResult?.code,
-      deviceId: authResult?.device_id,
-      tokenPayload,
-    });
+    if (profileVkIdLinkInFlight || user.vkIdLinked || vkAuth.vkIdEnabled !== true || !normalizeText(vkAuth.vkIdAppId)) return;
+    profileVkIdLinkInFlight = true;
+    try {
+      const VKID = await loadVkIdSdk();
+      VKID.Config.init({
+        app: Number(vkAuth.vkIdAppId),
+        redirectUrl: buildCurrentPageRedirectUrl(),
+        responseMode: VKID.ConfigResponseMode.Callback,
+        source: VKID.ConfigSource.LOWCODE,
+        scope: "phone email",
+      });
+      const authResult = await VKID.Auth.login({
+        lang: VKID.Languages.RUS,
+        scheme: VKID.Scheme.LIGHT,
+      });
+      const tokenPayload = await exchangeVkIdCodeSafe(
+        VKID,
+        authResult?.code,
+        authResult?.device_id,
+      );
+      await handleProfileVkIdLinkSuccess({
+        code: authResult?.code,
+        deviceId: authResult?.device_id,
+        tokenPayload,
+      });
+    } finally {
+      profileVkIdLinkInFlight = false;
+    }
   };
 
   const renderProfileVkIdOneTap = async () => {
@@ -5271,6 +5311,8 @@
           container.innerHTML = `<div class="list-item"><p class="list-title">Не удалось загрузить VK ID.</p></div>`;
         })
         .on(VKID.OneTapInternalEvents.LOGIN_SUCCESS, async (payload) => {
+          if (profileVkIdLinkInFlight) return;
+          profileVkIdLinkInFlight = true;
           try {
             const tokenPayload = await exchangeVkIdCodeSafe(
               VKID,
@@ -5287,6 +5329,8 @@
               "Ошибка VK ID",
               `<div class="list-item"><p class="list-title">${normalizeText(error?.message) || "Не удалось привязать VK ID."}</p></div>`,
             );
+          } finally {
+            profileVkIdLinkInFlight = false;
           }
         });
       profileVkIdOneTapRendered = true;

@@ -1289,6 +1289,43 @@ const registerHomeRoutes = ({
     }
   });
 
+  app.post("/api/home/profile/vk/unlink", authenticateHomeToken, async (req, res) => {
+    try {
+      const userId = normalizeText(req.homeUser?.userId);
+      if (!userId) return res.sendStatus(401);
+
+      const currentUser = await prisma.users.findUnique({
+        where: { id: userId },
+        select: HOME_USER_SELECT,
+      });
+      if (!currentUser) return res.sendStatus(401);
+
+      const currentMeta = await getUserMeta(userId);
+      const nextMeta = await updateUserMeta(userId, {
+        vkIdUserId: null,
+        vkIdProfile: null,
+      });
+
+      const user = toPublicHomeProfile(currentUser);
+      return res.json({
+        success: true,
+        user: {
+          ...user,
+          birthDate: nextMeta?.birthDate || currentMeta?.birthDate || null,
+          gender: nextMeta?.gender || currentMeta?.gender || "",
+          avatarUrl: nextMeta?.avatarUrl || currentMeta?.avatarUrl || "",
+          vkIdLinked: false,
+        },
+      });
+    } catch (error) {
+      console.error("Home VK ID unlink error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Не удалось отвязать VK ID.",
+      });
+    }
+  });
+
   app.post("/api/home/auth/telegram/start", async (req, res) => {
     try {
       const botSettings = await getBotSettings();

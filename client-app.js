@@ -4945,7 +4945,7 @@
     if (sheetId === "profile-security") {
       const user = state.payload?.user || {};
       const vkAuth = state.payload?.site?.auth || {};
-      openSheet("Безопасность", `<form class="form-grid" id="profile-password-form"><div class="telegram-sheet-card profile-edit-telegram profile-security-telegram"><div class="profile-security-row-copy"><p class="list-title">${user.telegramId ? "Telegram привязан" : "Telegram не подключен"}</p><p class="subtitle">${user.telegramId ? "Быстрый вход через Telegram уже доступен." : "Подключите Telegram для быстрого входа в личный кабинет."}</p></div><div class="inline-actions"><button class="tonal-btn" type="button" data-action="${user.telegramId ? "unlink-telegram" : "link-telegram"}">${user.telegramId ? "Отвязать Telegram" : "Привязать Telegram"}</button></div></div>${vkAuth.vkIdEnabled === true && normalizeText(vkAuth.vkIdAppId) ? `<div class="telegram-sheet-card profile-edit-telegram profile-security-telegram"><div class="profile-security-row-copy"><p class="list-title">${user.vkIdLinked ? "VK ID подключен" : "Подключить VK ID"}</p><p class="subtitle">${user.vkIdLinked ? "Вход через VK ID уже доступен для этого аккаунта." : "Подключите VK ID, чтобы входить в аккаунт без пароля."}</p></div>${user.vkIdLinked ? `<div class="inline-actions"><span class="tonal-btn" aria-disabled="true">Подключено</span></div>` : `<div class="profile-vkid-stack"><div id="profile-vkid-onetap" class="vkid-onetap profile-vkid-onetap"></div><button class="ghost-btn profile-vkid-fallback" type="button" data-action="link-vkid">Привязать через VK ID</button></div>`}</div>` : ""}<div class="security-password-toggle"><button class="security-password-trigger" type="button" data-action="show-password-change"><div class="profile-security-row-copy"><p class="list-title">Сменить пароль</p><p class="subtitle">Задайте новый пароль для входа на сайте.</p></div><span class="security-password-trigger-action">Изменить</span></button></div><div id="security-password-fields" hidden><label class="field"><span class="field-label">Новый пароль</span><input type="password" name="password" /></label></div><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
+      openSheet("Безопасность", `<form class="form-grid" id="profile-password-form"><div class="telegram-sheet-card profile-edit-telegram profile-security-telegram"><div class="profile-security-row-copy"><p class="list-title">${user.telegramId ? "Telegram привязан" : "Telegram не подключен"}</p><p class="subtitle">${user.telegramId ? "Быстрый вход через Telegram уже доступен." : "Подключите Telegram для быстрого входа в личный кабинет."}</p></div><div class="inline-actions"><button class="tonal-btn" type="button" data-action="${user.telegramId ? "unlink-telegram" : "link-telegram"}">${user.telegramId ? "Отвязать Telegram" : "Привязать Telegram"}</button></div></div>${vkAuth.vkIdEnabled === true && normalizeText(vkAuth.vkIdAppId) ? `<div class="telegram-sheet-card profile-edit-telegram profile-security-telegram"><div class="profile-security-row-copy"><p class="list-title">${user.vkIdLinked ? "VK ID подключен" : "Подключить VK ID"}</p><p class="subtitle">${user.vkIdLinked ? "Вход через VK ID уже доступен для этого аккаунта." : "Подключите VK ID, чтобы входить в аккаунт без пароля."}</p></div>${user.vkIdLinked ? `<div class="inline-actions"><button class="tonal-btn" type="button" data-action="unlink-vkid">Отвязать VK ID</button></div>` : `<div class="profile-vkid-stack"><div id="profile-vkid-onetap" class="vkid-onetap profile-vkid-onetap"></div><button class="ghost-btn profile-vkid-fallback" type="button" data-action="link-vkid">Привязать через VK ID</button></div>`}</div>` : ""}<div class="security-password-toggle"><button class="security-password-trigger" type="button" data-action="show-password-change"><div class="profile-security-row-copy"><p class="list-title">Сменить пароль</p><p class="subtitle">Задайте новый пароль для входа на сайте.</p></div><span class="security-password-trigger-action">Изменить</span></button></div><div id="security-password-fields" hidden><label class="field"><span class="field-label">Новый пароль</span><input type="password" name="password" /></label></div><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
       profileVkIdOneTapRendered = false;
       void renderProfileVkIdOneTap();
       return;
@@ -5283,6 +5283,12 @@
     render({ sheet: false });
   };
 
+  const unlinkVkId = async () => {
+    await apiRequest("/profile/vk/unlink", { method: "POST" });
+    commitAppPayload(await apiRequest("/app"));
+    render({ sheet: false });
+  };
+
   const syncReferralCopyButtons = () => {
     document.querySelectorAll("[data-action='copy-referral']").forEach((button) => {
       const copied = state.referralLinkCopied === true;
@@ -5375,6 +5381,15 @@
         case "unlink-telegram":
           event.preventDefault();
           void unlinkTelegram();
+          return;
+        case "unlink-vkid":
+          event.preventDefault();
+          void unlinkVkId().catch((error) => {
+            openSheet(
+              "Ошибка VK ID",
+              `<div class="list-item"><p class="list-title">${normalizeText(error?.message) || "Не удалось отвязать VK ID."}</p></div>`,
+            );
+          });
           return;
         case "check-telegram-link":
           event.preventDefault();

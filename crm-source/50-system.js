@@ -508,6 +508,7 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
   const updateHomeField = (key, value) => updateSectionField('home', key, value);
   const updateReferralField = (key, value) => updateSectionField('referral', key, value);
   const updateShopField = (key, value) => updateSectionField('shop', key, value);
+  const updateAuthField = (key, value) => updateSectionField('auth', key, value);
 
   const promos = Array.isArray(draft?.home?.promos) ? draft.home.promos : [];
   const referralLevels = Array.isArray(draft?.referral?.levels) ? draft.referral.levels : [];
@@ -662,6 +663,36 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
 
   const renderHomeTab = () => (
     <div className="space-y-5">
+      <SectionCard title="Авторизация">
+        <div className="crm-soft-card flex flex-col gap-3 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">Вход через VK ID</p>
+              <p className="mt-1 text-sm text-[var(--crm-muted)]">Показывать кнопку VK ID на клиентском сайте.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => updateAuthField('vkIdEnabled', !(draft?.auth?.vkIdEnabled === true))}
+              className={classNames(
+                'crm-ghost-btn min-w-[112px] px-4 py-2 text-sm',
+                draft?.auth?.vkIdEnabled === true && 'crm-action-btn text-black'
+              )}
+            >
+              {draft?.auth?.vkIdEnabled === true ? 'Включено' : 'Выключено'}
+            </button>
+          </div>
+          <label className="space-y-2 text-sm text-[var(--crm-text)]">
+            <span>VK App ID</span>
+            <input
+              value={draft?.auth?.vkIdAppId || ''}
+              onChange={(event) => updateAuthField('vkIdAppId', event.target.value)}
+              placeholder="Например, 12345678"
+              className="w-full px-4 py-3"
+            />
+          </label>
+        </div>
+      </SectionCard>
+
       <SectionCard title="Главная страница">
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
           <div className="space-y-4">

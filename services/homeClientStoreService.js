@@ -226,6 +226,10 @@ const createHomeClientStoreService = ({
       pageTitle: "Личный кабинет",
       historyTitle: "Последние движения",
     },
+    auth: {
+      vkIdEnabled: false,
+      vkIdAppId: "",
+    },
   });
 
   const sanitizeDateOnly = (value) => {
@@ -404,6 +408,7 @@ const createHomeClientStoreService = ({
     const bookingInput = input.booking && typeof input.booking === "object" ? input.booking : {};
     const shopInput = input.shop && typeof input.shop === "object" ? input.shop : {};
     const profileInput = input.profile && typeof input.profile === "object" ? input.profile : {};
+    const authInput = input.auth && typeof input.auth === "object" ? input.auth : {};
     const timeZonesInput = input.timeZones && typeof input.timeZones === "object" ? input.timeZones : {};
     const promos = Array.isArray(homeInput.promos)
       ? homeInput.promos.map((promo, index) => sanitizeSitePromo(promo, index)).slice(0, 12)
@@ -456,6 +461,16 @@ const createHomeClientStoreService = ({
       profile: {
         pageTitle: normalizeText(profileInput.pageTitle),
         historyTitle: normalizeText(profileInput.historyTitle),
+      },
+      auth: {
+        vkIdEnabled:
+          authInput.vkIdEnabled === undefined
+            ? Boolean(DEFAULT_SITE_CONFIG.auth.vkIdEnabled)
+            : Boolean(authInput.vkIdEnabled),
+        vkIdAppId:
+          normalizeText(authInput.vkIdAppId) ||
+          normalizeText(process.env.VK_ID_APP_ID) ||
+          DEFAULT_SITE_CONFIG.auth.vkIdAppId,
       },
     };
   };
@@ -660,6 +675,38 @@ const createHomeClientStoreService = ({
       input.bookingNotificationsEnabled === undefined ? true : Boolean(input.bookingNotificationsEnabled);
     const balanceNotificationsEnabled =
       input.balanceNotificationsEnabled === undefined ? true : Boolean(input.balanceNotificationsEnabled);
+    const bookingPushNotificationsEnabled =
+      input.bookingPushNotificationsEnabled === undefined
+        ? true
+        : Boolean(input.bookingPushNotificationsEnabled);
+    const balancePushNotificationsEnabled =
+      input.balancePushNotificationsEnabled === undefined
+        ? true
+        : Boolean(input.balancePushNotificationsEnabled);
+    const pushSubscriptions = Array.isArray(input.pushSubscriptions)
+      ? input.pushSubscriptions
+          .map((subscription) => {
+            if (!subscription || typeof subscription !== "object") return null;
+            const endpoint = normalizeText(subscription.endpoint);
+            const keys =
+              subscription.keys && typeof subscription.keys === "object" ? subscription.keys : {};
+            if (!endpoint || !normalizeText(keys.p256dh) || !normalizeText(keys.auth)) return null;
+            return {
+              endpoint,
+              expirationTime:
+                subscription.expirationTime === null || subscription.expirationTime === undefined
+                  ? null
+                  : Number(subscription.expirationTime) || null,
+              keys: {
+                p256dh: normalizeText(keys.p256dh),
+                auth: normalizeText(keys.auth),
+              },
+              createdAt: toIsoString(subscription.createdAt) || new Date().toISOString(),
+              userAgent: normalizeText(subscription.userAgent),
+            };
+          })
+          .filter(Boolean)
+      : [];
     return {
       birthDate: sanitizeDateOnly(input.birthDate),
       gender: GENDER_OPTIONS.has(gender) ? gender : "",
@@ -668,6 +715,19 @@ const createHomeClientStoreService = ({
       referredByUserId: normalizeText(input.referredByUserId) || null,
       bookingNotificationsEnabled,
       balanceNotificationsEnabled,
+      bookingPushNotificationsEnabled,
+      balancePushNotificationsEnabled,
+      pushSubscriptions,
+      vkIdUserId: normalizeText(input.vkIdUserId) || "",
+      vkIdProfile:
+        input.vkIdProfile && typeof input.vkIdProfile === "object"
+          ? {
+              firstName: normalizeText(input.vkIdProfile.firstName),
+              lastName: normalizeText(input.vkIdProfile.lastName),
+              avatarUrl: normalizeText(input.vkIdProfile.avatarUrl),
+              phone: normalizePhone(input.vkIdProfile.phone || "") || "",
+            }
+          : null,
       privacyConsentAcceptedAt: toIsoString(input.privacyConsentAcceptedAt),
       privacyConsentIp: normalizeText(input.privacyConsentIp) || "",
       privacyConsentSource: normalizeText(input.privacyConsentSource) || "",
@@ -739,6 +799,10 @@ const createHomeClientStoreService = ({
       profile: {
         ...current.profile,
         ...(patch.profile && typeof patch.profile === "object" ? patch.profile : {}),
+      },
+      auth: {
+        ...(current.auth && typeof current.auth === "object" ? current.auth : {}),
+        ...(patch.auth && typeof patch.auth === "object" ? patch.auth : {}),
       },
     });
     await writeSiteSettingsRow(nextSite);
@@ -1536,6 +1600,8 @@ const createHomeClientStoreService = ({
         avatarUrl: userMeta.avatarUrl,
         bookingNotificationsEnabled: userMeta.bookingNotificationsEnabled !== false,
         balanceNotificationsEnabled: userMeta.balanceNotificationsEnabled !== false,
+        bookingPushNotificationsEnabled: userMeta.bookingPushNotificationsEnabled !== false,
+        balancePushNotificationsEnabled: userMeta.balancePushNotificationsEnabled !== false,
         referralCode: userMeta.referralCode,
         warningCount,
         noticeCount: notices.length,
@@ -1594,6 +1660,8 @@ const createHomeClientStoreService = ({
         auth: {
           ...(site?.auth && typeof site.auth === "object" ? site.auth : {}),
           telegramEnabled: botSettings?.isBotEnabled !== false,
+          vkIdEnabled: site?.auth?.vkIdEnabled === true,
+          vkIdAppId: normalizeText(site?.auth?.vkIdAppId) || normalizeText(process.env.VK_ID_APP_ID) || "",
         },
       },
     };

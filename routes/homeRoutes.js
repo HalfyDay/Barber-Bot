@@ -252,6 +252,7 @@ const registerHomeRoutes = ({
   refundBsForCancelledAppointment,
   buildHomeAppPayload,
   buildPublicHomePayload,
+  getSiteSettings,
   TELEGRAM_BOT_USERNAME,
   markExpiredTelegramAuthRequests,
   createTelegramAuthRequest,
@@ -279,6 +280,7 @@ const registerHomeRoutes = ({
   touchSitePresenceSession,
   removeSitePresenceSession,
   attachHomeRealtimeClient,
+  homePushService,
 }) => {
   const buildClientAccessPayload = async (phone) => {
     const safePhone = normalizePhone(phone);
@@ -313,6 +315,88 @@ const registerHomeRoutes = ({
       role: normalizeText(matchedBarber.role) || "barber",
       barberId: normalizeText(matchedBarber.id),
       barberName: normalizeText(matchedBarber.name),
+    };
+  };
+
+  const decodeJwtPayload = (token) => {
+    const safeToken = normalizeText(token);
+    if (!safeToken.includes(".")) return null;
+    const [, payloadPart] = safeToken.split(".");
+    if (!payloadPart) return null;
+    try {
+      const normalized = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+      const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+      return JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+    } catch {
+      return null;
+    }
+  };
+
+  const exchangeVkIdAuthorizationCode = async ({
+    appId,
+    code,
+    deviceId,
+    codeVerifier,
+    redirectUrl,
+  }) => {
+    const safeAppId = normalizeText(appId);
+    const safeCode = normalizeText(code);
+    const safeDeviceId = normalizeText(deviceId);
+    const safeCodeVerifier = normalizeText(codeVerifier);
+    if (!safeAppId || !safeCode || !safeDeviceId || !safeCodeVerifier) {
+      throw new Error("VK_AUTH_REQUIRED");
+    }
+    const response = await fetch("https://id.vk.ru/oauth2/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: safeAppId,
+        code: safeCode,
+        device_id: safeDeviceId,
+        code_verifier: safeCodeVerifier,
+        redirect_uri:
+          normalizeText(redirectUrl) || `${process.env.APP_BASE_URL || "https://brothershop.website"}/login/`,
+      }).toString(),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message =
+        normalizeText(payload?.error_description) ||
+        normalizeText(payload?.error) ||
+        "VK_AUTH_EXCHANGE_FAILED";
+      throw new Error(message);
+    }
+    return payload;
+  };
+
+  const buildVkProfileFromTokenPayload = (tokenPayload = {}, tokenResponse = {}) => {
+    const firstName = normalizeText(
+      tokenPayload.first_name || tokenPayload.given_name || tokenPayload.name_given,
+    );
+    const lastName = normalizeText(
+      tokenPayload.last_name || tokenPayload.family_name || tokenPayload.name_family,
+    );
+    const displayName =
+      normalizeText(
+        tokenPayload.name ||
+          [firstName, lastName].filter(Boolean).join(" ") ||
+          tokenPayload.email ||
+          tokenPayload.phone,
+      ) || "";
+    return {
+      vkUserId:
+        normalizeText(tokenPayload.user_id) ||
+        normalizeText(tokenPayload.sub) ||
+        normalizeText(tokenResponse.user_id),
+      firstName,
+      lastName,
+      displayName,
+      phone: normalizePhone(tokenPayload.phone || "") || "",
+      email: normalizeText(tokenPayload.email),
+      avatarUrl: normalizeText(
+        tokenPayload.avatar || tokenPayload.picture || tokenPayload.photo || "",
+      ),
     };
   };
 
@@ -502,6 +586,155 @@ const registerHomeRoutes = ({
       return res
         .status(500)
         .json({ success: false, message: "Ошибка входа. Попробуйте позже." });
+    }
+  });
+
+  app.post("/api/home/auth/vk/complete", async (req, res) => {
+    try {
+      const siteSettings = (await getSiteSettings?.().catch(() => null)) || null;
+      const vkIdEnabled = siteSettings?.auth?.vkIdEnabled === true;
+      const vkIdAppId =
+        normalizeText(siteSettings?.auth?.vkIdAppId) ||
+        normalizeText(process.env.VK_ID_APP_ID);
+      if (!vkIdEnabled || !vkIdAppId) {
+        return res.status(403).json({
+          success: false,
+          message: "Вход через VK ID сейчас отключен.",
+        });
+      }
+
+      const code = normalizeText(req.body?.code);
+      const deviceId = normalizeText(req.body?.deviceId || req.body?.device_id);
+      const codeVerifier = normalizeText(req.body?.codeVerifier || req.body?.code_verifier);
+      const redirectUrl =
+        normalizeText(req.body?.redirectUrl) ||
+        `${process.env.APP_BASE_URL || "https://brothershop.website"}/login/`;
+      const referralCode = normalizeText(req.body?.referralCode).toUpperCase();
+      if (!code || !deviceId || !codeVerifier) {
+        return res.status(400).json({
+          success: false,
+          message: "Не удалось подтвердить VK ID. Попробуйте ещё раз.",
+        });
+      }
+
+      const tokenPayload = await exchangeVkIdAuthorizationCode({
+        appId: vkIdAppId,
+        code,
+        deviceId,
+        codeVerifier,
+        redirectUrl,
+      });
+      const idTokenPayload = decodeJwtPayload(tokenPayload.id_token);
+      const vkProfile = buildVkProfileFromTokenPayload(idTokenPayload || {}, tokenPayload);
+      if (!vkProfile.vkUserId) {
+        return res.status(409).json({
+          success: false,
+          message: "VK ID не вернул идентификатор пользователя.",
+        });
+      }
+      if (!vkProfile.phone) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "VK ID не передал номер телефона. Разрешите доступ к номеру или войдите другим способом.",
+        });
+      }
+
+      const users = await prisma.users.findMany({ select: HOME_USER_SELECT });
+      let existing =
+        users.find((user) => normalizePhone(user.Phone || "") === vkProfile.phone) || null;
+      if (!existing) {
+        for (const candidate of users) {
+          const meta = await getUserMeta(candidate.id);
+          if (normalizeText(meta?.vkIdUserId) === vkProfile.vkUserId) {
+            existing = candidate;
+            break;
+          }
+        }
+      }
+
+      const now = new Date().toISOString();
+      let row = null;
+      if (existing) {
+        const patch = {
+          Phone: vkProfile.phone,
+          homeIsActive: true,
+          homeCreatedAt: existing.homeCreatedAt || now,
+          homeUpdatedAt: now,
+          homeLastLoginAt: now,
+        };
+        if (shouldHydrateUserNameFromHome(existing.Name, existing.Phone)) {
+          patch.Name = vkProfile.displayName || vkProfile.phone;
+        }
+        if (
+          !normalizeText(existing.homePasswordHash) ||
+          !normalizeText(existing.homePasswordSalt)
+        ) {
+          const { hashHex, saltHex } = hashHomePassword(randomUUID());
+          patch.homePasswordHash = hashHex;
+          patch.homePasswordSalt = saltHex;
+        }
+        row = await prisma.users.update({
+          where: { id: existing.id },
+          data: patch,
+          select: HOME_USER_SELECT,
+        });
+      } else {
+        const { hashHex, saltHex } = hashHomePassword(randomUUID());
+        row = await prisma.users.create({
+          data: {
+            id: randomUUID(),
+            Name: vkProfile.displayName || vkProfile.phone,
+            Phone: vkProfile.phone,
+            TelegramID: null,
+            Barber: null,
+            homePasswordHash: hashHex,
+            homePasswordSalt: saltHex,
+            homeIsActive: true,
+            homeCreatedAt: now,
+            homeUpdatedAt: now,
+            homeLastLoginAt: now,
+          },
+          select: HOME_USER_SELECT,
+        });
+      }
+
+      const user = toPublicHomeUser(row);
+      if (referralCode) {
+        await applyReferralCode({
+          userId: user.id,
+          referralCode,
+        }).catch(() => null);
+      }
+      const currentMeta = await getUserMeta(user.id);
+      await updateUserMeta(user.id, {
+        vkIdUserId: vkProfile.vkUserId,
+        vkIdProfile: {
+          firstName: vkProfile.firstName,
+          lastName: vkProfile.lastName,
+          avatarUrl: vkProfile.avatarUrl,
+          phone: vkProfile.phone,
+        },
+        avatarUrl: vkProfile.avatarUrl || currentMeta?.avatarUrl || "",
+      });
+
+      const identity = buildHomeIdentity({
+        userId: user.id,
+        phone: user.phone,
+        displayName: user.displayName,
+      });
+      const token = signHomeSessionToken(identity);
+      return res.json({
+        success: true,
+        token,
+        user,
+      });
+    } catch (error) {
+      console.error("Home VK ID auth complete error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Не удалось завершить вход через VK ID.",
+      });
     }
   });
 
@@ -931,6 +1164,66 @@ const registerHomeRoutes = ({
     });
   });
 
+  app.get(
+    "/api/home/notifications/push/public-key",
+    authenticateHomeToken,
+    async (req, res) => {
+      return res.json({
+        success: true,
+        ...(homePushService?.getPublicConfig?.() || { enabled: false, publicKey: "" }),
+      });
+    },
+  );
+
+  app.post(
+    "/api/home/notifications/push/subscribe",
+    authenticateHomeToken,
+    async (req, res) => {
+      try {
+        const userId = normalizeText(req.homeUser?.userId);
+        if (!userId) return res.sendStatus(401);
+        if (!homePushService?.registerSubscription) {
+          return res.status(503).json({ success: false, message: "Push сейчас недоступен." });
+        }
+        const result = await homePushService.registerSubscription(
+          userId,
+          req.body?.subscription,
+          req.headers["user-agent"] || "",
+        );
+        return res.json({ success: true, ...result });
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: "Не удалось сохранить push-подписку.",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/api/home/notifications/push/unsubscribe",
+    authenticateHomeToken,
+    async (req, res) => {
+      try {
+        const userId = normalizeText(req.homeUser?.userId);
+        if (!userId) return res.sendStatus(401);
+        if (!homePushService?.unregisterSubscription) {
+          return res.json({ success: true, subscriptions: 0 });
+        }
+        const result = await homePushService.unregisterSubscription(
+          userId,
+          req.body?.endpoint || "",
+        );
+        return res.json({ success: true, ...result });
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: "Не удалось удалить push-подписку.",
+        });
+      }
+    },
+  );
+
   app.get("/api/home/profile", authenticateHomeToken, async (req, res) => {
     try {
       const userId = normalizeText(req.homeUser?.userId);
@@ -957,6 +1250,10 @@ const registerHomeRoutes = ({
           avatarUrl: meta?.avatarUrl || "",
           bookingNotificationsEnabled: meta?.bookingNotificationsEnabled !== false,
           balanceNotificationsEnabled: meta?.balanceNotificationsEnabled !== false,
+          bookingPushNotificationsEnabled:
+            meta?.bookingPushNotificationsEnabled !== false,
+          balancePushNotificationsEnabled:
+            meta?.balancePushNotificationsEnabled !== false,
           referralCode: meta?.referralCode || "",
         },
         botUsername: TELEGRAM_BOT_USERNAME || null,
@@ -1083,6 +1380,22 @@ const registerHomeRoutes = ({
           : !["false", "0", "off", ""].includes(
               String(balanceNotificationsEnabledRaw).trim().toLowerCase(),
             );
+      const bookingPushNotificationsEnabledRaw =
+        req.body?.bookingPushNotificationsEnabled;
+      const bookingPushNotificationsEnabled =
+        bookingPushNotificationsEnabledRaw === undefined
+          ? undefined
+          : !["false", "0", "off", ""].includes(
+              String(bookingPushNotificationsEnabledRaw).trim().toLowerCase(),
+            );
+      const balancePushNotificationsEnabledRaw =
+        req.body?.balancePushNotificationsEnabled;
+      const balancePushNotificationsEnabled =
+        balancePushNotificationsEnabledRaw === undefined
+          ? undefined
+          : !["false", "0", "off", ""].includes(
+              String(balancePushNotificationsEnabledRaw).trim().toLowerCase(),
+            );
 
       const updated = await prisma.users.update({
         where: { id: userId },
@@ -1096,6 +1409,12 @@ const registerHomeRoutes = ({
         avatarUrl: hasAvatarUrl ? avatarUrl : currentMeta?.avatarUrl || "",
         ...(bookingNotificationsEnabled === undefined ? {} : { bookingNotificationsEnabled }),
         ...(balanceNotificationsEnabled === undefined ? {} : { balanceNotificationsEnabled }),
+        ...(bookingPushNotificationsEnabled === undefined
+          ? {}
+          : { bookingPushNotificationsEnabled }),
+        ...(balancePushNotificationsEnabled === undefined
+          ? {}
+          : { balancePushNotificationsEnabled }),
       });
       const user = toPublicHomeProfile(updated);
       const identity = buildHomeIdentity({
@@ -1115,6 +1434,10 @@ const registerHomeRoutes = ({
           avatarUrl: meta?.avatarUrl || "",
           bookingNotificationsEnabled: meta?.bookingNotificationsEnabled !== false,
           balanceNotificationsEnabled: meta?.balanceNotificationsEnabled !== false,
+          bookingPushNotificationsEnabled:
+            meta?.bookingPushNotificationsEnabled !== false,
+          balancePushNotificationsEnabled:
+            meta?.balancePushNotificationsEnabled !== false,
           referralCode: meta?.referralCode || "",
         },
       });
@@ -1354,6 +1677,18 @@ const registerHomeRoutes = ({
       });
       const referral = await buildReferralPayload(stored);
       requestRealtimePush(true);
+      if (normalizeText(result?.recipient?.id) && Number(result?.amountBs) > 0) {
+        await homePushService?.sendNotificationToUser?.(
+          result.recipient.id,
+          {
+            title: "Пополнение BS",
+            body: `Вам перевели ${Math.trunc(Number(result.amountBs) || 0)} BS.`,
+            tag: "brothershop-balance-transfer",
+            url: "/booking/#referral",
+          },
+          { channel: "balance" },
+        );
+      }
       return res.json({
         success: true,
         referral,
@@ -2021,6 +2356,16 @@ const registerHomeRoutes = ({
         homeUser,
       });
       requestRealtimePush(true);
+      await homePushService?.sendNotificationToUser?.(
+        homeUser.id,
+        {
+          title: "Запись создана",
+          body: `${createdAppointment.Date} · ${createdAppointment.Time}`,
+          tag: `brothershop-booking-${createdAppointment.id}`,
+          url: "/booking/#booking",
+        },
+        { channel: "booking" },
+      );
 
       return res.status(201).json({
         appointment: {
@@ -2086,6 +2431,16 @@ const registerHomeRoutes = ({
         throw error;
       }
       requestRealtimePush(true);
+      await homePushService?.sendNotificationToUser?.(
+        homeUser.id,
+        {
+          title: "Запись отменена",
+          body: `${normalizeText(existing.Date)} · ${normalizeText(existing.Time)}`,
+          tag: `brothershop-booking-cancel-${appointmentId}`,
+          url: "/booking/#booking",
+        },
+        { channel: "booking" },
+      );
       return res.json({ appointment: updated });
     } catch (error) {
       console.error("Home booking cancel error:", error);

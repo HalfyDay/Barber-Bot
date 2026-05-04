@@ -210,6 +210,13 @@ const {
   warningLookbackDays: WARNING_LOOKBACK_DAYS,
   warningBlockThreshold: WARNING_BLOCK_THRESHOLD,
 });
+const homePushService = createHomePushService({
+  normalizeText,
+  normalizePhone,
+  prisma,
+  getUserMeta,
+  updateUserMeta,
+});
 const REALTIME_POLL_INTERVAL_MS = Math.max(
   2000,
   Number(process.env.REALTIME_POLL_INTERVAL_MS || "5000") || 5000,

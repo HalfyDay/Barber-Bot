@@ -245,6 +245,7 @@ registerHomeRoutes({
   refundBsForCancelledAppointment,
   buildHomeAppPayload,
   buildPublicHomePayload,
+  getSiteSettings,
   TELEGRAM_BOT_USERNAME,
   markExpiredTelegramAuthRequests,
   createTelegramAuthRequest,
@@ -272,6 +273,7 @@ registerHomeRoutes({
   touchSitePresenceSession,
   removeSitePresenceSession,
   attachHomeRealtimeClient,
+  homePushService,
 });
 registerBotInternalRoutes({
   app,
@@ -450,6 +452,7 @@ registerAdminCrudRoutes({
   buildUserInsightsMap,
   adjustUserBsBalance,
   addUserWarning,
+  homePushService,
 });
 app.get("/api/options/appointments", authenticateToken, async (req, res) => {
   try {

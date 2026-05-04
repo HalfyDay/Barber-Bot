@@ -135,3 +135,40 @@ const staleWhileRevalidate = async (request) => {
   return cachedResponse || networkPromise;
 };
 
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  let payload = null;
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { title: "BrotherShop", body: event.data.text() };
+  }
+  if (!payload) return;
+  event.waitUntil(
+    self.registration.showNotification(payload.title || "BrotherShop", {
+      body: payload.body || "",
+      icon: payload.icon || "/android-chrome-192x192.png",
+      badge: payload.badge || "/favicon-32x32.png",
+      tag: payload.tag || "brothershop-home",
+      data: {
+        url: payload.url || "/booking/",
+        ...(payload.data && typeof payload.data === "object" ? payload.data : {}),
+      },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = new URL(event.notification?.data?.url || "/booking/", self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      const existingClient = clients.find((client) => client.url === targetUrl);
+      if (existingClient) {
+        existingClient.focus?.();
+        return existingClient;
+      }
+      return self.clients.openWindow(targetUrl);
+    }),
+  );
+});

@@ -34,6 +34,7 @@ const { createNotificationReminderService } = require("./services/notificationRe
 const { createBotUserService } = require("./services/botUserService");
 const { createHomeProfileService } = require("./services/homeProfileService");
 const { createHomeClientStoreService } = require("./services/homeClientStoreService");
+const { createHomePushService } = require("./services/homePushService");
 const { createDateTimeService } = require("./services/dateTimeService");
 const { createAppointmentPresentationService } = require("./services/appointmentPresentationService");
 const { createIdentityAccessService } = require("./services/identityAccessService");

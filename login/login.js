@@ -5,6 +5,7 @@
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="m4 20 16-16"/></svg>';
   const HOME_API_BASE_URL = `${window.location.origin}/api/home/auth`;
   const HOME_PUBLIC_API_URL = `${window.location.origin}/api/home/public`;
+  const HOME_VK_AUTH_COMPLETE_API_URL = `${HOME_API_BASE_URL}/vk/complete`;
   const HOME_TELEGRAM_AUTH_START_API_URL = `${HOME_API_BASE_URL}/telegram/start`;
   const HOME_TELEGRAM_AUTH_STATUS_API_URL = `${HOME_API_BASE_URL}/telegram/status`;
   const HOME_TELEGRAM_AUTH_COMPLETE_API_URL = `${HOME_API_BASE_URL}/telegram/complete`;
@@ -44,6 +45,7 @@
   const forgotLink = document.getElementById("forgot-link");
   const telegramDivider = document.getElementById("telegram-divider");
   const telegramButton = document.getElementById("telegram-login");
+  const vkIdButton = document.getElementById("vkid-login");
   const telegramSetupBanner = document.getElementById("telegram-setup-banner");
   const telegramSetupEyebrow = document.getElementById("telegram-setup-eyebrow");
   const telegramSetupTitle = document.getElementById("telegram-setup-title");
@@ -68,6 +70,7 @@
     forgotLink &&
     telegramDivider &&
     telegramButton &&
+    vkIdButton &&
     telegramSetupBanner &&
     telegramSetupEyebrow &&
     telegramSetupTitle &&
@@ -84,6 +87,9 @@
   let telegramPollAttempt = 0;
   let telegramPollInFlight = false;
   let telegramLoginAvailable = true;
+  let vkIdLoginAvailable = false;
+  let vkIdAppId = "";
+  let vkIdSdkPromise = null;
   let telegramSetupState = {
     active: false,
     requestId: "",
@@ -462,8 +468,20 @@
   const applyTelegramLoginAvailability = (isAvailable) => {
     telegramLoginAvailable = Boolean(isAvailable);
     const shouldHideTelegramEntry = !telegramLoginAvailable || telegramSetupState.active;
-    setElementHidden(telegramDivider, shouldHideTelegramEntry);
     setElementHidden(telegramButton, shouldHideTelegramEntry);
+    setElementHidden(vkIdButton, !vkIdLoginAvailable || telegramSetupState.active);
+    const hasAnySocialAuth =
+      (telegramLoginAvailable || vkIdLoginAvailable) && !telegramSetupState.active;
+    setElementHidden(telegramDivider, !hasAnySocialAuth);
+  };
+
+  const applyVkIdLoginAvailability = (isAvailable, appId = "") => {
+    vkIdLoginAvailable = Boolean(isAvailable);
+    vkIdAppId = normalizeText(appId);
+    setElementHidden(vkIdButton, !vkIdLoginAvailable || telegramSetupState.active);
+    const hasAnySocialAuth =
+      (telegramLoginAvailable || vkIdLoginAvailable) && !telegramSetupState.active;
+    setElementHidden(telegramDivider, !hasAnySocialAuth);
   };
 
   const loadTelegramLoginAvailability = async () => {
@@ -472,11 +490,92 @@
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         applyTelegramLoginAvailability(true);
+        applyVkIdLoginAvailability(false, "");
         return;
       }
       applyTelegramLoginAvailability(payload?.site?.auth?.telegramEnabled !== false);
+      applyVkIdLoginAvailability(
+        payload?.site?.auth?.vkIdEnabled === true && normalizeText(payload?.site?.auth?.vkIdAppId),
+        payload?.site?.auth?.vkIdAppId,
+      );
     } catch {
       applyTelegramLoginAvailability(true);
+      applyVkIdLoginAvailability(false, "");
+    }
+  };
+
+  const toBase64Url = (input) =>
+    window.btoa(input).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+
+  const randomBase64Url = (size = 32) => {
+    const bytes = new Uint8Array(size);
+    window.crypto.getRandomValues(bytes);
+    return toBase64Url(String.fromCharCode(...bytes));
+  };
+
+  const loadVkIdSdk = async () => {
+    if (window.VKID) return window.VKID;
+    if (vkIdSdkPromise) return vkIdSdkPromise;
+    vkIdSdkPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/@vkid/sdk@<2.0.0/dist-sdk/umd/index.js";
+      script.async = true;
+      script.onload = () => {
+        if (window.VKID) resolve(window.VKID);
+        else reject(new Error("VK ID SDK unavailable"));
+      };
+      script.onerror = () => reject(new Error("VK ID SDK load failed"));
+      document.head.appendChild(script);
+    });
+    return vkIdSdkPromise;
+  };
+
+  const handleVkIdLogin = async () => {
+    if (!vkIdLoginAvailable || !vkIdAppId) return;
+    setStatus("Открываем VK ID…", "waiting");
+    try {
+      const VKID = await loadVkIdSdk();
+      const codeVerifier = randomBase64Url(32);
+      const stateToken = randomBase64Url(24);
+      VKID.Config.init({
+        app: Number(vkIdAppId),
+        redirectUrl: `${window.location.origin}${window.location.pathname}`,
+        responseMode: VKID.ConfigResponseMode.Callback,
+        source: VKID.ConfigSource.LOWCODE,
+        scope: "phone email",
+        state: stateToken,
+        codeVerifier,
+      });
+      const authResult = await VKID.Auth.login({
+        lang: VKID.Languages.RUS,
+        scheme: VKID.Scheme.LIGHT,
+      });
+      const response = await fetch(HOME_VK_AUTH_COMPLETE_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: authResult?.code,
+          deviceId: authResult?.device_id,
+          codeVerifier,
+          redirectUrl: `${window.location.origin}${window.location.pathname}`,
+          referralCode: getPendingReferralCode(),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.token || !payload?.user) {
+        throw new Error(payload?.message || "Не удалось выполнить вход через VK ID.");
+      }
+      const sessionPayload = buildSessionPayload({
+        token: payload.token,
+        user: payload.user,
+      });
+      clearLogoutMarker();
+      persistRememberChoice(true);
+      persistSessionPayload(sessionPayload, true);
+      setPendingReferralCode("");
+      redirectToHome();
+    } catch (error) {
+      setStatus(normalizeText(error?.message) || "Не удалось выполнить вход через VK ID.", "error");
     }
   };
 
@@ -997,6 +1096,7 @@
     registerForm.addEventListener("submit", handleRegister);
     forgotLink.addEventListener("click", handleForgotPassword);
     telegramButton.addEventListener("click", handleTelegramLogin);
+    vkIdButton.addEventListener("click", handleVkIdLogin);
     togglePasswordButton.addEventListener("click", handleTogglePassword);
     window.addEventListener("beforeunload", stopTelegramPolling);
     window.addEventListener("focus", triggerTelegramStatusRefresh);

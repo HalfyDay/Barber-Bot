@@ -28,6 +28,7 @@ const registerAdminCrudRoutes = ({
   buildUserInsightsMap,
   adjustUserBsBalance,
   addUserWarning,
+  homePushService,
 }) => {
   const buildScheduleBoard = async (requestedWindowDays = 14) => {
     const barbersList = await getBarbers({ includeInactive: true });
@@ -327,6 +328,19 @@ const registerAdminCrudRoutes = ({
       });
       res.status(201).json(record);
       requestRealtimePush(true);
+      const ownerUserId = await homePushService?.resolveUserIdForAppointment?.(record);
+      if (ownerUserId && normalizeText(record.Status) === "Активная") {
+        await homePushService?.sendNotificationToUser?.(
+          ownerUserId,
+          {
+            title: "Запись создана",
+            body: `${normalizeText(record.Date)} · ${normalizeText(record.Time)}`,
+            tag: `brothershop-admin-booking-create-${normalizeText(record.id)}`,
+            url: "/booking/#booking",
+          },
+          { channel: "booking" },
+        );
+      }
     } catch (error) {
       console.error("Appointment create error:", error);
       res.status(500).json({ error: "Не удалось создать запись." });
@@ -384,6 +398,21 @@ const registerAdminCrudRoutes = ({
       const updated = await prisma.appointments.update({ where: { id }, data });
       res.json(updated);
       requestRealtimePush(true);
+      const ownerUserId = await homePushService?.resolveUserIdForAppointment?.(updated);
+      if (ownerUserId) {
+        const nextStatus = normalizeText(updated.Status);
+        const title = nextStatus === "Отмена" ? "Запись отменена" : "Запись изменена";
+        await homePushService?.sendNotificationToUser?.(
+          ownerUserId,
+          {
+            title,
+            body: `${normalizeText(updated.Date)} · ${normalizeText(updated.Time)}`,
+            tag: `brothershop-admin-booking-update-${normalizeText(updated.id)}`,
+            url: "/booking/#booking",
+          },
+          { channel: "booking" },
+        );
+      }
     } catch (error) {
       console.error("Appointment update error:", error);
       res.status(500).json({ error: "Не удалось обновить запись." });
@@ -406,9 +435,23 @@ const registerAdminCrudRoutes = ({
           });
         }
       }
+      const existing = await prisma.appointments.findUnique({ where: { id } });
       await prisma.appointments.delete({ where: { id } });
       res.status(204).send();
       requestRealtimePush(true);
+      const ownerUserId = await homePushService?.resolveUserIdForAppointment?.(existing || {});
+      if (ownerUserId) {
+        await homePushService?.sendNotificationToUser?.(
+          ownerUserId,
+          {
+            title: "Запись удалена",
+            body: `${normalizeText(existing?.Date)} · ${normalizeText(existing?.Time)}`,
+            tag: `brothershop-admin-booking-delete-${normalizeText(id)}`,
+            url: "/booking/#booking",
+          },
+          { channel: "booking" },
+        );
+      }
     } catch (error) {
       console.error("Appointment delete error:", error);
       res.status(500).json({ error: "Не удалось удалить запись." });
@@ -533,6 +576,18 @@ const registerAdminCrudRoutes = ({
         actorName,
       });
       requestRealtimePush(true);
+      if (Number(result?.amountBs) > 0) {
+        await homePushService?.sendNotificationToUser?.(
+          id,
+          {
+            title: "Пополнение BS",
+            body: `Баланс увеличен на ${Math.trunc(Number(result.amountBs) || 0)} BS.`,
+            tag: `brothershop-admin-balance-${normalizeText(id)}`,
+            url: "/booking/#referral",
+          },
+          { channel: "balance" },
+        );
+      }
       return res.json(result);
     } catch (error) {
       if (error?.message === "USER_NOT_FOUND") {

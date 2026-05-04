@@ -12,6 +12,7 @@
   const TOPBAR_BALANCE_ANNOUNCEMENT_DURATION_MS = 2600;
   const TOPBAR_BALANCE_ANNOUNCEMENT_COOLDOWN_MS = 9000;
   const BALANCE_NOTIFICATION_TAG = "brothershop-home-balance";
+  const HOME_PUSH_SETTINGS_CACHE_TTL_MS = 300000;
   const CONTACT_PHONE = "+7 964 659-92-96";
   const SEO_HOME_TITLE = "BrotherShop | Барбершоп в Братске, мужские стрижки и оформление бороды";
   const APP_HOME_TITLE = "BrotherShop • Главная";
@@ -107,6 +108,8 @@
   let lastTopbarBalanceAnnouncementAt = 0;
   let lastKnownReferralBalance = null;
   let promoMarqueeAutoScroll = null;
+  let cachedPushPublicConfig = null;
+  let cachedPushPublicConfigAt = 0;
   const isEditableTarget = (target) => {
     if (!(target instanceof HTMLElement)) return false;
     return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
@@ -2113,6 +2116,86 @@
     } catch {
       return window.Notification.permission || "default";
     }
+  };
+
+  const urlBase64ToUint8Array = (base64String) => {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const normalized = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = window.atob(normalized);
+    return Uint8Array.from(rawData, (char) => char.charCodeAt(0));
+  };
+
+  const fetchHomePushPublicConfig = async (force = false) => {
+    const now = Date.now();
+    if (
+      !force &&
+      cachedPushPublicConfig &&
+      now - cachedPushPublicConfigAt < HOME_PUSH_SETTINGS_CACHE_TTL_MS
+    ) {
+      return cachedPushPublicConfig;
+    }
+    const payload = await apiRequest("/home/notifications/push/public-key");
+    cachedPushPublicConfig = payload || { enabled: false, publicKey: "" };
+    cachedPushPublicConfigAt = now;
+    return cachedPushPublicConfig;
+  };
+
+  const getActivePushToggleState = (user = {}) =>
+    user?.bookingPushNotificationsEnabled !== false ||
+    user?.balancePushNotificationsEnabled !== false;
+
+  const getHomePushRegistration = async () => {
+    if (!("serviceWorker" in navigator)) return null;
+    try {
+      return (await navigator.serviceWorker.ready) || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const disableHomePushSubscription = async () => {
+    const registration = await getHomePushRegistration();
+    const subscription = await registration?.pushManager?.getSubscription?.();
+    if (!subscription) return "none";
+    await apiRequest("/home/notifications/push/unsubscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: subscription.endpoint }),
+    }).catch(() => null);
+    await subscription.unsubscribe().catch(() => null);
+    return "unsubscribed";
+  };
+
+  const ensureHomePushSubscription = async ({ forcePrompt = false } = {}) => {
+    if (!("PushManager" in window) || !("serviceWorker" in navigator)) {
+      return { status: "unsupported" };
+    }
+    const permission =
+      window.Notification.permission === "default" && forcePrompt
+        ? await requestIncomingBalanceNotificationPermission()
+        : window.Notification.permission;
+    if (permission !== "granted") {
+      return { status: permission || "default" };
+    }
+    const publicConfig = await fetchHomePushPublicConfig();
+    if (!publicConfig?.enabled || !normalizeText(publicConfig?.publicKey)) {
+      return { status: "disabled" };
+    }
+    const registration = await getHomePushRegistration();
+    if (!registration?.pushManager) return { status: "unsupported" };
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicConfig.publicKey),
+      });
+    }
+    await apiRequest("/home/notifications/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: subscription.toJSON() }),
+    });
+    return { status: "granted", subscription };
   };
 
   const stopSitePresenceLoop = () => {
@@ -4855,7 +4938,20 @@
     }
     if (sheetId === "profile-notifications") {
       const user = state.payload?.user || {};
-      openSheet("Уведомления", `<form class="form-grid" id="profile-notifications-form"><label class="toggle-card"><div><p class="list-title">Уведомления о записях</p><p class="subtitle">Показывать уведомления на сайте о создании и изменениях записи к барберу.</p></div><input type="checkbox" name="bookingNotificationsEnabled" ${user.bookingNotificationsEnabled !== false ? "checked" : ""} /></label><label class="toggle-card"><div><p class="list-title">Уведомления о пополнении BS</p><p class="subtitle">Системные уведомления браузера и анимация в шапке при поступлении бонусов.</p></div><input type="checkbox" name="balanceNotificationsEnabled" ${user.balanceNotificationsEnabled !== false ? "checked" : ""} /></label><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
+      const notificationPermission =
+        typeof window.Notification === "function" ? window.Notification.permission : "unsupported";
+      const permissionLabel =
+        notificationPermission === "granted"
+          ? "Разрешены"
+          : notificationPermission === "denied"
+            ? "Запрещены в браузере"
+            : notificationPermission === "default"
+              ? "Нужно разрешение браузера"
+              : "Не поддерживаются";
+      openSheet(
+        "Уведомления",
+        `<form class="form-grid" id="profile-notifications-form"><div class="list-item"><p class="list-title">Push-уведомления</p><p class="subtitle">${permissionLabel}</p></div><label class="toggle-card"><div><p class="list-title">Записи на сайте</p><p class="subtitle">Изменения записи в открытом личном кабинете.</p></div><input type="checkbox" name="bookingNotificationsEnabled" ${user.bookingNotificationsEnabled !== false ? "checked" : ""} /></label><label class="toggle-card"><div><p class="list-title">Записи на телефон</p><p class="subtitle">Push даже когда сайт закрыт.</p></div><input type="checkbox" name="bookingPushNotificationsEnabled" ${user.bookingPushNotificationsEnabled !== false ? "checked" : ""} /></label><label class="toggle-card"><div><p class="list-title">Пополнение BS на сайте</p><p class="subtitle">Анимация и browser-notice при открытом сайте.</p></div><input type="checkbox" name="balanceNotificationsEnabled" ${user.balanceNotificationsEnabled !== false ? "checked" : ""} /></label><label class="toggle-card"><div><p class="list-title">Пополнение BS на телефон</p><p class="subtitle">Push о поступлении BS.</p></div><input type="checkbox" name="balancePushNotificationsEnabled" ${user.balancePushNotificationsEnabled !== false ? "checked" : ""} /></label><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`,
+      );
       return;
     }
     if (sheetId === "profile-notices") {
@@ -5826,14 +5922,30 @@
     bindProfileForm(sheetRoot, "profile-password-form", async (formData) => ({ password: normalizeText(formData.get("password")) }));
     bindProfileForm(sheetRoot, "profile-notifications-form", async (formData) => {
       const bookingNotificationsEnabled = formData.get("bookingNotificationsEnabled") === "on";
+      const bookingPushNotificationsEnabled =
+        formData.get("bookingPushNotificationsEnabled") === "on";
       const balanceNotificationsEnabled = formData.get("balanceNotificationsEnabled") === "on";
+      const balancePushNotificationsEnabled =
+        formData.get("balancePushNotificationsEnabled") === "on";
       const balanceNotificationsWasEnabled = state.payload?.user?.balanceNotificationsEnabled !== false;
       if (balanceNotificationsEnabled && !balanceNotificationsWasEnabled) {
         await requestIncomingBalanceNotificationPermission();
       }
+      const wantsAnyPush =
+        bookingPushNotificationsEnabled || balancePushNotificationsEnabled;
+      if (wantsAnyPush) {
+        const pushResult = await ensureHomePushSubscription({ forcePrompt: true });
+        if (pushResult.status !== "granted") {
+          throw new Error("Разрешите push-уведомления в браузере.");
+        }
+      } else {
+        await disableHomePushSubscription().catch(() => null);
+      }
       return {
         bookingNotificationsEnabled,
+        bookingPushNotificationsEnabled,
         balanceNotificationsEnabled,
+        balancePushNotificationsEnabled,
       };
     });
     const profilePasswordForm = queryById(sheetRoot, "profile-password-form");
@@ -5844,13 +5956,23 @@
     const profileNotificationsForm = queryById(sheetRoot, "profile-notifications-form");
     if (profileNotificationsForm) {
       const initialBookingNotificationsEnabled = state.payload?.user?.bookingNotificationsEnabled !== false;
+      const initialBookingPushNotificationsEnabled =
+        state.payload?.user?.bookingPushNotificationsEnabled !== false;
       const initialBalanceNotificationsEnabled = state.payload?.user?.balanceNotificationsEnabled !== false;
+      const initialBalancePushNotificationsEnabled =
+        state.payload?.user?.balancePushNotificationsEnabled !== false;
       setupProfileFormDirtyState(profileNotificationsForm, () => {
         const currentBookingValue = profileNotificationsForm.elements?.bookingNotificationsEnabled?.checked === true;
+        const currentBookingPushValue =
+          profileNotificationsForm.elements?.bookingPushNotificationsEnabled?.checked === true;
         const currentBalanceValue = profileNotificationsForm.elements?.balanceNotificationsEnabled?.checked === true;
+        const currentBalancePushValue =
+          profileNotificationsForm.elements?.balancePushNotificationsEnabled?.checked === true;
         return (
           currentBookingValue !== initialBookingNotificationsEnabled ||
-          currentBalanceValue !== initialBalanceNotificationsEnabled
+          currentBookingPushValue !== initialBookingPushNotificationsEnabled ||
+          currentBalanceValue !== initialBalanceNotificationsEnabled ||
+          currentBalancePushValue !== initialBalancePushNotificationsEnabled
         );
       });
     }
@@ -6065,6 +6187,9 @@
     }
     try {
       commitAppPayload(await apiRequest("/app"));
+      if (getActivePushToggleState(state.payload?.user || {})) {
+        ensureHomePushSubscription({ forcePrompt: false }).catch(() => null);
+      }
       state.bootstrapError = "";
       if (state.currentPage === "home") {
         const homeBarbers = getSortedBookingBarbers();

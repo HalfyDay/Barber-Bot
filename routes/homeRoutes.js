@@ -519,6 +519,84 @@ const registerHomeRoutes = ({
     return "other";
   };
 
+  const transliterateLatinToCyrillic = (value) => {
+    const safeValue = normalizeText(value);
+    if (!safeValue || /[А-Яа-яЁё]/.test(safeValue) || !/^[A-Za-z' -]+$/.test(safeValue)) {
+      return safeValue;
+    }
+    const source = safeValue.toLowerCase();
+    const multiCharMap = [
+      ["shch", "щ"],
+      ["sch", "щ"],
+      ["yo", "ё"],
+      ["yu", "ю"],
+      ["ya", "я"],
+      ["ye", "е"],
+      ["zh", "ж"],
+      ["kh", "х"],
+      ["ts", "ц"],
+      ["ch", "ч"],
+      ["sh", "ш"],
+      ["eh", "э"],
+      ["iy", "ий"],
+      ["yy", "ый"],
+    ];
+    const charMap = {
+      a: "а",
+      b: "б",
+      c: "к",
+      d: "д",
+      e: "е",
+      f: "ф",
+      g: "г",
+      h: "х",
+      i: "и",
+      j: "й",
+      k: "к",
+      l: "л",
+      m: "м",
+      n: "н",
+      o: "о",
+      p: "п",
+      q: "к",
+      r: "р",
+      s: "с",
+      t: "т",
+      u: "у",
+      v: "в",
+      w: "в",
+      x: "кс",
+      y: "й",
+      z: "з",
+      "'": "ь",
+      " ": " ",
+      "-": "-",
+    };
+    let index = 0;
+    let output = "";
+    while (index < source.length) {
+      let matched = false;
+      for (const [latin, cyrillic] of multiCharMap) {
+        if (source.startsWith(latin, index)) {
+          output += cyrillic;
+          index += latin.length;
+          matched = true;
+          break;
+        }
+      }
+      if (matched) continue;
+      output += charMap[source[index]] || source[index];
+      index += 1;
+    }
+    return output
+      .split(/(\s+|-)/)
+      .map((part) => {
+        if (!part || /^(\s+|-)$/.test(part)) return part;
+        return part.charAt(0).toUpperCase() + part.slice(1);
+      })
+      .join("");
+  };
+
   const buildVkProfileFromTokenPayload = (tokenPayload = {}, tokenResponse = {}) => {
     const responsePayload = unwrapVkProfilePayload(tokenResponse);
     const responseSources = [responsePayload, tokenResponse];
@@ -544,14 +622,19 @@ const registerHomeRoutes = ({
       pickVkField(tokenSources, ["name", "display_name", "displayName"]) ||
       email ||
       phone;
+    const resolvedFirstName = transliterateLatinToCyrillic(firstName);
+    const resolvedLastName = transliterateLatinToCyrillic(lastName);
+    const resolvedDisplayName = /[А-Яа-яЁё]/.test(displayName)
+      ? displayName
+      : [resolvedFirstName, resolvedLastName].filter(Boolean).join(" ") || transliterateLatinToCyrillic(displayName);
     return {
       vkUserId:
         pickVkField(allSources, ["user_id", "sub", "id", "userId", "uid", "uuid"]) ||
         pickVkFieldDeep(allSources, ["user_id", "sub", "id", "userId", "uid", "uuid"]) ||
         "",
-      firstName,
-      lastName,
-      displayName,
+      firstName: resolvedFirstName,
+      lastName: resolvedLastName,
+      displayName: resolvedDisplayName,
       phone,
       email,
       avatarUrl:
@@ -582,20 +665,28 @@ const registerHomeRoutes = ({
       return payload;
     };
     const safeAccessToken = normalizeText(accessToken);
-    if (safeAccessToken) {
-      const userInfo = await tryFetch(
-        `https://id.vk.ru/oauth2/user_info?client_id=${encodeURIComponent(safeAppId)}&lang=ru`,
-        { access_token: safeAccessToken },
-      );
-      if (userInfo) return userInfo;
-    }
     const safeIdToken = normalizeText(idToken);
-    if (safeIdToken) {
-      const publicInfo = await tryFetch(
-        `https://id.vk.ru/oauth2/public_info?client_id=${encodeURIComponent(safeAppId)}&lang=ru`,
-        { id_token: safeIdToken },
+    const requests = [];
+    if (safeAccessToken) {
+      requests.push(
+        tryFetch(
+          `https://id.vk.ru/oauth2/user_info?client_id=${encodeURIComponent(safeAppId)}&lang=ru`,
+          { access_token: safeAccessToken },
+        ),
       );
-      if (publicInfo) return publicInfo;
+    }
+    if (safeIdToken) {
+      requests.push(
+        tryFetch(
+          `https://id.vk.ru/oauth2/public_info?client_id=${encodeURIComponent(safeAppId)}&lang=ru`,
+          { id_token: safeIdToken },
+        ),
+      );
+    }
+    if (!requests.length) return null;
+    const results = await Promise.allSettled(requests);
+    for (const result of results) {
+      if (result.status === "fulfilled" && result.value) return result.value;
     }
     return null;
   };

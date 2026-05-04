@@ -625,7 +625,7 @@
     redirectToHome();
   };
 
-  const exchangeVkIdCodeSafe = async (VKID, code, deviceId, timeoutMs = 3500) => {
+  const exchangeVkIdCodeSafe = async (VKID, code, deviceId, timeoutMs = 900) => {
     if (!VKID?.Auth?.exchangeCode || !code || !deviceId) return null;
     try {
       return await Promise.race([

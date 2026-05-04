@@ -7213,15 +7213,22 @@ img.media-wave.is-ready {
 .profile-vkid-stack {
   display: grid;
   gap: 12px;
+  width: min(100%, 320px);
   justify-items: start;
+  align-items: start;
 }
 
 .vkid-onetap.profile-vkid-onetap {
-  width: min(100%, 320px);
+  width: 100%;
   min-height: 52px;
   display: flex;
   align-items: stretch;
   justify-self: start;
+}
+
+.profile-vkid-fallback {
+  width: 100%;
+  justify-content: center;
 }
 
 .vkid-onetap.profile-vkid-onetap > div,

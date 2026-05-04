@@ -375,32 +375,81 @@ const registerHomeRoutes = ({
 
   const buildVkProfileFromTokenPayload = (tokenPayload = {}, tokenResponse = {}) => {
     const firstName = normalizeText(
-      tokenPayload.first_name || tokenPayload.given_name || tokenPayload.name_given,
+      tokenPayload.first_name ||
+        tokenPayload.given_name ||
+        tokenPayload.name_given ||
+        tokenResponse.first_name,
     );
     const lastName = normalizeText(
-      tokenPayload.last_name || tokenPayload.family_name || tokenPayload.name_family,
+      tokenPayload.last_name ||
+        tokenPayload.family_name ||
+        tokenPayload.name_family ||
+        tokenResponse.last_name,
     );
     const displayName =
       normalizeText(
         tokenPayload.name ||
+          tokenResponse.name ||
           [firstName, lastName].filter(Boolean).join(" ") ||
+          tokenResponse.email ||
           tokenPayload.email ||
+          tokenResponse.phone ||
           tokenPayload.phone,
       ) || "";
     return {
       vkUserId:
         normalizeText(tokenPayload.user_id) ||
         normalizeText(tokenPayload.sub) ||
-        normalizeText(tokenResponse.user_id),
+        normalizeText(tokenResponse.user_id) ||
+        normalizeText(tokenResponse.sub) ||
+        normalizeText(tokenResponse.id),
       firstName,
       lastName,
       displayName,
-      phone: normalizePhone(tokenPayload.phone || "") || "",
-      email: normalizeText(tokenPayload.email),
+      phone: normalizePhone(tokenPayload.phone || tokenResponse.phone || "") || "",
+      email: normalizeText(tokenPayload.email || tokenResponse.email),
       avatarUrl: normalizeText(
-        tokenPayload.avatar || tokenPayload.picture || tokenPayload.photo || "",
+        tokenPayload.avatar ||
+          tokenPayload.picture ||
+          tokenPayload.photo ||
+          tokenResponse.avatar ||
+          tokenResponse.picture ||
+          tokenResponse.photo ||
+          "",
       ),
     };
+  };
+
+  const fetchVkIdProfileByToken = async ({ appId, accessToken, idToken }) => {
+    const safeAppId = normalizeText(appId);
+    if (!safeAppId) return null;
+    const tryFetch = async (url, body) => {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(body).toString(),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.error) return null;
+      return payload;
+    };
+    const safeAccessToken = normalizeText(accessToken);
+    if (safeAccessToken) {
+      const userInfo = await tryFetch(
+        `https://id.vk.ru/oauth2/user_info?client_id=${encodeURIComponent(safeAppId)}`,
+        { access_token: safeAccessToken },
+      );
+      if (userInfo) return userInfo;
+    }
+    const safeIdToken = normalizeText(idToken);
+    if (safeIdToken) {
+      const publicInfo = await tryFetch(
+        `https://id.vk.ru/oauth2/public_info?client_id=${encodeURIComponent(safeAppId)}`,
+        { id_token: safeIdToken },
+      );
+      if (publicInfo) return publicInfo;
+    }
+    return null;
   };
 
   app.post("/api/home/auth/register", async (req, res) => {
@@ -609,26 +658,40 @@ const registerHomeRoutes = ({
       const code = normalizeText(req.body?.code);
       const deviceId = normalizeText(req.body?.deviceId || req.body?.device_id);
       const codeVerifier = normalizeText(req.body?.codeVerifier || req.body?.code_verifier);
+      const providedTokenPayload =
+        req.body?.tokenPayload && typeof req.body.tokenPayload === "object"
+          ? req.body.tokenPayload
+          : null;
       const redirectUrl =
         normalizeText(req.body?.redirectUrl) ||
         `${process.env.APP_BASE_URL || "https://brothershop.website"}/login/`;
       const referralCode = normalizeText(req.body?.referralCode).toUpperCase();
-      if (!code || !deviceId) {
+      if ((!code || !deviceId) && !providedTokenPayload) {
         return res.status(400).json({
           success: false,
           message: "Не удалось подтвердить VK ID. Попробуйте ещё раз.",
         });
       }
 
-      const tokenPayload = await exchangeVkIdAuthorizationCode({
-        appId: vkIdAppId,
-        code,
-        deviceId,
-        codeVerifier,
-        redirectUrl,
-      });
+      const tokenPayload =
+        providedTokenPayload ||
+        (await exchangeVkIdAuthorizationCode({
+          appId: vkIdAppId,
+          code,
+          deviceId,
+          codeVerifier,
+          redirectUrl,
+        }));
       const idTokenPayload = decodeJwtPayload(tokenPayload.id_token);
-      const vkProfile = buildVkProfileFromTokenPayload(idTokenPayload || {}, tokenPayload);
+      const supplementalVkProfile = await fetchVkIdProfileByToken({
+        appId: vkIdAppId,
+        accessToken: tokenPayload.access_token,
+        idToken: tokenPayload.id_token,
+      });
+      const vkProfile = buildVkProfileFromTokenPayload(
+        idTokenPayload || {},
+        supplementalVkProfile || tokenPayload,
+      );
       if (!vkProfile.vkUserId) {
         return res.status(409).json({
           success: false,

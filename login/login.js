@@ -588,13 +588,14 @@
     }
   };
 
-  const handleVkIdOneTapSuccess = async ({ code, deviceId }) => {
+  const handleVkIdOneTapSuccess = async ({ code, deviceId, tokenPayload }) => {
     const response = await fetch(HOME_VK_AUTH_COMPLETE_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         code,
         deviceId,
+        tokenPayload,
         redirectUrl: `${window.location.origin}${window.location.pathname}`,
         referralCode: getPendingReferralCode(),
       }),
@@ -644,9 +645,14 @@
         .on(VKID.OneTapInternalEvents.LOGIN_SUCCESS, async (payload) => {
           try {
             setStatus("Выполняем вход через VK ID...", "waiting");
+            const tokenPayload = await VKID.Auth.exchangeCode(
+              payload?.code,
+              payload?.device_id,
+            );
             await handleVkIdOneTapSuccess({
               code: payload?.code,
               deviceId: payload?.device_id,
+              tokenPayload,
             });
           } catch (error) {
             setStatus(normalizeText(error?.message) || "Не удалось выполнить вход через VK ID.", "error");

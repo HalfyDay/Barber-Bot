@@ -343,21 +343,24 @@ const registerHomeRoutes = ({
     const safeCode = normalizeText(code);
     const safeDeviceId = normalizeText(deviceId);
     const safeCodeVerifier = normalizeText(codeVerifier);
-    if (!safeAppId || !safeCode || !safeDeviceId || !safeCodeVerifier) {
+    if (!safeAppId || !safeCode || !safeDeviceId) {
       throw new Error("VK_AUTH_REQUIRED");
+    }
+    const params = new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: safeAppId,
+      code: safeCode,
+      device_id: safeDeviceId,
+      redirect_uri:
+        normalizeText(redirectUrl) || `${process.env.APP_BASE_URL || "https://brothershop.website"}/login/`,
+    });
+    if (safeCodeVerifier) {
+      params.set("code_verifier", safeCodeVerifier);
     }
     const response = await fetch("https://id.vk.ru/oauth2/auth", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        client_id: safeAppId,
-        code: safeCode,
-        device_id: safeDeviceId,
-        code_verifier: safeCodeVerifier,
-        redirect_uri:
-          normalizeText(redirectUrl) || `${process.env.APP_BASE_URL || "https://brothershop.website"}/login/`,
-      }).toString(),
+      body: params.toString(),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -610,7 +613,7 @@ const registerHomeRoutes = ({
         normalizeText(req.body?.redirectUrl) ||
         `${process.env.APP_BASE_URL || "https://brothershop.website"}/login/`;
       const referralCode = normalizeText(req.body?.referralCode).toUpperCase();
-      if (!code || !deviceId || !codeVerifier) {
+      if (!code || !deviceId) {
         return res.status(400).json({
           success: false,
           message: "Не удалось подтвердить VK ID. Попробуйте ещё раз.",

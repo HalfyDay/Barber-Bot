@@ -514,14 +514,16 @@
   };
 
   const loadVkIdSdk = async () => {
+    if (window.VKIDSDK) return window.VKIDSDK;
     if (window.VKID) return window.VKID;
     if (vkIdSdkPromise) return vkIdSdkPromise;
     vkIdSdkPromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = "https://unpkg.com/@vkid/sdk/dist-sdk/umd/index.js";
+      script.src = "https://unpkg.com/@vkid/sdk@2.6.5/dist-sdk/umd/index.js";
       script.async = true;
       script.onload = () => {
-        if (window.VKID) resolve(window.VKID);
+        if (window.VKIDSDK) resolve(window.VKIDSDK);
+        else if (window.VKID) resolve(window.VKID);
         else reject(new Error("VK ID SDK unavailable"));
       };
       script.onerror = () => reject(new Error("VK ID SDK load failed"));

@@ -7210,6 +7210,20 @@ img.media-wave.is-ready {
   justify-content: flex-start;
 }
 
+.vkid-onetap.profile-vkid-onetap {
+  width: min(100%, 320px);
+  justify-self: start;
+}
+
+.vkid-onetap.profile-vkid-onetap > div,
+.vkid-onetap.profile-vkid-onetap iframe,
+.vkid-onetap.profile-vkid-onetap section {
+  width: 100% !important;
+  max-width: 100% !important;
+  border-radius: 18px !important;
+  overflow: hidden;
+}
+
 .security-password-trigger-action {
   display: inline-flex;
   align-items: center;

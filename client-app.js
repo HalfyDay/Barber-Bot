@@ -124,6 +124,8 @@
   let homeBarberTransitionResetTimer = null;
   let homeBarberSwipeHandledAt = 0;
   let profileAvatarPanelCloseTimer = null;
+  let vkIdSdkPromise = null;
+  let profileVkIdOneTapRendered = false;
   let homeBarberTiltSnapshot = {
     tiltX: "0deg",
     tiltY: "0deg",
@@ -4933,7 +4935,10 @@
     }
     if (sheetId === "profile-security") {
       const user = state.payload?.user || {};
-      openSheet("Безопасность", `<form class="form-grid" id="profile-password-form"><div class="telegram-sheet-card profile-edit-telegram profile-security-telegram"><div class="profile-security-row-copy"><p class="list-title">${user.telegramId ? "Telegram привязан" : "Telegram не подключен"}</p><p class="subtitle">${user.telegramId ? "Быстрый вход через Telegram уже доступен." : "Подключите Telegram для быстрого входа в личный кабинет."}</p></div><div class="inline-actions"><button class="tonal-btn" type="button" data-action="${user.telegramId ? "unlink-telegram" : "link-telegram"}">${user.telegramId ? "Отвязать Telegram" : "Привязать Telegram"}</button></div></div><div class="security-password-toggle"><button class="security-password-trigger" type="button" data-action="show-password-change"><div class="profile-security-row-copy"><p class="list-title">Сменить пароль</p><p class="subtitle">Задайте новый пароль для входа на сайте.</p></div><span class="security-password-trigger-action">Изменить</span></button></div><div id="security-password-fields" hidden><label class="field"><span class="field-label">Новый пароль</span><input type="password" name="password" /></label></div><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
+      const vkAuth = state.payload?.site?.auth || {};
+      openSheet("Безопасность", `<form class="form-grid" id="profile-password-form"><div class="telegram-sheet-card profile-edit-telegram profile-security-telegram"><div class="profile-security-row-copy"><p class="list-title">${user.telegramId ? "Telegram привязан" : "Telegram не подключен"}</p><p class="subtitle">${user.telegramId ? "Быстрый вход через Telegram уже доступен." : "Подключите Telegram для быстрого входа в личный кабинет."}</p></div><div class="inline-actions"><button class="tonal-btn" type="button" data-action="${user.telegramId ? "unlink-telegram" : "link-telegram"}">${user.telegramId ? "Отвязать Telegram" : "Привязать Telegram"}</button></div></div>${vkAuth.vkIdEnabled === true && normalizeText(vkAuth.vkIdAppId) ? `<div class="telegram-sheet-card profile-edit-telegram profile-security-telegram"><div class="profile-security-row-copy"><p class="list-title">${user.vkIdLinked ? "VK ID подключен" : "Подключить VK ID"}</p><p class="subtitle">${user.vkIdLinked ? "Вход через VK ID уже доступен для этого аккаунта." : "Подключите VK ID, чтобы входить в аккаунт без пароля."}</p></div>${user.vkIdLinked ? `<div class="inline-actions"><span class="tonal-btn" aria-disabled="true">Подключено</span></div>` : `<div id="profile-vkid-onetap" class="vkid-onetap profile-vkid-onetap"></div>`}</div>` : ""}<div class="security-password-toggle"><button class="security-password-trigger" type="button" data-action="show-password-change"><div class="profile-security-row-copy"><p class="list-title">Сменить пароль</p><p class="subtitle">Задайте новый пароль для входа на сайте.</p></div><span class="security-password-trigger-action">Изменить</span></button></div><div id="security-password-fields" hidden><label class="field"><span class="field-label">Новый пароль</span><input type="password" name="password" /></label></div><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
+      profileVkIdOneTapRendered = false;
+      void renderProfileVkIdOneTap();
       return;
     }
     if (sheetId === "profile-notifications") {
@@ -5091,6 +5096,108 @@
       return;
     }
     openProfileAvatarPanel();
+  };
+
+  const loadVkIdSdk = () => {
+    if (window.VKIDSDK) return Promise.resolve(window.VKIDSDK);
+    if (window.VKID) return Promise.resolve(window.VKID);
+    if (vkIdSdkPromise) return vkIdSdkPromise;
+    vkIdSdkPromise = new Promise((resolve, reject) => {
+      const existingScript = document.querySelector("script[data-vkid-sdk='1']");
+      if (existingScript) {
+        existingScript.addEventListener("load", () => {
+          if (window.VKIDSDK) resolve(window.VKIDSDK);
+          else if (window.VKID) resolve(window.VKID);
+          else reject(new Error("VK ID SDK unavailable"));
+        }, { once: true });
+        existingScript.addEventListener("error", () => reject(new Error("VK ID SDK load failed")), { once: true });
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/@vkid/sdk@2.6.5/dist-sdk/umd/index.js";
+      script.async = true;
+      script.dataset.vkidSdk = "1";
+      script.onload = () => {
+        if (window.VKIDSDK) resolve(window.VKIDSDK);
+        else if (window.VKID) resolve(window.VKID);
+        else reject(new Error("VK ID SDK unavailable"));
+      };
+      script.onerror = () => reject(new Error("VK ID SDK load failed"));
+      document.head.appendChild(script);
+    });
+    return vkIdSdkPromise;
+  };
+
+  const handleProfileVkIdLinkSuccess = async ({ code, deviceId, tokenPayload }) => {
+    const payload = await apiRequest("/profile/vk/link/complete", {
+      method: "POST",
+      body: JSON.stringify({
+        code,
+        deviceId,
+        tokenPayload,
+        redirectUrl: `${window.location.origin}${window.location.pathname}`,
+      }),
+    });
+    commitAppPayload(await apiRequest("/app"));
+    render({ sheet: false });
+    openSheet(
+      "VK ID подключен",
+      `<div class="list-item"><p class="list-title">VK ID успешно подключен.</p><p class="subtitle">Теперь в аккаунт можно входить через VK ID.</p></div>`,
+    );
+    return payload;
+  };
+
+  const renderProfileVkIdOneTap = async () => {
+    const container = document.getElementById("profile-vkid-onetap");
+    const user = state.payload?.user || {};
+    const vkAuth = state.payload?.site?.auth || {};
+    if (!container || user.vkIdLinked || vkAuth.vkIdEnabled !== true || !normalizeText(vkAuth.vkIdAppId)) return;
+    if (profileVkIdOneTapRendered) return;
+    try {
+      const VKID = await loadVkIdSdk();
+      VKID.Config.init({
+        app: Number(vkAuth.vkIdAppId),
+        redirectUrl: `${window.location.origin}${window.location.pathname}`,
+        responseMode: VKID.ConfigResponseMode.Callback,
+        source: VKID.ConfigSource.LOWCODE,
+        scope: "phone email",
+      });
+      container.innerHTML = "";
+      const oneTap = new VKID.OneTap();
+      oneTap
+        .render({
+          container,
+          scheme: VKID.Scheme?.DARK || "dark",
+          showAlternativeLogin: true,
+          styles: {
+            borderRadius: 18,
+          },
+        })
+        .on(VKID.WidgetEvents.ERROR, () => {
+          container.innerHTML = `<div class="list-item"><p class="list-title">Не удалось загрузить VK ID.</p></div>`;
+        })
+        .on(VKID.OneTapInternalEvents.LOGIN_SUCCESS, async (payload) => {
+          try {
+            const tokenPayload = await VKID.Auth.exchangeCode(
+              payload?.code,
+              payload?.device_id,
+            );
+            await handleProfileVkIdLinkSuccess({
+              code: payload?.code,
+              deviceId: payload?.device_id,
+              tokenPayload,
+            });
+          } catch (error) {
+            openSheet(
+              "Ошибка VK ID",
+              `<div class="list-item"><p class="list-title">${normalizeText(error?.message) || "Не удалось привязать VK ID."}</p></div>`,
+            );
+          }
+        });
+      profileVkIdOneTapRendered = true;
+    } catch {
+      container.innerHTML = `<div class="list-item"><p class="list-title">Не удалось загрузить VK ID.</p></div>`;
+    }
   };
 
   const startTelegramLink = async () => {

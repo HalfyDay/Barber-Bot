@@ -1594,6 +1594,7 @@ const createHomeClientStoreService = ({
         displayName: normalizeText(user.Name) || normalizePhone(user.Phone || "") || "Клиент",
         phone: normalizePhone(user.Phone || "") || null,
         telegramId: normalizeText(user.TelegramID) || null,
+        vkIdLinked: Boolean(userMeta.vkIdUserId),
         preferredBarber: normalizeText(user.Barber) || "",
         birthDate: userMeta.birthDate,
         gender: userMeta.gender,

@@ -373,49 +373,78 @@ const registerHomeRoutes = ({
     return payload;
   };
 
+  const unwrapVkProfilePayload = (payload = {}) => {
+    if (!payload || typeof payload !== "object") return {};
+    if (payload.user && typeof payload.user === "object") return payload.user;
+    if (payload.response && typeof payload.response === "object") {
+      if (payload.response.user && typeof payload.response.user === "object") return payload.response.user;
+      return payload.response;
+    }
+    if (payload.result && typeof payload.result === "object") return payload.result;
+    return payload;
+  };
+
+  const pickVkField = (sources, fieldNames) => {
+    for (const source of sources) {
+      if (!source || typeof source !== "object") continue;
+      for (const fieldName of fieldNames) {
+        const rawValue = source[fieldName];
+        const safeValue = normalizeText(rawValue);
+        if (safeValue) return safeValue;
+      }
+    }
+    return "";
+  };
+
+  const normalizeVkBirthDate = (value) => {
+    const safeValue = normalizeText(value);
+    if (!safeValue) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(safeValue)) return safeValue;
+    const dotted = safeValue.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (dotted) {
+      const [, day, month, year] = dotted;
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    }
+    return "";
+  };
+
+  const normalizeVkGender = (value) => {
+    const safeValue = normalizeText(value).toLowerCase();
+    if (!safeValue) return "";
+    if (["2", "male", "man", "m"].includes(safeValue)) return "male";
+    if (["1", "female", "woman", "f"].includes(safeValue)) return "female";
+    return "other";
+  };
+
   const buildVkProfileFromTokenPayload = (tokenPayload = {}, tokenResponse = {}) => {
-    const firstName = normalizeText(
-      tokenPayload.first_name ||
-        tokenPayload.given_name ||
-        tokenPayload.name_given ||
-        tokenResponse.first_name,
-    );
-    const lastName = normalizeText(
-      tokenPayload.last_name ||
-        tokenPayload.family_name ||
-        tokenPayload.name_family ||
-        tokenResponse.last_name,
-    );
-    const displayName =
-      normalizeText(
-        tokenPayload.name ||
-          tokenResponse.name ||
-          [firstName, lastName].filter(Boolean).join(" ") ||
-          tokenResponse.email ||
-          tokenPayload.email ||
-          tokenResponse.phone ||
-          tokenPayload.phone,
+    const responsePayload = unwrapVkProfilePayload(tokenResponse);
+    const sources = [tokenPayload, responsePayload, tokenResponse];
+    const firstName = pickVkField(sources, ["first_name", "given_name", "name_given", "firstName"]);
+    const lastName = pickVkField(sources, ["last_name", "family_name", "name_family", "lastName"]);
+    const email = pickVkField(sources, ["email"]);
+    const phone =
+      normalizePhone(
+        pickVkField(sources, ["phone", "phone_number", "phoneNumber"]),
       ) || "";
+    const displayName =
+      pickVkField(sources, ["name", "display_name", "displayName"]) ||
+      [firstName, lastName].filter(Boolean).join(" ") ||
+      email ||
+      phone;
     return {
       vkUserId:
-        normalizeText(tokenPayload.user_id) ||
-        normalizeText(tokenPayload.sub) ||
-        normalizeText(tokenResponse.user_id) ||
-        normalizeText(tokenResponse.sub) ||
-        normalizeText(tokenResponse.id),
+        pickVkField(sources, ["user_id", "sub", "id", "userId"]) || "",
       firstName,
       lastName,
       displayName,
-      phone: normalizePhone(tokenPayload.phone || tokenResponse.phone || "") || "",
-      email: normalizeText(tokenPayload.email || tokenResponse.email),
-      avatarUrl: normalizeText(
-        tokenPayload.avatar ||
-          tokenPayload.picture ||
-          tokenPayload.photo ||
-          tokenResponse.avatar ||
-          tokenResponse.picture ||
-          tokenResponse.photo ||
-          "",
+      phone,
+      email,
+      avatarUrl: pickVkField(sources, ["avatar", "picture", "photo", "avatar_url", "photo_200", "photo_100"]),
+      birthDate: normalizeVkBirthDate(
+        pickVkField(sources, ["birth_date", "birthDate", "bdate", "birthday", "date_of_birth"]),
+      ),
+      gender: normalizeVkGender(
+        pickVkField(sources, ["gender", "sex"]),
       ),
     };
   };
@@ -722,6 +751,13 @@ const registerHomeRoutes = ({
 
       const now = new Date().toISOString();
       let row = null;
+      const resolvedVkDisplayName =
+        [vkProfile.firstName, vkProfile.lastName].filter(Boolean).join(" ") ||
+        vkProfile.displayName ||
+        vkProfile.email ||
+        vkProfile.phone ||
+        "VK ID";
+
       if (existing) {
         const patch = {
           homeIsActive: true,
@@ -732,9 +768,11 @@ const registerHomeRoutes = ({
         if (vkProfile.phone) {
           patch.Phone = vkProfile.phone;
         }
-        if (shouldHydrateUserNameFromHome(existing.Name, existing.Phone)) {
-          patch.Name =
-            vkProfile.displayName || vkProfile.email || vkProfile.phone || existing.Name || "VK ID";
+        if (
+          shouldHydrateUserNameFromHome(existing.Name, existing.Phone) ||
+          normalizeText(existing.Name).toUpperCase() === "VK ID"
+        ) {
+          patch.Name = resolvedVkDisplayName || existing.Name || "VK ID";
         }
         if (
           !normalizeText(existing.homePasswordHash) ||
@@ -754,7 +792,7 @@ const registerHomeRoutes = ({
         row = await prisma.users.create({
           data: {
             id: randomUUID(),
-            Name: vkProfile.displayName || vkProfile.email || vkProfile.phone || "VK ID",
+            Name: resolvedVkDisplayName,
             Phone: vkProfile.phone || null,
             TelegramID: null,
             Barber: null,
@@ -785,6 +823,8 @@ const registerHomeRoutes = ({
           avatarUrl: vkProfile.avatarUrl,
           phone: vkProfile.phone,
         },
+        birthDate: currentMeta?.birthDate || vkProfile.birthDate || null,
+        gender: currentMeta?.gender || vkProfile.gender || "",
         avatarUrl: vkProfile.avatarUrl || currentMeta?.avatarUrl || "",
       });
 
@@ -794,16 +834,162 @@ const registerHomeRoutes = ({
         displayName: user.displayName,
       });
       const token = signHomeSessionToken(identity);
+      const nextMeta = await getUserMeta(user.id);
       return res.json({
         success: true,
         token,
-        user,
+        user: {
+          ...user,
+          birthDate: nextMeta?.birthDate || null,
+          gender: nextMeta?.gender || "",
+          avatarUrl: nextMeta?.avatarUrl || "",
+          vkIdLinked: Boolean(nextMeta?.vkIdUserId),
+        },
       });
     } catch (error) {
       console.error("Home VK ID auth complete error:", error);
       return res.status(500).json({
         success: false,
         message: "Не удалось завершить вход через VK ID.",
+      });
+    }
+  });
+
+  app.post("/api/home/profile/vk/link/complete", authenticateHomeToken, async (req, res) => {
+    try {
+      const userId = normalizeText(req.homeUser?.userId);
+      if (!userId) return res.sendStatus(401);
+
+      const siteSettings = (await getSiteSettings?.().catch(() => null)) || null;
+      const vkIdEnabled = siteSettings?.auth?.vkIdEnabled === true;
+      const vkIdAppId =
+        normalizeText(siteSettings?.auth?.vkIdAppId) ||
+        normalizeText(process.env.VK_ID_APP_ID);
+      if (!vkIdEnabled || !vkIdAppId) {
+        return res.status(403).json({
+          success: false,
+          message: "Вход через VK ID сейчас отключен.",
+        });
+      }
+
+      const code = normalizeText(req.body?.code);
+      const deviceId = normalizeText(req.body?.deviceId || req.body?.device_id);
+      const codeVerifier = normalizeText(req.body?.codeVerifier || req.body?.code_verifier);
+      const providedTokenPayload =
+        req.body?.tokenPayload && typeof req.body.tokenPayload === "object"
+          ? req.body.tokenPayload
+          : null;
+      const redirectUrl =
+        normalizeText(req.body?.redirectUrl) ||
+        `${process.env.APP_BASE_URL || "https://brothershop.website"}/login/`;
+      if ((!code || !deviceId) && !providedTokenPayload) {
+        return res.status(400).json({
+          success: false,
+          message: "Не удалось подтвердить VK ID. Попробуйте ещё раз.",
+        });
+      }
+
+      const tokenPayload =
+        providedTokenPayload ||
+        (await exchangeVkIdAuthorizationCode({
+          appId: vkIdAppId,
+          code,
+          deviceId,
+          codeVerifier,
+          redirectUrl,
+        }));
+      const idTokenPayload = decodeJwtPayload(tokenPayload.id_token);
+      const supplementalVkProfile = await fetchVkIdProfileByToken({
+        appId: vkIdAppId,
+        accessToken: tokenPayload.access_token,
+        idToken: tokenPayload.id_token,
+      });
+      const vkProfile = buildVkProfileFromTokenPayload(
+        idTokenPayload || {},
+        supplementalVkProfile || tokenPayload,
+      );
+      if (!vkProfile.vkUserId) {
+        return res.status(409).json({
+          success: false,
+          message: "VK ID не вернул идентификатор пользователя.",
+        });
+      }
+
+      const currentUser = await prisma.users.findUnique({
+        where: { id: userId },
+        select: HOME_USER_SELECT,
+      });
+      if (!currentUser) return res.sendStatus(401);
+
+      const users = await prisma.users.findMany({ select: HOME_USER_SELECT });
+      for (const candidate of users) {
+        if (normalizeText(candidate.id) === userId) continue;
+        const candidateMeta = await getUserMeta(candidate.id);
+        if (normalizeText(candidateMeta?.vkIdUserId) === vkProfile.vkUserId) {
+          return res.status(409).json({
+            success: false,
+            message: "Этот VK ID уже привязан к другому аккаунту.",
+          });
+        }
+      }
+
+      const currentMeta = await getUserMeta(userId);
+      const resolvedVkDisplayName =
+        [vkProfile.firstName, vkProfile.lastName].filter(Boolean).join(" ") ||
+        vkProfile.displayName ||
+        vkProfile.email ||
+        vkProfile.phone ||
+        normalizeText(currentUser.Name) ||
+        "VK ID";
+
+      const patch = {
+        homeUpdatedAt: new Date().toISOString(),
+      };
+      if (!normalizePhone(currentUser.Phone || "") && vkProfile.phone) {
+        patch.Phone = vkProfile.phone;
+      }
+      if (
+        shouldHydrateUserNameFromHome(currentUser.Name, currentUser.Phone) ||
+        normalizeText(currentUser.Name).toUpperCase() === "VK ID"
+      ) {
+        patch.Name = resolvedVkDisplayName;
+      }
+
+      const updatedUser = await prisma.users.update({
+        where: { id: userId },
+        data: patch,
+        select: HOME_USER_SELECT,
+      });
+
+      const nextMeta = await updateUserMeta(userId, {
+        vkIdUserId: vkProfile.vkUserId,
+        vkIdProfile: {
+          firstName: vkProfile.firstName,
+          lastName: vkProfile.lastName,
+          avatarUrl: vkProfile.avatarUrl,
+          phone: vkProfile.phone,
+        },
+        birthDate: currentMeta?.birthDate || vkProfile.birthDate || null,
+        gender: currentMeta?.gender || vkProfile.gender || "",
+        avatarUrl: currentMeta?.avatarUrl || vkProfile.avatarUrl || "",
+      });
+
+      const user = toPublicHomeProfile(updatedUser);
+      return res.json({
+        success: true,
+        user: {
+          ...user,
+          birthDate: nextMeta?.birthDate || null,
+          gender: nextMeta?.gender || "",
+          avatarUrl: nextMeta?.avatarUrl || "",
+          vkIdLinked: Boolean(nextMeta?.vkIdUserId),
+        },
+      });
+    } catch (error) {
+      console.error("Home VK ID profile link error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Не удалось привязать VK ID.",
       });
     }
   });
@@ -1318,6 +1504,7 @@ const registerHomeRoutes = ({
           birthDate: meta?.birthDate || null,
           gender: meta?.gender || "",
           avatarUrl: meta?.avatarUrl || "",
+          vkIdLinked: Boolean(meta?.vkIdUserId),
           bookingNotificationsEnabled: meta?.bookingNotificationsEnabled !== false,
           balanceNotificationsEnabled: meta?.balanceNotificationsEnabled !== false,
           bookingPushNotificationsEnabled:
@@ -1502,6 +1689,7 @@ const registerHomeRoutes = ({
           birthDate: meta?.birthDate || null,
           gender: meta?.gender || "",
           avatarUrl: meta?.avatarUrl || "",
+          vkIdLinked: Boolean(meta?.vkIdUserId),
           bookingNotificationsEnabled: meta?.bookingNotificationsEnabled !== false,
           balanceNotificationsEnabled: meta?.balanceNotificationsEnabled !== false,
           bookingPushNotificationsEnabled:

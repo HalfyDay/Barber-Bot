@@ -140,6 +140,23 @@
       font: 700 0.88rem/1 "Manrope", sans-serif;
       cursor: pointer;
     }
+
+    .vkid-onetap {
+      width: 100%;
+      display: none;
+      justify-content: center;
+    }
+
+    .vkid-onetap.is-visible {
+      display: flex;
+    }
+
+    .vkid-onetap > div,
+    .vkid-onetap iframe,
+    .vkid-onetap section {
+      width: 100% !important;
+      max-width: 100%;
+    }
   </style>
 </head>
 <body class="checking login-page">
@@ -235,12 +252,7 @@
         </span>
         Telegram
       </button>
-      <button id="vkid-login" type="button" class="telegram-btn" hidden>
-        <span class="tg-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 17.88h1.46c.44 0 .66-.28.66-.61 0-.3-.16-.47-.43-.78l-1.9-2.16 1.64-1.92c.17-.2.26-.36.26-.56 0-.33-.22-.57-.62-.57h-1.2c-.36 0-.55.15-.79.43l-1.22 1.45-1.2-1.45c-.23-.28-.42-.43-.79-.43H7.7c-.4 0-.62.24-.62.57 0 .2.09.36.26.56l1.64 1.92-1.9 2.16c-.27.31-.43.48-.43.78 0 .33.22.61.66.61h1.46c.36 0 .55-.15.79-.43l1.48-1.75 1.49 1.75c.23.28.43.43.79.43Z"/></svg>
-        </span>
-        VK ID
-      </button>
+      <div id="vkid-onetap" class="vkid-onetap" hidden></div>
     </section>
   </main>
 

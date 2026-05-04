@@ -45,7 +45,7 @@
   const forgotLink = document.getElementById("forgot-link");
   const telegramDivider = document.getElementById("telegram-divider");
   const telegramButton = document.getElementById("telegram-login");
-  const vkIdButton = document.getElementById("vkid-login");
+  const vkIdContainer = document.getElementById("vkid-onetap");
   const telegramSetupBanner = document.getElementById("telegram-setup-banner");
   const telegramSetupEyebrow = document.getElementById("telegram-setup-eyebrow");
   const telegramSetupTitle = document.getElementById("telegram-setup-title");
@@ -70,7 +70,7 @@
     forgotLink &&
     telegramDivider &&
     telegramButton &&
-    vkIdButton &&
+    vkIdContainer &&
     telegramSetupBanner &&
     telegramSetupEyebrow &&
     telegramSetupTitle &&
@@ -90,6 +90,7 @@
   let vkIdLoginAvailable = false;
   let vkIdAppId = "";
   let vkIdSdkPromise = null;
+  let vkIdOneTapRendered = false;
   let telegramSetupState = {
     active: false,
     requestId: "",
@@ -465,11 +466,17 @@
     element.hidden = Boolean(hidden);
   };
 
+  const setVkIdContainerVisible = (visible) => {
+    if (!vkIdContainer) return;
+    vkIdContainer.hidden = !visible;
+    vkIdContainer.classList.toggle("is-visible", Boolean(visible));
+  };
+
   const applyTelegramLoginAvailability = (isAvailable) => {
     telegramLoginAvailable = Boolean(isAvailable);
     const shouldHideTelegramEntry = !telegramLoginAvailable || telegramSetupState.active;
     setElementHidden(telegramButton, shouldHideTelegramEntry);
-    setElementHidden(vkIdButton, !vkIdLoginAvailable || telegramSetupState.active);
+    setVkIdContainerVisible(vkIdLoginAvailable && !telegramSetupState.active);
     const hasAnySocialAuth =
       (telegramLoginAvailable || vkIdLoginAvailable) && !telegramSetupState.active;
     setElementHidden(telegramDivider, !hasAnySocialAuth);
@@ -478,7 +485,7 @@
   const applyVkIdLoginAvailability = (isAvailable, appId = "") => {
     vkIdLoginAvailable = Boolean(isAvailable);
     vkIdAppId = normalizeText(appId);
-    setElementHidden(vkIdButton, !vkIdLoginAvailable || telegramSetupState.active);
+    setVkIdContainerVisible(vkIdLoginAvailable && !telegramSetupState.active);
     const hasAnySocialAuth =
       (telegramLoginAvailable || vkIdLoginAvailable) && !telegramSetupState.active;
     setElementHidden(telegramDivider, !hasAnySocialAuth);
@@ -578,6 +585,77 @@
       redirectToHome();
     } catch (error) {
       setStatus(normalizeText(error?.message) || "Не удалось выполнить вход через VK ID.", "error");
+    }
+  };
+
+  const handleVkIdOneTapSuccess = async ({ code, deviceId }) => {
+    const response = await fetch(HOME_VK_AUTH_COMPLETE_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        code,
+        deviceId,
+        redirectUrl: `${window.location.origin}${window.location.pathname}`,
+        referralCode: getPendingReferralCode(),
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.success || !payload?.token || !payload?.user) {
+      throw new Error(payload?.message || "Не удалось выполнить вход через VK ID.");
+    }
+    const sessionPayload = buildSessionPayload({
+      token: payload.token,
+      user: payload.user,
+    });
+    clearLogoutMarker();
+    persistRememberChoice(true);
+    persistSessionPayload(sessionPayload, true);
+    setPendingReferralCode("");
+    redirectToHome();
+  };
+
+  const renderVkIdOneTap = async () => {
+    if (!vkIdLoginAvailable || !vkIdAppId || telegramSetupState.active || !vkIdContainer) return;
+    if (vkIdOneTapRendered) return;
+    try {
+      const VKID = await loadVkIdSdk();
+      VKID.Config.init({
+        app: Number(vkIdAppId),
+        redirectUrl: `${window.location.origin}${window.location.pathname}`,
+        responseMode: VKID.ConfigResponseMode.Callback,
+        source: VKID.ConfigSource.LOWCODE,
+        scope: "phone email",
+      });
+      vkIdContainer.innerHTML = "";
+      const oneTap = new VKID.OneTap();
+      oneTap
+        .render({
+          container: vkIdContainer,
+          scheme: VKID.Scheme?.DARK || "dark",
+          showAlternativeLogin: true,
+          styles: {
+            borderRadius: 999,
+          },
+        })
+        .on(VKID.WidgetEvents.ERROR, (error) => {
+          console.warn("VK ID widget error", error);
+          setStatus("Не удалось загрузить VK ID.", "error");
+        })
+        .on(VKID.OneTapInternalEvents.LOGIN_SUCCESS, async (payload) => {
+          try {
+            setStatus("Выполняем вход через VK ID...", "waiting");
+            await handleVkIdOneTapSuccess({
+              code: payload?.code,
+              deviceId: payload?.device_id,
+            });
+          } catch (error) {
+            setStatus(normalizeText(error?.message) || "Не удалось выполнить вход через VK ID.", "error");
+          }
+        });
+      vkIdOneTapRendered = true;
+    } catch (error) {
+      console.warn("VK ID One Tap init failed", error);
+      setStatus("Не удалось загрузить VK ID.", "error");
     }
   };
 
@@ -904,6 +982,8 @@
     registerPhoneInput.readOnly = false;
     registerFullNameInput.required = true;
     registerFullNameInput.readOnly = false;
+    vkIdOneTapRendered = false;
+    if (vkIdContainer) vkIdContainer.innerHTML = "";
     renderTelegramSetupUi();
   };
 
@@ -1080,6 +1160,7 @@
     togglePasswordButton.innerHTML = EYE_ICON_CLOSED;
     tabsRoot.setAttribute("data-active", "login");
     await loadTelegramLoginAvailability();
+    await renderVkIdOneTap();
     try {
       const params = new URLSearchParams(window.location.search || "");
       const referralCode = normalizeText(params.get("ref"));
@@ -1098,7 +1179,6 @@
     registerForm.addEventListener("submit", handleRegister);
     forgotLink.addEventListener("click", handleForgotPassword);
     telegramButton.addEventListener("click", handleTelegramLogin);
-    vkIdButton.addEventListener("click", handleVkIdLogin);
     togglePasswordButton.addEventListener("click", handleTogglePassword);
     window.addEventListener("beforeunload", stopTelegramPolling);
     window.addEventListener("focus", triggerTelegramStatusRefresh);

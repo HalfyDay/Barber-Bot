@@ -698,7 +698,7 @@ const registerHomeRoutes = ({
           message: "VK ID не вернул идентификатор пользователя.",
         });
       }
-      if (!vkProfile.phone) {
+      if (false) {
         return res.status(409).json({
           success: false,
           message:
@@ -707,30 +707,34 @@ const registerHomeRoutes = ({
       }
 
       const users = await prisma.users.findMany({ select: HOME_USER_SELECT });
-      let existing =
-        users.find((user) => normalizePhone(user.Phone || "") === vkProfile.phone) || null;
-      if (!existing) {
-        for (const candidate of users) {
-          const meta = await getUserMeta(candidate.id);
-          if (normalizeText(meta?.vkIdUserId) === vkProfile.vkUserId) {
-            existing = candidate;
-            break;
-          }
+      let existing = null;
+      for (const candidate of users) {
+        const meta = await getUserMeta(candidate.id);
+        if (normalizeText(meta?.vkIdUserId) === vkProfile.vkUserId) {
+          existing = candidate;
+          break;
         }
+      }
+      if (!existing && vkProfile.phone) {
+        existing =
+          users.find((user) => normalizePhone(user.Phone || "") === vkProfile.phone) || null;
       }
 
       const now = new Date().toISOString();
       let row = null;
       if (existing) {
         const patch = {
-          Phone: vkProfile.phone,
           homeIsActive: true,
           homeCreatedAt: existing.homeCreatedAt || now,
           homeUpdatedAt: now,
           homeLastLoginAt: now,
         };
+        if (vkProfile.phone) {
+          patch.Phone = vkProfile.phone;
+        }
         if (shouldHydrateUserNameFromHome(existing.Name, existing.Phone)) {
-          patch.Name = vkProfile.displayName || vkProfile.phone;
+          patch.Name =
+            vkProfile.displayName || vkProfile.email || vkProfile.phone || existing.Name || "VK ID";
         }
         if (
           !normalizeText(existing.homePasswordHash) ||
@@ -750,8 +754,8 @@ const registerHomeRoutes = ({
         row = await prisma.users.create({
           data: {
             id: randomUUID(),
-            Name: vkProfile.displayName || vkProfile.phone,
-            Phone: vkProfile.phone,
+            Name: vkProfile.displayName || vkProfile.email || vkProfile.phone || "VK ID",
+            Phone: vkProfile.phone || null,
             TelegramID: null,
             Barber: null,
             homePasswordHash: hashHex,

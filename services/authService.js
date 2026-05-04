@@ -156,7 +156,7 @@ const createAuthService = ({
         return res.sendStatus(403);
       }
       const identity = buildHomeIdentity(payload || {});
-      if (!identity.userId || !identity.phone) {
+      if (!identity.userId) {
         return res.sendStatus(403);
       }
       req.homeUser = identity;

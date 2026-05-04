@@ -5284,9 +5284,20 @@
   };
 
   const unlinkVkId = async () => {
-    await apiRequest("/profile/vk/unlink", { method: "POST" });
+    const payload = await apiRequest("/profile/vk/unlink", { method: "POST" });
+    if (payload?.user && state.payload) {
+      commitAppPayload({
+        ...state.payload,
+        user: {
+          ...state.payload.user,
+          ...payload.user,
+        },
+      });
+      openSheetById("profile-security");
+      return;
+    }
     commitAppPayload(await apiRequest("/app"));
-    render({ sheet: false });
+    openSheetById("profile-security");
   };
 
   const syncReferralCopyButtons = () => {

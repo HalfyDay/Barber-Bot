@@ -699,36 +699,10 @@ const registerHomeRoutes = ({
     redirectUrl,
     providedTokenPayload,
   }) => {
-    const tokenCandidates = [];
-    const safeProvidedTokenPayload =
-      providedTokenPayload && typeof providedTokenPayload === "object" ? providedTokenPayload : null;
-    if (safeProvidedTokenPayload) {
-      tokenCandidates.push({
-        source: "client",
-        tokenPayload: safeProvidedTokenPayload,
-      });
-    }
-    if (normalizeText(code) && normalizeText(deviceId)) {
-      try {
-        const exchangedTokenPayload = await exchangeVkIdAuthorizationCode({
-          appId,
-          code,
-          deviceId,
-          codeVerifier,
-          redirectUrl,
-        });
-        tokenCandidates.push({
-          source: "server",
-          tokenPayload: exchangedTokenPayload,
-        });
-      } catch (error) {
-        if (!tokenCandidates.length) throw error;
-      }
-    }
     const profileCandidates = [];
-    for (const candidate of tokenCandidates) {
-      const tokenPayload = candidate?.tokenPayload && typeof candidate.tokenPayload === "object"
-        ? candidate.tokenPayload
+    const resolveCandidate = async (source, tokenPayloadInput) => {
+      const tokenPayload = tokenPayloadInput && typeof tokenPayloadInput === "object"
+        ? tokenPayloadInput
         : {};
       const idTokenPayload = decodeJwtPayload(tokenPayload.id_token);
       const supplementalVkProfile = await fetchVkIdProfileByToken({
@@ -740,18 +714,45 @@ const registerHomeRoutes = ({
         idTokenPayload || {},
         supplementalVkProfile || tokenPayload,
       );
-      profileCandidates.push({
-        source: candidate.source,
+      const candidate = {
+        source,
         tokenPayload,
         idTokenPayload,
         supplementalVkProfile,
         vkProfile,
-      });
-      if (vkProfile.vkUserId) {
+      };
+      profileCandidates.push(candidate);
+      return candidate;
+    };
+    const safeProvidedTokenPayload =
+      providedTokenPayload && typeof providedTokenPayload === "object" ? providedTokenPayload : null;
+    if (safeProvidedTokenPayload) {
+      const clientCandidate = await resolveCandidate("client", safeProvidedTokenPayload);
+      if (clientCandidate.vkProfile?.vkUserId) {
         return {
-          ...profileCandidates[profileCandidates.length - 1],
+          ...clientCandidate,
           profileCandidates,
         };
+      }
+    }
+    if (normalizeText(code) && normalizeText(deviceId)) {
+      try {
+        const exchangedTokenPayload = await exchangeVkIdAuthorizationCode({
+          appId,
+          code,
+          deviceId,
+          codeVerifier,
+          redirectUrl,
+        });
+        const serverCandidate = await resolveCandidate("server", exchangedTokenPayload);
+        if (serverCandidate.vkProfile?.vkUserId) {
+          return {
+            ...serverCandidate,
+            profileCandidates,
+          };
+        }
+      } catch (error) {
+        if (!profileCandidates.length) throw error;
       }
     }
     if (profileCandidates.length) {

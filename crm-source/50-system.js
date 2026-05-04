@@ -674,8 +674,8 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
               type="button"
               onClick={() => updateAuthField('vkIdEnabled', !(draft?.auth?.vkIdEnabled === true))}
               className={classNames(
-                'crm-ghost-btn min-w-[112px] px-4 py-2 text-sm',
-                draft?.auth?.vkIdEnabled === true && 'crm-action-btn text-black'
+                'min-w-[112px] px-4 py-2 text-sm',
+                draft?.auth?.vkIdEnabled === true ? 'crm-action-btn' : 'crm-ghost-btn'
               )}
             >
               {draft?.auth?.vkIdEnabled === true ? 'Включено' : 'Выключено'}

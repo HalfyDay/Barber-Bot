@@ -1901,9 +1901,9 @@
 
   const statusColorClass = (value) => (value === "green" ? "green" : value === "yellow" ? "yellow" : "red");
   const referralColorLabel = (value) => {
-    if (value === "green") return "Активный";
-    if (value === "yellow") return "Редкий";
-    return "Неактивный";
+    if (value === "green") return "Зеленый";
+    if (value === "yellow") return "Желтый";
+    return "Красный";
   };
   const humanizeReferralTransferError = (error) => {
     const message = normalizeText(error?.message).toLowerCase();
@@ -2023,6 +2023,43 @@
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(normalizeText(payload.message || payload.error) || "Ошибка запроса.");
     return payload;
+  };
+
+  const getCurrentReferralCodeFromLocation = () => {
+    try {
+      return normalizeText(new URL(window.location.href).searchParams.get("ref")).toUpperCase();
+    } catch {
+      return "";
+    }
+  };
+
+  const clearReferralCodeFromLocation = () => {
+    try {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete("ref");
+      window.history.replaceState(buildHistoryState(state.sheet), "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    } catch {}
+  };
+
+  const applyReferralCodeFromLocationForAuthenticatedUser = async () => {
+    const referralCode = getCurrentReferralCodeFromLocation();
+    if (!referralCode || !isAuthenticated()) return false;
+    try {
+      const payload = await apiRequest("/referral/apply", {
+        method: "POST",
+        body: JSON.stringify({ referralCode }),
+      });
+      if (payload?.referral) {
+        commitAppPayload({
+          ...(state.payload || {}),
+          referral: payload.referral,
+        });
+      }
+      clearReferralCodeFromLocation();
+      return payload?.applied === true;
+    } catch {
+      return false;
+    }
   };
 
   const ensureSitePresenceSessionId = () => {
@@ -3199,50 +3236,20 @@
             </div>
             <span class="status-badge">${referral.stats?.green || 0}</span>
           </div>
-          ${topReferralThisMonth
-            ? `<div class="referral-spotlight-card referral-spotlight-embedded">
-                <div class="referral-spotlight-kicker">Лучший в этом месяце</div>
-                <div class="referral-spotlight-body">
-                  <div class="referral-spotlight-avatar">${avatarMarkup({ displayName: topReferralThisMonth.fullName }, 72)}</div>
-                  <div class="referral-spotlight-copy">
-                    <p class="list-title">${normalizeText(topReferralThisMonth.fullName)}</p>
-                    <p class="subtitle">${topReferralThisMonth.phone ? formatPhone(topReferralThisMonth.phone) : "Телефон скрыт"}</p>
-                  </div>
-                  <div class="referral-spotlight-stats">
-                    <div class="referral-spotlight-stat">
-                      <span class="field-label">BS</span>
-                      <strong>${topReferralThisMonth.rewardedVisits || 0}</strong>
-                    </div>
-                    <div class="referral-spotlight-stat">
-                      <span class="field-label">Визиты</span>
-                      <strong>${topReferralThisMonth.completedVisits || 0}</strong>
-                    </div>
-                  </div>
-                </div>
-                <p class="subtitle referral-spotlight-note">${topReferralThisMonth.lastVisitAt ? `Последний визит ${formatDateTime(topReferralThisMonth.lastVisitAt)}` : "Новый лидер по текущим начислениям."}</p>
-              </div>`
-            : ""}
           <div class="list">
             ${referralPreview.length
-              ? referralPreview
+                ? referralPreview
                   .map(
-                    (item) => `
+                    (item, index) => `
                       <div class="list-item referral-referral-card">
                         <div class="section-head">
-                          <div><p class="list-title">${normalizeText(item.fullName)}</p><p class="subtitle">${item.phone ? formatPhone(item.phone) : "Телефон скрыт"}</p></div>
-                          <span class="status-badge ${statusColorClass(item.color)}">${referralColorLabel(item.color)}</span>
+                          <div><p class="list-title referral-referral-name ${statusColorClass(item.color)}">${index + 1}. ${normalizeText(item.fullName)}</p></div>
                         </div>
-                        <div class="referral-referral-metrics">
-                          <div class="referral-referral-metric">
-                            <span class="field-label">Визиты</span>
-                            <strong>${item.completedVisits || 0}</strong>
-                          </div>
-                          <div class="referral-referral-metric">
-                            <span class="field-label">Принес BS</span>
-                            <strong>${item.rewardedVisits || 0}</strong>
-                          </div>
+                        <div class="referral-referral-summary">
+                          <span>Визиты: <strong>${item.completedVisits || 0}</strong></span>
+                          <span>BS: <strong>${item.rewardedVisits || 0}</strong></span>
+                          <span>${item.lastVisitAt ? `Последний визит: <strong>${formatDateTime(item.lastVisitAt)}</strong>` : "Последний визит: <strong>Нет данных</strong>"}</span>
                         </div>
-                        <div class="muted-text">Последний визит: ${item.lastVisitAt ? formatDateTime(item.lastVisitAt) : "Нет данных"}</div>
                       </div>`,
                   )
                   .join("")
@@ -4888,7 +4895,7 @@
         items.length
           ? `<div class="list referral-sheet-list">${items
               .map(
-                (item) => `<div class="list-item referral-sheet-item"><div class="section-head"><div><p class="list-title">${normalizeText(item.fullName)}</p><p class="subtitle">${item.phone ? formatPhone(item.phone) : "Телефон скрыт"}</p></div><span class="status-badge ${statusColorClass(item.color)}">${referralColorLabel(item.color)}</span></div><div class="referral-sheet-meta"><span>Выполненных записей: <strong>${item.completedVisits || 0}</strong></span><span>Начисляемых BS: <strong>${item.rewardedVisits || 0}</strong></span><span>Последний визит: <strong>${item.lastVisitAt ? formatDateTime(item.lastVisitAt) : "Нет данных"}</strong></span></div></div>`,
+                (item, index) => `<div class="list-item referral-sheet-item referral-sheet-item-compact referral-referral-card"><div class="section-head referral-sheet-row-head"><div><p class="list-title referral-sheet-name ${statusColorClass(item.color)}">${index + 1}. ${normalizeText(item.fullName)}</p></div></div><div class="referral-referral-summary referral-sheet-meta"><span>Визиты: <strong>${item.completedVisits || 0}</strong></span><span>BS: <strong>${item.rewardedVisits || 0}</strong></span><span>Последний визит: <strong>${item.lastVisitAt ? formatDateTime(item.lastVisitAt) : "Нет данных"}</strong></span></div></div>`,
               )
               .join("")}</div>`
           : `<div class="empty-state">Рефералов пока нет.</div>`,
@@ -4988,7 +4995,7 @@
     if (sheetId === "profile-security") {
       const user = state.payload?.user || {};
       const vkAuth = state.payload?.site?.auth || {};
-      openSheet("Безопасность", `<form class="form-grid" id="profile-password-form"><div class="telegram-sheet-card profile-edit-telegram profile-security-telegram"><div class="profile-security-row-copy"><p class="list-title">${user.telegramId ? "Telegram привязан" : "Telegram не подключен"}</p><p class="subtitle">${user.telegramId ? "Быстрый вход через Telegram уже доступен." : "Подключите Telegram для быстрого входа в личный кабинет."}</p></div><div class="inline-actions"><button class="tonal-btn" type="button" data-action="${user.telegramId ? "unlink-telegram" : "link-telegram"}">${user.telegramId ? "Отвязать Telegram" : "Привязать Telegram"}</button></div></div>${vkAuth.vkIdEnabled === true && normalizeText(vkAuth.vkIdAppId) ? `<div class="telegram-sheet-card profile-edit-telegram profile-security-telegram profile-security-vkid-row"><div class="profile-security-row-copy"><p class="list-title">${user.vkIdLinked ? "VK ID подключен" : "Подключить VK ID"}</p><p class="subtitle">${user.vkIdLinked ? "Вход через VK ID уже доступен для этого аккаунта." : "Подключите VK ID, чтобы входить в аккаунт без пароля."}</p></div><div class="inline-actions">${user.vkIdLinked ? `<button class="tonal-btn" type="button" data-action="unlink-vkid">Отвязать VK ID</button>` : `<button class="ghost-btn profile-vkid-inline-btn" type="button" data-action="link-vkid">Привязать VK ID</button>`}</div>${!user.vkIdLinked ? `<div class="profile-vkid-stack"><div id="profile-vkid-onetap" class="vkid-onetap profile-vkid-onetap"></div></div>` : ""}</div>` : ""}<div class="security-password-toggle"><button class="security-password-trigger" type="button" data-action="show-password-change"><div class="profile-security-row-copy"><p class="list-title">Сменить пароль</p><p class="subtitle">Задайте новый пароль для входа на сайте.</p></div><span class="security-password-trigger-action">Изменить</span></button></div><div id="security-password-fields" hidden><label class="field"><span class="field-label">Новый пароль</span><input type="password" name="password" /></label></div><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
+      openSheet("Безопасность", `<form class="form-grid" id="profile-password-form"><div class="telegram-sheet-card profile-edit-telegram profile-security-telegram"><div class="profile-security-row-copy"><p class="list-title">${user.telegramId ? "Telegram привязан" : "Telegram не подключен"}</p><p class="subtitle">${user.telegramId ? "Быстрый вход через Telegram уже доступен." : "Подключите Telegram для быстрого входа в личный кабинет."}</p></div><div class="inline-actions"><button class="tonal-btn" type="button" data-action="${user.telegramId ? "unlink-telegram" : "link-telegram"}">${user.telegramId ? "Отвязать Telegram" : "Привязать Telegram"}</button></div></div>${vkAuth.vkIdEnabled === true && normalizeText(vkAuth.vkIdAppId) ? `<div class="telegram-sheet-card profile-edit-telegram profile-security-telegram profile-security-vkid-row"><div class="profile-security-row-copy"><p class="list-title">${user.vkIdLinked ? "VK ID подключен" : "Подключить VK ID"}</p><p class="subtitle">${user.vkIdLinked ? "Вход через VK ID уже доступен для этого аккаунта." : "Подключите VK ID, чтобы входить в аккаунт без пароля."}</p></div><div class="inline-actions">${user.vkIdLinked ? `<button class="tonal-btn" type="button" data-action="unlink-vkid">Отвязать VK ID</button>` : profileVkIdLinkInFlight ? `<div class="profile-vkid-inline-loader" aria-live="polite"><span class="vkid-link-spinner" aria-hidden="true"></span></div>` : `<button class="ghost-btn profile-vkid-inline-btn" type="button" data-action="link-vkid">Привязать VK ID</button>`}</div>${!user.vkIdLinked && !profileVkIdLinkInFlight ? `<div class="profile-vkid-stack"><div id="profile-vkid-onetap" class="vkid-onetap profile-vkid-onetap"></div></div>` : ""}</div>` : ""}<div class="security-password-toggle"><button class="security-password-trigger" type="button" data-action="show-password-change"><div class="profile-security-row-copy"><p class="list-title">Сменить пароль</p><p class="subtitle">Задайте новый пароль для входа на сайте.</p></div><span class="security-password-trigger-action">Изменить</span></button></div><div id="security-password-fields" hidden><label class="field"><span class="field-label">Новый пароль</span><input type="password" name="password" /></label></div><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
       profileVkIdOneTapRendered = false;
       void renderProfileVkIdOneTap();
       return;
@@ -5233,6 +5240,11 @@
     }
   };
 
+  const syncProfileSecurityVkIdBusyUi = () => {
+    if (normalizeText(state.sheet?.title) !== "Безопасность") return;
+    openNamedSheet("profile-security");
+  };
+
   const exchangeVkIdCodeSafe = async (VKID, code, deviceId, timeoutMs = 4500) => {
     if (!VKID?.Auth?.exchangeCode || !code || !deviceId) return null;
     try {
@@ -5250,6 +5262,7 @@
     const vkAuth = state.payload?.site?.auth || {};
     if (profileVkIdLinkInFlight || user.vkIdLinked || vkAuth.vkIdEnabled !== true || !normalizeText(vkAuth.vkIdAppId)) return;
     profileVkIdLinkInFlight = true;
+    syncProfileSecurityVkIdBusyUi();
     try {
       const VKID = await loadVkIdSdk();
       VKID.Config.init({
@@ -5275,6 +5288,7 @@
       });
     } finally {
       profileVkIdLinkInFlight = false;
+      syncProfileSecurityVkIdBusyUi();
     }
   };
 
@@ -5313,6 +5327,7 @@
         .on(VKID.OneTapInternalEvents.LOGIN_SUCCESS, async (payload) => {
           if (profileVkIdLinkInFlight) return;
           profileVkIdLinkInFlight = true;
+          syncProfileSecurityVkIdBusyUi();
           try {
             const tokenPayload = await exchangeVkIdCodeSafe(
               VKID,
@@ -5331,6 +5346,7 @@
             );
           } finally {
             profileVkIdLinkInFlight = false;
+            syncProfileSecurityVkIdBusyUi();
           }
         });
       profileVkIdOneTapRendered = true;
@@ -6469,6 +6485,7 @@
     }
     try {
       commitAppPayload(await apiRequest("/app"));
+      await applyReferralCodeFromLocationForAuthenticatedUser();
       if (getActivePushToggleState(state.payload?.user || {})) {
         ensureHomePushSubscription({ forcePrompt: false }).catch(() => null);
       }

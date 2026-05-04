@@ -833,20 +833,26 @@ const createHomeClientStoreService = ({
   const resolveActivity = (lastAppointment) => {
     const lastDateIso = normalizeText(lastAppointment?.startDateTime || lastAppointment?.Date);
     if (!lastDateIso) {
-      return { color: "red", label: "Неактивный", lastVisitAt: null };
+      return { color: "red", label: "Красный", lastVisitAt: null };
     }
     const lastDate = new Date(lastDateIso);
     if (Number.isNaN(lastDate.getTime())) {
-      return { color: "red", label: "Неактивный", lastVisitAt: null };
+      return { color: "red", label: "Красный", lastVisitAt: null };
     }
     const diffDays = Math.floor((Date.now() - lastDate.getTime()) / (24 * 60 * 60 * 1000));
     if (diffDays <= ACTIVITY_GREEN_DAYS) {
-      return { color: "green", label: "Активный", lastVisitAt: lastDate.toISOString() };
+      return { color: "green", label: "Зеленый", lastVisitAt: lastDate.toISOString() };
     }
     if (diffDays <= ACTIVITY_YELLOW_DAYS) {
-      return { color: "yellow", label: "Редкий", lastVisitAt: lastDate.toISOString() };
+      return { color: "yellow", label: "Желтый", lastVisitAt: lastDate.toISOString() };
     }
-    return { color: "red", label: "Неактивный", lastVisitAt: lastDate.toISOString() };
+    return { color: "red", label: "Красный", lastVisitAt: lastDate.toISOString() };
+  };
+
+  const referralColorPriority = (value) => {
+    if (value === "green") return 0;
+    if (value === "yellow") return 1;
+    return 2;
   };
 
   const buildCatalogHelpers = async () => {
@@ -1092,7 +1098,14 @@ const createHomeClientStoreService = ({
           lastVisitAt: referral.lastVisitAt,
         };
       })
-      .filter((referral) => referral.color !== 'red');
+      .sort((left, right) => {
+        const colorDelta = referralColorPriority(left.color) - referralColorPriority(right.color);
+        if (colorDelta !== 0) return colorDelta;
+        const leftVisit = normalizeText(left.lastVisitAt);
+        const rightVisit = normalizeText(right.lastVisitAt);
+        if (leftVisit !== rightVisit) return rightVisit.localeCompare(leftVisit);
+        return normalizeText(left.fullName).localeCompare(normalizeText(right.fullName), "ru");
+      });
     const manualTransactions = (ownerMeta.transactions || []).map((transaction) => {
       const sanitized = sanitizeTransaction(transaction);
       const currentAvatarUrl = normalizeText(

@@ -4,6 +4,7 @@
   const EYE_ICON_CLOSED =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="m4 20 16-16"/></svg>';
   const HOME_API_BASE_URL = `${window.location.origin}/api/home/auth`;
+  const HOME_API_ROOT_URL = `${window.location.origin}/api/home`;
   const HOME_PUBLIC_API_URL = `${window.location.origin}/api/home/public`;
   const HOME_VK_AUTH_COMPLETE_API_URL = `${HOME_API_BASE_URL}/vk/complete`;
   const HOME_TELEGRAM_AUTH_START_API_URL = `${HOME_API_BASE_URL}/telegram/start`;
@@ -454,6 +455,27 @@
     return nextPayload;
   };
 
+  const applyPendingReferralForSession = async (token, referralCode) => {
+    const safeToken = normalizeText(token);
+    const safeReferralCode = normalizeText(referralCode).toUpperCase();
+    if (!safeToken || !safeReferralCode) return false;
+    try {
+      const response = await fetch(`${HOME_API_ROOT_URL}/referral/apply`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${safeToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ referralCode: safeReferralCode }),
+      });
+      setPendingReferralCode("");
+      return response.ok;
+    } catch {
+      setPendingReferralCode("");
+      return false;
+    }
+  };
+
   const setStatus = (text, type = "default") => {
     statusElement.textContent = text || "";
     statusElement.classList.remove("is-error", "is-ok", "is-waiting");
@@ -474,6 +496,16 @@
   const setElementHidden = (element, hidden) => {
     if (!element) return;
     element.hidden = Boolean(hidden);
+  };
+
+  const isLocalDevOrigin = () => {
+    const hostname = normalizeText(window.location.hostname).toLowerCase();
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]" ||
+      hostname.endsWith(".local")
+    );
   };
 
   const setVkIdContainerVisible = (visible) => {
@@ -505,6 +537,7 @@
     try {
       const response = await fetch(HOME_PUBLIC_API_URL, { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
+      const canUseVkId = !isLocalDevOrigin();
       if (!response.ok) {
         applyTelegramLoginAvailability(true);
         applyVkIdLoginAvailability(false, "");
@@ -512,7 +545,7 @@
       }
       applyTelegramLoginAvailability(payload?.site?.auth?.telegramEnabled !== false);
       applyVkIdLoginAvailability(
-        payload?.site?.auth?.vkIdEnabled === true && normalizeText(payload?.site?.auth?.vkIdAppId),
+        canUseVkId && payload?.site?.auth?.vkIdEnabled === true && normalizeText(payload?.site?.auth?.vkIdAppId),
         payload?.site?.auth?.vkIdAppId,
       );
     } catch {
@@ -662,7 +695,7 @@
         })
         .on(VKID.WidgetEvents.ERROR, (error) => {
           console.warn("VK ID widget error", error);
-          setStatus("Не удалось загрузить VK ID.", "error");
+          setVkIdContainerVisible(false);
         })
         .on(VKID.OneTapInternalEvents.LOGIN_SUCCESS, async (payload) => {
           try {
@@ -684,7 +717,7 @@
       vkIdOneTapRendered = true;
     } catch (error) {
       console.warn("VK ID One Tap init failed", error);
-      setStatus("Не удалось загрузить VK ID.", "error");
+      setVkIdContainerVisible(false);
     }
   };
 
@@ -756,6 +789,7 @@
       formatPhoneMasked(extractPhoneDigits(loginPhoneInput.value)),
     );
     const password = normalizeText(loginPasswordInput.value);
+    const referralCode = getPendingReferralCode();
 
     if (!isPhoneComplete(loginPhoneInput.value) || !normalizedPhone) {
       setStatus("Введите корректный номер телефона.", "error");
@@ -776,7 +810,7 @@
         homeResponse = await fetch(`${HOME_API_BASE_URL}/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone: normalizedPhone, password }),
+          body: JSON.stringify({ phone: normalizedPhone, password, referralCode }),
         });
         homePayload = await homeResponse.json().catch(() => ({}));
       } catch (error) {
@@ -790,6 +824,7 @@
         clearLogoutMarker();
         persistRememberChoice(true);
         persistSessionPayload(sessionPayload, true);
+        setPendingReferralCode("");
         redirectToHome();
         return;
       }
@@ -1189,7 +1224,6 @@
     togglePasswordButton.innerHTML = EYE_ICON_CLOSED;
     tabsRoot.setAttribute("data-active", "login");
     await loadTelegramLoginAvailability();
-    await renderVkIdOneTap();
     try {
       const params = new URLSearchParams(window.location.search || "");
       const referralCode = normalizeText(params.get("ref"));
@@ -1209,6 +1243,7 @@
     forgotLink.addEventListener("click", handleForgotPassword);
     telegramButton.addEventListener("click", handleTelegramLogin);
     togglePasswordButton.addEventListener("click", handleTogglePassword);
+    void renderVkIdOneTap();
     window.addEventListener("beforeunload", stopTelegramPolling);
     window.addEventListener("focus", triggerTelegramStatusRefresh);
     document.addEventListener("visibilitychange", () => {
@@ -1219,6 +1254,10 @@
 
     const restoredHomeSession = await tryRestoreSession();
     if (restoredHomeSession) {
+      const referralCode = getPendingReferralCode();
+      if (referralCode) {
+        await applyPendingReferralForSession(restoredHomeSession.token, referralCode);
+      }
       redirectToHome();
       return;
     }

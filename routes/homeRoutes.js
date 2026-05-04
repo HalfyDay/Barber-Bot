@@ -776,6 +776,7 @@ const registerHomeRoutes = ({
       const phoneInput = normalizeText(req.body?.phone);
       const safePhone = normalizePhone(phoneInput);
       const password = normalizeText(req.body?.password);
+      const referralCode = normalizeText(req.body?.referralCode).toUpperCase();
       const privacyConsentAccepted = parseConsentAccepted(req.body?.privacyConsentAccepted);
       if (!safePhone || !password) {
         return res.status(400).json({
@@ -877,6 +878,7 @@ const registerHomeRoutes = ({
       const phoneInput = normalizeText(req.body?.phone);
       const safePhone = normalizePhone(phoneInput);
       const password = normalizeText(req.body?.password);
+      const referralCode = normalizeText(req.body?.referralCode).toUpperCase();
       if (!safePhone || !password) {
         return res.status(400).json({
           success: false,
@@ -932,6 +934,12 @@ const registerHomeRoutes = ({
         select: HOME_USER_SELECT,
       });
       const user = toPublicHomeUser(updated);
+      if (referralCode) {
+        await applyReferralCode({
+          userId: user.id,
+          referralCode,
+        }).catch(() => null);
+      }
       const access = await buildClientAccessPayload(user.phone);
       const identity = buildHomeIdentity({
         userId: user.id,
@@ -2178,6 +2186,41 @@ const registerHomeRoutes = ({
       return res.status(500).json({
         success: false,
         message: "Не удалось загрузить реферальную систему.",
+      });
+    }
+  });
+
+  app.post("/api/home/referral/apply", authenticateHomeToken, async (req, res) => {
+    try {
+      const userId = normalizeText(req.homeUser?.userId);
+      if (!userId) return res.sendStatus(401);
+      const stored = await prisma.users.findUnique({ where: { id: userId } });
+      if (!stored) return res.sendStatus(401);
+      const referralCode = normalizeText(req.body?.referralCode).toUpperCase();
+      if (!referralCode) {
+        return res.status(400).json({
+          success: false,
+          message: "Укажите реферальный код.",
+        });
+      }
+      const beforeMeta = await getUserMeta(userId);
+      const ownerId = await applyReferralCode({
+        userId,
+        referralCode,
+      });
+      const afterMeta = await getUserMeta(userId);
+      const referral = await buildReferralPayload(stored);
+      return res.json({
+        success: true,
+        applied: Boolean(ownerId) && normalizeText(afterMeta?.referredByUserId) !== normalizeText(beforeMeta?.referredByUserId),
+        alreadyLinked: Boolean(normalizeText(beforeMeta?.referredByUserId)),
+        referral,
+      });
+    } catch (error) {
+      console.error("Home referral apply error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Не удалось применить реферальный код.",
       });
     }
   });

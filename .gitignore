@@ -5,6 +5,8 @@
 /AppSite/
 /Image/generated/
 
+/report/
+
 # Environment & secrets
 .env
 .env.*

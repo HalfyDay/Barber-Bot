@@ -628,6 +628,7 @@
           {activeTable === 'Barbers' && (
             <BarbersView
               barbers={barbers}
+              services={services}
               positions={positions}
               onFieldChange={onBarberFieldChange}
               onSave={onSaveBarber}

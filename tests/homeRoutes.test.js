@@ -63,6 +63,8 @@ const createHomeHarness = (overrides = {}) => {
     findHomeUserByPhone: async () => null,
     findHomeUserByTelegramId: async () => null,
     findHomeUserById: async () => null,
+    getUserMeta: async () => null,
+    updateUserMeta: async (_userId, meta) => meta,
     shouldHydrateUserNameFromHome: () => false,
     HOME_USER_SELECT: { id: true },
     HOME_PROFILE_SELECT: { id: true },
@@ -260,6 +262,49 @@ test("home profile update blocks locked name changes", async () => {
   assert.equal(res.statusCode, 429);
   assert.equal(res.body.success, false);
   assert.equal(res.body.message, "blocked");
+});
+
+test("home profile update stores a new password when provided", async () => {
+  const currentUser = createHomeUserRecord({
+    id: "user-78",
+    Name: "Ivan",
+    Phone: "+79990000000",
+  });
+  const calls = [];
+  const { app } = createHomeHarness({
+    prisma: {
+      users: {
+        async findUnique() {
+          return currentUser;
+        },
+        async findMany() {
+          return [];
+        },
+        async update({ where, data, select }) {
+          calls.push(["update", where, data, select]);
+          return { ...currentUser, ...data };
+        },
+      },
+    },
+  });
+  const handler = app.getRoute("PUT", "/api/home/profile");
+  const res = createResponseMock();
+
+  await handler(
+    {
+      homeUser: { userId: "user-78" },
+      body: { password: "new-secret-123" },
+    },
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0][1], { id: "user-78" });
+  assert.equal(calls[0][2].homePasswordHash, "hash");
+  assert.equal(calls[0][2].homePasswordSalt, "salt");
+  assert.equal(calls[0][2].Name, "Ivan");
+  assert.equal(calls[0][2].Phone, "+79990000000");
 });
 
 test("home profile telegram status rejects request created for another user", async () => {

@@ -69,7 +69,7 @@ loadBarberAliasesFromDisk();
 barberAliases = getBarberAliases();
 barberAliasLookup = getBarberAliasLookup();
 const STAFF_READ_TABLES = new Set(["Appointments", "Schedules", "Services"]);
-const STAFF_WRITE_TABLES = new Set(["Appointments"]);
+const STAFF_WRITE_TABLES = new Set(["Appointments", "Schedules"]);
 const STAFF_DELETE_TABLES = new Set(["Appointments"]);
 const {
   buildBarberLookup,

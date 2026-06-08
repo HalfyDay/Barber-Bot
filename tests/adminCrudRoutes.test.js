@@ -74,7 +74,7 @@ const createHarness = (overrides = {}) => {
     tableToModelMap: {},
     TABLE_ORDERING: {},
     STAFF_READ_TABLES: new Set(["Appointments", "Schedules"]),
-    STAFF_WRITE_TABLES: new Set(["Appointments", "Schedules"]),
+    STAFF_WRITE_TABLES: new Set(["Appointments"]),
     STAFF_DELETE_TABLES: new Set(["Appointments"]),
     isStaffIdentity: () => false,
     getIdentityBarberName: (identity) => identity?.barberName || null,
@@ -747,6 +747,7 @@ test("admin crud routes let staff delete own appointment", async () => {
   const calls = [];
   const { app } = createHarness({
     isStaffIdentity: () => true,
+    STAFF_WRITE_TABLES: new Set(["Appointments", "Schedules"]),
     prisma: {
       appointments: {
         async findMany() {
@@ -851,6 +852,7 @@ test("admin crud routes let staff update own schedule", async () => {
   const calls = [];
   const { app } = createHarness({
     isStaffIdentity: () => true,
+    STAFF_WRITE_TABLES: new Set(["Appointments", "Schedules"]),
     prisma: {
       appointments: {
         async findMany() {

@@ -1,5 +1,6 @@
 ﻿const BarbersView = ({
   barbers = [],
+  services = [],
   positions = [],
   loadAvatarOptions,
   uploadAvatar,
@@ -38,6 +39,22 @@
   const isCreateMode = editorState.mode === 'create';
   const activeBarber = sortedBarbers.find((barber) => barber.id === editorState.targetId) || null;
   const workingBarber = isCreateMode ? draftBarber : activeBarber;
+  const getBarberServices = useCallback(
+    (barber = {}) => {
+      if (Array.isArray(barber.services) && barber.services.length) return barber.services;
+      const barberId = normalizeText(barber.id || barber.barberId || '');
+      const barberName = normalizeText(barber.name || '');
+      const source = Array.isArray(services) ? services : [];
+      return source.filter((service) => {
+        if (service?.isActive === false) return false;
+        const prices = service?.prices && typeof service.prices === 'object' ? service.prices : {};
+        const hasIdPrice = barberId && prices[barberId] !== undefined && prices[barberId] !== null && `${prices[barberId]}` !== '';
+        const hasNamePrice = barberName && prices[barberName] !== undefined && prices[barberName] !== null && `${prices[barberName]}` !== '';
+        return hasIdPrice || hasNamePrice;
+      });
+    },
+    [services],
+  );
   const [pendingAvatar, setPendingAvatar] = useState('');
   const cardSaverRef = useRef(null);
   const [savingBarber, setSavingBarber] = useState(false);
@@ -235,6 +252,12 @@
   }, [canManageBarbers, reorderBusy, sortedBarbers]);
   const handleFieldChange = (field, value) => {
     const nextValue = field === 'rating' ? formatRatingValue(value) : value;
+    const pairedField =
+      field === 'name'
+        ? 'cardTitle'
+        : field === 'description'
+          ? 'cardDescription'
+          : null;
     if (field === 'avatarUrl') {
       const normalized = nextValue || '';
       setPendingAvatar(normalized);
@@ -244,9 +267,16 @@
       return;
     }
     if (isCreateMode) {
-      setDraftBarber((prev) => ({ ...prev, [field]: nextValue }));
+      setDraftBarber((prev) => ({
+        ...prev,
+        [field]: nextValue,
+        ...(pairedField ? { [pairedField]: nextValue } : {}),
+      }));
     } else if (activeBarber) {
       onFieldChange?.(activeBarber.id, field, nextValue);
+      if (pairedField) {
+        onFieldChange?.(activeBarber.id, pairedField, nextValue);
+      }
     }
   };
   const handlePhoneChange = (rawValue) => {
@@ -267,8 +297,6 @@
     (fields) => {
       if (!fields) return;
       const nextFields = {
-        cardTitle: fields.cardTitle ?? fields.name ?? '',
-        cardDescription: fields.cardDescription ?? fields.description ?? '',
         cardPhrase: fields.cardPhrase ?? fields.phrase ?? '',
         cardPhotoGrayscale: fields.cardPhotoGrayscale !== false,
         cardPhotoOutline: fields.cardPhotoOutline !== false,
@@ -524,21 +552,12 @@
               onChange={handleAvatarChange}
               loadOptions={loadAvatarOptions}
               onUpload={uploadAvatar}
-              onCardUpload={uploadCard}
               onDelete={deleteAvatar}
-              onRegisterCardSaver={registerCardSaver}
+              showCardEditor={false}
               initialName={workingBarber?.name || ''}
               initialDescription={workingBarber?.description || ''}
-              initialCardTitle={workingBarber?.cardTitle || workingBarber?.name || ''}
-              initialCardDescription={workingBarber?.cardDescription || workingBarber?.description || ''}
               initialCardPhrase={workingBarber?.cardPhrase || ''}
-              initialPhotoGrayscale={workingBarber?.cardPhotoGrayscale !== false}
-              initialPhotoOutline={workingBarber?.cardPhotoOutline !== false}
-              cardMode={workingBarber?.cardMode || CARD_MODE_GENERATED}
-              cardImageUrl={workingBarber?.cardImageUrl || ''}
-              onCardFieldsChange={handleCardFieldsChange}
-              onCardModeChange={handleCardModeChange}
-              onCardImageChange={handleCardImageChange}
+              services={getBarberServices(workingBarber)}
             />
             <div className="crm-soft-card space-y-5 p-6">
               <div className="grid grid-cols-2 gap-4">
@@ -620,6 +639,21 @@
                     />
                   </div>
                 </div>
+                <textarea
+                  value={workingBarber.description || ''}
+                  onChange={(event) => handleFieldChange('description', event.target.value)}
+                  placeholder="Описание"
+                  rows={4}
+                  className="col-span-2 w-full px-4 py-3 text-white placeholder:text-slate-500"
+                />
+                <input
+                  name="barberPhrase"
+                  aria-label="Любимая фраза"
+                  value={workingBarber.cardPhrase || ''}
+                  onChange={(event) => handleFieldChange('cardPhrase', event.target.value)}
+                  placeholder="Любимая фраза"
+                  className="col-span-2 w-full px-4 py-3 text-white placeholder:text-slate-500"
+                />
                 <input
                   name="barberPhone"
                   aria-label="Телефон"
@@ -631,10 +665,10 @@
                 />
                 <input
                   name="barberTelegram"
-                  aria-label="Telegram ID"
+                  aria-label="Telegram"
                   value={workingBarber.telegramId || ''}
                   onChange={(event) => handleFieldChange('telegramId', event.target.value)}
-                  placeholder="Telegram ID"
+                  placeholder="Telegram"
                   className="w-full px-4 py-3 text-white placeholder:text-slate-500"
                 />
               </div>
@@ -649,6 +683,7 @@
 };
 const BarberProfileView = ({
   barber = null,
+  services = [],
   loadAvatarOptions,
   uploadAvatar,
   deleteAvatar,
@@ -658,6 +693,20 @@ const BarberProfileView = ({
 }) => {
   const [pendingAvatar, setPendingAvatar] = useState(barber?.avatarUrl || "");
   const [showPassword, setShowPassword] = useState(false);
+  const barberServices = useMemo(() => {
+    if (!barber) return [];
+    if (Array.isArray(barber.services) && barber.services.length) return barber.services;
+    const barberId = normalizeText(barber.id || barber.barberId || '');
+    const barberName = normalizeText(barber.name || '');
+    const source = Array.isArray(services) ? services : [];
+    return source.filter((service) => {
+      if (service?.isActive === false) return false;
+      const prices = service?.prices && typeof service.prices === 'object' ? service.prices : {};
+      const hasIdPrice = barberId && prices[barberId] !== undefined && prices[barberId] !== null && `${prices[barberId]}` !== '';
+      const hasNamePrice = barberName && prices[barberName] !== undefined && prices[barberName] !== null && `${prices[barberName]}` !== '';
+      return hasIdPrice || hasNamePrice;
+    });
+  }, [barber, services]);
   const profileSnapshot = useMemo(
     () => (barber ? JSON.stringify({ ...barber, avatarUrl: pendingAvatar || '' }) : null),
     [barber, pendingAvatar],
@@ -731,34 +780,20 @@ const BarberProfileView = ({
     <div className="space-y-6">
       <SectionCard title="Мой профиль" hideTitleOnMobile>
         <div className="space-y-6">
-          <BarberAvatarPicker
-            value={pendingAvatar || ''}
-            onChange={setPendingAvatar}
-            loadOptions={loadAvatarOptions}
-            onUpload={uploadAvatar}
-            onDelete={deleteAvatar}
-            initialName={barber?.name || ''}
-            initialDescription={barber?.description || ''}
-            initialCardTitle={barber?.cardTitle || barber?.name || ''}
-            initialCardDescription={barber?.cardDescription || barber?.description || ''}
-            initialCardPhrase={barber?.cardPhrase || ''}
-            initialPhotoGrayscale={barber?.cardPhotoGrayscale !== false}
-            initialPhotoOutline={barber?.cardPhotoOutline !== false}
-            cardMode={barber?.cardMode || CARD_MODE_GENERATED}
-            cardImageUrl={barber?.cardImageUrl || ''}
-            onCardFieldsChange={(fields) => {
-              if (!fields || !barber?.id) return;
-              onFieldChange?.(barber.id, 'cardTitle', fields.cardTitle ?? fields.name ?? '');
-              onFieldChange?.(barber.id, 'cardDescription', fields.cardDescription ?? fields.description ?? '');
-              onFieldChange?.(barber.id, 'cardPhrase', fields.cardPhrase ?? fields.phrase ?? '');
-              onFieldChange?.(barber.id, 'cardPhotoGrayscale', fields.cardPhotoGrayscale !== false);
-              onFieldChange?.(barber.id, 'cardPhotoOutline', fields.cardPhotoOutline !== false);
-            }}
-            onCardModeChange={(mode) => handleFieldChange('cardMode', normalizeCardMode(mode))}
-            onCardImageChange={(path) => handleFieldChange('cardImageUrl', normalizeImagePath(path || ''))}
-          />
+            <BarberAvatarPicker
+              value={pendingAvatar || ''}
+              onChange={setPendingAvatar}
+              loadOptions={loadAvatarOptions}
+              onUpload={uploadAvatar}
+              onDelete={deleteAvatar}
+              showCardEditor={false}
+              initialName={barber?.name || ''}
+              initialDescription={barber?.description || ''}
+              initialCardPhrase={barber?.cardPhrase || ''}
+              services={barberServices}
+            />
           <div className="crm-soft-card space-y-5 p-6">
-            <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2">
               <input
                 name="barberName"
                 aria-label="Имя"
@@ -826,6 +861,14 @@ const BarberProfileView = ({
                 onChange={(event) => handleFieldChange('description', event.target.value)}
                 placeholder="Описание"
                 rows={4}
+                className="col-span-2 w-full px-4 py-3 text-white placeholder:text-slate-500"
+              />
+              <input
+                name="barberPhrase"
+                aria-label="Любимая фраза"
+                value={barber.cardPhrase || ''}
+                onChange={(event) => handleFieldChange('cardPhrase', event.target.value)}
+                placeholder="Любимая фраза"
                 className="col-span-2 w-full px-4 py-3 text-white placeholder:text-slate-500"
               />
               <input

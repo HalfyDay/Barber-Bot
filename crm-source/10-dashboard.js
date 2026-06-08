@@ -13,6 +13,21 @@
   liveStatus = 'unknown',
 }) => {
   if (!data) return <LoadingState />;
+  const IconUpload = ({ className = 'h-5 w-5' }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M12 16V4" />
+      <path d="m7 9 5-5 5 5" />
+      <path d="M5 20h14" />
+    </svg>
+  );
+  const IconGrid = ({ className = 'h-5 w-5' }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <rect x="4" y="4" width="7" height="7" rx="1.5" />
+      <rect x="13" y="4" width="7" height="7" rx="1.5" />
+      <rect x="4" y="13" width="7" height="7" rx="1.5" />
+      <rect x="13" y="13" width="7" height="7" rx="1.5" />
+    </svg>
+  );
   const [pendingStatusId, setPendingStatusId] = useState(null);
   const nowTs = useNowTick(30000);
   const stats = data.stats || {};
@@ -905,10 +920,12 @@ const BarberAvatarPicker = ({
   initialCardTitle = '',
   initialCardDescription = '',
   initialCardPhrase = '',
+  services = [],
   initialPhotoGrayscale = true,
   initialPhotoOutline = true,
   cardMode = CARD_MODE_GENERATED,
   cardImageUrl = '',
+  showCardEditor = true,
   onCardFieldsChange,
   onCardModeChange,
   onCardImageChange,
@@ -920,8 +937,6 @@ const BarberAvatarPicker = ({
   const [actionError, setActionError] = useState('');
   const lastSavedPreviewRef = useRef(null);
   const [cardFields, setCardFields] = useState(() => ({
-    name: sanitizeCardText(initialCardTitle || initialName),
-    description: sanitizeCardText(initialCardDescription || initialDescription),
     phrase: sanitizeCardText(initialCardPhrase || ''),
   }));
   const [selectedCardMode, setSelectedCardMode] = useState(() => normalizeCardMode(cardMode));
@@ -947,25 +962,17 @@ const BarberAvatarPicker = ({
   }, [value, onChange]);
   useEffect(() => {
     setCardFields({
-      name: sanitizeCardText(initialCardTitle || initialName),
-      description: sanitizeCardText(initialCardDescription || initialDescription),
       phrase: sanitizeCardText(initialCardPhrase || ''),
     });
     setPhotoGrayscale(initialPhotoGrayscale !== false);
     setPhotoOutlineEnabled(initialPhotoOutline !== false);
   }, [
-    initialName,
-    initialDescription,
-    initialCardTitle,
-    initialCardDescription,
     initialCardPhrase,
     initialPhotoGrayscale,
     initialPhotoOutline,
   ]);
   useEffect(() => {
     onCardFieldsChange?.({
-      cardTitle: cardFields.name,
-      cardDescription: cardFields.description,
       cardPhrase: cardFields.phrase,
       cardPhotoGrayscale: photoGrayscale,
       cardPhotoOutline: photoOutlineEnabled,
@@ -1156,8 +1163,32 @@ const BarberAvatarPicker = ({
   );
   const previewSrc = normalizedValue ? resolveAssetUrl(normalizedValue) : '';
   const photoPreview = cardPhoto ? resolveAssetUrl(cardPhoto) : '';
+  const visibleServices = useMemo(
+    () =>
+      (Array.isArray(services) ? services : [])
+        .map((service) => (typeof service === 'string' ? service : normalizeText(service?.name || service?.title || service?.label)))
+        .map((service) => normalizeText(service))
+        .filter(Boolean)
+        .slice(0, 4),
+    [services],
+  );
   const isGeneratedMode = selectedCardMode === CARD_MODE_GENERATED;
   const isCustomMode = selectedCardMode === CARD_MODE_CUSTOM_IMAGE;
+  const IconUpload = ({ className = 'h-5 w-5' }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M12 16V4" />
+      <path d="m7 9 5-5 5 5" />
+      <path d="M5 20h14" />
+    </svg>
+  );
+  const IconGrid = ({ className = 'h-5 w-5' }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <rect x="4" y="4" width="7" height="7" rx="1.5" />
+      <rect x="13" y="4" width="7" height="7" rx="1.5" />
+      <rect x="4" y="13" width="7" height="7" rx="1.5" />
+      <rect x="13" y="13" width="7" height="7" rx="1.5" />
+    </svg>
+  );
   useEffect(() => {
     let cancelled = false;
     const renderCard = async () => {
@@ -1192,7 +1223,7 @@ const BarberAvatarPicker = ({
           ctx.fillStyle = gradient;
           ctx.fillRect(0, 0, CARD_CANVAS_WIDTH, CARD_CANVAS_HEIGHT);
         }
-        const title = sanitizeCardText(cardFields.name || 'BARBER').toUpperCase();
+        const title = sanitizeCardText(initialName || 'BARBER').toUpperCase();
         ctx.fillStyle = CARD_NAME_COLOR;
         ctx.save();
         ctx.font = TITLE_FONT;
@@ -1218,7 +1249,7 @@ const BarberAvatarPicker = ({
         let lineIndex = 0;
         ctx.font = '600 30px "Manrope", "Inter", sans-serif';
         ctx.fillStyle = CARD_TEXT_COLOR;
-        const rawDescription = sanitizeCardText(cardFields.description || '');
+        const rawDescription = sanitizeCardText(initialDescription || '');
         const descriptionLines = rawDescription.split('\n');
         const payload = descriptionLines.some((line) => line.trim())
           ? descriptionLines
@@ -1321,9 +1352,9 @@ const BarberAvatarPicker = ({
       cancelled = true;
     };
   }, [
-    cardFields.name,
-    cardFields.description,
     cardFields.phrase,
+    initialName,
+    initialDescription,
     cardPhoto,
     photoGrayscale,
     customCardImage,
@@ -1348,7 +1379,7 @@ const BarberAvatarPicker = ({
       }
       const result = await onCardUpload({
         barberId,
-        name: buildCardFileName(cardFields.name || 'barber-card'),
+        name: buildCardFileName(initialName || 'barber-card'),
         data: previewData,
       });
       lastSavedPreviewRef.current = previewData;
@@ -1358,7 +1389,7 @@ const BarberAvatarPicker = ({
       }
       return result;
     },
-    [onCardUpload, cardFields.name, onCardImageChange],
+    [onCardUpload, initialName, onCardImageChange],
   );
   const handleCardModeSelect = useCallback(
     (mode) => {
@@ -1389,9 +1420,9 @@ const BarberAvatarPicker = ({
     if (!cardPreview) return;
     const link = document.createElement('a');
     link.href = cardPreview;
-    link.download = buildCardFileName(cardFields.name || 'barber-card').replace(/\.jpg$/, '.png');
+    link.download = buildCardFileName(initialName || 'barber-card').replace(/\.jpg$/, '.png');
     link.click();
-  }, [cardPreview, cardFields.name]);
+  }, [cardPreview, initialName]);
   const handleCustomCardFile = useCallback(
     async (event) => {
       const file = event.target.files?.[0];
@@ -1415,7 +1446,6 @@ const BarberAvatarPicker = ({
     },
     [onCardModeChange, onCardImageChange],
   );
-  const [cardDetailsOpen, setCardDetailsOpen] = useState(false);
   return (
     <div className="crm-soft-card overflow-hidden">
       <input
@@ -1445,53 +1475,198 @@ const BarberAvatarPicker = ({
         className="hidden"
         onChange={handleCustomCardFile}
       />
-      <div className="space-y-4 p-5">
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-[var(--crm-muted)]">Источник:</span>
-              <button
-                type="button"
-                onClick={() => handleCardModeSelect(CARD_MODE_GENERATED)}
-                className={classNames(
-                  'crm-ghost-btn px-3 py-1.5 text-xs',
-                  isGeneratedMode
-                    ? 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]'
-                    : '',
+      {!showCardEditor ? (
+        <div className="space-y-4 p-5">
+          {(() => {
+            const profileName = normalizeText(initialName || 'Барбер');
+            const profileDescription = normalizeText(initialDescription || '');
+            const profilePhrase = normalizeText(cardFields.phrase);
+            return (
+              <div className="crm-barber-profile-card overflow-hidden">
+                <div className="barber-profile-scene" data-tilt-card="barber-profile">
+                  <div className="barber-profile-surface">
+                    <div className="barber-profile-backdrop" aria-hidden="true">
+                      <div className="barber-profile-backdrop-glow" />
+                      <div className="barber-profile-backdrop-orb barber-profile-backdrop-orb-a" />
+                      <div className="barber-profile-backdrop-orb barber-profile-backdrop-orb-b" />
+                      <div className="barber-profile-backdrop-wave" />
+                      <div className="barber-profile-backdrop-grid" />
+                      <div className="barber-profile-backdrop-name">BROTHERSHOP</div>
+                    </div>
+                    <div className="barber-profile-layout">
+                      <div className="barber-profile-copy">
+                        <h2 className="barber-profile-title">{profileName}</h2>
+                        {profilePhrase ? <p className="barber-profile-signature">{profilePhrase}</p> : null}
+                        {profileDescription ? <p className="barber-profile-description">{profileDescription}</p> : null}
+                        <div className="barber-profile-services">
+                          <span className="barber-profile-services-label">Услуги</span>
+                          <div className="barber-profile-services-list">
+                            {visibleServices.length ? (
+                              visibleServices.map((service) => (
+                                <span className="barber-profile-service-chip" key={service}>{service}</span>
+                              ))
+                            ) : (
+                              <span className="barber-profile-service-chip is-placeholder">Загрузка услуг...</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="barber-profile-art">
+                        <div className="relative w-full">
+                          <div className="barber-profile-art-stack">
+                            {previewSrc ? (
+                              <>
+                                <img src={previewSrc} alt="" aria-hidden="true" className="barber-profile-art-outline" />
+                                <img src={previewSrc} alt={profileName} className="barber-profile-art-image" />
+                              </>
+                            ) : (
+                              <div className="barber-profile-poster-fallback">
+                                <DefaultProfileIcon className="h-full w-full" iconClassName="h-32 w-32" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="crm-barber-profile-actions">
+                            {loading && <span className="crm-barber-profile-loading">Загрузка...</span>}
+                              <div className="flex shrink-0 items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => photoInputRef.current?.click()}
+                                  className="crm-barber-profile-action-btn"
+                                  aria-label="Загрузить фото"
+                                  title="Загрузить фото"
+                                >
+                                  <IconUpload className="h-5 w-5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowGallery((prev) => !prev)}
+                                  className={classNames(
+                                    'crm-barber-profile-action-btn',
+                                    showGallery ? 'is-active' : '',
+                                  )}
+                                  aria-label="Показать галерею"
+                                  title="Показать галерею"
+                                  disabled={loading || (!avatarOptions.length && !normalizedValue)}
+                                >
+                                  <IconGrid className="h-5 w-5" />
+                                </button>
+                                {previewSrc && typeof onDelete === 'function' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteImage(normalizedValue)}
+                                    className="crm-barber-profile-action-btn is-danger"
+                                    aria-label="Удалить фото"
+                                    title="Удалить фото"
+                                    disabled={actionBusy}
+                                  >
+                                    <IconTrash className="h-5 w-5" />
+                                  </button>
+                                )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {showGallery && availableOptions.length > 0 && (
+                  <div className="border-t border-white/8 bg-[color:var(--crm-surface-2)] p-4 sm:p-5">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      {availableOptions.map((preset) => {
+                        const normalizedPreset = normalizeImagePath(preset);
+                        const isSelected = normalizedPreset === normalizedValue;
+                        return (
+                          <button
+                            type="button"
+                            key={preset}
+                            onClick={() => applyAvatarValue(normalizedPreset)}
+                            className={classNames(
+                              'group crm-soft-panel relative overflow-hidden p-1.5 transition hover:bg-[color:var(--crm-surface-4)]',
+                              isSelected ? 'bg-[color:var(--crm-highlight-soft)]' : 'bg-[color:var(--crm-surface-3)]',
+                            )}
+                          >
+                            <img src={resolveAssetUrl(normalizedPreset)} alt="avatar preset" className="h-20 w-full rounded-xl object-cover" />
+                            {typeof onDelete === 'function' && (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleDeleteImage(normalizedPreset);
+                                }}
+                                className="absolute right-1 top-1 rounded-full bg-[color:var(--crm-surface-4)]/80 p-1 text-[var(--crm-text)] opacity-0 transition hover:bg-rose-600/80 hover:text-white group-hover:opacity-100 disabled:cursor-not-allowed"
+                                disabled={actionBusy}
+                                aria-label="Удалить аватар"
+                              >
+                                <IconTrash className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
-              >
-                Редактор
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  handleCardModeSelect(CARD_MODE_CUSTOM_IMAGE);
-                  customCardInputRef.current?.click();
-                }}
-                className={classNames(
-                  'crm-ghost-btn px-3 py-1.5 text-xs',
-                  isCustomMode
-                    ? 'bg-[color:var(--crm-highlight-soft)] text-[color:var(--crm-highlight-text)]'
-                    : '',
+                {!avatarOptions.length && !loading && (
+                  <div className="border-t border-white/8 bg-[color:var(--crm-surface-2)] px-4 py-4 text-sm text-[var(--crm-muted)] sm:px-5">
+                    Аватаров пока нет. Загрузите фото, чтобы увидеть его здесь.
+                  </div>
                 )}
-              >
-                Свое изобр.
-              </button>
-            </div>
-          </div>
-          <div className="crm-inline-panel relative overflow-hidden">
-            <canvas
-              ref={canvasRef}
-              className="block h-full w-full max-w-full bg-[color:var(--crm-surface-4)]/60"
-              style={{ aspectRatio: '16 / 9' }}
-            />
-            {!cardPreview && (
-              <div className="absolute inset-0 flex items-center justify-center bg-[color:var(--crm-surface-4)]/70 p-6 text-center text-sm text-[var(--crm-text)]">
-                <p>Загрузите фото барбера и заполните поля — карточка соберется автоматически.</p>
+                {(actionError || renderError) && (
+                  <div className="border-t border-white/8 bg-[color:var(--crm-surface-2)] px-4 py-3 text-sm text-rose-200 sm:px-5">
+                    {actionError || renderError}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
+            );
+          })()}
+        </div>
+      ) : (
+        <div className="space-y-4 p-5">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--crm-muted)]">Источник:</span>
+                <button
+                  type="button"
+                  onClick={() => handleCardModeSelect(CARD_MODE_GENERATED)}
+                  className={classNames(
+                    'crm-ghost-btn px-3 py-1.5 text-xs',
+                    isGeneratedMode
+                      ? 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]'
+                      : '',
+                  )}
+                >
+                  Редактор
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleCardModeSelect(CARD_MODE_CUSTOM_IMAGE);
+                    customCardInputRef.current?.click();
+                  }}
+                  className={classNames(
+                    'crm-ghost-btn px-3 py-1.5 text-xs',
+                    isCustomMode
+                      ? 'bg-[color:var(--crm-highlight-soft)] text-[color:var(--crm-highlight-text)]'
+                      : '',
+                  )}
+                >
+                  Свое изобр.
+                </button>
+              </div>
+            </div>
+            <div className="crm-inline-panel relative overflow-hidden">
+              <canvas
+                ref={canvasRef}
+                className="block h-full w-full max-w-full bg-[color:var(--crm-surface-4)]/60"
+                style={{ aspectRatio: '16 / 9' }}
+              />
+              {!cardPreview && (
+                <div className="absolute inset-0 flex items-center justify-center bg-[color:var(--crm-surface-4)]/70 p-6 text-center text-sm text-[var(--crm-text)]">
+                  <p>Загрузите фото барбера, чтобы увидеть карточку.</p>
+                </div>
+              )}
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -1523,43 +1698,8 @@ const BarberAvatarPicker = ({
                 </button>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => setCardDetailsOpen((prev) => !prev)}
-              className="crm-ghost-btn px-3 py-2 text-xs font-semibold uppercase tracking-wide"
-            >
-              {cardDetailsOpen ? 'Скрыть' : 'Раскрыть'}
-            </button>
           </div>
-        </div>
-        <div
-          className={classNames(
-            'crm-inline-panel overflow-hidden transition-all duration-200',
-            cardDetailsOpen ? 'max-h-[2200px] opacity-100 p-4' : 'max-h-0 opacity-0 p-0'
-          )}
-        >
-          {cardDetailsOpen && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-white">Имя сотрудника</label>
-                <input
-                  value={cardFields.name}
-                  onChange={(event) => setCardFields((prev) => ({ ...prev, name: event.target.value }))}
-                  placeholder="BARBER"
-                  className="w-full px-4 py-3 text-white placeholder:text-[var(--crm-muted)]"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-white">Описание</label>
-                <textarea
-                  rows={4}
-                  value={cardFields.description}
-                  onChange={(event) => setCardFields((prev) => ({ ...prev, description: event.target.value }))}
-                  placeholder="Аккуратен в деталях и доводит стрижку до идеала"
-                  className="w-full px-4 py-3 text-white placeholder:text-[var(--crm-muted)]"
-                />
-                <p className="text-xs text-[var(--crm-muted)]">Каждая строка станет пунктом списка.</p>
-              </div>
+          <div className="crm-inline-panel space-y-4 p-4">
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-white">Любимая фраза</label>
                 <input
@@ -1636,11 +1776,11 @@ const BarberAvatarPicker = ({
                           type="button"
                           key={preset}
                           onClick={() => applyAvatarValue(normalizedPreset)}
-                          className={classNames(
-                            'group crm-soft-panel relative overflow-hidden p-1.5 transition hover:bg-[color:var(--crm-surface-4)]',
-                            isSelected ? 'bg-[color:var(--crm-primary-container)]' : 'bg-[color:var(--crm-surface-3)]',
-                          )}
-                        >
+                            className={classNames(
+                              'group crm-soft-panel relative overflow-hidden p-1.5 transition hover:bg-[color:var(--crm-surface-4)]',
+                              isSelected ? 'bg-[color:var(--crm-highlight-soft)]' : 'bg-[color:var(--crm-surface-3)]',
+                            )}
+                          >
                           <img src={resolveAssetUrl(normalizedPreset)} alt="card preset" className="h-20 w-full rounded-xl object-cover" />
                           {typeof onDelete === 'function' && (
                             <button
@@ -1664,11 +1804,10 @@ const BarberAvatarPicker = ({
                   <p className="text-sm text-[var(--crm-muted)]">Карточек пока нет. Сохраните одну, чтобы увидеть здесь.</p>
                 )}
               </div>
-            </div>
-          )}
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+        </div>
   );
 };
 const DAY_INDEX_LOOKUP = (() => {

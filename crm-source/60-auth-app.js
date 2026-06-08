@@ -1718,15 +1718,18 @@ const handleBarberFieldChange = (id, field, value) => {
         );
       case 'profile':
         return (
-          <BarberProfileView
-            barber={currentBarber}
-            loadAvatarOptions={handleLoadAvatarOptions}
-            uploadAvatar={handleUploadAvatar}
-            deleteAvatar={handleDeleteAvatar}
-            onFieldChange={handleBarberFieldChange}
-            onSave={handleSaveBarber}
-            allowRatingEdit={role === ROLE_OWNER || role === ROLE_CREATOR}
-          />
+          <div className="mx-auto w-full max-w-[1120px]">
+            <BarberProfileView
+              barber={currentBarber}
+              services={services}
+              loadAvatarOptions={handleLoadAvatarOptions}
+              uploadAvatar={handleUploadAvatar}
+              deleteAvatar={handleDeleteAvatar}
+              onFieldChange={handleBarberFieldChange}
+              onSave={handleSaveBarber}
+              allowRatingEdit={role === ROLE_OWNER || role === ROLE_CREATOR}
+            />
+          </div>
         );
       case 'system':
         if (!canAccessSystem) {

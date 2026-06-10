@@ -1,4 +1,4 @@
-﻿  const error = legacyCrudGuard.ensureTableAllowed(tableName);
+  const error = legacyCrudGuard.ensureTableAllowed(tableName);
   if (!error) return false;
   res.status(error.status || 410).json({
     error: error.message,
@@ -176,6 +176,7 @@ const {
 });
 const {
   getUserMeta,
+  findUserIdByVkId,
   updateUserMeta,
   getSiteSettings,
   updateSiteSettings,

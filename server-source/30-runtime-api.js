@@ -1,4 +1,4 @@
-﻿} = createSitePresenceService();
+} = createSitePresenceService();
 const stopHttpServer = () =>
   new Promise((resolve) => {
     if (!httpServer) return resolve();
@@ -236,6 +236,7 @@ registerHomeRoutes({
   buildLimitBlockedMessage,
   getBotSettings,
   getUserMeta,
+  findUserIdByVkId,
   updateUserMeta,
   applyReferralCode,
   buildReferralPayload,

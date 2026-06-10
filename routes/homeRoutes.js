@@ -243,6 +243,7 @@ const registerHomeRoutes = ({
   buildLimitBlockedMessage,
   getBotSettings,
   getUserMeta,
+  findUserIdByVkId,
   updateUserMeta,
   applyReferralCode,
   buildReferralPayload,
@@ -1031,22 +1032,20 @@ const registerHomeRoutes = ({
         });
       }
 
-      const users = await prisma.users.findMany({ select: HOME_USER_SELECT });
       let existing = null;
-      for (const candidate of users) {
-        const meta = await getUserMeta(candidate.id);
-        if (normalizeText(meta?.vkIdUserId) === vkProfile.vkUserId) {
-          existing = candidate;
-          break;
-        }
+      const existingVkUserId = await findUserIdByVkId(vkProfile.vkUserId);
+      if (existingVkUserId) {
+        existing = await prisma.users.findUnique({
+          where: { id: existingVkUserId },
+          select: HOME_USER_SELECT,
+        }) || null;
       }
       if (!existing && vkProfile.phone) {
-        existing =
-          users.find((user) => normalizePhone(user.Phone || "") === vkProfile.phone) || null;
+        existing = await findHomeUserByPhone(vkProfile.phone);
         if (existing) {
           const existingMeta = await getUserMeta(existing.id);
-          const existingVkUserId = normalizeText(existingMeta?.vkIdUserId);
-          if (existingVkUserId && existingVkUserId !== vkProfile.vkUserId) {
+          const existingMetaVkUserId = normalizeText(existingMeta?.vkIdUserId);
+          if (existingMetaVkUserId && existingMetaVkUserId !== vkProfile.vkUserId) {
             return res.status(409).json({
               success: false,
               message: "Этот номер телефона уже связан с другим VK ID.",
@@ -1121,7 +1120,7 @@ const registerHomeRoutes = ({
         }).catch(() => null);
       }
       const currentMeta = await getUserMeta(user.id);
-      await updateUserMeta(user.id, {
+      const nextMeta = await updateUserMeta(user.id, {
         vkIdUserId: vkProfile.vkUserId,
         vkIdProfile: {
           firstName: vkProfile.firstName,
@@ -1140,7 +1139,6 @@ const registerHomeRoutes = ({
         displayName: user.displayName,
       });
       const token = signHomeSessionToken(identity);
-      const nextMeta = await getUserMeta(user.id);
       return res.json({
         success: true,
         token,
@@ -1225,16 +1223,12 @@ const registerHomeRoutes = ({
       });
       if (!currentUser) return res.sendStatus(401);
 
-      const users = await prisma.users.findMany({ select: HOME_USER_SELECT });
-      for (const candidate of users) {
-        if (normalizeText(candidate.id) === userId) continue;
-        const candidateMeta = await getUserMeta(candidate.id);
-        if (normalizeText(candidateMeta?.vkIdUserId) === vkProfile.vkUserId) {
-          return res.status(409).json({
-            success: false,
-            message: "Этот VK ID уже привязан к другому аккаунту.",
-          });
-        }
+      const existingVkOwner = await findUserIdByVkId(vkProfile.vkUserId);
+      if (existingVkOwner && normalizeText(existingVkOwner) !== userId) {
+        return res.status(409).json({
+          success: false,
+          message: "Этот VK ID уже привязан к другому аккаунту.",
+        });
       }
 
       const currentMeta = await getUserMeta(userId);

@@ -475,7 +475,9 @@ const createHomeClientStoreService = ({
     };
   };
 
+  let homeUserMetaTableEnsured = false;
   const ensureHomeUserMetaTable = async () => {
+    if (homeUserMetaTableEnsured) return;
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "${HOME_USER_META_TABLE}" (
         "userId" TEXT PRIMARY KEY,
@@ -484,6 +486,7 @@ const createHomeClientStoreService = ({
         "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
+    homeUserMetaTableEnsured = true;
   };
 
   const readHomeUserMetaRows = async () => {
@@ -747,9 +750,27 @@ const createHomeClientStoreService = ({
 
   const getUserMeta = async (userId) => {
     const store = await readStore();
+    const safeUserId = normalizeText(userId);
+    const hadEntry = safeUserId && store.users?.[safeUserId] !== undefined;
     const meta = ensureUserMeta(store, userId);
-    await writeStore(store);
+    if (!hadEntry && safeUserId) {
+      await writeStore(store);
+    }
     return meta;
+  };
+
+  const findUserIdByVkId = async (vkUserId) => {
+    const safeVkUserId = normalizeText(vkUserId);
+    if (!safeVkUserId) return null;
+    await ensureHomeUserMetaTable();
+    const rows = await prisma.$queryRawUnsafe(
+      `SELECT "userId" FROM "${HOME_USER_META_TABLE}" WHERE "payload"->>'vkIdUserId' = $1 LIMIT 1`,
+      safeVkUserId,
+    );
+    if (Array.isArray(rows) && rows.length > 0) {
+      return normalizeText(rows[0].userId) || null;
+    }
+    return null;
   };
 
   const updateUserMeta = async (userId, patch = {}) => {
@@ -1683,6 +1704,7 @@ const createHomeClientStoreService = ({
 
   return {
     getUserMeta,
+    findUserIdByVkId,
     updateUserMeta,
     getSiteSettings,
     updateSiteSettings,

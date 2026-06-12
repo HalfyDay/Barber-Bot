@@ -807,6 +807,23 @@ const runPostUpdateDatabaseFixes = async () => {
         CREATE INDEX IF NOT EXISTS "TelegramAuthRequests_code_idx" ON "TelegramAuthRequests"("code");
       `);
       console.log('[update] Public schema tables verified/created (Businesses, TelegramAuthRequests)');
+
+      // If Appointments table exists in public schema, ensure Comment/CoverBs/DiscountRub exist
+      const tableCheck = await publicClient.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'Appointments'
+        );
+      `);
+      if (tableCheck.rows[0]?.exists) {
+        console.log('[update] Patching public schema Appointments table with new columns');
+        await publicClient.query(`
+          ALTER TABLE "public"."Appointments" ADD COLUMN IF NOT EXISTS "Comment" TEXT;
+          ALTER TABLE "public"."Appointments" ADD COLUMN IF NOT EXISTS "CoverBs" INTEGER;
+          ALTER TABLE "public"."Appointments" ADD COLUMN IF NOT EXISTS "DiscountRub" INTEGER;
+        `);
+      }
     } finally {
       await publicClient.end();
     }

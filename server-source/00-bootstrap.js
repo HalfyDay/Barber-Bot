@@ -1,4 +1,4 @@
-﻿require("dotenv").config();
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
@@ -14,7 +14,7 @@ const {
   getLicenseStatus,
   startLicenseWatcher,
 } = require("./services/licenseGuard");
-const { checkForUpdates, applyUpdate } = require("./services/updateManager");
+const { checkForUpdates, applyUpdate, runPostUpdateDatabaseFixes } = require("./services/updateManager");
 const { createAppointmentService } = require("./services/appointmentService");
 const { createTelegramAuthService } = require("./services/telegramAuthService");
 const { createLegacyCrudGuard } = require("./services/legacyCrudGuard");
@@ -44,6 +44,7 @@ const { createBarberAliasService } = require("./services/barberAliasService");
 const { createSitePresenceService } = require("./services/sitePresenceService");
 const { createHomeRealtimeService } = require("./services/homeRealtimeService");
 const { createPrismaClient, getPrismaRuntimeConfig, validatePrismaRuntimeConfig } = require("./services/prismaRuntime");
+const { tenantMiddleware } = require("./services/tenantMiddleware");
 const { registerAdminCrudRoutes } = require("./routes/adminCrudRoutes");
 const { registerHomeRoutes } = require("./routes/homeRoutes");
 const { registerBotInternalRoutes } = require("./routes/botInternalRoutes");
@@ -207,7 +208,7 @@ const TABLE_ORDERING = {
 };
 const numericFields = {
   Users: [],
-  Appointments: [],
+  Appointments: ["CoverBs", "DiscountRub"],
   Schedules: [],
   Cost: [],
   Barbers: ["orderIndex"],
@@ -288,8 +289,19 @@ const allowedCorsOrigins = new Set([
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedCorsOrigins.has(origin)) {
+      if (!origin) {
         return callback(null, true);
+      }
+      if (allowedCorsOrigins.has(origin)) {
+        return callback(null, true);
+      }
+      try {
+        const parsed = new URL(origin);
+        if (parsed.hostname === "localhost" || parsed.hostname.endsWith(".localhost")) {
+          return callback(null, true);
+        }
+      } catch (e) {
+        // Ignore URL parse errors
       }
       return callback(new Error("Not allowed by CORS"));
     },
@@ -331,6 +343,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: "12mb" }));
+app.use(tenantMiddleware);
 const setNoStoreHeaders = (res) => {
   res.setHeader(
     "Cache-Control",
@@ -342,4 +355,3 @@ const setNoStoreHeaders = (res) => {
 };
 const PUBLIC_HOME_LANDING = path.join(__dirname, "home-page", "index.html");
 const LEGAL_DIR = path.join(__dirname, "legal");
-

@@ -1,4 +1,4 @@
-﻿const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, options, tableId, clients = [], hiddenFields = [] }) => {
+const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, options, tableId, clients = [], hiddenFields = [] }) => {
   const editableColumns = useMemo(() => columns.filter((column) => column.editable !== false), [columns]);
   const visibleColumns = useMemo(
     () => editableColumns.filter((column) => !hiddenFields.includes(column.key)),
@@ -331,6 +331,7 @@ const AppointmentModal = ({
   clients = [],
   serviceCatalog = [],
   onQuickCreateClient = null,
+  barbers = [],
 }) => {
   const buildDraft = useCallback(
     (record) => (record ? { ...record, UserID: record.UserID || record.userId || '', Status: normalizeStatusValue(record.Status) } : null),
@@ -476,6 +477,34 @@ const AppointmentModal = ({
     appointments,
     updateWarningForDraft,
   ]);
+  const getServicesPrice = useCallback(
+    (servicesValue, barberName) => {
+      const selectedBarber = (barbers || []).find(
+        (b) => normalizeText(b.name).toLowerCase() === normalizeText(barberName || '').toLowerCase()
+      );
+      const barberId = selectedBarber?.id;
+      return parseMultiValue(servicesValue).reduce((sum, serviceName) => {
+        const key = canonicalizeName(serviceName).toLowerCase();
+        const service = (serviceCatalog || []).find(
+          (s) => canonicalizeName(s?.name || '').toLowerCase() === key
+        );
+        if (!service) return sum;
+        const prices = service.prices || {};
+        const price = barberId ? (prices[barberId] ?? prices[selectedBarber?.name]) : null;
+        return sum + (Number(price) || 0);
+      }, 0);
+    },
+    [barbers, serviceCatalog]
+  );
+
+  const totalPrice = useMemo(
+    () => getServicesPrice(draft?.Services, draft?.Barber),
+    [draft?.Services, draft?.Barber, getServicesPrice]
+  );
+  const coverBs = draft?.CoverBs || 0;
+  const discountRub = draft?.DiscountRub || 0;
+  const amountToPay = Math.max(0, totalPrice - discountRub);
+
   const servicesSelection = parseMultiValue(draft?.Services);
   const appointmentServiceOptions = useMemo(
     () => dedupeOptionList(options.services || []),
@@ -653,6 +682,7 @@ const AppointmentModal = ({
         Status: normalizeStatusValue(nextDraft.Status),
         Services: nextDraft.Services,
         UserID: nextDraft.UserID || '',
+        Comment: nextDraft.Comment || '',
       },
       isNew,
     });
@@ -749,7 +779,22 @@ const AppointmentModal = ({
 	      isOpen={open}
 	      onClose={onClose}
 	      footer={
-	        <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap sm:gap-3">
+	        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:flex-nowrap sm:gap-3">
+	          <div className="mr-auto flex items-center gap-3 text-sm">
+	            <div className="flex flex-col items-start leading-tight">
+	              <span className="text-[10px] uppercase font-bold tracking-wider text-[var(--crm-muted)]">К оплате</span>
+	              <span className="text-lg font-extrabold text-[color:var(--crm-primary)]">{amountToPay} ₽</span>
+	            </div>
+	            {coverBs > 0 && (
+	              <div className="h-6 w-px bg-white/10" />
+	            )}
+	            {coverBs > 0 && (
+	              <div className="flex flex-col items-start leading-tight text-xs text-amber-400">
+	                <span className="text-[9px] uppercase font-semibold tracking-wider text-[var(--crm-muted)]">Списано</span>
+	                <span>-{coverBs} BS ({discountRub} ₽)</span>
+	              </div>
+	            )}
+	          </div>
 	          {!isNew && canDelete && (
 	            <button
 	              onClick={() => onDelete?.(draft)}
@@ -937,6 +982,20 @@ const AppointmentModal = ({
           />
         </div>
       </div>
+
+      <div className="crm-inline-panel mt-4 p-4 space-y-2">
+        <label className="text-xs font-semibold uppercase tracking-wider text-[var(--crm-muted)]">Комментарий</label>
+        <textarea
+          name="appointmentComment"
+          aria-label="Комментарий"
+          value={draft.Comment || ''}
+          onChange={(event) => handleChange('Comment', event.target.value)}
+          placeholder="Комментарий к записи..."
+          rows={3}
+          className="w-full text-sm text-white bg-white/5 rounded-xl p-3 border border-white/5 focus:outline-none focus:ring-1 focus:ring-[color:var(--crm-primary)] resize-none"
+        />
+      </div>
+
       <div className="crm-inline-panel mt-4">
         <button
           type="button"

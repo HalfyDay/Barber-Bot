@@ -599,7 +599,12 @@ test("admin crud routes update appointment and request realtime push", async () 
         Status: "done",
         UserID: "77",
       },
-      { excludeAppointmentId: "appt-1" },
+      {
+        excludeAppointmentId: "appt-1",
+        allowMissingSchedule: true,
+        allowOutsideWorkingHours: true,
+        allowBusySlot: true,
+      },
     ],
     ["update", { id: "appt-1" }, { Status: "done", UserID: "77" }],
     ["requestRealtimePush", true],
@@ -683,7 +688,12 @@ test("admin crud routes let staff update own appointment", async () => {
         StartAt: "2026-03-18T10:00:00.000Z",
         UserID: "42",
       },
-      { excludeAppointmentId: "appt-1" },
+      {
+        excludeAppointmentId: "appt-1",
+        allowMissingSchedule: true,
+        allowOutsideWorkingHours: true,
+        allowBusySlot: true,
+      },
     ],
     [
       "update",

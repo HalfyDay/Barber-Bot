@@ -1,7 +1,24 @@
+const { getActiveTimezone } = require("./prismaRuntime");
+
 const createDateTimeService = ({
   normalizeText,
   timeZone,
 }) => {
+  const resolveTimeZone = (zone) => {
+    try {
+      const activeZone = getActiveTimezone();
+      if (activeZone) {
+        if (!zone || zone === timeZone) {
+          return activeZone;
+        }
+        return zone;
+      }
+    } catch (e) {
+      // Ignore
+    }
+    return zone || timeZone || "Europe/Moscow";
+  };
+
   const sanitizeTimeToken = (value) => {
     const match = normalizeText(value).match(/(\d{1,2}):(\d{2})/);
     if (!match) return "";
@@ -17,12 +34,13 @@ const createDateTimeService = ({
 
   const timeZoneFormatterCache = new Map();
   const getTimeZoneFormatter = (zone = timeZone) => {
-    const cacheKey = zone || "default";
+    const resolvedZone = resolveTimeZone(zone);
+    const cacheKey = resolvedZone || "default";
     if (!timeZoneFormatterCache.has(cacheKey)) {
       timeZoneFormatterCache.set(
         cacheKey,
         new Intl.DateTimeFormat("en-CA", {
-          timeZone: zone,
+          timeZone: resolvedZone,
           year: "numeric",
           month: "2-digit",
           day: "2-digit",

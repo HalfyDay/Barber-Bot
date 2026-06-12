@@ -1,3 +1,5 @@
+const { getActiveTimezone } = require("./prismaRuntime");
+
 const createError = (code) => {
   const error = new Error(code);
   error.code = code;
@@ -12,6 +14,21 @@ const createAppointmentService = ({
   normalizePhone = (value) => normalizeText(value),
   isActiveStatus = () => false,
 }) => {
+  const resolveTimeZone = (zone) => {
+    try {
+      const activeZone = getActiveTimezone();
+      if (activeZone) {
+        if (!zone || zone === timeZone) {
+          return activeZone;
+        }
+        return zone;
+      }
+    } catch (e) {
+      // Ignore
+    }
+    return zone || timeZone || "Europe/Moscow";
+  };
+
   const toLower = (value) => normalizeText(value).toLowerCase();
   const slotBlockTokens = ["block", "блок"];
   const timeZoneFormatterCache = new Map();
@@ -23,12 +40,13 @@ const createAppointmentService = ({
   };
 
   const getTimeZoneFormatter = (zone = timeZone) => {
-    const cacheKey = zone || "default";
+    const resolvedZone = resolveTimeZone(zone);
+    const cacheKey = resolvedZone || "default";
     if (!timeZoneFormatterCache.has(cacheKey)) {
       timeZoneFormatterCache.set(
         cacheKey,
         new Intl.DateTimeFormat("en-CA", {
-          timeZone: zone,
+          timeZone: resolvedZone,
           year: "numeric",
           month: "2-digit",
           day: "2-digit",
@@ -393,6 +411,9 @@ const createAppointmentService = ({
     selectedServices,
     settings,
     activeStatus,
+    comment,
+    coverBs,
+    discountRub,
   }) => {
     const startLabel = formatMinutesAsClock(startMinute);
     const endLabel = formatMinutesAsClock(startMinute + totalDuration);
@@ -420,6 +441,9 @@ const createAppointmentService = ({
         Services: selectedServices.map((service) => service.name).join(", "),
         Reminder2hClientSent: false,
         Reminder2hBarberSent: false,
+        Comment: comment || null,
+        CoverBs: coverBs || null,
+        DiscountRub: discountRub || null,
       };
 
       await validateActiveAppointment(appointment, { prismaClient: tx });

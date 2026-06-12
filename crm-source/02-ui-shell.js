@@ -1,4 +1,4 @@
-﻿const LoadingState = ({ label = 'Загружаю данные...' } = {}) => (
+const LoadingState = ({ label = 'Загружаю данные...' } = {}) => (
   <div className="flex items-center justify-center py-12 text-[var(--crm-muted)]">
     <span className="animate-pulse">{label}</span>
   </div>
@@ -191,6 +191,37 @@ const IconPlus = ({ className = 'h-5 w-5' }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M12 5v14" />
     <path d="M5 12h14" />
+  </svg>
+);
+const IconEdit = ({ className = 'h-5 w-5' }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+  </svg>
+);
+const IconLogin = ({ className = 'h-5 w-5' }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+    <polyline points="10 17 15 12 10 7" />
+    <line x1="15" y1="12" x2="3" y2="12" />
   </svg>
 );
 const IconCheck = ({ className = 'h-5 w-5' }) => (
@@ -544,6 +575,57 @@ const StatCard = ({ label, value, accent = 'text-[color:var(--crm-primary)]', on
       </Wrapper>
   );
 };
+const useMovingNavIndicator = (activeId) => {
+  const trackRef = useRef(null);
+  const itemRefs = useRef(new Map());
+  const [indicatorStyle, setIndicatorStyle] = useState({
+    opacity: 0,
+    transform: 'translate3d(0, 0, 0)',
+    width: 0,
+    height: 0,
+  });
+  const setItemRef = useCallback((itemId) => (node) => {
+    if (node) {
+      itemRefs.current.set(itemId, node);
+    } else {
+      itemRefs.current.delete(itemId);
+    }
+  }, []);
+  useLayoutEffect(() => {
+    const trackEl = trackRef.current;
+    const activeEl = activeId ? itemRefs.current.get(activeId) : null;
+    if (!trackEl || !activeEl) {
+      setIndicatorStyle((prev) => (prev.opacity === 0 ? prev : { ...prev, opacity: 0 }));
+      return undefined;
+    }
+    const update = () => {
+      const trackRect = trackEl.getBoundingClientRect();
+      const activeRect = activeEl.getBoundingClientRect();
+      setIndicatorStyle({
+        opacity: 1,
+        transform: `translate3d(${activeRect.left - trackRect.left + trackEl.scrollLeft}px, ${activeRect.top - trackRect.top + trackEl.scrollTop}px, 0)`,
+        width: activeRect.width,
+        height: activeRect.height,
+      });
+    };
+    update();
+    const raf = window.requestAnimationFrame(update);
+    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    resizeObserver?.observe(trackEl);
+    resizeObserver?.observe(activeEl);
+    trackEl.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      resizeObserver?.disconnect();
+      trackEl.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [activeId]);
+  return { trackRef, setItemRef, indicatorStyle };
+};
 const Sidebar = ({
   session,
   activeTab,
@@ -557,11 +639,24 @@ const Sidebar = ({
   tableShortcuts,
   systemSection = 'bot',
   onSelectSystemSection,
+  systemSubSections,
 }) => {
   const username = session?.displayName || session?.username || '-';
   const sidebarTabs = Array.isArray(tabs) && tabs.length ? tabs : VIEW_TABS_BY_ROLE[ROLE_OWNER];
   const sidebarShortcuts =
     Array.isArray(tableShortcuts) && tableShortcuts.length ? tableShortcuts : DEFAULT_TABLE_SHORTCUTS;
+  const subSections = Array.isArray(systemSubSections) && systemSubSections.length ? systemSubSections : SYSTEM_SUB_SECTIONS;
+  const { trackRef, setItemRef, indicatorStyle } = useMovingNavIndicator(activeTab);
+  const {
+    trackRef: tableTrackRef,
+    setItemRef: setTableItemRef,
+    indicatorStyle: tableIndicatorStyle,
+  } = useMovingNavIndicator(activeTab === 'tables' ? activeDataTable : null);
+  const {
+    trackRef: systemTrackRef,
+    setItemRef: setSystemItemRef,
+    indicatorStyle: systemIndicatorStyle,
+  } = useMovingNavIndicator(activeTab === 'system' ? systemSection : null);
   return (
     <aside className="crm-sidebar hidden w-72 flex-shrink-0 flex-col p-5 lg:sticky lg:top-0 lg:flex lg:h-screen lg:overflow-y-auto">
       <div className="border-b border-white/5 pb-5">
@@ -583,16 +678,18 @@ const Sidebar = ({
         )}
         </div>
       </div>
-      <nav className="mt-6 flex-1 space-y-2 overflow-y-auto">
+      <nav ref={trackRef} className="relative mt-6 flex-1 space-y-2 overflow-y-auto">
+        <div aria-hidden="true" className="crm-nav-indicator" style={indicatorStyle} />
         {sidebarTabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const IconComponent = VIEW_TAB_ICONS[tab.id] || IconDots;
           return (
             <div key={tab.id} className="space-y-1">
                 <button
+                  ref={setItemRef(tab.id)}
                   onClick={() => onChange?.(tab.id)}
                   className={classNames(
-                    'crm-sidebar-tab flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold',
+                    'crm-sidebar-tab crm-nav-item flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold',
                     isActive && 'crm-sidebar-tab-active'
                   )}
                 >
@@ -600,15 +697,17 @@ const Sidebar = ({
                   {tab.label}
               </button>
               {tab.id === 'tables' && (
-                <div className="space-y-1 pl-4">
+                <div ref={tableTrackRef} className="relative space-y-1 pl-4">
+                  <div aria-hidden="true" className="crm-nav-indicator" style={tableIndicatorStyle} />
                   {sidebarShortcuts.map((shortcut) => {
                     const isShortcutActive = activeDataTable === shortcut.id && activeTab === 'tables';
                     return (
                       <button
                         key={shortcut.id}
+                        ref={setTableItemRef(shortcut.id)}
                         onClick={() => onSelectTable?.(shortcut.id)}
                         className={classNames(
-                          'crm-subnav-pill w-full px-3 py-2 text-left text-xs font-semibold',
+                          'crm-subnav-pill crm-nav-item w-full px-3 py-2 text-left text-xs font-semibold',
                           isShortcutActive && 'crm-subnav-pill-active'
                         )}
                         disabled={!onSelectTable}
@@ -620,18 +719,20 @@ const Sidebar = ({
                 </div>
               )}
               {tab.id === 'system' && (
-                <div className="space-y-1 pl-4">
-                  {SYSTEM_SUB_SECTIONS.map((section) => {
+                <div ref={systemTrackRef} className="relative space-y-1 pl-4">
+                  <div aria-hidden="true" className="crm-nav-indicator" style={systemIndicatorStyle} />
+                  {subSections.map((section) => {
                     const isSectionActive = isActive && systemSection === section.id;
                     return (
                       <button
                         key={section.id}
+                        ref={setSystemItemRef(section.id)}
                         onClick={() => {
                           onChange?.('system');
                           onSelectSystemSection?.(section.id);
                         }}
                         className={classNames(
-                          'crm-subnav-pill w-full px-3 py-2 text-left text-xs font-semibold',
+                          'crm-subnav-pill crm-nav-item w-full px-3 py-2 text-left text-xs font-semibold',
                           isSectionActive && 'crm-subnav-pill-active'
                         )}
                       >
@@ -662,6 +763,7 @@ const MobileTabs = ({
   tableShortcuts,
   systemSection,
   onSelectSystemSection,
+  systemSubSections,
 }) => {
   const username = session?.displayName || session?.username || '-';
   const userAvatarSrc = resolveAssetUrl(currentBarber?.avatarUrl);
@@ -689,6 +791,17 @@ const MobileTabs = ({
     onChange?.(tabId);
   };
   const availableTabs = Array.isArray(tabs) && tabs.length ? tabs : VIEW_TABS_BY_ROLE[ROLE_OWNER];
+  const { trackRef, setItemRef, indicatorStyle } = useMovingNavIndicator(activeTab);
+  const {
+    trackRef: tableTrackRef,
+    setItemRef: setTableItemRef,
+    indicatorStyle: tableIndicatorStyle,
+  } = useMovingNavIndicator(activeTab === 'tables' ? activeDataTable : null);
+  const {
+    trackRef: systemTrackRef,
+    setItemRef: setSystemItemRef,
+    indicatorStyle: systemIndicatorStyle,
+  } = useMovingNavIndicator(activeTab === 'system' ? systemSection : null);
   const handleToggleLogoutMenu = () => setShowLogoutMenu((prev) => !prev);
   const handleLogoutClick = () => {
     setShowLogoutMenu(false);
@@ -739,8 +852,9 @@ const MobileTabs = ({
     () => (Array.isArray(tableShortcuts) && tableShortcuts.length ? tableShortcuts : DEFAULT_TABLE_SHORTCUTS),
     [tableShortcuts]
   );
+  const subSections = Array.isArray(systemSubSections) && systemSubSections.length ? systemSubSections : SYSTEM_SUB_SECTIONS;
   const canRenderTableSubmenu = activeTab === 'tables' && resolvedShortcuts.length > 0;
-  const canRenderSystemSubmenu = activeTab === 'system' && SYSTEM_SUB_SECTIONS.length > 0;
+  const canRenderSystemSubmenu = activeTab === 'system' && subSections.length > 0;
   const hasVisibleSubmenus = showSubmenus && (canRenderTableSubmenu || canRenderSystemSubmenu);
   const activeTopTabLabel =
     availableTabs.find((tab) => tab.id === activeTab)?.label ||
@@ -748,7 +862,7 @@ const MobileTabs = ({
   const activeTableLabel =
     resolvedShortcuts.find((shortcut) => shortcut.id === activeDataTable)?.label || activeTopTabLabel;
   const activeSystemLabel =
-    SYSTEM_SUB_SECTIONS.find((section) => section.id === systemSection)?.label || activeTopTabLabel;
+    subSections.find((section) => section.id === systemSection)?.label || activeTopTabLabel;
   const mobileHeaderTitle =
     activeTab === 'tables' ? activeTableLabel : activeTab === 'system' ? activeSystemLabel : activeTopTabLabel;
   const renderLiveIndicator = () =>
@@ -830,16 +944,19 @@ const MobileTabs = ({
                 {canRenderTableSubmenu && (
                   <div
                     className={classNames(
-                      'no-scrollbar flex gap-2 overflow-x-auto px-1.5 py-1 transition-all duration-300',
+                      'no-scrollbar relative flex gap-2 overflow-x-auto px-1.5 py-1 transition-all duration-300',
                       showSubmenus ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1'
                     )}
+                    ref={tableTrackRef}
                   >
+                    <div aria-hidden="true" className="crm-nav-indicator" style={tableIndicatorStyle} />
                     {resolvedShortcuts.map((shortcut) => {
                       const isShortcutActive = activeDataTable === shortcut.id;
                       const canSelectTable = typeof onSelectTable === 'function';
                       return (
                         <button
                           key={shortcut.id}
+                          ref={setTableItemRef(shortcut.id)}
                           type="button"
                           onClick={() => {
                             handleSelect('tables', { preserveSubmenus: true });
@@ -847,7 +964,7 @@ const MobileTabs = ({
                           }}
                           disabled={!canSelectTable}
                           className={classNames(
-                            'crm-subnav-pill flex-shrink-0 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide',
+                            'crm-subnav-pill crm-nav-item flex-shrink-0 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide',
                             isShortcutActive && 'crm-subnav-pill-active',
                             !canSelectTable && 'opacity-50'
                           )}
@@ -861,16 +978,19 @@ const MobileTabs = ({
                 {canRenderSystemSubmenu && (
                   <div
                     className={classNames(
-                      'no-scrollbar flex gap-2 overflow-x-auto px-1.5 py-1 transition-all duration-300',
+                      'no-scrollbar relative flex gap-2 overflow-x-auto px-1.5 py-1 transition-all duration-300',
                       showSubmenus ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1'
                     )}
+                    ref={systemTrackRef}
                   >
-                    {SYSTEM_SUB_SECTIONS.map((section) => {
+                    <div aria-hidden="true" className="crm-nav-indicator" style={systemIndicatorStyle} />
+                    {subSections.map((section) => {
                       const isSectionActive = systemSection === section.id;
                       const canSelect = typeof onSelectSystemSection === 'function';
                       return (
                         <button
                           key={section.id}
+                          ref={setSystemItemRef(section.id)}
                           type="button"
                           onClick={() => {
                             handleSelect('system', { preserveSubmenus: true });
@@ -878,7 +998,7 @@ const MobileTabs = ({
                           }}
                           disabled={!canSelect}
                           className={classNames(
-                            'crm-subnav-pill flex-shrink-0 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide',
+                            'crm-subnav-pill crm-nav-item flex-shrink-0 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide',
                             isSectionActive && 'crm-subnav-pill-active',
                             !canSelect && 'opacity-50'
                           )}
@@ -890,16 +1010,18 @@ const MobileTabs = ({
                   </div>
                 )}
               </div>
-              <div className="flex w-full items-center gap-3 px-2 py-1 transition-all duration-300">
+              <div ref={trackRef} className="relative flex w-full items-center gap-3 px-2 py-1 transition-all duration-300">
+                <div aria-hidden="true" className="crm-nav-indicator" style={indicatorStyle} />
                 {availableTabs.map((tab) => {
                   const IconComponent = VIEW_TAB_ICONS[tab.id] || IconDots;
                   const isActive = activeTab === tab.id;
                   return (
                     <button
+                      ref={setItemRef(tab.id)}
                       key={tab.id}
                       onClick={() => handleSelect(tab.id)}
                       className={classNames(
-                        'crm-mobile-tab flex-1 px-3 py-2 text-center text-sm font-semibold',
+                        'crm-mobile-tab crm-nav-item flex-1 px-3 py-2 text-center text-sm font-semibold',
                         isActive && 'crm-mobile-tab-active'
                       )}
                       aria-label={tab.label}
@@ -917,4 +1039,3 @@ const MobileTabs = ({
     </>
   );
 };
-

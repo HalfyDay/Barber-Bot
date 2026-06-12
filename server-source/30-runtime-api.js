@@ -386,6 +386,17 @@ registerServiceCatalogRoutes({
   filterBarbersForIdentity,
   filterServicesForIdentity,
 });
+const { registerCreatorRoutes } = require("./routes/creatorRoutes");
+registerCreatorRoutes({
+  app,
+  prisma,
+  authService: {
+    signSessionToken,
+    authenticateToken,
+  },
+  resolveUserIdentity,
+  creatorAccount: CREATOR_ACCOUNT,
+});
 registerOwnerAssetsRoutes({
   app,
   authenticateToken,
@@ -578,6 +589,7 @@ const {
   markExpiredTelegramAuthRequests,
   ensureLicenseValid,
   startLicenseWatcher,
+  runPostUpdateDatabaseFixes,
   migrateLegacyHomeUsersToUsers,
   ensureBootstrapData,
   normalizeStoredAppointmentStatuses,
@@ -595,4 +607,3 @@ const {
 installBackupCron();
 registerShutdownHandlers();
 bootstrap();
-

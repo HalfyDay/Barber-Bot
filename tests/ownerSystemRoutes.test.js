@@ -173,16 +173,20 @@ test("owner system routes perform system update and schedule restart", async () 
 
   await handler({ identity: { username: "owner" }, body: {} }, res);
 
-  assert.equal(res.statusCode, 200);
+  assert.equal(res.statusCode, 202);
   assert.deepEqual(res.body, {
-    updated: true,
-    files: 3,
-    info: { hasUpdate: false, force: true },
+    success: true,
+    started: true,
     restarting: true,
+    info: { hasUpdate: false, force: true },
   });
+
+  // Wait for background async update functions to execute
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
   assert.deepEqual(calls, [
-    "performSystemUpdate",
     ["checkForUpdates", true],
+    "performSystemUpdate",
     "scheduleSelfRestart",
   ]);
 });

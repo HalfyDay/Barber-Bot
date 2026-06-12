@@ -427,15 +427,17 @@ const registerAdminCrudRoutes = ({
       });
     }
     try {
+      let existing = null;
       if (isStaffIdentity(req.identity)) {
-        const existing = await prisma.appointments.findUnique({ where: { id } });
+        existing = await prisma.appointments.findUnique({ where: { id } });
         if (!existing || !matchesIdentityBarber(existing.Barber, req.identity)) {
           return res.status(403).json({
             error: "Недостаточно прав для удаления этой записи.",
           });
         }
+      } else {
+        existing = await prisma.appointments.findUnique({ where: { id } });
       }
-      const existing = await prisma.appointments.findUnique({ where: { id } });
       await prisma.appointments.delete({ where: { id } });
       res.status(204).send();
       requestRealtimePush(true);
@@ -463,7 +465,7 @@ const registerAdminCrudRoutes = ({
       return res.status(403).json({ error: "Недостаточно прав для доступа к этому разделу." });
     }
     try {
-      return res.json(await buildScheduleBoard(req.query.days));
+      return res.json(await buildScheduleBoard(req.query?.days));
     } catch (error) {
       console.error("Schedules fetch error:", error);
       return res.status(500).json({ error: "Не удалось загрузить расписание." });

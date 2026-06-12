@@ -39,6 +39,9 @@ model Appointments {
   Reminder2hClientSent Boolean?    @map("Reminder2hClientSent")
   Reminder2hBarberSent Boolean?    @map("Reminder2hBarberSent")
   UserID               String?    @map("UserID")
+  Comment              String?    @map("Comment")
+  CoverBs              Int?       @map("CoverBs")
+  DiscountRub          Int?       @map("DiscountRub")
 
   @@map("Appointments")
 }

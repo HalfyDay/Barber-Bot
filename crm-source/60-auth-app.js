@@ -1,4 +1,4 @@
-﻿const LoginScreen = ({ onLogin, error }) => {
+const LoginScreen = ({ onLogin, error }) => {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -238,14 +238,15 @@ const App = () => {
   const isOwner = role === ROLE_OWNER;
   const hasOwnerAccess = isOwner || isCreator;
   const staffBarberId = session?.barberId || null;
-  const viewTabs = VIEW_TABS_BY_ROLE[role] || VIEW_TABS_BY_ROLE[ROLE_OWNER];
+  let viewTabs = VIEW_TABS_BY_ROLE[role] || VIEW_TABS_BY_ROLE[ROLE_OWNER];
   const dataTables = DATA_TABLES_BY_ROLE[role] || DEFAULT_DATA_TABLES;
   const visibleTableOrder = VISIBLE_TABLE_ORDER_BY_ROLE[role] || DEFAULT_VISIBLE_TABLE_ORDER;
   const sidebarShortcuts = DATA_SHORTCUTS_BY_ROLE[role] || DEFAULT_TABLE_SHORTCUTS;
   const canUseRealtime = hasOwnerAccess || role === ROLE_STAFF;
   const canAccessBot = hasOwnerAccess;
   const canAccessSystem = hasOwnerAccess;
-  const resolvedSystemSection = SYSTEM_SUB_SECTIONS.some((tab) => tab.id === systemSection) ? systemSection : 'bot';
+  const systemSubSections = getSystemSubSections(role, session?.isImpersonated);
+  const resolvedSystemSection = systemSubSections.some((tab) => tab.id === systemSection) ? systemSection : (systemSubSections[0]?.id || 'bot');
   const requestConfirm = useCallback(
     (options = {}) =>
       new Promise((resolve) => {
@@ -410,6 +411,41 @@ const apiRequest = useCallback(
     },
     [session?.token, handleLogout, handleSessionTokenRefresh]
   );
+
+  const handleImpersonate = useCallback(async (businessId, barberId) => {
+    try {
+      const data = await apiRequest('/creator/impersonate', {
+        method: 'POST',
+        body: JSON.stringify({ businessId, barberId }),
+      });
+      if (data && data.token) {
+        localStorage.setItem('barber.creatorToken', JSON.stringify(session));
+        const sessionPayload = buildSessionPayload(data);
+        persistSessionPayload(sessionPayload, rememberSession);
+        setSession(sessionPayload);
+        setActiveTab('dashboard');
+      }
+    } catch (err) {
+      setGlobalError(err.message || 'Не удалось авторизоваться от имени сотрудника');
+    }
+  }, [apiRequest, session, rememberSession, setActiveTab, setGlobalError]);
+
+  const handleExitImpersonation = useCallback(() => {
+    const creatorToken = localStorage.getItem('barber.creatorToken');
+    if (!creatorToken) return;
+    localStorage.removeItem('barber.creatorToken');
+    try {
+      const creatorSession = JSON.parse(creatorToken);
+      persistSessionPayload(creatorSession, rememberSession);
+      setSession(creatorSession);
+      setActiveTab('system');
+      setSystemSection('businesses');
+    } catch (err) {
+      console.error('Failed to exit impersonation', err);
+      handleLogout();
+    }
+  }, [rememberSession, setSession, setActiveTab, setSystemSection, handleLogout]);
+
   const applyFavoriteBarberRule = useCallback(
     async (profilePayload) => {
       if (!profilePayload || !Array.isArray(profilePayload.appointments) || !profilePayload.user) {
@@ -819,7 +855,7 @@ const apiRequest = useCallback(
     persistRememberChoice(rememberChoice);
     setRememberSession(rememberChoice);
     try {
-      const response = await fetch(`${API_BASE_URL}/login`, {
+      const response = await fetch(`${API_BASE_URL}/login${window.location.search}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: normalizedPhone, username: normalizedLogin, password }),
@@ -1636,7 +1672,7 @@ const handleBarberFieldChange = (id, field, value) => {
     activeTab === 'tables' &&
     (activeDataTable === 'Appointments' || activeDataTable === 'Users');
   const mainClassName = classNames(
-    'flex-1 min-w-0 w-full overflow-visible md:overflow-x-hidden',
+    'flex-1 min-w-0 w-full overflow-x-hidden',
     isMobileFlatTablePage
       ? 'space-y-0 px-0 pt-0 pb-24'
       : 'space-y-4 p-4 md:p-8 md:pt-6',
@@ -1771,6 +1807,8 @@ const handleBarberFieldChange = (id, field, value) => {
             onUpdateToken={handleUpdateBotToken}
             section={resolvedSystemSection}
             onSectionChange={setSystemSection}
+            apiRequest={apiRequest}
+            onImpersonate={handleImpersonate}
             role={role}
           />
         );
@@ -1814,8 +1852,33 @@ const handleBarberFieldChange = (id, field, value) => {
       </div>
     );
   }
+  const isImpersonated = Boolean(session?.isImpersonated);
+  const renderImpersonationBanner = () => {
+    if (!isImpersonated) return null;
+    return (
+      <div className="bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 text-white px-4 py-3 text-center text-sm font-semibold flex flex-col sm:flex-row items-center justify-between gap-3 z-50 sticky top-0 shadow-lg border-b border-amber-500/20 backdrop-blur-md">
+        <div className="flex items-center gap-2">
+          <span className="flex h-2 w-2 relative">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+          </span>
+          <span>
+            Режим просмотра: вы вошли как <strong>{session?.displayName || session?.barberName}</strong> (Бизнес: {session?.businessName || '—'})
+          </span>
+        </div>
+        <button
+          onClick={handleExitImpersonation}
+          className="bg-white/10 hover:bg-white/20 active:scale-95 text-white px-4 py-1.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition duration-150 shadow-inner border border-white/10"
+        >
+          Вернуться в панель Создателя
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="crm-app-shell min-h-screen text-white">
+      {renderImpersonationBanner()}
       {isMobile && (
         <MobileTabs
           activeTab={activeTab}
@@ -1831,9 +1894,10 @@ const handleBarberFieldChange = (id, field, value) => {
           tableShortcuts={sidebarShortcuts}
           systemSection={resolvedSystemSection}
           onSelectSystemSection={setSystemSection}
+          systemSubSections={systemSubSections}
         />
       )}
-      <div className="flex">
+      <div className="flex w-full min-w-0">
         <Sidebar
           session={session}
           activeTab={activeTab}
@@ -1847,10 +1911,11 @@ const handleBarberFieldChange = (id, field, value) => {
           tableShortcuts={sidebarShortcuts}
           systemSection={resolvedSystemSection}
           onSelectSystemSection={setSystemSection}
+          systemSubSections={systemSubSections}
         />
         <main className={mainClassName}>
           {globalError && <ErrorBanner message={globalError} />}
-          <div className="crm-page-switch">
+          <div key={activeTab} className="crm-page-switch">
             {renderActive()}
           </div>
         </main>
@@ -1874,6 +1939,7 @@ const handleBarberFieldChange = (id, field, value) => {
         canDelete={appointmentModal.allowDelete}
         onDelete={appointmentModal.allowDelete ? handleDeleteAppointment : null}
         onQuickCreateClient={handleQuickCreateClient}
+        barbers={barbers}
       />
       <ConfirmDialog {...confirmDialog} onResult={handleConfirmResult} />
     </div>
@@ -1943,4 +2009,3 @@ const renderApp = () => {
   }
 };
 renderApp();
-

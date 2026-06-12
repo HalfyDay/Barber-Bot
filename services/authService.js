@@ -1,3 +1,5 @@
+const { getTenantPrismaClient } = require("./prismaRuntime");
+
 const createAuthService = ({
   jwt,
   jwtSecret,
@@ -17,7 +19,10 @@ const createAuthService = ({
   prisma,
   isDatabaseCorruptionError,
   buildDatabaseCorruptionMessage,
+  getTenantPrismaClient: customGetTenantPrismaClient,
 }) => {
+  const getTenantPrisma = customGetTenantPrismaClient || getTenantPrismaClient;
+
   const readBearerToken = (req) => {
     const authHeader = req.headers.authorization;
     return authHeader && authHeader.split(" ")[1];
@@ -272,35 +277,89 @@ const createAuthService = ({
           phone: creatorAccount.phone,
         });
       }
-      const barbers = await prisma.barbers.findMany({
-        where: { isActive: true },
-        select: {
-          id: true,
-          name: true,
-          login: true,
-          phone: true,
-          password: true,
-          role: true,
-        },
-      });
-      const barber = barbers.find((candidate) => {
-        const phoneMatches =
-          normalizedPhone && normalizePhone(candidate.phone) === normalizedPhone;
-        const loginMatches =
-          username && normalizeLogin(candidate.login) === username;
-        return phoneMatches || loginMatches;
-      });
-      if (!barber || !barber.password || barber.password !== password) {
+
+      let foundBarber = null;
+      let foundBusinessId = null;
+
+      if (req.businessId) {
+        const barbers = await prisma.barbers.findMany({
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            login: true,
+            phone: true,
+            password: true,
+            role: true,
+          },
+        });
+        const barber = barbers.find((candidate) => {
+          const phoneMatches =
+            normalizedPhone && normalizePhone(candidate.phone) === normalizedPhone;
+          const loginMatches =
+            username && normalizeLogin(candidate.login) === username;
+          return phoneMatches || loginMatches;
+        });
+        if (barber && barber.password && barber.password === password) {
+          foundBarber = barber;
+          foundBusinessId = req.businessId;
+        }
+      } else {
+        // Shared login: search across all active schemas in public.Businesses
+        let activeBusinesses = [];
+        try {
+          const globalPrisma = getTenantPrisma("public");
+          activeBusinesses = await globalPrisma.businesses.findMany({
+            where: { isActive: true },
+          });
+        } catch (err) {
+          console.error("[auth] Global login: failed to query global businesses list:", err);
+        }
+        for (const business of activeBusinesses) {
+          try {
+            const tenantPrisma = getTenantPrisma(business.dbSchema);
+            const barbers = await tenantPrisma.barbers.findMany({
+              where: { isActive: true },
+              select: {
+                id: true,
+                name: true,
+                login: true,
+                phone: true,
+                password: true,
+                role: true,
+              },
+            });
+            const barber = barbers.find((candidate) => {
+              const phoneMatches =
+                normalizedPhone && normalizePhone(candidate.phone) === normalizedPhone;
+              const loginMatches =
+                username && normalizeLogin(candidate.login) === username;
+              return phoneMatches || loginMatches;
+            });
+            if (barber && barber.password && barber.password === password) {
+              foundBarber = barber;
+              foundBusinessId = business.id;
+              break;
+            }
+          } catch (err) {
+            console.error(`[auth] Global login: failed to query tenant ${business.dbSchema}:`, err);
+          }
+        }
+      }
+
+      if (!foundBarber) {
         return res
           .status(401)
           .json({ success: false, message: "Неверный номер или пароль." });
       }
+
       const identity = resolveUserIdentity({
-        username: barber.phone || barber.login || username,
-        login: barber.login || username,
-        barberId: barber.id,
-        barberName: barber.name || barber.login || normalizedPhone || username,
-        role: barber.role,
+        username: foundBarber.phone || foundBarber.login || username,
+        login: foundBarber.login || username,
+        barberId: foundBarber.id,
+        barberName: foundBarber.name || foundBarber.login || normalizedPhone || username,
+        role: foundBarber.role,
+        businessId: foundBusinessId,
       });
       const token = signSessionToken(identity);
       return res.json({
@@ -311,7 +370,7 @@ const createAuthService = ({
         barberId: identity.barberId,
         role: identity.role,
         barberName: identity.barberName,
-        phone: barber.phone || null,
+        phone: foundBarber.phone || null,
       });
     } catch (error) {
       console.error("Login error:", error);

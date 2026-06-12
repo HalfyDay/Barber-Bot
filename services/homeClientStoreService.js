@@ -827,6 +827,12 @@ const createHomeClientStoreService = ({
       },
     });
     await writeSiteSettingsRow(nextSite);
+    try {
+      const { clearActiveTenantTimezone } = require("./prismaRuntime");
+      clearActiveTenantTimezone();
+    } catch (e) {
+      // ignore
+    }
     return nextSite;
   };
 

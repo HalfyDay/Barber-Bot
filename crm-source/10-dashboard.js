@@ -1,4 +1,4 @@
-﻿const DashboardView = ({
+const DashboardView = ({
   data,
   onOpenAppointment,
   onOpenProfile,
@@ -518,6 +518,11 @@
                         ) : (
                           <p className="text-xs text-[var(--crm-muted)] sm:text-sm">Нет выбранных услуг</p>
                         )}
+                        {appt.Comment ? (
+                          <div className="mt-2 text-xs text-[var(--crm-muted)] italic whitespace-pre-wrap break-words min-w-0">
+                            {appt.Comment}
+                          </div>
+                        ) : null}
                       </div>
                       </div>
                     );

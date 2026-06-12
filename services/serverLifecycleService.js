@@ -21,6 +21,7 @@ const createServerLifecycleService = ({
   markExpiredTelegramAuthRequests,
   ensureLicenseValid,
   startLicenseWatcher,
+  runPostUpdateDatabaseFixes,
   migrateLegacyHomeUsersToUsers,
   ensureBootstrapData,
   normalizeStoredAppointmentStatuses,
@@ -107,6 +108,7 @@ const createServerLifecycleService = ({
           licenseError?.message || licenseError,
         );
       }
+      await runPostUpdateDatabaseFixes?.();
       startLicenseWatcher();
       const legacyMigration = await migrateLegacyHomeUsersToUsers();
       if (legacyMigration.created || legacyMigration.updated) {

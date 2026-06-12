@@ -7,7 +7,9 @@ const {
   buildPrismaUpdateCommands,
   resolvePostgresDumpPath,
   stripPostgresSchemaQuery,
+  buildIdempotentTenantPatch,
 } = require('../services/updateManager');
+
 
 test('update manager formats network error without stack trace noise', () => {
   const error = new TypeError('fetch failed');
@@ -59,3 +61,47 @@ The datasource provider \`postgresql\` specified in your schema does not match t
 
   assert.equal(canSkipPrismaMigrateForProviderSwitch(message), true);
 });
+
+test('buildIdempotentTenantPatch converts CREATE TABLE to IF NOT EXISTS', () => {
+  const sql = `
+CREATE TABLE "Users" (
+    "id" TEXT NOT NULL,
+    CONSTRAINT "Users_pkey" PRIMARY KEY ("id")
+);
+`.trim();
+
+  const result = buildIdempotentTenantPatch(sql);
+  assert.ok(result.includes('CREATE TABLE IF NOT EXISTS "Users"'), 'should have IF NOT EXISTS on CREATE TABLE');
+  assert.ok(!result.includes('CONSTRAINT "Users_pkey"'), 'should drop CONSTRAINT lines (handled at creation)');
+});
+
+test('buildIdempotentTenantPatch converts CREATE INDEX and CREATE UNIQUE INDEX to IF NOT EXISTS', () => {
+  const sql = `
+CREATE UNIQUE INDEX "Businesses_subdomain_key" ON "Businesses"("subdomain");
+CREATE INDEX "TelegramAuthRequests_code_idx" ON "TelegramAuthRequests"("code");
+`.trim();
+
+  const result = buildIdempotentTenantPatch(sql);
+  assert.ok(result.includes('CREATE UNIQUE INDEX IF NOT EXISTS'), 'should add IF NOT EXISTS on UNIQUE INDEX');
+  assert.ok(result.includes('CREATE INDEX IF NOT EXISTS'), 'should add IF NOT EXISTS on INDEX');
+});
+
+test('buildIdempotentTenantPatch wraps CREATE TYPE with existence check', () => {
+  const sql = `CREATE TYPE "BarberRole" AS ENUM ('owner', 'staff');`;
+
+  const result = buildIdempotentTenantPatch(sql);
+  assert.ok(result.includes('DO $$'), 'should wrap enum in DO block');
+  assert.ok(result.includes('pg_type'), 'should check pg_type for existence');
+});
+
+test('buildIdempotentTenantPatch skips AddForeignKey blocks', () => {
+  const sql = `
+-- AddForeignKey
+ALTER TABLE "Barbers" ADD CONSTRAINT "Barbers_positionId_fkey" FOREIGN KEY ("positionId") REFERENCES "Positions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+`.trim();
+
+  const result = buildIdempotentTenantPatch(sql);
+  assert.ok(!result.includes('ADD CONSTRAINT'), 'should skip AddForeignKey ALTER TABLE statements');
+  assert.ok(!result.includes('REFERENCES'), 'should skip REFERENCES in skipped blocks');
+});
+

@@ -2919,6 +2919,9 @@ const registerHomeRoutes = ({
           selectedServices,
           settings,
           activeStatus: STATUS_ACTIVE,
+          comment: normalizeText(req.body?.comment) || null,
+          coverBs: requestedCoverBs || null,
+          discountRub: requestedCoverBs > 0 ? requestedCoverBs * bsToRubRate : null,
         });
       } catch (error) {
         if (error?.message === "LIMIT_REACHED") {

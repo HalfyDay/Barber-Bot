@@ -170,13 +170,19 @@ test("validateAppointmentRecord skips validation for non-active statuses", async
 });
 
 test("createHomeAppointment writes through prisma transaction", async () => {
+  const futureDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+  const yyyy = futureDate.getFullYear();
+  const mm = String(futureDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(futureDate.getDate()).padStart(2, '0');
+  const dateKey = `${yyyy}-${mm}-${dd}`;
+
   const service = createService({
     appointments: [
       {
         id: "existing-1",
         UserID: "user-2",
         Barber: "Alex",
-        Date: "2026-03-20",
+        Date: dateKey,
         Time: "12:00 - 13:00",
         Status: "Активная",
       },
@@ -193,7 +199,7 @@ test("createHomeAppointment writes through prisma transaction", async () => {
       id: "barber-1",
       name: "Alex",
     },
-    dateKey: "2026-03-20",
+    dateKey: dateKey,
     startMinute: 10 * 60,
     totalDuration: 60,
     selectedServices: [{ id: "svc-1", name: "Haircut" }],

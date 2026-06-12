@@ -1,4 +1,4 @@
-﻿const BotControlView = ({
+const BotControlView = ({
   status,
   settings,
   backups = [],
@@ -26,6 +26,7 @@
   siteSaving = false,
   onSaveSite = null,
   role = ROLE_OWNER,
+  session = null,
 }) => {
   const [description, setDescription] = useState(settings?.botDescription || '');
   const [about, setAbout] = useState(settings?.aboutText || '');
@@ -88,8 +89,10 @@
   const updateButtonLabel = systemBusy && pendingReloadReason !== 'restart' ? 'Обновление…' : 'Обновить';
   const restartButtonLabel = systemBusy && pendingReloadReason === 'restart' ? 'Перезапуск…' : 'Перезапуск';
   const isCreator = role === ROLE_CREATOR;
+  const showAdminSystemControls = isCreator || Boolean(session?.isImpersonated);
+  const showTimeZoneSettings = role !== ROLE_CREATOR || Boolean(session?.isImpersonated);
   const licenseList = Array.isArray(licenseStatus?.licenses) ? licenseStatus.licenses : [];
-  const hasLicenseList = isCreator && licenseList.length > 0;
+  const hasLicenseList = showAdminSystemControls && licenseList.length > 0;
   const resolveSavedTimeZones = useCallback(
     () => ({
       crm: normalizeText(siteConfig?.timeZones?.crm) || 'Asia/Irkutsk',
@@ -137,107 +140,113 @@
   if (viewMode === 'system') {
     return (
       <div className="space-y-6">
-        <SectionCard title="Время и часовой пояс">
-          <div className="crm-soft-card flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
-            <label className="min-w-0 flex-1 space-y-2">
-              <span className="block text-sm text-[var(--crm-text)]">Часовой пояс</span>
-              <select
-                value={timeZoneDraft}
-                onChange={(event) => setTimeZoneDraft(event.target.value)}
-                className="w-full px-4 py-3"
-              >
-                {timeZoneOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label} ({option.value})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="crm-inline-panel px-4 py-3 sm:min-w-[240px]">
-              <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--crm-muted)]">Сейчас</p>
-              <p className="mt-1 text-sm font-semibold text-white">{formatTimeZonePreview(timeZoneDraft)}</p>
-            </div>
-            <button
-              type="button"
-              onClick={handleSaveTimeZones}
-              disabled={!timeZoneDirty || siteSaving || typeof onSaveSite !== 'function'}
-              className="crm-action-btn px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {siteSaving ? 'Сохранение...' : 'Сохранить'}
-            </button>
-          </div>
-        </SectionCard>
-        <BackupsPanel backups={backups} onRestore={onRestoreBackup} onCreate={onCreateBackup} onDelete={onDeleteBackup} />
-        <SectionCard title="Лицензия и обновления">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="crm-soft-card p-4 text-sm text-[var(--crm-text)]">
-              <p className="font-semibold">Лицензия</p>
-              <p className="mt-1">Статус: {licenseStatus?.valid ? 'Активна' : 'Не подтверждена'}</p>
-              {licenseStatus?.license?.owner && <p>Владелец: {licenseStatus.license.owner}</p>}
-              {licenseStatus?.license?.expiresAt && <p>Действует до {formatDate(licenseStatus.license.expiresAt)}</p>}
-              {licenseStatus?.license?.number && <p>Номер: {licenseStatus.license.number}</p>}
-            </div>
-            <div className="crm-soft-card p-4 text-sm text-[var(--crm-text)]">
-              <p className="font-semibold">Обновления</p>
-              <p className="mt-1">Текущая версия: {currentVersionLabel}</p>
-              <p>Доступная версия: {latestVersionLabel}</p>
-              <p>Проверено: {checkedAtLabel}</p>
-              {publishedAtLabel && <p>Релиз: {publishedAtLabel}</p>}
-              <p>Статус: {updateStatusLabel}</p>
-              {updateSourceLabel && (
-                <p>
-                  Источник:{' '}
-                  {updateSourceUrl ? (
-                    <a href={updateSourceUrl} className="text-[color:var(--crm-primary)] hover:text-white" target="_blank" rel="noreferrer">
-                      {updateSourceLabel}
-                    </a>
-                  ) : (
-                    updateSourceLabel
-                  )}
-                </p>
-              )}
-              <div className="mt-3 flex flex-nowrap items-stretch gap-1.5 text-xs sm:flex-wrap sm:gap-2 sm:text-sm">
-                <button
-                  onClick={onRefreshUpdate}
-                  disabled={systemBusy}
-                  className="crm-ghost-btn px-2.5 py-2 text-[11px] whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
+        {showTimeZoneSettings && (
+          <SectionCard title="Время и часовой пояс">
+            <div className="crm-soft-card flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
+              <label className="min-w-0 flex-1 space-y-2">
+                <span className="block text-sm text-[var(--crm-text)]">Часовой пояс</span>
+                <select
+                  value={timeZoneDraft}
+                  onChange={(event) => setTimeZoneDraft(event.target.value)}
+                  className="w-full px-4 py-3"
                 >
-                  Проверить
-                </button>
-                <button
-                  onClick={onApplyUpdate}
-                  disabled={systemBusy || !updateAvailable}
-                  className="crm-action-btn px-2.5 py-2 text-[11px] whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
-                >
-                  {updateButtonLabel}
-                </button>
-                <button
-                  onClick={onRestartSystem}
-                  disabled={restartDisabled}
-                  className="crm-tonal-btn px-2.5 py-2 text-[11px] whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
-                >
-                  {restartButtonLabel}
-                </button>
+                  {timeZoneOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label} ({option.value})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="crm-inline-panel px-4 py-3 sm:min-w-[240px]">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--crm-muted)]">Сейчас</p>
+                <p className="mt-1 text-sm font-semibold text-white">{formatTimeZonePreview(timeZoneDraft)}</p>
               </div>
-            </div>
-          </div>
-        </SectionCard>
-        {hasLicenseList && (
-          <SectionCard title="Авторизованные организации">
-            <div className="grid gap-3 md:grid-cols-2">
-              {licenseList.map((item, index) => {
-                const name = item.name || item.owner || 'Организация';
-                const key = item.key || item.number || '';
-                return (
-                  <div key={item.key || item.owner || index} className="crm-soft-card p-4 text-sm text-[var(--crm-text)]">
-                    <p className="font-semibold text-white">{name}</p>
-                    {key && <p className="text-xs text-[var(--crm-muted)]">Ключ: {key}</p>}
-                    {item.expiresAt && <p className="text-xs text-[var(--crm-muted)]">Действует до {formatDate(item.expiresAt)}</p>}
-                  </div>
-                );
-              })}
+              <button
+                type="button"
+                onClick={handleSaveTimeZones}
+                disabled={!timeZoneDirty || siteSaving || typeof onSaveSite !== 'function'}
+                className="crm-action-btn px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {siteSaving ? 'Сохранение...' : 'Сохранить'}
+              </button>
             </div>
           </SectionCard>
+        )}
+        {showAdminSystemControls && (
+          <>
+            <BackupsPanel backups={backups} onRestore={onRestoreBackup} onCreate={onCreateBackup} onDelete={onDeleteBackup} />
+            <SectionCard title="Лицензия и обновления">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="crm-soft-card p-4 text-sm text-[var(--crm-text)]">
+                  <p className="font-semibold">Лицензия</p>
+                  <p className="mt-1">Статус: {licenseStatus?.valid ? 'Активна' : 'Не подтверждена'}</p>
+                  {licenseStatus?.license?.owner && <p>Владелец: {licenseStatus.license.owner}</p>}
+                  {licenseStatus?.license?.expiresAt && <p>Действует до {formatDate(licenseStatus.license.expiresAt)}</p>}
+                  {licenseStatus?.license?.number && <p>Номер: {licenseStatus.license.number}</p>}
+                </div>
+                <div className="crm-soft-card p-4 text-sm text-[var(--crm-text)]">
+                  <p className="font-semibold">Обновления</p>
+                  <p className="mt-1">Текущая версия: {currentVersionLabel}</p>
+                  <p>Доступная версия: {latestVersionLabel}</p>
+                  <p>Проверено: {checkedAtLabel}</p>
+                  {publishedAtLabel && <p>Релиз: {publishedAtLabel}</p>}
+                  <p>Статус: {updateStatusLabel}</p>
+                  {updateSourceLabel && (
+                    <p>
+                      Источник:{' '}
+                      {updateSourceUrl ? (
+                        <a href={updateSourceUrl} className="text-[color:var(--crm-primary)] hover:text-white" target="_blank" rel="noreferrer">
+                          {updateSourceLabel}
+                        </a>
+                      ) : (
+                        updateSourceLabel
+                      )}
+                    </p>
+                  )}
+                  <div className="mt-3 flex flex-nowrap items-stretch gap-1.5 text-xs sm:flex-wrap sm:gap-2 sm:text-sm">
+                    <button
+                      onClick={onRefreshUpdate}
+                      disabled={systemBusy}
+                      className="crm-ghost-btn px-2.5 py-2 text-[11px] whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
+                    >
+                      Проверить
+                    </button>
+                    <button
+                      onClick={onApplyUpdate}
+                      disabled={systemBusy || !updateAvailable}
+                      className="crm-action-btn px-2.5 py-2 text-[11px] whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
+                    >
+                      {updateButtonLabel}
+                    </button>
+                    <button
+                      onClick={onRestartSystem}
+                      disabled={restartDisabled}
+                      className="crm-tonal-btn px-2.5 py-2 text-[11px] whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
+                    >
+                      {restartButtonLabel}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+            {hasLicenseList && (
+              <SectionCard title="Авторизованные организации">
+                <div className="grid gap-3 md:grid-cols-2">
+                  {licenseList.map((item, index) => {
+                    const name = item.name || item.owner || 'Организация';
+                    const key = item.key || item.number || '';
+                    return (
+                      <div key={item.key || item.owner || index} className="crm-soft-card p-4 text-sm text-[var(--crm-text)]">
+                        <p className="font-semibold text-white">{name}</p>
+                        {key && <p className="text-xs text-[var(--crm-muted)]">Ключ: {key}</p>}
+                        {item.expiresAt && <p className="text-xs text-[var(--crm-muted)]">Действует до {formatDate(item.expiresAt)}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </SectionCard>
+            )}
+          </>
         )}
       </div>
     );
@@ -387,16 +396,1107 @@
     </div>
   );
 };
+const CreatorBusinessesView = ({ apiRequest, onImpersonate, role }) => {
+  const [businesses, setBusinesses] = useState([]);
+  const [loadingBusinesses, setLoadingBusinesses] = useState(false);
+  const [activeBusiness, setActiveBusiness] = useState(null);
+  
+  const [barbers, setBarbers] = useState([]);
+  const [loadingBarbers, setLoadingBarbers] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Business form state
+  const [showNewBusForm, setShowNewBusForm] = useState(false);
+  const [newBusName, setNewBusName] = useState('');
+  const [newBusSubdomain, setNewBusSubdomain] = useState('');
+  const [newBusCustomDomain, setNewBusCustomDomain] = useState('');
+  const [newBusCustomCrmDomain, setNewBusCustomCrmDomain] = useState('');
+  const [creatingBusiness, setCreatingBusiness] = useState(false);
+
+  // Edit Business state
+  const [showEditBusForm, setShowEditBusForm] = useState(false);
+  const [editBusName, setEditBusName] = useState('');
+  const [editBusSubdomain, setEditBusSubdomain] = useState('');
+  const [editBusCustomDomain, setEditBusCustomDomain] = useState('');
+  const [editBusCustomCrmDomain, setEditBusCustomCrmDomain] = useState('');
+  const [editBusActive, setEditBusActive] = useState(true);
+  const [updatingBusiness, setUpdatingBusiness] = useState(false);
+
+  // Delete Business state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deletingBusiness, setDeletingBusiness] = useState(false);
+
+  // Employee form state
+  const [showBarberForm, setShowBarberForm] = useState(false);
+  const [editingBarber, setEditingBarber] = useState(null);
+  const [barberFormName, setBarberFormName] = useState('');
+  const [barberFormLogin, setBarberFormLogin] = useState('');
+  const [barberFormPhone, setBarberFormPhone] = useState('');
+  const [barberFormPassword, setBarberFormPassword] = useState('');
+  const [barberFormRole, setBarberFormRole] = useState('staff');
+  const [barberFormActive, setBarberFormActive] = useState(true);
+  const [savingBarber, setSavingBarber] = useState(false);
+
+  useEffect(() => {
+    loadBusinesses();
+  }, []);
+
+  useEffect(() => {
+    if (activeBusiness) {
+      loadBarbers(activeBusiness.id);
+    } else {
+      setBarbers([]);
+    }
+    setShowBarberForm(false);
+    setEditingBarber(null);
+    setShowEditBusForm(false);
+    setShowDeleteConfirm(false);
+    setDeletePassword('');
+  }, [activeBusiness]);
+
+  const loadBusinesses = async () => {
+    setLoadingBusinesses(true);
+    setError(null);
+    try {
+      const data = await apiRequest('/creator/businesses');
+      setBusinesses(data || []);
+    } catch (err) {
+      setError(err.message || 'Ошибка загрузки списка организаций');
+    } finally {
+      setLoadingBusinesses(false);
+    }
+  };
+
+  const loadBarbers = async (busId) => {
+    setLoadingBarbers(true);
+    setError(null);
+    try {
+      const data = await apiRequest(`/creator/businesses/${busId}/barbers`);
+      setBarbers(data || []);
+    } catch (err) {
+      setError(err.message || 'Ошибка загрузки сотрудников');
+    } finally {
+      setLoadingBarbers(false);
+    }
+  };
+
+  const handleCreateBusiness = async (e) => {
+    e.preventDefault();
+    if (!newBusName.trim()) {
+      setError('Название организации обязательно');
+      return;
+    }
+    setCreatingBusiness(true);
+    setError(null);
+    try {
+      const newBus = await apiRequest('/creator/businesses', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: newBusName.trim(),
+          subdomain: newBusSubdomain.trim() || null,
+          customDomain: newBusCustomDomain.trim() || null,
+          customCrmDomain: newBusCustomCrmDomain.trim() || null,
+        }),
+      });
+      setBusinesses((prev) => [...prev, newBus]);
+      setActiveBusiness(newBus);
+      setNewBusName('');
+      setNewBusSubdomain('');
+      setNewBusCustomDomain('');
+      setNewBusCustomCrmDomain('');
+      setShowNewBusForm(false);
+    } catch (err) {
+      setError(err.message || 'Ошибка создания организации');
+    } finally {
+      setCreatingBusiness(false);
+    }
+  };
+
+  const openEditBusForm = () => {
+    if (!activeBusiness) return;
+    setEditBusName(activeBusiness.name || '');
+    setEditBusSubdomain(activeBusiness.subdomain || '');
+    setEditBusCustomDomain(activeBusiness.customDomain || '');
+    setEditBusCustomCrmDomain(activeBusiness.customCrmDomain || '');
+    setEditBusActive(activeBusiness.isActive !== false);
+    setShowEditBusForm(true);
+    setShowDeleteConfirm(false);
+  };
+
+  const handleUpdateBusiness = async (e) => {
+    e.preventDefault();
+    if (!editBusName.trim()) {
+      setError('Название организации обязательно');
+      return;
+    }
+    setUpdatingBusiness(true);
+    setError(null);
+    try {
+      const updated = await apiRequest(`/creator/businesses/${activeBusiness.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: editBusName.trim(),
+          subdomain: editBusSubdomain.trim() || undefined,
+          customDomain: editBusCustomDomain.trim() || null,
+          customCrmDomain: editBusCustomCrmDomain.trim() || null,
+          isActive: editBusActive,
+        }),
+      });
+      setBusinesses((prev) => prev.map((b) => (b.id === activeBusiness.id ? updated : b)));
+      setActiveBusiness(updated);
+      setShowEditBusForm(false);
+    } catch (err) {
+      setError(err.message || 'Ошибка обновления организации');
+    } finally {
+      setUpdatingBusiness(false);
+    }
+  };
+
+  const handleDeleteBusiness = async (e) => {
+    e.preventDefault();
+    if (!deletePassword) {
+      setError('Пароль обязателен для подтверждения удаления');
+      return;
+    }
+    setDeletingBusiness(true);
+    setError(null);
+    try {
+      await apiRequest(`/creator/businesses/${activeBusiness.id}/delete`, {
+        method: 'POST',
+        body: JSON.stringify({ password: deletePassword }),
+      });
+      setBusinesses((prev) => prev.filter((b) => b.id !== activeBusiness.id));
+      setActiveBusiness(null);
+      setShowDeleteConfirm(false);
+      setDeletePassword('');
+    } catch (err) {
+      setError(err.message || 'Ошибка удаления организации');
+    } finally {
+      setDeletingBusiness(false);
+    }
+  };
+
+  const openNewBarberForm = () => {
+    setEditingBarber(null);
+    setBarberFormName('');
+    setBarberFormLogin('');
+    setBarberFormPhone('');
+    setBarberFormPassword('');
+    setBarberFormRole('staff');
+    setBarberFormActive(true);
+    setShowBarberForm(true);
+  };
+
+  const openEditBarberForm = (barber) => {
+    setEditingBarber(barber);
+    setBarberFormName(barber.name || '');
+    setBarberFormLogin(barber.login || '');
+    setBarberFormPhone(formatPhoneDisplay(barber.phone || ''));
+    setBarberFormPassword(barber.password || '');
+    setBarberFormRole(barber.role || 'staff');
+    setBarberFormActive(barber.isActive !== false);
+    setShowBarberForm(true);
+  };
+
+  const handleSaveBarber = async (e) => {
+    e.preventDefault();
+    const phoneDigits = (barberFormPhone || '').replace(/\D/g, '');
+    if (!barberFormName.trim() || phoneDigits.length < 11 || !barberFormPassword.trim()) {
+      setError('Имя, полный номер телефона (11 цифр) и пароль обязательны');
+      return;
+    }
+    setSavingBarber(true);
+    setError(null);
+    try {
+      const payload = {
+        name: barberFormName.trim(),
+        login: phoneDigits,
+        phone: barberFormPhone.trim(),
+        password: barberFormPassword.trim(),
+        role: barberFormRole,
+        isActive: barberFormActive,
+      };
+
+      if (editingBarber) {
+        const updated = await apiRequest(`/creator/businesses/${activeBusiness.id}/barbers/${editingBarber.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        });
+        setBarbers((prev) => prev.map((b) => (b.id === editingBarber.id ? updated : b)));
+      } else {
+        const created = await apiRequest(`/creator/businesses/${activeBusiness.id}/barbers`, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        setBarbers((prev) => [...prev, created]);
+      }
+      setShowBarberForm(false);
+      setEditingBarber(null);
+    } catch (err) {
+      setError(err.message || 'Ошибка сохранения сотрудника');
+    } finally {
+      setSavingBarber(false);
+    }
+  };
+
+  const handleDeleteBarber = async (barberId) => {
+    if (!window.confirm('Вы уверены, что хотите удалить этого сотрудника?')) return;
+    setError(null);
+    try {
+      await apiRequest(`/creator/businesses/${activeBusiness.id}/barbers/${barberId}`, {
+        method: 'DELETE',
+      });
+      setBarbers((prev) => prev.filter((b) => b.id !== barberId));
+    } catch (err) {
+      setError(err.message || 'Ошибка удаления сотрудника');
+    }
+  };
+
+  return (
+    <div className="space-y-6 text-white w-full min-w-0">
+      {error && (
+        <div className="bg-rose-500/20 border border-rose-500/30 text-rose-200 px-4 py-3 rounded-2xl text-sm flex justify-between items-center">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-white hover:opacity-75">✕</button>
+        </div>
+      )}
+
+      <div className="grid gap-6 md:grid-cols-[320px_1fr] w-full min-w-0">
+        {/* Left Column: Businesses List */}
+        <div className={`space-y-4 w-full min-w-0 ${activeBusiness ? 'hidden md:block' : ''}`}>
+          <SectionCard 
+            title="Организации" 
+            actions={
+              <button 
+                onClick={() => setShowNewBusForm(prev => !prev)} 
+                className="crm-action-btn h-9 px-3 text-xs"
+              >
+                {showNewBusForm ? 'Отмена' : 'Добавить'}
+              </button>
+            }
+          >
+            {showNewBusForm && (
+              <form onSubmit={handleCreateBusiness} className="crm-soft-card p-4 space-y-3">
+                <p className="text-xs font-semibold text-[color:var(--crm-primary)]">Новая организация</p>
+                <div className="space-y-2 text-xs">
+                  <label className="block space-y-1">
+                    <span className="text-[var(--crm-muted)]">Название</span>
+                    <input 
+                      value={newBusName} 
+                      onChange={e => setNewBusName(e.target.value)} 
+                      className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2 focus:ring-1 focus:ring-[color:var(--crm-primary)]" 
+                      placeholder="Барбершоп 1"
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-[var(--crm-muted)]">Поддомен</span>
+                    <input 
+                      value={newBusSubdomain} 
+                      onChange={e => setNewBusSubdomain(e.target.value)} 
+                      className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2 focus:ring-1 focus:ring-[color:var(--crm-primary)]" 
+                      placeholder="shop1"
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-[var(--crm-muted)]">Свой домен сайта (опционально)</span>
+                    <input 
+                      value={newBusCustomDomain} 
+                      onChange={e => setNewBusCustomDomain(e.target.value)} 
+                      className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2 focus:ring-1 focus:ring-[color:var(--crm-primary)]" 
+                      placeholder="barber1.ru"
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-[var(--crm-muted)]">Свой домен CRM (опционально)</span>
+                    <input 
+                      value={newBusCustomCrmDomain} 
+                      onChange={e => setNewBusCustomCrmDomain(e.target.value)} 
+                      className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2 focus:ring-1 focus:ring-[color:var(--crm-primary)]" 
+                      placeholder="panel.barber1.ru"
+                    />
+                  </label>
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={creatingBusiness} 
+                  className="crm-action-btn w-full py-2 text-xs font-semibold"
+                >
+                  {creatingBusiness ? 'Создание...' : 'Создать'}
+                </button>
+              </form>
+            )}
+
+            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+              {loadingBusinesses ? (
+                <p className="text-xs text-[var(--crm-muted)] text-center py-4">Загрузка...</p>
+              ) : businesses.length === 0 ? (
+                <p className="text-xs text-[var(--crm-muted)] text-center py-4">Нет организаций</p>
+              ) : (
+                businesses.map((bus) => {
+                  const isActive = activeBusiness?.id === bus.id;
+                  return (
+                    <button
+                      key={bus.id}
+                      onClick={() => setActiveBusiness(bus)}
+                      className={`w-full text-left p-3 rounded-2xl transition ${
+                        isActive 
+                          ? 'bg-[color:var(--crm-primary-container)] border border-[color:var(--crm-primary)]/20' 
+                          : 'bg-[color:var(--crm-surface-2)] hover:bg-[color:var(--crm-surface-3)]'
+                      }`}
+                    >
+                      <p className="font-semibold text-sm text-white">{bus.name}</p>
+                      <p className="text-xs text-[var(--crm-muted)] mt-0.5">
+                        {bus.subdomain}.brothershop.website
+                      </p>
+                      {bus.customDomain && (
+                        <p className="text-[10px] text-[color:var(--crm-primary)] mt-0.5">
+                          Сайт: {bus.customDomain}
+                        </p>
+                      )}
+                      {bus.customCrmDomain && (
+                        <p className="text-[10px] text-[color:var(--crm-primary)] mt-0.5">
+                          CRM: {bus.customCrmDomain}
+                        </p>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </SectionCard>
+        </div>
+
+        {/* Right Column: Selected Business Details & Employees */}
+        <div className={`space-y-4 w-full min-w-0 ${!activeBusiness ? 'hidden md:block' : ''}`}>
+          {!activeBusiness ? (
+            <div className="crm-soft-card p-12 text-center text-sm text-[var(--crm-muted)]">
+              Выберите организацию в списке слева для управления сотрудниками и параметрами
+            </div>
+          ) : (
+            <>
+              {/* Back button for mobile */}
+              <button
+                onClick={() => setActiveBusiness(null)}
+                className="md:hidden crm-ghost-btn inline-flex items-center gap-1.5 text-xs text-[color:var(--crm-primary)] px-3 py-2 mb-2 hover:bg-white/5 rounded-xl transition"
+              >
+                ← Назад к списку организаций
+              </button>
+              {/* Organization Details Card */}
+              <SectionCard
+                title={`Организация: ${activeBusiness.name}`}
+                actions={
+                  <div className="flex gap-2">
+                    <button
+                      onClick={openEditBusForm}
+                      className="crm-tonal-btn h-9 w-9 p-0 flex items-center justify-center rounded-full"
+                      style={{ minHeight: 0 }}
+                      title="Редактировать"
+                    >
+                      <IconEdit className="h-5 w-5" />
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="crm-danger-btn h-9 w-9 p-0 flex items-center justify-center rounded-full"
+                      style={{ minHeight: 0 }}
+                      title="Удалить"
+                    >
+                      <IconTrash className="h-5 w-5" />
+                    </button>
+                  </div>
+                }
+              >
+                {showEditBusForm && (
+                  <form onSubmit={handleUpdateBusiness} className="crm-soft-card p-4 space-y-4">
+                    <p className="text-sm font-semibold text-[color:var(--crm-primary)]">
+                      Редактировать организацию
+                    </p>
+                    <div className="grid gap-4 sm:grid-cols-2 text-xs">
+                      <label className="block space-y-1">
+                        <span className="text-[var(--crm-muted)]">Название</span>
+                        <input
+                          value={editBusName}
+                          onChange={(e) => setEditBusName(e.target.value)}
+                          className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                          required
+                        />
+                      </label>
+                      <label className="block space-y-1">
+                        <span className="text-[var(--crm-muted)]">Поддомен</span>
+                        <input
+                          value={editBusSubdomain}
+                          onChange={(e) => setEditBusSubdomain(e.target.value)}
+                          className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                          placeholder="Необязательно"
+                        />
+                      </label>
+                      <label className="block space-y-1">
+                        <span className="text-[var(--crm-muted)]">Свой домен сайта</span>
+                        <input
+                          value={editBusCustomDomain}
+                          onChange={(e) => setEditBusCustomDomain(e.target.value)}
+                          className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                          placeholder="brothershop.website"
+                        />
+                      </label>
+                      <label className="block space-y-1">
+                        <span className="text-[var(--crm-muted)]">Свой домен CRM</span>
+                        <input
+                          value={editBusCustomCrmDomain}
+                          onChange={(e) => setEditBusCustomCrmDomain(e.target.value)}
+                          className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                          placeholder="panel.brothershop.website"
+                        />
+                      </label>
+                      <div className="flex items-center gap-2 pt-6">
+                        <input
+                          type="checkbox"
+                          id="editBusActive"
+                          checked={editBusActive}
+                          onChange={(e) => setEditBusActive(e.target.checked)}
+                          className="crm-toggle-check"
+                        />
+                        <label htmlFor="editBusActive" className="text-xs text-[var(--crm-text)]">
+                          Организация активна
+                        </label>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setShowEditBusForm(false)}
+                        className="crm-ghost-btn px-4 py-2 font-semibold"
+                      >
+                        Отмена
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={updatingBusiness}
+                        className="crm-action-btn px-4 py-2 font-semibold"
+                      >
+                        {updatingBusiness ? 'Сохранение...' : 'Сохранить'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {showDeleteConfirm && (
+                  <form onSubmit={handleDeleteBusiness} className="crm-soft-card p-4 border border-rose-500/20 bg-rose-500/5 space-y-4">
+                    <p className="text-sm font-semibold text-rose-300">
+                      Подтверждение удаления организации
+                    </p>
+                    <p className="text-xs text-rose-200/80">
+                      Внимание! Это действие безвозвратно удалит все данные организации (схему базы данных, записи, сотрудников и клиентов). Для подтверждения введите пароль Создателя:
+                    </p>
+                    <div className="text-xs">
+                      <label className="block space-y-1">
+                        <span className="text-rose-300">Пароль Создателя</span>
+                        <input
+                          type="password"
+                          value={deletePassword}
+                          onChange={(e) => setDeletePassword(e.target.value)}
+                          className="w-full bg-[color:var(--crm-surface-2)] border border-rose-500/30 text-white rounded-xl px-3 py-2 focus:ring-1 focus:ring-rose-500"
+                          placeholder="Пароль"
+                          required
+                        />
+                      </label>
+                    </div>
+                    <div className="flex gap-2 justify-end text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowDeleteConfirm(false);
+                          setDeletePassword('');
+                        }}
+                        className="crm-ghost-btn px-4 py-2 font-semibold text-white"
+                      >
+                        Отмена
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={deletingBusiness}
+                        className="crm-danger-btn px-4 py-2 font-semibold"
+                      >
+                        {deletingBusiness ? 'Удаление...' : 'Да, удалить организацию'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {!showEditBusForm && !showDeleteConfirm && (
+                  <div className="crm-soft-card p-4 space-y-3 text-xs">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <span className="text-[var(--crm-muted)] block">Схема БД:</span>
+                        <span className="font-mono text-white text-sm break-all">{activeBusiness.dbSchema}</span>
+                      </div>
+                      <div>
+                        <span className="text-[var(--crm-muted)] block">Статус:</span>
+                        {activeBusiness.isActive !== false ? (
+                          <span className="text-emerald-400 font-semibold">Активна</span>
+                        ) : (
+                          <span className="text-rose-400 font-semibold">Отключена</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="border-t border-white/5 pt-3 space-y-3">
+                      <p className="font-semibold text-white">Адреса для доступа:</p>
+                      
+                      <div className="grid gap-6 md:grid-cols-2">
+                        {/* Production URLs */}
+                        <div className="space-y-3">
+                          <span className="text-[color:var(--crm-primary)] font-semibold block text-xs uppercase tracking-wider">В продакшене:</span>
+                          <div className="text-xs space-y-2">
+                            <div>
+                              <span className="text-[var(--crm-muted)] block mb-0.5">Сайт (Клиенты): </span>
+                              <a 
+                                href={activeBusiness.customDomain ? `https://${activeBusiness.customDomain}/` : `https://${activeBusiness.subdomain}.brothershop.website/`}
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-white underline hover:text-[color:var(--crm-primary)] break-all font-medium"
+                              >
+                                {activeBusiness.customDomain ? activeBusiness.customDomain : `${activeBusiness.subdomain}.brothershop.website`}
+                              </a>
+                            </div>
+                            <div>
+                              <span className="text-[var(--crm-muted)] block mb-0.5">CRM (Панель управления): </span>
+                              <a 
+                                href={activeBusiness.customCrmDomain ? `https://${activeBusiness.customCrmDomain}/` : (activeBusiness.customDomain ? `https://panel.${activeBusiness.customDomain}/` : `https://panel.${activeBusiness.subdomain}.brothershop.website/`)}
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-white underline hover:text-[color:var(--crm-primary)] break-all font-medium"
+                              >
+                                {activeBusiness.customCrmDomain ? activeBusiness.customCrmDomain : (activeBusiness.customDomain ? `panel.${activeBusiness.customDomain}` : `panel.${activeBusiness.subdomain}.brothershop.website`)}
+                              </a>
+                            </div>
+                            <div className="pt-1 border-t border-white/5">
+                              <span className="text-[var(--crm-muted)] block mb-0.5">Общая CRM (Авторизация): </span>
+                              <a 
+                                href="https://panel.brothershop.website/"
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-white underline hover:text-[color:var(--crm-primary)] break-all font-medium"
+                              >
+                                panel.brothershop.website
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Local Testing URLs */}
+                        <div className="space-y-3">
+                          <span className="text-yellow-400 font-semibold block text-xs uppercase tracking-wider">Локально (тесты):</span>
+                          <div className="text-xs space-y-3">
+                            {/* Via Query Parameter */}
+                            <div className="space-y-1">
+                              <span className="text-[var(--crm-muted)] block text-[10px] uppercase tracking-wider text-yellow-500/80">Через query-параметры:</span>
+                              <div>
+                                <span className="text-[var(--crm-muted)]">Сайт: </span>
+                                <a 
+                                  href={`http://localhost:${window.location.port || '3000'}/?businessId=${activeBusiness.id}`}
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-white underline hover:text-yellow-400 break-all font-medium"
+                                >
+                                  localhost:{window.location.port || '3000'}/?businessId=...
+                                </a>
+                              </div>
+                              <div>
+                                <span className="text-[var(--crm-muted)]">CRM: </span>
+                                <a 
+                                  href={`http://localhost:${window.location.port || '3000'}/panel/?businessId=${activeBusiness.id}`}
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-white underline hover:text-yellow-400 break-all font-medium"
+                                >
+                                  localhost:{window.location.port || '3000'}/panel/?businessId=...
+                                </a>
+                              </div>
+                              <div>
+                                <span className="text-[var(--crm-muted)]">Общий вход CRM: </span>
+                                <a 
+                                  href={`http://localhost:${window.location.port || '3000'}/panel/`}
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-white underline hover:text-yellow-400 break-all font-medium"
+                                >
+                                  localhost:{window.location.port || '3000'}/panel/
+                                </a>
+                              </div>
+                            </div>
+                            
+                            {/* Via Local Subdomain */}
+                            <div className="space-y-1 pt-1 border-t border-white/5">
+                              <span className="text-[var(--crm-muted)] block text-[10px] uppercase tracking-wider text-yellow-500/80">Через локальный поддомен:</span>
+                              <div>
+                                <span className="text-[var(--crm-muted)]">Сайт: </span>
+                                <a 
+                                  href={`http://${activeBusiness.subdomain}.localhost:${window.location.port || '3000'}/`}
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-white underline hover:text-yellow-400 break-all font-medium"
+                                >
+                                  {activeBusiness.subdomain}.localhost:{window.location.port || '3000'}/
+                                </a>
+                              </div>
+                              <div>
+                                <span className="text-[var(--crm-muted)]">CRM: </span>
+                                <a 
+                                  href={`http://${activeBusiness.subdomain}.localhost:${window.location.port || '3000'}/panel/`}
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-white underline hover:text-yellow-400 break-all font-medium"
+                                >
+                                  {activeBusiness.subdomain}.localhost:{window.location.port || '3000'}/panel/
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </SectionCard>
+
+              <SectionCard 
+                title={`Сотрудники: ${activeBusiness.name}`} 
+                actions={
+                  <button 
+                    onClick={openNewBarberForm}
+                    className="crm-action-btn h-9 w-9 p-0 flex items-center justify-center rounded-full"
+                    style={{ minHeight: 0 }}
+                    title="Добавить сотрудника"
+                  >
+                    <IconPlus className="h-5 w-5" />
+                  </button>
+                }
+              >
+              {showBarberForm && !editingBarber && (
+                <form onSubmit={handleSaveBarber} className="crm-soft-card p-4 space-y-4 mb-4">
+                  <p className="text-sm font-semibold text-[color:var(--crm-primary)]">
+                    Добавить сотрудника
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-2 text-xs">
+                    <label className="block space-y-1">
+                      <span className="text-[var(--crm-muted)]">ФИО сотрудника</span>
+                      <input 
+                        value={barberFormName} 
+                        onChange={e => setBarberFormName(e.target.value)} 
+                        className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                        placeholder="Иван Иванов"
+                        required
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-[var(--crm-muted)]">Номер телефона (для входа/связи)</span>
+                      <input 
+                        value={barberFormPhone} 
+                        onChange={e => setBarberFormPhone(formatPhoneDisplay(e.target.value))} 
+                        className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                        placeholder="+7 999 888-77-66"
+                        required
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-[var(--crm-muted)]">Пароль</span>
+                      <input 
+                        type="text"
+                        value={barberFormPassword} 
+                        onChange={e => setBarberFormPassword(e.target.value)} 
+                        className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                        placeholder="Минимум 6 символов"
+                        required
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-[var(--crm-muted)]">Роль</span>
+                      <select 
+                        value={barberFormRole}
+                        onChange={e => setBarberFormRole(e.target.value)}
+                        className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                      >
+                        <option value="staff">Сотрудник</option>
+                        <option value="owner">Владелец (Owner)</option>
+                      </select>
+                    </label>
+                    <div className="flex items-center gap-2 pt-6">
+                      <input 
+                        type="checkbox"
+                        id="barberFormActive"
+                        checked={barberFormActive}
+                        onChange={e => setBarberFormActive(e.target.checked)}
+                        className="crm-toggle-check"
+                      />
+                      <label htmlFor="barberFormActive" className="text-xs text-[var(--crm-text)]">
+                        Сотрудник активен
+                      </label>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end text-xs">
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setShowBarberForm(false);
+                        setEditingBarber(null);
+                      }} 
+                      className="crm-ghost-btn px-4 py-2 font-semibold"
+                    >
+                      Отмена
+                    </button>
+                    <button 
+                      type="submit" 
+                      disabled={savingBarber}
+                      className="crm-action-btn px-4 py-2 font-semibold"
+                    >
+                      {savingBarber ? 'Сохранение...' : 'Сохранить'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              <div className="crm-table-shell overflow-x-auto hidden md:block">
+                <table className="min-w-full border-collapse text-xs text-[var(--crm-text)]">
+                  <thead>
+                    <tr className="bg-[color:var(--crm-surface-4)] text-left">
+                      <th className="p-3 font-semibold border-b border-white/5">Имя</th>
+                      <th className="p-3 font-semibold border-b border-white/5">Телефон</th>
+                      <th className="p-3 font-semibold border-b border-white/5">Роль</th>
+                      <th className="p-3 font-semibold border-b border-white/5">Статус</th>
+                      <th className="p-3 font-semibold border-b border-white/5 text-right">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loadingBarbers ? (
+                      <tr>
+                        <td colSpan="5" className="p-4 text-center text-[var(--crm-muted)]">Загрузка сотрудников...</td>
+                      </tr>
+                    ) : barbers.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="p-4 text-center text-[var(--crm-muted)]">Сотрудники не добавлены</td>
+                      </tr>
+                    ) : (
+                      barbers.map((barber) => {
+                        const isEditingThisBarber = showBarberForm && editingBarber?.id === barber.id;
+                        return (
+                          <Fragment key={barber.id}>
+                            <tr className="hover:bg-white/5 transition">
+                              <td className="p-3 border-b border-white/5 font-semibold text-white">{barber.name}</td>
+                              <td className="p-3 border-b border-white/5">{barber.phone || '—'}</td>
+                              <td className="p-3 border-b border-white/5">
+                                {barber.role === 'owner' ? (
+                                  <span className="text-[color:var(--crm-primary)] font-semibold">Владелец</span>
+                                ) : (
+                                  <span>Сотрудник</span>
+                                )}
+                              </td>
+                              <td className="p-3 border-b border-white/5">
+                                {barber.isActive !== false ? (
+                                  <span className="text-emerald-400">Активен</span>
+                                ) : (
+                                  <span className="text-rose-400">Заблокирован</span>
+                                )}
+                              </td>
+                              <td className="p-3 border-b border-white/5 text-right space-x-1">
+                                <button
+                                  onClick={() => onImpersonate(activeBusiness.id, barber.id)}
+                                  className="crm-tonal-btn h-8 w-8 p-0 inline-flex items-center justify-center rounded-full"
+                                  style={{ minHeight: 0 }}
+                                  title="Войти под этим сотрудником"
+                                >
+                                  <IconLogin className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => openEditBarberForm(barber)}
+                                  className="crm-ghost-btn h-8 w-8 p-0 inline-flex items-center justify-center rounded-full"
+                                  style={{ minHeight: 0 }}
+                                  title="Редактировать"
+                                >
+                                  <IconEdit className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteBarber(barber.id)}
+                                  className="crm-danger-btn h-8 w-8 p-0 inline-flex items-center justify-center rounded-full"
+                                  style={{ minHeight: 0 }}
+                                  title="Удалить"
+                                >
+                                  <IconTrash className="h-4 w-4" />
+                                </button>
+                              </td>
+                            </tr>
+                            {isEditingThisBarber && (
+                              <tr>
+                                <td colSpan="5" className="p-4 bg-[color:var(--crm-surface-3)] border-b border-white/5">
+                                  <form onSubmit={handleSaveBarber} className="space-y-4">
+                                    <p className="text-sm font-semibold text-[color:var(--crm-primary)]">
+                                      Редактировать сотрудника: {barber.name}
+                                    </p>
+                                    <div className="grid gap-4 sm:grid-cols-2 text-xs">
+                                      <label className="block space-y-1">
+                                        <span className="text-[var(--crm-muted)]">ФИО сотрудника</span>
+                                        <input 
+                                          value={barberFormName} 
+                                          onChange={e => setBarberFormName(e.target.value)} 
+                                          className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                                          placeholder="Иван Иванов"
+                                          required
+                                        />
+                                      </label>
+                                      <label className="block space-y-1">
+                                        <span className="text-[var(--crm-muted)]">Номер телефона (для входа/связи)</span>
+                                        <input 
+                                          value={barberFormPhone} 
+                                          onChange={e => setBarberFormPhone(formatPhoneDisplay(e.target.value))} 
+                                          className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                                          placeholder="+7 999 888-77-66"
+                                          required
+                                        />
+                                      </label>
+                                      <label className="block space-y-1">
+                                        <span className="text-[var(--crm-muted)]">Пароль</span>
+                                        <input 
+                                          type="text"
+                                          value={barberFormPassword} 
+                                          onChange={e => setBarberFormPassword(e.target.value)} 
+                                          className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                                          placeholder="Минимум 6 символов"
+                                          required
+                                        />
+                                      </label>
+                                      <label className="block space-y-1">
+                                        <span className="text-[var(--crm-muted)]">Роль</span>
+                                        <select 
+                                          value={barberFormRole}
+                                          onChange={e => setBarberFormRole(e.target.value)}
+                                          className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                                        >
+                                          <option value="staff">Сотрудник</option>
+                                          <option value="owner">Владелец (Owner)</option>
+                                        </select>
+                                      </label>
+                                      <div className="flex items-center gap-2 pt-6">
+                                        <input 
+                                          type="checkbox"
+                                          id="barberFormActiveEdit"
+                                          checked={barberFormActive}
+                                          onChange={e => setBarberFormActive(e.target.checked)}
+                                          className="crm-toggle-check"
+                                        />
+                                        <label htmlFor="barberFormActiveEdit" className="text-xs text-[var(--crm-text)]">
+                                          Сотрудник активен
+                                        </label>
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-2 justify-end text-xs">
+                                      <button 
+                                        type="button"
+                                        onClick={() => {
+                                          setShowBarberForm(false);
+                                          setEditingBarber(null);
+                                        }} 
+                                        className="crm-ghost-btn px-4 py-2 font-semibold"
+                                      >
+                                        Отмена
+                                      </button>
+                                      <button 
+                                        type="submit" 
+                                        disabled={savingBarber}
+                                        className="crm-action-btn px-4 py-2 font-semibold"
+                                      >
+                                        {savingBarber ? 'Сохранение...' : 'Сохранить'}
+                                      </button>
+                                    </div>
+                                  </form>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile list view */}
+              <div className="block md:hidden space-y-3">
+                {loadingBarbers ? (
+                  <div className="p-4 text-center text-[var(--crm-muted)] text-xs">Загрузка сотрудников...</div>
+                ) : barbers.length === 0 ? (
+                  <div className="p-4 text-center text-[var(--crm-muted)] text-xs">Сотрудники не добавлены</div>
+                ) : (
+                  barbers.map((barber) => {
+                    const isEditingThisBarber = showBarberForm && editingBarber?.id === barber.id;
+                    return (
+                      <Fragment key={barber.id}>
+                        <div className="crm-soft-card p-4 space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="font-semibold text-white text-sm">{barber.name}</div>
+                              <div className="text-xs text-[var(--crm-muted)] mt-0.5">{barber.phone || '—'}</div>
+                            </div>
+                            <div className="flex flex-col items-end text-xs">
+                              {barber.role === 'owner' ? (
+                                <span className="text-[color:var(--crm-primary)] font-semibold">Владелец</span>
+                              ) : (
+                                <span className="text-[var(--crm-muted)]">Сотрудник</span>
+                              )}
+                              <span className={`text-[10px] mt-1 ${barber.isActive !== false ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {barber.isActive !== false ? 'Активен' : 'Заблокирован'}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex justify-between items-center pt-2 border-t border-white/5">
+                            <span className="text-xs text-[var(--crm-muted)] font-medium">Действия</span>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => onImpersonate(activeBusiness.id, barber.id)}
+                                className="crm-tonal-btn h-8 w-8 p-0 inline-flex items-center justify-center rounded-full"
+                                style={{ minHeight: 0 }}
+                                title="Войти под этим сотрудником"
+                              >
+                                <IconLogin className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => openEditBarberForm(barber)}
+                                className="crm-ghost-btn h-8 w-8 p-0 inline-flex items-center justify-center rounded-full"
+                                style={{ minHeight: 0 }}
+                                title="Редактировать"
+                              >
+                                <IconEdit className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteBarber(barber.id)}
+                                className="crm-danger-btn h-8 w-8 p-0 inline-flex items-center justify-center rounded-full"
+                                style={{ minHeight: 0 }}
+                                title="Удалить"
+                              >
+                                <IconTrash className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        {isEditingThisBarber && (
+                          <div className="p-4 bg-[color:var(--crm-surface-3)] border-b border-white/5 rounded-xl my-2">
+                            <form onSubmit={handleSaveBarber} className="space-y-4">
+                              <p className="text-sm font-semibold text-[color:var(--crm-primary)]">
+                                Редактировать сотрудника: {barber.name}
+                              </p>
+                              <div className="grid gap-4 sm:grid-cols-2 text-xs">
+                                <label className="block space-y-1">
+                                  <span className="text-[var(--crm-muted)]">ФИО сотрудника</span>
+                                  <input 
+                                    value={barberFormName} 
+                                    onChange={e => setBarberFormName(e.target.value)} 
+                                    className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                                    placeholder="Иван Иванов"
+                                    required
+                                  />
+                                </label>
+                                <label className="block space-y-1">
+                                  <span className="text-[var(--crm-muted)]">Номер телефона (для входа/связи)</span>
+                                  <input 
+                                    value={barberFormPhone} 
+                                    onChange={e => setBarberFormPhone(formatPhoneDisplay(e.target.value))} 
+                                    className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                                    placeholder="+7 999 888-77-66"
+                                    required
+                                  />
+                                </label>
+                                <label className="block space-y-1">
+                                  <span className="text-[var(--crm-muted)]">Пароль</span>
+                                  <input 
+                                    type="text"
+                                    value={barberFormPassword} 
+                                    onChange={e => setBarberFormPassword(e.target.value)} 
+                                    className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                                    placeholder="Минимум 6 символов"
+                                    required
+                                  />
+                                </label>
+                                <label className="block space-y-1">
+                                  <span className="text-[var(--crm-muted)]">Роль</span>
+                                  <select 
+                                    value={barberFormRole}
+                                    onChange={e => setBarberFormRole(e.target.value)}
+                                    className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2"
+                                  >
+                                    <option value="staff">Сотрудник</option>
+                                    <option value="owner">Владелец (Owner)</option>
+                                  </select>
+                                </label>
+                                <div className="flex items-center gap-2 pt-6">
+                                  <input 
+                                    type="checkbox"
+                                    id="barberFormActiveEditMob"
+                                    checked={barberFormActive}
+                                    onChange={e => setBarberFormActive(e.target.checked)}
+                                    className="crm-toggle-check"
+                                  />
+                                  <label htmlFor="barberFormActiveEditMob" className="text-xs text-[var(--crm-text)]">
+                                    Сотрудник активен
+                                  </label>
+                                </div>
+                              </div>
+                              <div className="flex gap-2 justify-end text-xs">
+                                <button 
+                                  type="button"
+                                  onClick={() => {
+                                    setShowBarberForm(false);
+                                    setEditingBarber(null);
+                                  }} 
+                                  className="crm-ghost-btn px-4 py-2 font-semibold"
+                                >
+                                  Отмена
+                                </button>
+                                <button 
+                                  type="submit" 
+                                  disabled={savingBarber}
+                                  className="crm-action-btn px-4 py-2 font-semibold"
+                                >
+                                  {savingBarber ? 'Сохранение...' : 'Сохранить'}
+                                </button>
+                              </div>
+                            </form>
+                          </div>
+                        )}
+                      </Fragment>
+                    );
+                  })
+                )}
+              </div>
+            </SectionCard>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
-  const activeSection = SYSTEM_SUB_SECTIONS.some((tab) => tab.id === section) ? section : 'bot';
+  const role = props.role || ROLE_OWNER;
+  const sections = getSystemSubSections(role, props.session?.isImpersonated);
+  const activeSection = sections.some((tab) => tab.id === section) ? section : (sections[0]?.id || 'bot');
+  
   useEffect(() => {
     if (activeSection !== section) {
-      onSectionChange?.('bot');
+      onSectionChange?.(activeSection);
     }
   }, [activeSection, section, onSectionChange]);
+
+  if (activeSection === 'businesses') {
+    return <CreatorBusinessesView {...props} />;
+  }
+
   return (
     <div className="space-y-4">
-      {activeSection === 'site' ? <SiteSettingsView {...props} /> : <BotControlView {...props} viewMode={activeSection} />}
+      {activeSection === 'site' ? (
+        <SiteSettingsView {...props} />
+      ) : (
+        <BotControlView {...props} viewMode={activeSection === 'settings' ? 'system' : activeSection} />
+      )}
     </div>
   );
 };
@@ -498,6 +1598,7 @@ const SiteImageUploadField = ({ label, value = '', onChange, onUploadImage = nul
 const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = false, onUploadSiteImage = null, services = [], siteOnlineStats = null }) => {
   const [draft, setDraft] = useState(() => siteConfig || {});
   const [activeTab, setActiveTab] = useState('home');
+  const { trackRef, setItemRef, indicatorStyle } = useMovingNavIndicator(activeTab);
 
   useEffect(() => {
     setDraft(siteConfig || {});
@@ -1018,16 +2119,18 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
   return (
     <div className="space-y-6">
       <div className="crm-inline-panel flex flex-col gap-3 p-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-2">
+        <div ref={trackRef} className="relative flex flex-wrap gap-2">
+          <div aria-hidden="true" className="crm-nav-indicator" style={indicatorStyle} />
           {SITE_PAGE_TABS.map((tab) => {
             const isActive = tab.id === activeTab;
             return (
               <button
                 key={tab.id}
                 type="button"
+                ref={setItemRef(tab.id)}
                 onClick={() => setActiveTab(tab.id)}
                 className={classNames(
-                  'crm-subnav-pill px-4 py-2 text-sm font-semibold',
+                  'crm-subnav-pill crm-nav-item px-4 py-2 text-sm font-semibold',
                   isActive && 'crm-subnav-pill-active'
                 )}
               >
@@ -1050,4 +2153,3 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
     </div>
   );
 };
-

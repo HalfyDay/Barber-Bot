@@ -42,6 +42,9 @@ model Appointments {
   Reminder2hClientSent Boolean? @map("Reminder2hClientSent")
   Reminder2hBarberSent Boolean? @map("Reminder2hBarberSent")
   UserID               String?  @map("UserID")
+  Comment              String?  @map("Comment")
+  CoverBs              Int?     @map("CoverBs")
+  DiscountRub          Int?     @map("DiscountRub")
 
   @@map("Appointments")
 }
@@ -200,3 +203,18 @@ model TelegramAuthRequests {
   @@index([code])
   @@map("TelegramAuthRequests")
 }
+
+model Businesses {
+  id              String   @id
+  name            String
+  subdomain       String   @unique
+  customDomain    String?  @unique
+  customCrmDomain String?  @unique
+  dbSchema        String   @unique
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("Businesses")
+}
+

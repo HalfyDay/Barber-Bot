@@ -20,6 +20,7 @@ const createIdentityAccessService = ({
     barberName: normalizeText(
       payload.barberName || payload.displayName || payload.name || "",
     ),
+    businessId: payload.businessId || null,
   });
 
   const resolveRequestIdentity = (req) =>

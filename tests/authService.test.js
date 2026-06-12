@@ -46,6 +46,24 @@ const createHarness = (overrides = {}) =>
       },
       ...(overrides.prisma || {}),
     },
+    getTenantPrismaClient: (schema) => {
+      if (schema === "public") {
+        return {
+          businesses: {
+            async findMany() {
+              return overrides.businessesList || [];
+            },
+          },
+        };
+      }
+      return {
+        barbers: {
+          async findMany() {
+            return overrides.barbersList || [];
+          },
+        },
+      };
+    },
     isDatabaseCorruptionError: () => false,
     buildDatabaseCorruptionMessage: () => "db-error",
     ...overrides,

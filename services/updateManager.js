@@ -3,9 +3,11 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
+const { Client } = require('pg');
 const { getPrismaRuntimeConfig } = require('./prismaRuntime');
 const { resolvePortableConfig } = require('../scripts/lib/postgresPortableRuntime');
 const PROJECT_ROOT = path.join(__dirname, '..');
+const TENANT_TEMPLATE_PATH = path.join(PROJECT_ROOT, 'prisma', 'tenant_template.sql');
 const PACKAGE_PATH = path.join(PROJECT_ROOT, 'package.json');
 
 const fetch =
@@ -622,6 +624,250 @@ const checkForUpdates = async (force = false) => {
   return info;
 };
 
+/**
+ * Builds an idempotent DDL patch script from the tenant_template.sql.
+ * Converts each CREATE TABLE / CREATE INDEX / CREATE TYPE / CREATE UNIQUE INDEX
+ * to IF NOT EXISTS variants, and wraps ALTER TABLE ADD COLUMN statements
+ * so they only run if the column is missing.
+ * Ignores CONSTRAINT and AddForeignKey statements (safe to skip — constraints
+ * are already applied when the schema was first created).
+ */
+const buildIdempotentTenantPatch = (templateSql) => {
+  const lines = templateSql.split(/\r?\n/);
+  const output = [];
+  let skipBlock = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Check for AddForeignKey marker BEFORE generic comment filtering,
+    // because "-- AddForeignKey" starts with "--" and would be filtered first.
+    if (/^-- AddForeignKey/i.test(trimmed)) {
+      skipBlock = true;
+      continue;
+    }
+
+    // While inside a skipped block, consume lines until end of statement
+    if (skipBlock) {
+      if (trimmed.endsWith(';')) skipBlock = false;
+      continue;
+    }
+
+    // Skip blank lines and generic comments
+    if (!trimmed || trimmed.startsWith('--')) {
+      continue;
+    }
+
+    // Make CREATE TABLE idempotent
+    if (/^CREATE TABLE "/.test(trimmed)) {
+      output.push(line.replace('CREATE TABLE "', 'CREATE TABLE IF NOT EXISTS "'));
+      continue;
+    }
+
+    // Make CREATE UNIQUE INDEX idempotent
+    if (/^CREATE UNIQUE INDEX "/.test(trimmed)) {
+      output.push(line.replace('CREATE UNIQUE INDEX "', 'CREATE UNIQUE INDEX IF NOT EXISTS "'));
+      continue;
+    }
+
+    // Make CREATE INDEX idempotent
+    if (/^CREATE INDEX "/.test(trimmed)) {
+      output.push(line.replace('CREATE INDEX "', 'CREATE INDEX IF NOT EXISTS "'));
+      continue;
+    }
+
+    // Make CREATE TYPE idempotent (enums)
+    if (/^CREATE TYPE "/.test(trimmed)) {
+      // Wrap with DO block to check if type already exists
+      output.push(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = '${trimmed.match(/CREATE TYPE "(\w+)"/)?.[1] || ''}') THEN ${line.trim()} END IF; END $$;`);
+      continue;
+    }
+
+    // Skip lines with CONSTRAINT inside CREATE TABLE — handled by CREATE TABLE block
+    if (/^CONSTRAINT "/.test(trimmed)) {
+      continue;
+    }
+
+    // Pass through all other statements (table columns, etc.)
+    output.push(line);
+  }
+
+  return output.join('\n');
+};
+
+/**
+ * Opens a raw pg Client against the given schema and runs the idempotent
+ * tenant patch SQL derived from the current tenant_template.sql.
+ */
+const applyTenantSchemaPatch = async (schema, templateSql, connectionString) => {
+  let cleanUrl = connectionString;
+  try {
+    const parsedUrl = new URL(connectionString);
+    parsedUrl.search = '';
+    cleanUrl = parsedUrl.toString();
+  } catch (e) {
+    if (connectionString.includes('?')) {
+      cleanUrl = connectionString.split('?')[0];
+    }
+  }
+
+  const client = new Client({ connectionString: cleanUrl });
+  await client.connect();
+  try {
+    await client.query(`SET search_path TO "${schema}";`);
+    await client.query(`
+      ALTER TABLE "Appointments" ADD COLUMN IF NOT EXISTS "Comment" TEXT;
+      ALTER TABLE "Appointments" ADD COLUMN IF NOT EXISTS "CoverBs" INTEGER;
+      ALTER TABLE "Appointments" ADD COLUMN IF NOT EXISTS "DiscountRub" INTEGER;
+    `);
+    const patchSql = buildIdempotentTenantPatch(templateSql);
+    await client.query(patchSql);
+  } finally {
+    await client.end();
+  }
+};
+
+/**
+ * Post-update database fix pass:
+ * 1. Ensures the Businesses table exists in public (handled by Prisma migrations,
+ *    but we double-check here for resilience).
+ * 2. Reads all tenant schemas registered in Businesses and applies the
+ *    current tenant_template.sql to each one as an idempotent patch,
+ *    so existing tenants receive any new columns/tables/indexes.
+ */
+const runPostUpdateDatabaseFixes = async () => {
+  if (!fs.existsSync(TENANT_TEMPLATE_PATH)) {
+    console.warn('[update] tenant_template.sql not found, skipping tenant schema patches');
+    return;
+  }
+
+  const connectionString = process.env.POSTGRES_DATABASE_URL;
+  if (!connectionString) {
+    console.warn('[update] POSTGRES_DATABASE_URL not set, skipping post-update database fixes');
+    return;
+  }
+
+  const templateSql = fs.readFileSync(TENANT_TEMPLATE_PATH, 'utf8');
+
+  // --- Step 1: Ensure Businesses table exists in public schema ---
+  try {
+    let cleanUrl = connectionString;
+    try {
+      const parsedUrl = new URL(connectionString);
+      parsedUrl.search = '';
+      cleanUrl = parsedUrl.toString();
+    } catch (e) {
+      if (connectionString.includes('?')) cleanUrl = connectionString.split('?')[0];
+    }
+
+    const publicClient = new Client({ connectionString: cleanUrl });
+    await publicClient.connect();
+    try {
+      // Idempotent creation of Businesses table in public schema
+      await publicClient.query(`SET search_path TO "public";`);
+      await publicClient.query(`
+        CREATE TABLE IF NOT EXISTS "Businesses" (
+          "id" TEXT NOT NULL,
+          "name" TEXT NOT NULL,
+          "subdomain" TEXT NOT NULL,
+          "customDomain" TEXT,
+          "customCrmDomain" TEXT,
+          "dbSchema" TEXT NOT NULL,
+          "isActive" BOOLEAN NOT NULL DEFAULT true,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "Businesses_pkey" PRIMARY KEY ("id")
+        );
+        ALTER TABLE "Businesses" ADD COLUMN IF NOT EXISTS "customCrmDomain" TEXT;
+        CREATE UNIQUE INDEX IF NOT EXISTS "Businesses_subdomain_key" ON "Businesses"("subdomain");
+        CREATE UNIQUE INDEX IF NOT EXISTS "Businesses_customDomain_key" ON "Businesses"("customDomain");
+        CREATE UNIQUE INDEX IF NOT EXISTS "Businesses_customCrmDomain_key" ON "Businesses"("customCrmDomain");
+        CREATE UNIQUE INDEX IF NOT EXISTS "Businesses_dbSchema_key" ON "Businesses"("dbSchema");
+
+        CREATE TABLE IF NOT EXISTS "TelegramAuthRequests" (
+          "id" TEXT NOT NULL,
+          "code" TEXT NOT NULL,
+          "status" TEXT NOT NULL,
+          "flow" TEXT NOT NULL DEFAULT 'login',
+          "targetUserId" TEXT,
+          "telegramId" TEXT,
+          "phone" TEXT,
+          "displayName" TEXT,
+          "userId" TEXT,
+          "errorMessage" TEXT,
+          "createdAt" TEXT NOT NULL,
+          "expiresAt" TEXT NOT NULL,
+          "updatedAt" TEXT NOT NULL,
+          CONSTRAINT "TelegramAuthRequests_pkey" PRIMARY KEY ("id")
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS "TelegramAuthRequests_code_key" ON "TelegramAuthRequests"("code");
+        CREATE INDEX IF NOT EXISTS "TelegramAuthRequests_status_expiresAt_idx" ON "TelegramAuthRequests"("status", "expiresAt");
+        CREATE INDEX IF NOT EXISTS "TelegramAuthRequests_flow_targetUserId_idx" ON "TelegramAuthRequests"("flow", "targetUserId");
+        CREATE INDEX IF NOT EXISTS "TelegramAuthRequests_code_idx" ON "TelegramAuthRequests"("code");
+      `);
+      console.log('[update] Public schema tables verified/created (Businesses, TelegramAuthRequests)');
+    } finally {
+      await publicClient.end();
+    }
+  } catch (publicError) {
+    console.error('[update] Failed to ensure public schema tables:', publicError.message);
+    // Non-fatal: Prisma migration may have already handled this
+  }
+
+  // --- Step 2: Patch all existing tenant schemas ---
+  let tenantSchemas = [];
+  try {
+    let cleanUrl = connectionString;
+    try {
+      const parsedUrl = new URL(connectionString);
+      parsedUrl.search = '';
+      cleanUrl = parsedUrl.toString();
+    } catch (e) {
+      if (connectionString.includes('?')) cleanUrl = connectionString.split('?')[0];
+    }
+
+    const listClient = new Client({ connectionString: cleanUrl });
+    await listClient.connect();
+    try {
+      const result = await listClient.query(
+        'SELECT "dbSchema" FROM public."Businesses" WHERE "isActive" = true ORDER BY "name" ASC'
+      );
+      tenantSchemas = result.rows.map((row) => row.dbSchema).filter(Boolean);
+    } finally {
+      await listClient.end();
+    }
+  } catch (listError) {
+    // Businesses table may not exist yet (very first install — migration will create it)
+    console.warn('[update] Could not list tenant schemas (Businesses table may not exist yet):', listError.message);
+    return;
+  }
+
+  if (!tenantSchemas.length) {
+    console.log('[update] No active tenant schemas found, skipping tenant patch pass');
+    return;
+  }
+
+  console.log(`[update] Applying tenant schema patches to ${tenantSchemas.length} schema(s): ${tenantSchemas.join(', ')}`);
+  const errors = [];
+  for (const schema of tenantSchemas) {
+    try {
+      await applyTenantSchemaPatch(schema, templateSql, connectionString);
+      console.log(`[update] Patched tenant schema: ${schema}`);
+    } catch (patchError) {
+      const msg = `Failed to patch tenant schema "${schema}": ${patchError.message}`;
+      console.error(`[update] ${msg}`);
+      errors.push(msg);
+    }
+  }
+
+  if (errors.length) {
+    console.warn(`[update] ${errors.length} tenant schema patch(es) failed. Manual inspection may be required.`);
+  } else {
+    console.log('[update] All tenant schemas patched successfully');
+  }
+};
+
 const applyUpdate = async () => {
   console.log("[update] applying update...");
   await createPreUpdateBackup();
@@ -658,6 +904,10 @@ const applyUpdate = async () => {
     } else {
       console.log('[update] prisma schema unchanged, skipping migrations/generate');
     }
+    // Always run post-update DB fixes to ensure Businesses table and tenant
+    // schemas are in sync with the current codebase, regardless of whether
+    // prisma migrations ran.
+    await runPostUpdateDatabaseFixes();
     if (shouldRunWebBuild) {
       await removeWebBuildOutputs();
       await runCommand('npm run build:web');
@@ -688,6 +938,8 @@ const applyUpdate = async () => {
 module.exports = {
   checkForUpdates,
   applyUpdate,
+  runPostUpdateDatabaseFixes,
+  buildIdempotentTenantPatch,
   canSkipPrismaMigrateForProviderSwitch,
   describeUpdateError,
   buildPrismaUpdateCommands,

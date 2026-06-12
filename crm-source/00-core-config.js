@@ -1,4 +1,4 @@
-﻿const { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, Fragment } = React;
+const { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, Fragment } = React;
 const { createPortal, createRoot } = ReactDOM;
 const sendClientLog = (data) => {
   try {
@@ -60,8 +60,6 @@ const VIEW_TABS_BY_ROLE = {
     { id: 'profile', label: 'Профиль' },
   ],
   [ROLE_CREATOR]: [
-    { id: 'dashboard', label: 'Главная' },
-    { id: 'tables', label: 'Данные' },
     { id: 'system', label: 'Система' },
   ],
 };
@@ -83,8 +81,6 @@ VIEW_TABS_BY_ROLE[ROLE_STAFF] = [
   { id: 'profile', label: 'Профиль' },
 ];
 VIEW_TABS_BY_ROLE[ROLE_CREATOR] = [
-  { id: 'dashboard', label: 'Главная' },
-  { id: 'tables', label: 'Данные' },
   { id: 'system', label: 'Система' },
 ];
 const TABLE_ORDER = ['Appointments', 'Schedules', 'Users', 'Barbers', 'Services', 'Positions', 'Revenue'];
@@ -94,8 +90,8 @@ const DATA_TABLES_BY_ROLE = {
   [ROLE_CREATOR]: ['Appointments', 'Schedules', 'Users', 'Positions'],
 };
 const VISIBLE_TABLE_ORDER_BY_ROLE = {
-  [ROLE_OWNER]: ['Appointments', 'Users', 'Barbers', 'Schedules', 'Services', 'Positions', 'Revenue'],
-  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Services', 'Revenue'],
+  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Revenue', 'Users', 'Barbers', 'Services', 'Positions'],
+  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Revenue', 'Services'],
 };
 const TABLE_CONFIG = {
   Appointments: { label: 'Записи', mode: 'data', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'desc' } },
@@ -107,11 +103,11 @@ const TABLE_CONFIG = {
   Revenue: { label: 'Доходы', mode: 'custom' },
 };
 const DATA_SHORTCUTS_BY_ROLE = {
-  [ROLE_OWNER]: ['Appointments', 'Users', 'Barbers', 'Schedules', 'Services', 'Positions', 'Revenue'].map((tableId) => ({
+  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Revenue', 'Users', 'Barbers', 'Services', 'Positions'].map((tableId) => ({
     id: tableId,
     label: TABLE_CONFIG[tableId]?.label || tableId,
   })),
-  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Services', 'Revenue'].map((tableId) => ({
+  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Revenue', 'Services'].map((tableId) => ({
     id: tableId,
     label: TABLE_CONFIG[tableId]?.label || tableId,
   })),
@@ -119,4 +115,19 @@ const DATA_SHORTCUTS_BY_ROLE = {
 const DEFAULT_DATA_TABLES = DATA_TABLES_BY_ROLE[ROLE_OWNER];
 const DEFAULT_TABLE_SHORTCUTS = DATA_SHORTCUTS_BY_ROLE[ROLE_OWNER];
 const DEFAULT_VISIBLE_TABLE_ORDER = VISIBLE_TABLE_ORDER_BY_ROLE[ROLE_OWNER];
+
+const getSystemSubSections = (role, isImpersonated) => {
+  if (role === ROLE_CREATOR) {
+    return [
+      { id: 'businesses', label: 'Организации' },
+      { id: 'settings', label: 'Настройки' },
+    ];
+  }
+  return [
+    { id: 'bot', label: 'Бот' },
+    { id: 'site', label: 'Сайт' },
+    { id: 'settings', label: 'Настройки' },
+  ];
+};
+
 

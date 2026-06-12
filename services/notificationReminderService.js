@@ -1,3 +1,5 @@
+const { getTenantPrismaClient, tenantPrismaStorage, getTenantTimezone } = require("./prismaRuntime");
+
 const createNotificationReminderService = ({
   normalizeText,
   readBotToken,
@@ -250,25 +252,41 @@ const createNotificationReminderService = ({
     if (appointmentReminderCycleRunning) return;
     appointmentReminderCycleRunning = true;
     try {
-      const settings = await getBotSettings();
-      if (settings?.isBotEnabled === false) return;
-      const token = await readBotToken();
-      if (!token) return;
-      const now = new Date();
-      const todayKey = formatDateOnly(now);
-      if (todayKey && todayKey !== lastAppointmentCleanupDateKey) {
-        const removed = await purgeOldAppointments(now);
-        lastAppointmentCleanupDateKey = todayKey;
-        if (removed > 0) {
-          logger.log(`[reminders] Purged old appointments: ${removed}`);
-        }
-      }
-      const [monthlySent, appointmentSent] = await Promise.all([
-        processMonthlyHaircutReminders(now),
-        processUpcomingAppointmentReminders(now),
-      ]);
-      if (monthlySent || appointmentSent) {
-        logger.log(`[reminders] Sent monthly=${monthlySent}, appointment=${appointmentSent}`);
+      const globalPrisma = getTenantPrismaClient("public");
+      const businesses = await globalPrisma.businesses.findMany({
+        where: { isActive: true },
+      });
+
+      for (const business of businesses) {
+        const tenantPrisma = getTenantPrismaClient(business.dbSchema);
+        const timezone = await getTenantTimezone(business.dbSchema);
+        
+        await tenantPrismaStorage.run({ prisma: tenantPrisma, timezone, schema: business.dbSchema }, async () => {
+          try {
+            const settings = await getBotSettings();
+            if (settings?.isBotEnabled === false) return;
+            const token = await readBotToken();
+            if (!token) return;
+            const now = new Date();
+            const todayKey = formatDateOnly(now);
+            if (todayKey && todayKey !== lastAppointmentCleanupDateKey) {
+              const removed = await purgeOldAppointments(now);
+              lastAppointmentCleanupDateKey = todayKey;
+              if (removed > 0) {
+                logger.log(`[reminders][${business.subdomain}] Purged old appointments: ${removed}`);
+              }
+            }
+            const [monthlySent, appointmentSent] = await Promise.all([
+              processMonthlyHaircutReminders(now),
+              processUpcomingAppointmentReminders(now),
+            ]);
+            if (monthlySent || appointmentSent) {
+              logger.log(`[reminders][${business.subdomain}] Sent monthly=${monthlySent}, appointment=${appointmentSent}`);
+            }
+          } catch (innerError) {
+            logger.error(`[reminders][${business.subdomain}] Cycle failed:`, innerError);
+          }
+        });
       }
     } catch (error) {
       logger.error("Appointment reminder cycle failed:", error);

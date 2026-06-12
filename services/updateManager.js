@@ -684,11 +684,6 @@ const buildIdempotentTenantPatch = (templateSql) => {
       continue;
     }
 
-    // Skip lines with CONSTRAINT inside CREATE TABLE — handled by CREATE TABLE block
-    if (/^CONSTRAINT "/.test(trimmed)) {
-      continue;
-    }
-
     // Pass through all other statements (table columns, etc.)
     output.push(line);
   }

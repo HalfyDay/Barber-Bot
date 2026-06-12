@@ -80,7 +80,8 @@ const tenantMiddleware = async (req, res, next) => {
 
     // 3. Resolve to correct schema
     let schema = "public";
-    if (business && business.isActive) {
+    const isCreatorRoute = req.path && req.path.startsWith("/api/creator");
+    if (business && business.isActive && !isCreatorRoute) {
       schema = business.dbSchema;
       req.business = business;
       req.businessId = business.id;

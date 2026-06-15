@@ -1216,8 +1216,7 @@ img.media-wave.is-ready {
   z-index: 1;
 }
 
-.promo-thumb:hover,
-.promo-thumb-surface:hover {
+.promo-thumb:hover {
   transform: translateY(-2px) scale(1.01);
   box-shadow: none;
 }
@@ -2806,6 +2805,26 @@ img.media-wave.is-ready {
   border: 1px solid transparent;
 }
 
+button.referral-level-card {
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+button.referral-level-card:hover,
+button.referral-level-card:focus,
+button.referral-level-card:focus-visible {
+  background: var(--md-sys-color-surface-container-high);
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  outline: none;
+}
+
+button.referral-level-card:active {
+  background: var(--md-sys-color-surface-container);
+  transform: translateY(0);
+  box-shadow: none;
+}
+
 .referral-level-card-head {
   align-items: start;
 }
@@ -3992,6 +4011,16 @@ img.media-wave.is-ready {
   background: color-mix(in srgb, var(--md-sys-color-surface) 94%, #0c1011);
 }
 
+.transfer-bs-sheet .referral-transfer-recipient {
+  background: var(--md-sys-color-surface-container-high);
+  border: 0;
+}
+
+.transfer-bs-sheet .referral-transfer-recipient:hover {
+  background: var(--md-sys-color-surface-container-highest);
+  border: 0;
+}
+
 .transfer-bs-sheet .sheet-body {
   padding-top: 8px;
 }
@@ -4374,7 +4403,7 @@ img.media-wave.is-ready {
 }
 
 .achievement-card.is-unlocked {
-  border-color: color-mix(in srgb, var(--md-sys-color-primary) 18%, transparent 82%);
+  border-color: transparent;
   background: linear-gradient(180deg, color-mix(in srgb, var(--md-sys-color-primary-container) 26%, var(--md-sys-color-surface-container-low) 74%), var(--md-sys-color-surface-container-low));
 }
 
@@ -4603,7 +4632,7 @@ img.media-wave.is-ready {
   gap: 12px;
 }
 
-.referral-level-card {
+.referral-levels-sheet .referral-level-card {
   display: grid;
   gap: 12px;
   padding: 16px;
@@ -4612,7 +4641,7 @@ img.media-wave.is-ready {
   background: var(--md-sys-color-surface-container-low);
 }
 
-.referral-level-card.is-current {
+.referral-levels-sheet .referral-level-card.is-current {
   border-color: transparent;
   background: linear-gradient(180deg, rgba(0, 191, 175, 0.09), rgba(31, 37, 36, 0.98));
   box-shadow: inset 0 0 0 1px rgba(0, 191, 175, 0.12);
@@ -7191,6 +7220,7 @@ img.media-wave.is-ready {
 }
 
 .profile-edit-form-layout .profile-avatar-field,
+.profile-edit-form-layout .profile-edit-settings-list,
 .profile-edit-form-layout .profile-edit-telegram,
 .profile-edit-form-layout .profile-edit-telegram-wrap,
 .profile-edit-form-layout .profile-edit-submit {
@@ -7200,6 +7230,30 @@ img.media-wave.is-ready {
 .profile-avatar-field {
   display: grid;
   align-content: start;
+}
+
+.profile-edit-form-layout .profile-avatar-field,
+.profile-edit-form-layout .profile-edit-settings-list {
+  grid-column: 1 / -1;
+}
+
+.sheet .profile-edit-settings-list {
+  padding-inline: 0;
+}
+
+@keyframes reveal-password-field {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reveal-anim {
+  animation: reveal-password-field 0.24s ease forwards;
 }
 
 .profile-edit-submit {

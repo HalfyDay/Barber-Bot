@@ -125,7 +125,12 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
                 aria-label={column.label || column.key}
                 type={column.type === 'date' ? 'date' : 'text'}
                 value={value || ''}
-                onChange={(event) => setDraft((prev) => ({ ...prev, [column.key]: event.target.value }))}
+                onChange={(event) => {
+                  const val = event.target.value;
+                  const isPhoneField = column.key.toLowerCase() === 'phone';
+                  const formattedVal = isPhoneField ? formatPhoneDisplay(val) : val;
+                  setDraft((prev) => ({ ...prev, [column.key]: formattedVal }));
+                }}
                 className="w-full px-3 py-2 text-white"
               />
             </div>
@@ -903,7 +908,7 @@ const AppointmentModal = ({
             aria-label="Телефон клиента"
             type="tel"
             value={draft.Phone || ''}
-            onChange={(event) => handleChange('Phone', event.target.value)}
+            onChange={(event) => handleChange('Phone', formatPhoneDisplay(event.target.value))}
             placeholder="+7..."
             className="h-11 w-full px-3 text-white"
           />

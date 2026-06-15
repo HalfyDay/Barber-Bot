@@ -1,4 +1,4 @@
-﻿const MultiSelectCell = ({ value, options = [], onCommit }) => {
+const MultiSelectCell = ({ value, options = [], onCommit }) => {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(normalizeMultiValueList(value));
   const anchorRef = useRef(null);
@@ -985,7 +985,7 @@ const StatusMenu = ({ statuses = [], hiddenStatuses = [], onToggle, onReset, mod
                     setOpen(false);
                   }}
                   className={classNames(
-                    'crm-soft-panel flex min-h-[52px] w-full items-center rounded-2xl px-4 py-3 text-left text-sm leading-6 text-[var(--crm-text)]',
+                    'crm-soft-panel flex min-h-[40px] w-full items-center rounded-2xl px-4 py-2.5 text-left text-sm leading-5 text-[var(--crm-text)]',
                     isActive && 'bg-[color:var(--crm-primary-container)] text-[#eafffb]'
                   )}
                 >

@@ -1,4 +1,4 @@
-﻿const getDashboardSnapshotIdentityKey = (identity = null) => {
+const getDashboardSnapshotIdentityKey = (identity = null) => {
   const safeIdentity = identity || {};
   return JSON.stringify({
     role: normalizeText(safeIdentity.role || ""),
@@ -76,6 +76,25 @@ const {
   buildHomeAppPayload,
   buildUserInsightsMap,
 });
+const buildRealtimeAppointmentsPayloadForBusiness = async (businessId) => {
+  if (!businessId) {
+    return buildRealtimeAppointmentsPayload();
+  }
+  const { getTenantPrismaClient, getTenantTimezone, tenantPrismaStorage } = require("./services/prismaRuntime");
+  const globalPrisma = getTenantPrismaClient("public");
+  const business = await globalPrisma.businesses.findUnique({
+    where: { id: String(businessId) },
+  });
+  if (!business || !business.isActive) {
+    return buildRealtimeAppointmentsPayload();
+  }
+  const schema = business.dbSchema;
+  const tenantPrisma = getTenantPrismaClient(schema);
+  const timezone = await getTenantTimezone(schema);
+  return tenantPrismaStorage.run({ prisma: tenantPrisma, timezone, schema, businessId: business.id }, () => {
+    return buildRealtimeAppointmentsPayload();
+  });
+};
 const {
   attachClient: attachRealtimeClient,
   runPush: runRealtimePush,
@@ -86,7 +105,7 @@ const {
   hasLoop: hasRealtimeLoop,
 } = createRealtimeService({
   createHash,
-  buildPayload: buildRealtimeAppointmentsPayload,
+  buildPayload: buildRealtimeAppointmentsPayloadForBusiness,
   pollIntervalMs: REALTIME_POLL_INTERVAL_MS,
   keepAliveMs: REALTIME_KEEPALIVE_MS,
   randomUUID,
@@ -107,7 +126,10 @@ const requestHomeRealtimeSync = (reason = "app-sync") =>
   });
 const requestUnifiedRealtimePush = (force = false) => {
   clearDashboardSnapshotCache();
-  requestRealtimePush(force);
+  const { tenantPrismaStorage } = require("./services/prismaRuntime");
+  const activeStore = tenantPrismaStorage.getStore();
+  const businessId = activeStore?.businessId || null;
+  requestRealtimePush(force, businessId);
   requestHomeRealtimeSync("app-sync");
 };
 const {

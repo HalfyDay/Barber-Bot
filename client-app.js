@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const ROOT = document.getElementById("app");
   const API_ROOT = `${window.location.origin}/api/home`;
   const LOGIN_PAGE_URL = "/login/";
@@ -2331,13 +2331,8 @@
           title="Сканировать QR"
         >${iconMarkup("scan")}</button>`
       : "";
+    const transferRecipients = Array.isArray(state.payload?.referral?.recentTransferRecipients) ? state.payload.referral.recentTransferRecipients : [];
     return `<form class="referral-transfer-bank-sheet" id="referral-transfer-form">
-      <section class="referral-transfer-bank-hero">
-        <div class="referral-transfer-bank-hero-copy">
-          <span class="field-label">Баланс BS</span>
-          <strong>${currentBalance} BS</strong>
-        </div>
-      </section>
       ${transferError ? `<div class="referral-transfer-bank-error" role="alert">${transferError}</div>` : ""}
       <section class="referral-transfer-bank-section">
         <div class="referral-transfer-bank-section-head">
@@ -2350,6 +2345,30 @@
           </label>
           ${scanTransferAction}
         </div>
+        ${transferRecipients.length
+          ? `<div class="referral-transfer-recipient-carousel" style="margin-top:12px;">
+              <button class="ghost-btn icon-only-btn referral-transfer-scroll-btn referral-transfer-scroll-btn-prev" type="button" data-action="scroll-transfer-recipients" data-direction="prev" aria-label="Прокрутить получателей влево">${iconMarkup("chevron-left")}</button>
+              <div class="referral-transfer-recipient-strip" data-transfer-recipient-strip>
+              ${transferRecipients
+                .map(
+                  (recipient) => `
+                    <button
+                      class="referral-transfer-recipient"
+                      type="button"
+                      data-action="select-transfer-recipient"
+                      data-phone="${normalizeText(recipient.phone)}"
+                      data-name="${normalizeText(recipient.fullName)}"
+                      data-short-name="${normalizeText(recipient.shortName || recipient.fullName)}"
+                    >
+                      ${avatarMarkup({ avatarUrl: recipient.avatarUrl, displayName: recipient.shortName || recipient.fullName }, 48)}
+                      <span class="referral-transfer-recipient-name" style="font-size:0.75rem;">${normalizeText(recipient.shortName || recipient.fullName)}</span>
+                    </button>`,
+                )
+                .join("")}
+              </div>
+              <button class="ghost-btn icon-only-btn referral-transfer-scroll-btn referral-transfer-scroll-btn-next" type="button" data-action="scroll-transfer-recipients" data-direction="next" aria-label="Прокрутить получателей вправо">${iconMarkup("chevron-right")}</button>
+            </div>`
+          : ""}
       </section>
       <section class="referral-transfer-bank-section">
         <div class="referral-transfer-bank-section-head">
@@ -2360,21 +2379,6 @@
           <input type="number" name="amountBs" min="1" step="1" value="${normalizeText(draft.amountBs)}" placeholder="0" required />
           <span class="referral-transfer-bank-currency">BS</span>
         </label>
-        <div class="referral-transfer-bank-presets">
-          ${REFERRAL_TRANSFER_QUICK_AMOUNTS
-            .map(
-              (amount) => `
-                <button
-                  class="referral-transfer-bank-preset ${selectedQuickAmount === amount ? "is-selected" : ""}"
-                  type="button"
-                  data-action="transfer-preset"
-                  data-amount="${amount}"
-                >
-                  ${amount} BS
-                </button>`,
-            )
-            .join("")}
-        </div>
       </section>
       <section class="referral-transfer-bank-section">
         <div class="referral-transfer-bank-section-head">
@@ -3026,9 +3030,11 @@
       const sentTotal = transferOutOperations.reduce((total, operation) => total + Math.abs(Number(operation.amountBs) || 0), 0);
       const receivedTotal = transferInOperations.reduce((total, operation) => total + Math.max(0, Number(operation.amountBs) || 0), 0);
       const averageTransfer = outgoingTransfers ? Math.round(sentTotal / outgoingTransfers) : 0;
-      const levelProgress = Math.max(0, Math.min(100, Number(referral.scale?.progress || 0)));
-      const nextReferralTarget = Math.max(0, Number(referral.scale?.next || 0));
       const currentReferralCount = Math.max(0, Number(referral.program?.activeReferralsCount || referral.stats?.green || referral.scale?.current || 0));
+      const maxLevel = levels[levels.length - 1];
+      const maxReferralsTarget = maxLevel ? Math.max(1, Number(maxLevel.minReferrals) || 0) : 10;
+      const levelProgress = Math.max(0, Math.min(100, Math.round((currentReferralCount / maxReferralsTarget) * 100)));
+      const nextReferralTarget = Math.max(0, Number(referral.scale?.next || 0));
       const referralLevelName = getReferralLevelName(referralProgram, currentReferralCount);
       const isStatsSection = state.referralSection === "stats";
       const activeReferralsCount = referrals.filter((item) => normalizeText(item.color) === "green").length;
@@ -3073,22 +3079,22 @@
               </div>
             </div>
           </article>
-          <article class="list-card referral-level-card">
+          <button class="list-card referral-level-card" type="button" data-action="open-sheet" data-sheet="referral-levels" style="text-align: left; cursor: pointer; width: 100%; display: grid; gap: 14px; align-items: stretch;">
             <div class="section-head referral-level-card-head">
               <div>
                 <div class="section-eyebrow">Уровень</div>
                 <h2 class="section-title">${referralLevelName}</h2>
               </div>
-              <button class="referral-wallet-balance-note referral-wallet-level-link" type="button" data-action="open-sheet" data-sheet="referral-levels">Все уровни</button>
+              <span class="referral-wallet-balance-note referral-wallet-level-link">Все уровни</span>
             </div>
             <div class="referral-wallet-progress">
               <div class="referral-wallet-progress-head">
-                <span class="field-label">Прогресс до следующего уровня</span>
+                <span class="field-label">Общий прогресс уровней</span>
                 <strong>${referral.scale?.isMaxLevel ? "MAX" : `${currentReferralCount}/${nextReferralTarget}`}</strong>
               </div>
               <div class="progress-track referral-wallet-progress-track"><div class="progress-bar referral-wallet-progress-bar" style="width:${levelProgress}%"></div></div>
             </div>
-          </article>
+          </button>
         </div>
         <div class="filter-row referral-section-tabs referral-pill-row" data-pill-group="referral-section">
           <span class="referral-pill-indicator" aria-hidden="true"></span>
@@ -3166,45 +3172,6 @@
         </div>`
           : `
         <div class="referral-section-panel referral-overview-stack">
-        <article class="list-card referral-transfer-card">
-          <div class="section-head">
-            <div>
-              <div class="section-eyebrow">Переводы</div>
-              <h2 class="section-title">Быстрые отправки</h2>
-            </div>
-          </div>
-          <button class="referral-transfer-hub" type="button" data-action="open-sheet" data-sheet="transfer-bs">
-            <div>
-              <p class="list-title">Отправить BS клиенту</p>
-              <p class="subtitle">Перевод по номеру телефона с моментальным подтверждением.</p>
-            </div>
-            <span class="referral-transfer-hub-arrow">${iconMarkup("transfer")}</span>
-          </button>
-          ${transferRecipients.length
-            ? `<div class="referral-transfer-recipient-carousel">
-                <button class="ghost-btn icon-only-btn referral-transfer-scroll-btn referral-transfer-scroll-btn-prev" type="button" data-action="scroll-transfer-recipients" data-direction="prev" aria-label="Прокрутить получателей влево">${iconMarkup("chevron-left")}</button>
-                <div class="referral-transfer-recipient-strip" data-transfer-recipient-strip>
-                ${transferRecipients
-                  .map(
-                    (recipient) => `
-                      <button
-                        class="referral-transfer-recipient"
-                        type="button"
-                        data-action="open-quick-transfer"
-                        data-phone="${normalizeText(recipient.phone)}"
-                        data-name="${normalizeText(recipient.fullName)}"
-                        data-short-name="${normalizeText(recipient.shortName || recipient.fullName)}"
-                      >
-                        ${avatarMarkup({ avatarUrl: recipient.avatarUrl, displayName: recipient.shortName || recipient.fullName }, 56)}
-                        <span class="referral-transfer-recipient-name">${normalizeText(recipient.shortName || recipient.fullName)}</span>
-                      </button>`,
-                  )
-                  .join("")}
-                </div>
-                <button class="ghost-btn icon-only-btn referral-transfer-scroll-btn referral-transfer-scroll-btn-next" type="button" data-action="scroll-transfer-recipients" data-direction="next" aria-label="Прокрутить получателей вправо">${iconMarkup("chevron-right")}</button>
-              </div>` 
-            : ``}
-        </article>
         <article class="list-card referral-transfer-history-card">
           <div class="referral-subsection">
             <div class="section-head">
@@ -3914,15 +3881,21 @@
     return memoizeRenderedFragment("page-achievements", [state.payload?.user, state.payload?.profile, state.payload?.referral], () => {
       const achievements = buildAccountAchievements();
       const unlockedCount = achievements.filter((item) => item.unlocked).length;
+      const progressPercent = Math.max(0, Math.min(100, Math.round((unlockedCount / Math.max(1, achievements.length)) * 100)));
       return `
       <section class="page profile-page achievements-page">
         <article class="hero-card page-hero achievements-hero">
           <div class="hero-eyebrow">Аккаунт</div>
           <h1 class="hero-title">Достижения</h1>
           <p class="subtitle achievements-hero-copy">Прогресс аккаунта, визитов, рефералов и переводов BS.</p>
-          <div class="profile-summary-strip achievements-summary-strip">
-            <div class="profile-summary-cell"><span class="field-label">Открыто</span><strong>${unlockedCount}</strong></div>
-            <div class="profile-summary-cell"><span class="field-label">Всего</span><strong>${achievements.length}</strong></div>
+          <div class="achievements-progress-container" style="margin-top:16px;display:grid;gap:8px;width:100%;">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.85rem;font-weight:500;">
+              <span style="color:var(--muted);">Прогресс достижений</span>
+              <span style="color:var(--md-sys-color-primary);font-weight:700;">${unlockedCount} из ${achievements.length}</span>
+            </div>
+            <div class="progress-track" style="height:8px;border-radius:4px;background:rgba(255,255,255,0.06);overflow:hidden;width:100%;">
+              <div class="progress-bar" style="width:${progressPercent}%;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--md-sys-color-primary),#c1fff2);"></div>
+            </div>
           </div>
         </article>
         <div class="achievements-grid">
@@ -4980,7 +4953,7 @@
       return;
     }
     if (sheetId === "profile-menu") {
-      openSheet("Настройки", `<div class="list"><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-edit"><p class="list-title">Редактировать профиль</p><p class="subtitle">Имя, телефон, дата рождения, пол и фото.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-password"><p class="list-title">Сменить пароль</p><p class="subtitle">Пароль входа на сайте.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-security"><p class="list-title">Telegram и VK ID</p><p class="subtitle">Связанные аккаунты и вход без пароля.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-notifications"><p class="list-title">Настройки уведомлений</p><p class="subtitle">Уведомления о записях и пополнениях BS.</p></button><button class="list-item menu-action danger-surface" type="button" data-action="open-sheet" data-sheet="profile-logout-confirm"><p class="list-title">Выход</p><p class="subtitle">Выйти из аккаунта.</p></button></div>`);
+      openSheet("Настройки", `<div class="list"><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-edit"><p class="list-title">Редактировать профиль</p><p class="subtitle">Имя, телефон, дата рождения, пол и фото.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-security"><p class="list-title">Безопасность</p><p class="subtitle">Telegram, VK и смена пароля.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-notifications"><p class="list-title">Настройки уведомлений</p><p class="subtitle">Уведомления о записях и пополнениях BS.</p></button><button class="list-item menu-action danger-surface" type="button" data-action="open-sheet" data-sheet="profile-logout-confirm"><p class="list-title">Выход</p><p class="subtitle">Выйти из аккаунта.</p></button></div>`);
       return;
     }
     if (sheetId === "profile-logout-confirm") {
@@ -4989,13 +4962,13 @@
     }
     if (sheetId === "profile-edit") {
       const user = state.payload?.user || {};
-      openSheet("Редактировать профиль", `<form class="form-grid profile-edit-form-layout" id="profile-edit-form"><label class="field"><span class="field-label">ФИО</span><input name="displayName" value="${normalizeText(user.displayName)}" required /></label><label class="field"><span class="field-label">Телефон</span><input name="phone" value="${normalizeText(user.phone)}" required /></label><label class="field"><span class="field-label">Дата рождения</span><input type="date" name="birthDate" value="${normalizeText(user.birthDate)}" /></label><label class="field"><span class="field-label">Пол</span><select name="gender"><option value="">Не указан</option><option value="male" ${user.gender === "male" ? "selected" : ""}>Мужской</option><option value="female" ${user.gender === "female" ? "selected" : ""}>Женский</option><option value="other" ${user.gender === "other" ? "selected" : ""}>Другой</option></select></label><div class="field profile-avatar-field"><span class="field-label">Фото</span>${renderProfileAvatarUploadControl(user, { prefix: "profile-avatar-edit", title: "Загрузить фото", showCameraButton: !isDesktopLikeDevice() })}</div><div class="list profile-edit-settings-list"><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-password"><p class="list-title">Сменить пароль</p><p class="subtitle">Пароль для входа на сайте.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-security"><p class="list-title">Telegram и VK ID</p><p class="subtitle">Привязка Telegram и VK ID.</p></button><button class="list-item menu-action" type="button" data-action="open-sheet" data-sheet="profile-notifications"><p class="list-title">Настройки уведомлений</p><p class="subtitle">Push и браузерные уведомления.</p></button></div><div class="inline-actions profile-edit-submit"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`, "", "sheet-wide profile-edit-sheet");
+      openSheet("Редактировать профиль", `<form class="form-grid profile-edit-form-layout" id="profile-edit-form"><label class="field"><span class="field-label">ФИО</span><input name="displayName" value="${normalizeText(user.displayName)}" required /></label><label class="field"><span class="field-label">Телефон</span><input name="phone" value="${normalizeText(user.phone)}" required /></label><label class="field"><span class="field-label">Дата рождения</span><input type="date" name="birthDate" value="${normalizeText(user.birthDate)}" /></label><label class="field"><span class="field-label">Пол</span><select name="gender"><option value="">Не указан</option><option value="male" ${user.gender === "male" ? "selected" : ""}>Мужской</option><option value="female" ${user.gender === "female" ? "selected" : ""}>Женский</option><option value="other" ${user.gender === "other" ? "selected" : ""}>Другой</option></select></label><div class="field profile-avatar-field"><span class="field-label">Фото</span>${renderProfileAvatarUploadControl(user, { prefix: "profile-avatar-edit", title: "Загрузить фото", showCameraButton: !isDesktopLikeDevice() })}</div><div class="inline-actions profile-edit-submit"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`, "", "sheet-wide profile-edit-sheet");
       return;
     }
     if (sheetId === "profile-security") {
       const user = state.payload?.user || {};
       const vkAuth = state.payload?.site?.auth || {};
-      openSheet("Безопасность", `<form class="form-grid" id="profile-password-form"><div class="list"><div class="list-item"><p class="list-title">${user.telegramId ? "Telegram привязан" : "Telegram не подключен"}</p><p class="subtitle">${user.telegramId ? "Быстрый вход через Telegram уже доступен." : "Подключите Telegram для быстрого входа в личный кабинет."}</p></div>${vkAuth.vkIdEnabled === true && normalizeText(vkAuth.vkIdAppId) ? `<div class="list-item"><p class="list-title">${user.vkIdLinked ? "VK ID подключен" : "Подключить VK ID"}</p><p class="subtitle">${user.vkIdLinked ? "Вход через VK ID уже доступен для этого аккаунта." : "Подключите VK ID, чтобы входить в аккаунт без пароля."}</p></div>` : ""}</div><label class="field"><span class="field-label">Новый пароль</span><input type="password" name="password" placeholder="Введите новый пароль" /></label><div class="inline-actions"><button class="primary-btn" type="submit" disabled>Сохранить</button><button class="ghost-btn" type="button" data-action="${user.telegramId ? "unlink-telegram" : "link-telegram"}">${user.telegramId ? "Отвязать Telegram" : "Привязать Telegram"}</button>${vkAuth.vkIdEnabled === true && normalizeText(vkAuth.vkIdAppId) ? `${user.vkIdLinked ? `<button class="tonal-btn" type="button" data-action="unlink-vkid">Отвязать VK ID</button>` : profileVkIdLinkInFlight ? `<div class="profile-vkid-inline-loader" aria-live="polite"><span class="vkid-link-spinner" aria-hidden="true"></span></div>` : `<button class="ghost-btn profile-vkid-inline-btn" type="button" data-action="link-vkid">Привязать VK ID</button>`}` : ""}<button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
+      openSheet("Безопасность", `<form class="form-grid" id="profile-password-form"><div class="list-item"><div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;"><div><p class="list-title">${user.telegramId ? "Telegram привязан" : "Telegram не подключен"}</p><p class="subtitle">${user.telegramId ? "Быстрый вход через Telegram уже доступен." : "Подключите Telegram для быстрого входа в личный кабинет."}</p></div><button class="ghost-btn" style="min-width:140px;" type="button" data-action="${user.telegramId ? "unlink-telegram" : "link-telegram"}">${user.telegramId ? "Отвязать" : "Подключить"}</button></div></div>${vkAuth.vkIdEnabled === true && normalizeText(vkAuth.vkIdAppId) ? `<div class="list-item"><div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;"><div><p class="list-title">${user.vkIdLinked ? "VK ID подключен" : "Подключить VK ID"}</p><p class="subtitle">${user.vkIdLinked ? "Вход через VK ID уже доступен для этого аккаунта." : "Подключите VK ID, чтобы входить в аккаунт без пароля."}</p></div>${user.vkIdLinked ? `<button class="tonal-btn" style="min-width:140px;" type="button" data-action="unlink-vkid">Отвязать</button>` : profileVkIdLinkInFlight ? `<div class="profile-vkid-inline-loader" aria-live="polite"><span class="vkid-link-spinner" aria-hidden="true"></span></div>` : `<button class="ghost-btn profile-vkid-inline-btn" style="min-width:140px;" type="button" data-action="link-vkid">Подключить</button>`}</div></div>` : ""}<div class="list-item"><div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;width:100%;"><div><p class="list-title">Сменить пароль</p><p class="subtitle">Придумайте новый пароль для входа.</p></div><button class="ghost-btn" style="min-width:140px;" type="button" onclick="this.style.display='none';const inp=document.getElementById('profile-password-inputs');inp.style.display='flex';inp.classList.add('reveal-anim');inp.querySelector('input').focus();">Сменить пароль</button></div><div id="profile-password-inputs" style="display:none;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;width:100%;"><label class="field" style="flex:1;min-width:200px;"><span class="field-label" style="font-size:0.75rem;">Новый пароль</span><input type="password" name="password" placeholder="Введите новый пароль" style="width:100%;" /></label><button class="primary-btn" type="submit" disabled style="height:48px;min-width:120px;">Сохранить</button></div></div><div class="inline-actions" style="margin-top:8px;"><button class="ghost-btn" type="button" data-action="open-sheet" data-sheet="profile-menu">Назад</button></div></form>`);
       profileVkIdOneTapRendered = false;
       void renderProfileVkIdOneTap();
       return;
@@ -5718,6 +5691,24 @@
           const step = Math.max(strip.clientWidth * 0.82, (firstCard?.clientWidth || 160) + 12);
           const direction = normalizeText(actionNode.dataset.direction) === "prev" ? -1 : 1;
           strip.scrollBy({ left: step * direction, behavior: "smooth" });
+          return;
+        }
+        case "select-transfer-recipient": {
+          event.preventDefault();
+          const phone = normalizeText(actionNode.dataset.phone);
+          state.referralTransferDraft = {
+            ...(state.referralTransferDraft || {}),
+            targetPhone: phone,
+          };
+          state.referralTransferError = "";
+          const transferForm = actionNode.closest("#referral-transfer-form");
+          const targetPhoneInput = transferForm?.elements?.targetPhone;
+          if (transferForm && targetPhoneInput) {
+            targetPhoneInput.value = phone;
+            applyPhoneMask(targetPhoneInput);
+          } else {
+            refreshTransferBsSheet();
+          }
           return;
         }
         case "transfer-preset":

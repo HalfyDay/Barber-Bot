@@ -10,10 +10,10 @@ const createRealtimeService = ({
 }) => {
   const clients = new Set();
   let interval = null;
-  let snapshotHash = null;
-  let busy = false;
-  let pendingForce = false;
-  let lastEventString = null;
+  const snapshotHashes = new Map();
+  const busyMap = new Map();
+  const pendingForceMap = new Map();
+  const lastEventStrings = new Map();
 
   const hashAppointmentsSnapshot = (rows = []) => {
     const sorted = [...rows].sort((a, b) => {
@@ -37,10 +37,12 @@ const createRealtimeService = ({
     clients.delete(client);
   };
 
-  const broadcastRealtimePayload = (payload) => {
+  const broadcastRealtimePayload = (payload, businessId) => {
     const eventString = formatSseEventString("appointments", payload);
-    lastEventString = eventString;
+    const key = businessId || "";
+    lastEventStrings.set(key, eventString);
     clients.forEach((client) => {
+      if (client.businessId !== businessId) return;
       try {
         client.res.write(eventString);
       } catch (error) {
@@ -54,17 +56,18 @@ const createRealtimeService = ({
     });
   };
 
-  const runPush = async (force = false) => {
-    if (busy) {
-      pendingForce = pendingForce || force;
+  const runPush = async (force = false, businessId = null) => {
+    const key = businessId || "";
+    if (busyMap.get(key)) {
+      pendingForceMap.set(key, pendingForceMap.get(key) || force);
       return;
     }
-    busy = true;
+    busyMap.set(key, true);
     try {
-      const snapshot = await buildPayload();
+      const snapshot = await buildPayload(businessId);
       const nextHash = hashAppointmentsSnapshot(snapshot.appointmentsRaw);
-      if (!force && nextHash === snapshotHash) return;
-      snapshotHash = nextHash;
+      if (!force && nextHash === snapshotHashes.get(key)) return;
+      snapshotHashes.set(key, nextHash);
       const envelope = {
         type: "appointments:update",
         payload: {
@@ -76,27 +79,33 @@ const createRealtimeService = ({
           updatedAt: snapshot.updatedAt,
         },
       };
-      broadcastRealtimePayload(envelope);
+      broadcastRealtimePayload(envelope, businessId);
     } catch (error) {
-      logError("Realtime snapshot error:", error);
+      logError(`Realtime snapshot error for business ${key}:`, error);
     } finally {
-      busy = false;
-      if (pendingForce) {
-        const shouldForce = pendingForce;
-        pendingForce = false;
-        void runPush(shouldForce);
+      busyMap.set(key, false);
+      if (pendingForceMap.get(key)) {
+        const shouldForce = pendingForceMap.get(key);
+        pendingForceMap.set(key, false);
+        void runPush(shouldForce, businessId);
       }
     }
   };
 
-  const requestPush = (force = false) =>
-    runPush(force).catch((error) => logError("Realtime push failed:", error));
+  const requestPush = (force = false, businessId = null) =>
+    runPush(force, businessId).catch((error) => logError(`Realtime push failed for business ${businessId}:`, error));
 
   const ensureLoop = () => {
     if (interval) return;
     interval = setIntervalFn(() => {
       if (clients.size === 0) return;
-      void runPush(false);
+      const businessIds = new Set();
+      clients.forEach((client) => {
+        businessIds.add(client.businessId);
+      });
+      businessIds.forEach((bId) => {
+        void runPush(false, bId);
+      });
     }, pollIntervalMs);
   };
 
@@ -118,13 +127,15 @@ const createRealtimeService = ({
     });
   };
 
-  const attachClient = ({ req, res }) => {
-    const client = { id: randomUUID(), res, keepAlive: null };
+  const attachClient = ({ req, res, businessId = null }) => {
+    const client = { id: randomUUID(), res, businessId, keepAlive: null };
     clients.add(client);
-    if (lastEventString) {
-      res.write(lastEventString);
+    const key = businessId || "";
+    const cachedEvent = lastEventStrings.get(key);
+    if (cachedEvent) {
+      res.write(cachedEvent);
     } else {
-      requestPush(true);
+      requestPush(true, businessId);
     }
     client.keepAlive = setIntervalFn(() => {
       try {

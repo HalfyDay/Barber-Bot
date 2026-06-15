@@ -1,4 +1,4 @@
-﻿const parseScheduleDate = (value) => {
+const parseScheduleDate = (value) => {
   const normalized = normalizeText(value);
   if (!normalized) return null;
   const parsed = new Date(`${normalized}T00:00:00`);
@@ -79,6 +79,9 @@ const SchedulesView = ({
     'tables.schedulesCalendarDate',
     getLocalISODateString(),
   );
+  useEffect(() => {
+    setCalendarDate(getLocalISODateString(new Date()));
+  }, [setCalendarDate]);
   useEffect(() => {
     setBarberFilter(defaultBarberFilter);
   }, [defaultBarberFilter]);
@@ -315,9 +318,9 @@ const SchedulesView = ({
     const hasWorkingHours = normalizeText(slot?.Week).trim() && normalizeText(slot?.Week).trim() !== '0';
     return hasWorkingHours
       ? {
-          dot: 'bg-[color:var(--crm-primary)]',
-          chip: 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]',
-          sheet: 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]',
+          dot: 'bg-[var(--crm-primary)]',
+          chip: 'bg-[var(--crm-primary-container)] text-[var(--crm-primary)]',
+          sheet: 'bg-[var(--crm-primary-container)] text-[var(--crm-primary)]',
         }
       : {
           dot: 'bg-rose-300',
@@ -393,8 +396,8 @@ const SchedulesView = ({
                           className={classNames(
                             'flex w-full items-center justify-between rounded-2xl px-3 py-2 text-left text-sm font-semibold transition',
                             isActive
-                              ? 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]'
-                              : 'text-white hover:bg-[color:var(--crm-surface-4)]'
+                              ? 'bg-[var(--crm-primary-container)] text-[var(--crm-primary)]'
+                              : 'text-white hover:bg-[var(--crm-surface-4)]'
                           )}
                         >
                           <span>{days} дн.</span>
@@ -413,7 +416,7 @@ const SchedulesView = ({
               type="button"
               onClick={openDatePicker}
               className={classNames(
-                'inline-flex items-center gap-2 rounded-full px-3 py-2 text-left text-2xl font-semibold capitalize text-white transition hover:bg-[color:var(--crm-surface-4)]',
+                'inline-flex items-center gap-2 rounded-full px-3 py-2 text-left text-2xl font-semibold capitalize text-white transition hover:bg-[var(--crm-surface-4)]',
                 isMobileViewport && 'min-w-0 flex-1 gap-1 px-1.5 py-1.5 text-[18px] leading-none'
               )}
             >
@@ -472,8 +475,8 @@ const SchedulesView = ({
                           className={classNames(
                             'flex w-full items-center justify-between rounded-2xl px-3 py-2 text-left text-sm font-semibold transition',
                             isActive
-                              ? 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]'
-                              : 'text-white hover:bg-[color:var(--crm-surface-4)]'
+                              ? 'bg-[var(--crm-primary-container)] text-[var(--crm-primary)]'
+                              : 'text-white hover:bg-[var(--crm-surface-4)]'
                           )}
                         >
                           <span>{days} дн.</span>
@@ -488,7 +491,7 @@ const SchedulesView = ({
               type="button"
               onClick={() => shiftMonth(-1)}
               className={classNames(
-                'inline-flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-[var(--crm-muted)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white',
+                'inline-flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-[var(--crm-muted)] transition hover:bg-[var(--crm-surface-4)] hover:text-white',
                 isMobileViewport && 'h-9 w-9'
               )}
               aria-label="Предыдущий месяц"
@@ -499,7 +502,7 @@ const SchedulesView = ({
               type="button"
               onClick={jumpToToday}
               className={classNames(
-                'inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-semibold text-[var(--crm-text)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white',
+                'inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-semibold text-[var(--crm-text)] transition hover:bg-[var(--crm-surface-4)] hover:text-white',
                 isMobileViewport && 'h-9 px-2.5 text-[11px]'
               )}
             >
@@ -509,7 +512,7 @@ const SchedulesView = ({
               type="button"
               onClick={() => shiftMonth(1)}
               className={classNames(
-                'inline-flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-[var(--crm-muted)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white',
+                'inline-flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-[var(--crm-muted)] transition hover:bg-[var(--crm-surface-4)] hover:text-white',
                 isMobileViewport && 'h-9 w-9'
               )}
               aria-label="Следующий месяц"
@@ -553,9 +556,10 @@ const SchedulesView = ({
             <button
               key={day.key}
               type="button"
+              autoFocus={isToday}
               onClick={() => openScheduleSheet(day.key)}
               className={classNames(
-                'crm-soft-panel min-w-0 h-full flex flex-col text-left transition hover:bg-[color:var(--crm-surface-dim)] focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)]/40',
+                'crm-soft-panel min-w-0 h-full flex flex-col text-left transition hover:bg-[var(--crm-surface-dim)] focus:outline-none focus:ring-2 focus:ring-[#00bfaf]/40',
                 isMobileViewport ? 'rounded-[18px] px-1 py-1.5' : 'p-2',
                 day.inCurrentMonth ? 'text-white' : 'text-slate-500',
               )}
@@ -568,9 +572,9 @@ const SchedulesView = ({
                     'inline-flex min-w-[28px] items-center justify-center rounded-full px-2 font-semibold sm:h-9 sm:min-w-[36px] sm:text-base',
                     isMobileViewport ? 'h-6 text-[11px]' : 'h-8 text-sm',
                     isSelected
-                      ? 'bg-[color:var(--crm-primary)] text-[color:var(--crm-primary-on)]'
+                      ? 'bg-[var(--crm-primary)] text-[var(--crm-primary-on)]'
                       : isToday
-                        ? 'bg-[color:var(--crm-surface-5)] text-white'
+                        ? 'bg-[var(--crm-surface-5)] text-white'
                         : 'text-inherit',
                   )}
                 >

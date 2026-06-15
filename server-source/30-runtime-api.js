@@ -432,7 +432,7 @@ app.get("/api/events/stream", authenticateStream, (req, res) => {
     res.writeHead(200);
   }
   res.write("retry: 5000\n\n");
-  attachRealtimeClient({ req, res });
+  attachRealtimeClient({ req, res, businessId: req.businessId });
 });
 registerAdminCrudRoutes({
   app,

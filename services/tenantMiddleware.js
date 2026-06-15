@@ -4,8 +4,12 @@ const { tenantPrismaStorage, getTenantPrismaClient, getTenantTimezone } = requir
 // Extract business ID from JWT token without verifying signature (graceful extraction)
 const getBusinessIdFromToken = (req) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader) return null;
-  const token = authHeader.split(" ")[1];
+  let token = null;
+  if (authHeader) {
+    token = authHeader.split(" ")[1];
+  } else if (req.query && req.query.token) {
+    token = req.query.token;
+  }
   if (!token) return null;
   try {
     const decoded = jwt.decode(token);
@@ -94,7 +98,7 @@ const tenantMiddleware = async (req, res, next) => {
     const timezone = await getTenantTimezone(schema);
 
     // Run request inside AsyncLocalStorage context
-    tenantPrismaStorage.run({ prisma: tenantPrisma, timezone, schema }, () => {
+    tenantPrismaStorage.run({ prisma: tenantPrisma, timezone, schema, businessId: business?.id || null }, () => {
       next();
     });
   } catch (error) {

@@ -1,4 +1,4 @@
-const registerAdminCrudRoutes = ({
+﻿const registerAdminCrudRoutes = ({
   app,
   authenticateToken,
   prisma,
@@ -53,37 +53,21 @@ const registerAdminCrudRoutes = ({
       return `${yyyy}-${mm}-${dd}`;
     };
     const todayKey = formatDateKey(today);
-    const expiredSchedules = await prisma.schedules.findMany({
-      where: { Date: { lt: todayKey } },
-    });
-    for (const schedule of expiredSchedules) {
-      if (!schedule?.Barber || !schedule?.Date) continue;
-      const baseDate = new Date(`${schedule.Date}T00:00:00`);
-      if (Number.isNaN(baseDate.getTime())) continue;
-      let rollingDate = new Date(baseDate);
-      while (rollingDate < today) {
-        rollingDate.setDate(rollingDate.getDate() + windowDays);
-      }
-      const nextDateKey = formatDateKey(rollingDate);
-      const targetDayIndex = (rollingDate.getDay() + 6) % 7;
-      const existingTarget = await prisma.schedules.findFirst({
-        where: { Barber: schedule.Barber, Date: nextDateKey },
-      });
-      if (existingTarget) {
-        await prisma.schedules.delete({ where: { id: schedule.id } });
-      } else {
-        await prisma.schedules.update({
-          where: { id: schedule.id },
-          data: { Date: nextDateKey, DayOfWeek: daysOfWeek[targetDayIndex] },
-        });
-      }
-    }
+
+    // Cleanup only truly stale records (older than 2x the window) without rolling.
+    // Previously this function rolled expired records to new dates on every read,
+    // which caused schedules to disappear from the dates the admin set them for.
+    const staleThreshold = new Date(today);
+    staleThreshold.setDate(staleThreshold.getDate() - windowDays * 2);
+    const staleKey = formatDateKey(staleThreshold);
     await prisma.schedules.deleteMany({
-      where: {
-        Date: { lt: todayKey },
-      },
+      where: { Date: { lt: staleKey } },
     });
-    const allSchedules = await prisma.schedules.findMany();
+
+    // Read all future/current schedules (from today onwards) for the display grid
+    const allSchedules = await prisma.schedules.findMany({
+      where: { Date: { gte: todayKey } },
+    });
     const schedulesMap = allSchedules.reduce((acc, schedule) => {
       if (schedule.Barber && schedule.Date) {
         acc.set(`${schedule.Barber}-${schedule.Date}`, schedule);

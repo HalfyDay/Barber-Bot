@@ -1,4 +1,4 @@
-﻿/**
+/**
  * schedulePersistence.test.js
  *
  * Tests for the schedule save/persist bug:
@@ -571,4 +571,96 @@ test("schedule GET board shows saved schedule for a barber on correct date", asy
   assert.equal(denisIn3Days.Week, "11:00-20:00", "Week should match the saved record");
   assert.equal(denisIn3Days.originalId, "sched-future", "originalId should reference the DB record");
 });
+
+test("schedule GET matches schedule record if barber name has a trailing space in Barbers table", async () => {
+  const todayKey = dateOffsetKey(0);
+  const { app } = createHarness({
+    getBarbers: async () => [{ id: "barber-vadim", name: "Вадим🐯 " }],
+    prisma: {
+      schedules: {
+        async findMany() {
+          return [
+            {
+              id: "sched-1",
+              Barber: "Вадим🐯", // Trimmed in DB
+              Date: todayKey,
+              Week: "10:00-18:00",
+            },
+          ];
+        },
+        async deleteMany() {
+          return {};
+        },
+        async findFirst() {
+          return null;
+        },
+      },
+    },
+  });
+
+  const handler = app.getRoute("GET", "/api/schedules");
+  const res = createResponseMock();
+  await handler({ identity: { username: "owner" } }, res);
+
+  assert.equal(res.statusCode, 200);
+  const board = res.body;
+  const vadimSlot = board.find(
+    (slot) => slot.Barber === "Вадим🐯" && slot.Date === todayKey
+  );
+  assert.ok(vadimSlot, "Vadim slot should be in the board (normalized)");
+  assert.equal(vadimSlot.Week, "10:00-18:00", "Week should match the saved record");
+});
+
+test("barber POST and PUT normalize trailing space in name", async () => {
+  const createdBarbers = [];
+  const updatedBarbers = [];
+
+  const app = createAppMock();
+  const prisma = {
+    barbers: {
+      async create({ data }) {
+        createdBarbers.push(data);
+        return data;
+      },
+      async update({ where, data }) {
+        updatedBarbers.push({ where, data });
+        return { id: where.id, ...data };
+      },
+      async findUnique() {
+        return { id: "barber-1", name: "Вадим🐯 " };
+      },
+    },
+  };
+
+  const { registerAdminCrudRoutes } = require("../routes/adminCrudRoutes");
+
+  registerAdminCrudRoutes({
+    app,
+    authenticateToken: (req, res, next) => next(),
+    prisma,
+    randomUUID: () => "uuid-1",
+    normalizeText: (v) => (v ?? "").toString().trim(),
+    normalizePhone: (v) => v,
+    canonicalizeKey: (v) => (v ?? "").toString().trim().toLowerCase(),
+    isStaffIdentity: () => false,
+    filterBarbersForIdentity: (b) => b,
+    coercePayload: (table, body) => body,
+    getBarbers: async () => [],
+    propagateBarberRename: async () => {},
+    requestRealtimePush: () => {},
+  });
+
+  const postHandler = app.getRoute("POST", "/api/barbers");
+  const postRes = createResponseMock();
+  await postHandler({ body: { name: "  Вадим🐯  ", phone: "12345" } }, postRes);
+  assert.equal(postRes.statusCode, 201);
+  assert.equal(createdBarbers[0].name, "Вадим🐯", "POST must trim name");
+
+  const putHandler = app.getRoute("PUT", "/api/barbers/:id");
+  const putRes = createResponseMock();
+  await putHandler({ params: { id: "barber-1" }, body: { name: "  Вадим🐯  " } }, putRes);
+  assert.equal(putRes.statusCode, 200);
+  assert.equal(updatedBarbers[0].data.name, "Вадим🐯", "PUT must trim name");
+});
+
 

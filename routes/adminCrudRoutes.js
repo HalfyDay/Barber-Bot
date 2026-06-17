@@ -1,4 +1,4 @@
-﻿const registerAdminCrudRoutes = ({
+const registerAdminCrudRoutes = ({
   app,
   authenticateToken,
   prisma,
@@ -78,9 +78,9 @@
       new Set(allSchedules.map((item) => item.Barber).filter(Boolean)),
     );
     const barberNames = (
-      barbersList.map((barber) => barber.name).filter(Boolean).length
-        ? barbersList.map((barber) => barber.name).filter(Boolean)
-        : fallbackNames
+      barbersList.map((barber) => normalizeText(barber.name)).filter(Boolean).length
+        ? barbersList.map((barber) => normalizeText(barber.name)).filter(Boolean)
+        : fallbackNames.map((name) => normalizeText(name)).filter(Boolean)
     ).sort((a, b) => a.localeCompare(b, "ru"));
     const fullSchedule = [];
     barberNames.forEach((name) => {
@@ -157,6 +157,9 @@
     if (payload.phone !== undefined) {
       payload.phone = normalizePhone(payload.phone);
     }
+    if (payload.name !== undefined) {
+      payload.name = normalizeText(payload.name);
+    }
     try {
       const record = await prisma.barbers.create({
         data: { id: randomUUID(), ...payload },
@@ -180,6 +183,9 @@
     }
     if (data.phone !== undefined) {
       data.phone = normalizePhone(data.phone);
+    }
+    if (data.name !== undefined) {
+      data.name = normalizeText(data.name);
     }
     if (data.name !== undefined) {
       const existingBarber = await prisma.barbers.findUnique({

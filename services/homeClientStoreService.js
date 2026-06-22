@@ -434,7 +434,7 @@ const createHomeClientStoreService = ({
         mapImageUrl: normalizeText(homeInput.mapImageUrl) || "",
         mapLink: normalizeText(homeInput.mapLink),
         mapCaption: normalizeText(homeInput.mapCaption),
-        contactsTitle: normalizeText(homeInput.contactsTitle),
+        contactsTitle: normalizeText(homeInput.contactsTitle) || DEFAULT_SITE_CONFIG.home.contactsTitle,
         phone: normalizeText(homeInput.phone),
         telegramUrl: normalizeText(homeInput.telegramUrl) || "",
         whatsappUrl: normalizeText(homeInput.whatsappUrl) || "",

@@ -2943,7 +2943,7 @@
         </article>` : ""}
           ${hasContactsBlock ? `
           <article class="content-card contacts-card">
-          ${normalizeText(siteHome.contactsTitle) ? `<h2 class="section-title">${normalizeText(siteHome.contactsTitle)}</h2>` : ""}
+          <h2 class="section-title">${normalizeText(siteHome.contactsTitle) || "Контакты"}</h2>
           <div class="contact-actions">
             ${phone ? `<a class="ghost-btn square-btn icon-btn contacts-phone phone-link" href="tel:${normalizePhone(phone)}" aria-label="Телефон">${iconMarkup("phone")}<span>${phone}</span></a>` : ""}
             ${normalizeText(siteHome.telegramUrl) ? `<a class="ghost-btn square-btn icon-btn" href="${normalizeText(siteHome.telegramUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Telegram">${iconMarkup("telegram")}<span>Telegram</span></a>` : ""}

@@ -1,4 +1,4 @@
-﻿const TablesWorkspace = ({
+const TablesWorkspace = ({
   apiRequest,
   sharedOptions,
   onOptionsUpdate,
@@ -713,11 +713,10 @@
                   onOpenCreate={
                     activeTable === 'Appointments'
                       ? () =>
-                          onCreateAppointment?.(
-                            appointmentCalendarView === 'day'
-                              ? { Date: appointmentCalendarDate || getLocalISODateString() }
-                              : {}
-                          )
+                          onCreateAppointment?.({
+                            ...(appointmentCalendarView === 'day' ? { Date: appointmentCalendarDate || getLocalISODateString() } : {}),
+                            ...(selectedBarber && selectedBarber !== 'all' ? { Barber: selectedBarber } : {}),
+                          })
                       : () => setCreateModalOpen(true)
                   }
                   onRefresh={fetchTables}

@@ -1,4 +1,4 @@
-﻿const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [], onOpenProfile }) => {
+const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [], onOpenProfile }) => {
   if (!groups.length) {
     return <p className="text-[var(--crm-muted)]">Записей пока нет.</p>;
   }
@@ -498,7 +498,7 @@ const AppointmentsCalendarView = ({
             key={slot.id || `${slot.Barber}-${slot.Date}-${slot.Time}`}
             type="button"
             title={slot.Time || 'Свободное окно'}
-            onClick={() => onCreateAppointment?.({ Barber: slot.Barber, Date: slot.Date, Time: slot.Time })}
+            onClick={() => onCreateAppointment?.({ Barber: slot.Barber || (selectedBarber !== 'all' ? selectedBarber : undefined), Date: slot.Date, Time: slot.Time })}
             className="w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-md bg-[rgba(0,191,175,0.26)] px-1 py-0.5 text-center text-[10px] font-semibold leading-tight text-[#f4fffd] transition hover:bg-[rgba(0,191,175,0.32)] focus:outline-none"
           >
             {monthCompactLabel}
@@ -509,7 +509,7 @@ const AppointmentsCalendarView = ({
         <button
           key={slot.id || `${slot.Barber}-${slot.Date}-${slot.Time}`}
           type="button"
-          onClick={() => onCreateAppointment?.({ Barber: slot.Barber, Date: slot.Date, Time: slot.Time })}
+          onClick={() => onCreateAppointment?.({ Barber: slot.Barber || (selectedBarber !== 'all' ? selectedBarber : undefined), Date: slot.Date, Time: slot.Time })}
           className={classNames(
             'w-full rounded-[22px] bg-[rgba(0,191,175,0.26)] text-center text-[#eafffb] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_10px_22px_rgba(0,0,0,0.18)] transition hover:bg-[rgba(0,191,175,0.32)] focus:outline-none',
             compact ? 'px-2 py-2' : 'p-3'

@@ -1,4 +1,4 @@
-﻿const TABLE_COLUMNS = {
+const TABLE_COLUMNS = {
   Appointments: [
     { key: 'CustomerName', label: 'Клиент', editable: true, type: 'text', isProfileLink: true, minWidth: 'w-48' },
     { key: 'Phone', label: 'Телефон', editable: true, type: 'text', minWidth: 'w-36' },
@@ -954,6 +954,11 @@ const buildManualTimeRangeValue = (start, end) => {
     return `${safeStart} - ${safeEnd}`;
   }
   return safeStart || '';
+};
+const parseSlotTimeMinutes = (value) => {
+  const match = normalizeText(value).match(/(\d{1,2}):(\d{2})/);
+  if (!match) return 0;
+  return Number(match[1]) * 60 + Number(match[2]);
 };
 const addMinutesToTimeToken = (timeValue, minutesToAdd) => {
   const safeTime = sanitizeTimeToken(timeValue);

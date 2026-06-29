@@ -140,139 +140,556 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
     </Modal>
   );
 };
-const ProfileModal = ({ state, onClose, onBlockClient }) => {
-  const appointments = state.data?.appointments || [];
-  const visitHistory = useMemo(() => buildVisitHistory(appointments), [appointments]);
-  const user = state.data?.user || null;
-  const avatarSrc = useMemo(
-    () => resolveAssetUrl(normalizeImagePath(user?.avatarUrl || user?.AvatarURL || '')),
-    [user?.AvatarURL, user?.avatarUrl]
-  );
+const ProfileModal = ({
+  state,
+  isOpen,
+  open: openProp,
+  client: clientProp,
+  onClose,
+  barbers = [],
+  onUpdate = null,
+  onAdjustBs = null,
+  onAddWarning = null,
+  onBlockClient = null,
+  onDelete = null,
+  onRequestConfirm = null,
+  fetchHistory = null,
+}) => {
+  const effectiveOpen = Boolean(state ? state.open : (isOpen !== undefined ? isOpen : openProp));
+  const externalLoading = state ? state.loading : false;
+  const externalData = state ? state.data : null;
+
+  const [modalRecord, setModalRecord] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [internalLoading, setInternalLoading] = useState(false);
+  const [error, setError] = useState('');
   const [blockState, setBlockState] = useState(null);
   const [blockBusy, setBlockBusy] = useState(false);
-  const [blockError, setBlockError] = useState('');
+  const [saveBusy, setSaveBusy] = useState(false);
+
+  const [bsMode, setBsMode] = useState('add');
+  const [bsInput, setBsInput] = useState('');
+  const [bsComment, setBsComment] = useState('');
+  const [bsError, setBsError] = useState('');
+  const [bsPanelOpen, setBsPanelOpen] = useState(false);
+
+  const [warningComment, setWarningComment] = useState('');
+  const [warningBusy, setWarningBusy] = useState(false);
+  const [warningError, setWarningError] = useState('');
+  const [warningPanelOpen, setWarningPanelOpen] = useState(false);
+
   useEffect(() => {
-    setBlockState(null);
-    setBlockError('');
-  }, [state?.open, user?.id]);
-  const warningCount = blockState?.warningCount ?? state.data?.warningCount ?? user?.warningCount ?? 0;
-  const manualBlocked = blockState?.manualBlocked ?? state.data?.manualBlocked ?? user?.manualBlocked ?? false;
-  const isBlocked =
-    blockState?.isBlocked ??
-    blockState?.blocked ??
-    state.data?.isBlocked ??
-    user?.isBlocked ??
-    manualBlocked;
-  const handleToggleBlock = async () => {
-    if (!onBlockClient || !user?.id) return;
+    if (!effectiveOpen) {
+      setModalRecord(null);
+      setHistory([]);
+      setError('');
+      setBlockState(null);
+      setBsInput('');
+      setBsComment('');
+      setBsError('');
+      setWarningComment('');
+      setWarningError('');
+      setBsPanelOpen(false);
+      setWarningPanelOpen(false);
+      setBlockBusy(false);
+      setSaveBusy(false);
+      setWarningBusy(false);
+      setInternalLoading(false);
+      return;
+    }
+
+    const sourceUser = externalData?.user || clientProp || externalData || null;
+    const sourceAppts = externalData?.appointments || [];
+
+    if (sourceUser) {
+      setModalRecord({
+        ...sourceUser,
+        Name: sourceUser.Name || sourceUser.name || '',
+        Phone: sourceUser.Phone || sourceUser.phone || '',
+        TelegramID: sourceUser.TelegramID || sourceUser.telegramId || '',
+        Barber: sourceUser.Barber || sourceUser.barber || '',
+      });
+      setHistory(buildVisitHistory(sourceAppts));
+    }
+
+    if (externalData?.error) {
+      setError(externalData.error);
+    } else {
+      setError('');
+    }
+
+    if (fetchHistory && sourceUser && (sourceUser.Name || sourceUser.name)) {
+      setInternalLoading(true);
+      Promise.resolve(fetchHistory(sourceUser))
+        .then((profile) => {
+          if (profile?.user) {
+            setModalRecord((prev) => ({
+              ...(prev || {}),
+              ...profile.user,
+              Name: profile.user.Name || profile.user.name || prev?.Name || '',
+              Phone: profile.user.Phone || profile.user.phone || prev?.Phone || '',
+              TelegramID: profile.user.TelegramID || profile.user.telegramId || prev?.TelegramID || '',
+              Barber: profile.user.Barber || profile.user.barber || prev?.Barber || '',
+            }));
+          }
+          if (profile?.appointments) {
+            setHistory(buildVisitHistory(profile.appointments));
+          }
+        })
+        .catch((err) => setError(err?.message || 'Не удалось загрузить историю'))
+        .finally(() => setInternalLoading(false));
+    }
+  }, [effectiveOpen, externalData, clientProp, fetchHistory]);
+
+  const barberOptions = useMemo(() => {
+    if (Array.isArray(barbers) && barbers.length) {
+      return barbers.map((b) => (typeof b === 'string' ? b : b.name || b.Name || '')).filter(Boolean);
+    }
+    return [];
+  }, [barbers]);
+
+  const warningCount = Number(blockState?.warningCount ?? modalRecord?.warningCount ?? externalData?.warningCount ?? externalData?.user?.warningCount ?? 0);
+  const manualBlocked = Boolean(blockState?.manualBlocked ?? modalRecord?.manualBlocked ?? externalData?.manualBlocked ?? externalData?.user?.manualBlocked);
+  const isBlocked = blockState?.isBlocked ?? blockState?.blocked ?? modalRecord?.isBlocked ?? externalData?.isBlocked ?? externalData?.user?.isBlocked ?? manualBlocked;
+
+  const clientAvatarSrc = resolveAssetUrl(
+    normalizeImagePath(modalRecord?.avatarUrl || modalRecord?.AvatarURL || externalData?.user?.avatarUrl || externalData?.user?.AvatarURL || '')
+  );
+
+  const currentBsBalance = Math.max(0, Math.trunc(Number(modalRecord?.bsBalance ?? externalData?.user?.bsBalance ?? 0) || 0));
+  const parsedBsAmount = parseBsEditorAmount(bsInput);
+  const hasBsDraft = String(bsInput || '').trim().length > 0;
+  const signedBsAmount = bsMode === 'subtract' ? -parsedBsAmount : parsedBsAmount;
+  const projectedBsBalance = bsMode === 'set' ? parsedBsAmount : currentBsBalance + signedBsAmount;
+
+  const handleFieldChange = (field, value) => {
+    setModalRecord((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleBsFieldChange = (field, value) => {
+    if (field === 'bsInput') setBsInput(value);
+    if (field === 'bsMode') setBsMode(value);
+    if (field === 'bsComment') setBsComment(value);
+    if (field === 'bsInput' || field === 'bsMode') setBsError('');
+  };
+
+  const handleWarningCommentChange = (value) => {
+    setWarningComment(value);
+    setWarningError('');
+  };
+
+  const handleSave = async () => {
+    if (!modalRecord) return;
+    const recordId = getRecordId(modalRecord) || modalRecord.id || modalRecord.telegramId;
+    if (saveBusy) return;
+
+    let normalizedBsAmount = parsedBsAmount;
+    if (hasBsDraft) {
+      if (Number.isNaN(parsedBsAmount)) {
+        setBsError('Введите целое число. Например: 120 или 15.');
+        return;
+      }
+      if (bsMode === 'set' && normalizedBsAmount < 0) {
+        setBsError('Баланс BS не может быть отрицательным.');
+        return;
+      }
+      if (bsMode !== 'set' && projectedBsBalance < 0) {
+        setBsError('После списания баланс не может уйти в минус.');
+        return;
+      }
+    }
+
+    setSaveBusy(true);
+    setBsError('');
+    setError('');
+
+    try {
+      if (typeof onUpdate === 'function' && recordId) {
+        await onUpdate(recordId, {
+          Name: modalRecord.Name,
+          Phone: modalRecord.Phone,
+          TelegramID: modalRecord.TelegramID,
+          Barber: modalRecord.Barber,
+        }, { tableId: 'Users' });
+      }
+      if (hasBsDraft && typeof onAdjustBs === 'function' && recordId) {
+        const result = await onAdjustBs(recordId, {
+          mode: bsMode === 'set' ? 'set' : 'adjust',
+          amountBs: bsMode === 'set' ? normalizedBsAmount : signedBsAmount,
+          comment: bsComment,
+        });
+        if (result?.bsBalance !== undefined) {
+          setModalRecord((prev) => ({ ...prev, bsBalance: result.bsBalance }));
+        }
+      }
+      onClose?.();
+    } catch (err) {
+      setError(err?.message || 'Не удалось сохранить изменения.');
+    } finally {
+      setSaveBusy(false);
+    }
+  };
+
+  const handleBlockToggle = async () => {
+    const recordId = getRecordId(modalRecord) || modalRecord?.id;
+    if (!onBlockClient || !recordId) return;
     setBlockBusy(true);
-    setBlockError('');
+    setError('');
     const nextBlocked = !isBlocked;
     try {
-      const result = await onBlockClient(user.id, nextBlocked);
+      const result = await onBlockClient(recordId, nextBlocked);
       setBlockState({
         warningCount: result?.warnings ?? warningCount,
         manualBlocked: result?.manualBlocked ?? nextBlocked,
         isBlocked: result?.blocked ?? nextBlocked,
       });
-    } catch (error) {
-      setBlockError(error.message || 'Failed to update block status');
+      setModalRecord((prev) => ({ ...prev, isBlocked: result?.blocked ?? nextBlocked, manualBlocked: result?.manualBlocked ?? nextBlocked }));
+    } catch (err) {
+      setError(err?.message || 'Не удалось обновить статус блокировки');
     } finally {
       setBlockBusy(false);
     }
   };
-  const phoneLabel = user?.Phone ? formatPhoneInput(user.Phone) : '';
-  const phoneHref = phoneLabel ? `tel:${phoneLabel.replace(/[^\d+]/g, '')}` : '';
-  const telegramHandle = user?.TelegramID ? formatTelegramHandle(user.TelegramID) : '';
-  const telegramHref = user?.TelegramID ? buildTelegramLink(user.TelegramID) : '';
-  const telegramTarget = telegramHref?.startsWith('tg://') ? '_self' : '_blank';
-  const telegramRel = telegramHref?.startsWith('tg://') ? undefined : 'noopener noreferrer';
+
+  const handleAddWarning = async () => {
+    const recordId = getRecordId(modalRecord) || modalRecord?.id;
+    const comment = String(warningComment || '').trim();
+    if (!recordId || typeof onAddWarning !== 'function') return;
+    if (!comment) {
+      setWarningError('Введите комментарий к предупреждению.');
+      return;
+    }
+    setWarningBusy(true);
+    setWarningError('');
+    try {
+      const result = await onAddWarning(recordId, { comment });
+      setWarningComment('');
+      setWarningBusy(false);
+      setBlockState((prev) => ({
+        ...prev,
+        warningCount: result?.warnings ?? warningCount + 1,
+        isBlocked: result?.blocked ?? isBlocked,
+        manualBlocked: result?.manualBlocked ?? manualBlocked,
+      }));
+      setModalRecord((prev) => ({
+        ...prev,
+        warningCount: result?.warnings ?? warningCount + 1,
+        isBlocked: result?.blocked ?? isBlocked,
+      }));
+      if (result?.warning) {
+        setHistory((prev) => [
+          {
+            id: result.warning.id,
+            Date: result.warning.createdAt,
+            Time: '',
+            Status: 'warning',
+            Barber: 'Предупреждение',
+            Services: result.warning.description || comment,
+            startDate: new Date(result.warning.createdAt),
+            dateLabel: formatDateTime(result.warning.createdAt, ''),
+            orderNumber: prev.length + 1,
+          },
+          ...prev,
+        ]);
+      }
+    } catch (err) {
+      setWarningBusy(false);
+      setWarningError(err?.message || 'Не удалось добавить предупреждение.');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!modalRecord) return;
+    const confirmed = onRequestConfirm
+      ? await onRequestConfirm({
+          title: 'Удалить клиента?',
+          message: `Клиент «${modalRecord.Name || 'Без имени'}» будет удален без возможности восстановления.`,
+          confirmLabel: 'Удалить',
+          tone: 'danger',
+        })
+      : true;
+    if (!confirmed) return;
+    if (typeof onDelete === 'function') {
+      await onDelete(modalRecord, { skipConfirm: true });
+    }
+    onClose?.();
+  };
+
+  const isLoading = externalLoading || internalLoading;
+
   return (
     <Modal
-      title={state.data?.user?.Name || 'Client profile'}
-      isOpen={state.open}
+      title={modalRecord?.Name || 'Клиент'}
+      isOpen={effectiveOpen}
       onClose={onClose}
+      maxWidthClass="max-w-3xl"
       footer={
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {onBlockClient && user?.id && (
+        <div className="flex flex-nowrap items-center justify-end gap-2 sm:gap-3">
+          {modalRecord && onDelete && (
             <button
-              onClick={handleToggleBlock}
-              disabled={blockBusy}
+              onClick={handleDelete}
+              className={classNames(
+                RESPONSIVE_ACTION_BUTTON_CLASS,
+                SHEET_FOOTER_BUTTON_CLASS,
+                'crm-danger-btn'
+              )}
+              aria-label="Удалить"
+              title="Удалить"
+            >
+              <IconTrash className="h-5 w-5" aria-hidden="true" />
+              <span className="hidden sm:inline">Удалить</span>
+            </button>
+          )}
+          <button
+            onClick={handleBlockToggle}
+            disabled={blockBusy || !onBlockClient || !modalRecord}
             className={classNames(
               RESPONSIVE_ACTION_BUTTON_CLASS,
               SHEET_FOOTER_BUTTON_CLASS,
               isBlocked
                 ? 'crm-tonal-btn text-[color:var(--crm-highlight-text)]'
                 : 'crm-danger-btn',
-              blockBusy && 'cursor-not-allowed opacity-60'
+              (blockBusy || !onBlockClient || !modalRecord) && 'cursor-not-allowed opacity-60'
             )}
+            aria-label={isBlocked ? 'Разблокировать клиента' : 'Заблокировать клиента'}
+            title={isBlocked ? 'Разблокировать клиента' : 'Заблокировать клиента'}
           >
-              <IconBan className="h-5 w-5" aria-hidden="true" />
-              <span className="hidden sm:inline">{isBlocked ? 'Разблокировать' : 'Заблокировать'}</span>
-            </button>
-          )}
-          <button onClick={onClose} className={classNames('crm-ghost-btn', SHEET_FOOTER_BUTTON_CLASS)}>Закрыть</button>
+            <IconBan className="h-5 w-5" aria-hidden="true" />
+            <span className="hidden sm:inline">{isBlocked ? 'Разблокировать' : 'Заблокировать'}</span>
+          </button>
+          <button
+            onClick={onClose}
+            disabled={saveBusy}
+            className={classNames(
+              RESPONSIVE_ACTION_BUTTON_CLASS,
+              SHEET_FOOTER_BUTTON_CLASS,
+              'crm-ghost-btn',
+              saveBusy && 'cursor-not-allowed opacity-60'
+            )}
+            aria-label="Отмена"
+            title="Отмена"
+          >
+            <IconClose className="h-5 w-5" aria-hidden="true" />
+            <span className="hidden sm:inline">Отмена</span>
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saveBusy}
+            className={classNames(
+              RESPONSIVE_ACTION_BUTTON_CLASS,
+              SHEET_FOOTER_BUTTON_CLASS,
+              'crm-action-btn',
+              saveBusy && 'cursor-not-allowed opacity-60'
+            )}
+            aria-label="Сохранить"
+            title="Сохранить"
+          >
+            <IconSave className="h-5 w-5" aria-hidden="true" />
+            <span className="hidden sm:inline">Сохранить</span>
+          </button>
         </div>
       }
     >
-      {state.loading && <LoadingState label="Loading profile..." />}
-      {!state.loading && state.data?.error && <ErrorBanner message={state.data.error} />}
-      {!state.loading && user && (
+      {isLoading && <LoadingState label="Загрузка профиля..." />}
+      {!isLoading && error && <ErrorBanner message={error} />}
+      {!isLoading && modalRecord && (
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-            {avatarSrc ? (
-              <img src={avatarSrc} alt={user?.Name || 'Клиент'} className="h-14 w-14 rounded-full object-cover" />
+            {clientAvatarSrc ? (
+              <img
+                src={clientAvatarSrc}
+                alt={modalRecord?.Name || 'Клиент'}
+                className="h-14 w-14 rounded-full object-cover"
+              />
             ) : (
-              <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--crm-surface-3)] text-[var(--crm-muted)]" aria-hidden="true">
+              <span
+                className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--crm-surface-3)] text-[var(--crm-muted)]"
+                aria-hidden="true"
+              >
                 <IconCalendarDay className="h-6 w-6" />
               </span>
             )}
             <div className="min-w-0">
-              <p className="text-lg font-semibold text-white">{user?.Name || 'Без имени'}</p>
-              {(phoneLabel || telegramHandle) && (
-                <p className="text-sm text-[var(--crm-muted)]">
-                  {[phoneLabel, telegramHandle].filter(Boolean).join(' • ')}
+              <p className="text-lg font-semibold text-white">{modalRecord?.Name || 'Без имени'}</p>
+              {modalRecord?.Phone && (
+                <p className="text-sm text-[var(--crm-muted)]">{formatPhoneInput(modalRecord.Phone)}</p>
+              )}
+            </div>
+          </div>
+          <div className="crm-inline-panel px-4 py-3">
+            <button
+              type="button"
+              onClick={() => setWarningPanelOpen((prev) => !prev)}
+              className="flex w-full items-center justify-between gap-3 text-left"
+            >
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  Предупреждения: {warningCount}{isBlocked ? ' (Заблокирован)' : ''}
                 </p>
-              )}
+              </div>
+              <div className="flex items-center gap-2">
+                {isBlocked && <span className="rounded-full bg-[color:var(--crm-highlight-soft)] px-3 py-1 text-xs font-semibold text-[color:var(--crm-highlight-text)]">Заблокирован</span>}
+                <svg className={classNames('h-4 w-4 text-[var(--crm-muted)] transition-transform', warningPanelOpen && 'rotate-180')} viewBox="0 0 20 20" fill="none">
+                  <path d="M5 7.5l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+            </button>
+            <div className={classNames('crm-sheet-disclosure', warningPanelOpen && 'crm-sheet-disclosure-open')}>
+              <div className="crm-sheet-disclosure-inner">
+                <div className="grid gap-2 pt-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                <label className="space-y-1 text-sm text-slate-300">
+                  Комментарий
+                  <input
+                    value={warningComment}
+                    onChange={(event) => handleWarningCommentChange(event.target.value)}
+                    placeholder="Например, грубое опоздание или нарушение правил"
+                    className="h-10 w-full px-3 text-white"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={handleAddWarning}
+                  disabled={warningBusy || !onAddWarning}
+                  className={classNames(
+                    'crm-action-btn h-10 min-h-0 px-4 text-sm',
+                    (warningBusy || !onAddWarning) && 'cursor-not-allowed opacity-60'
+                  )}
+                >
+                  Добавить
+                </button>
+                {warningError && <p className="text-sm text-rose-300 sm:col-span-2">{warningError}</p>}
+                </div>
+              </div>
             </div>
           </div>
-          <div className="crm-inline-panel flex flex-wrap items-center justify-between gap-3 px-3 py-2">
-            <div className="text-sm text-white">
-              <p className="font-semibold">Предупреждения: {warningCount}</p>
-              {blockError && <p className="text-xs text-rose-300">{blockError}</p>}
-            </div>
-            {isBlocked && (
-              <span className="rounded-full bg-[color:var(--crm-highlight-soft)] px-3 py-1 text-xs font-semibold text-[color:var(--crm-highlight-text)]">Заблокирован</span>
-            )}
+          <div className="grid grid-cols-2 gap-3">
+            <label className="col-span-2 space-y-1 text-sm text-slate-300 md:col-span-1">
+              Имя
+              <input
+                name="clientName"
+                aria-label="Имя клиента"
+                value={modalRecord.Name || ''}
+                onChange={(event) => handleFieldChange('Name', event.target.value)}
+                className="h-10 w-full px-3 text-white"
+              />
+            </label>
+            <label className="col-span-2 space-y-1 text-sm text-slate-300 md:col-span-1">
+              Телефон
+              <input
+                name="clientPhone"
+                aria-label="Телефон клиента"
+                value={modalRecord.Phone || ''}
+                onChange={(event) => handleFieldChange('Phone', event.target.value)}
+                className="h-10 w-full px-3 text-white"
+              />
+            </label>
+            <label className="space-y-1 text-sm text-slate-300">
+              Telegram ID
+              <input
+                name="clientTelegram"
+                aria-label="Telegram ID"
+                value={modalRecord.TelegramID || ''}
+                onChange={(event) => handleFieldChange('TelegramID', event.target.value)}
+                className="h-10 w-full px-3 text-white"
+              />
+            </label>
+            <label className="space-y-1 text-sm text-slate-300">
+              {"Любимый барбер"}
+              <CustomSelect
+                value={modalRecord.Barber || ''}
+                onChange={(value) => handleFieldChange('Barber', value)}
+                buttonClassName="!h-10 min-h-0 px-3"
+                portalMenu
+                placeholder="Не выбран"
+                options={[
+                  { value: '', label: 'Не выбран' },
+                  ...barberOptions.map((barber) => ({ value: barber, label: barber })),
+                ]}
+              />
+            </label>
           </div>
-          <div className="grid gap-2 text-sm text-slate-200">
-            <div>
-              <span className="text-[var(--crm-muted)]">Телефон:</span>{" "}
-              {phoneLabel && phoneHref ? (
-                <a href={phoneHref} className="text-[color:var(--crm-primary)] hover:text-white">
-                  {phoneLabel}
-                </a>
-              ) : (
-                "-"
-              )}
+          <div className="crm-soft-card p-3">
+            <button
+              type="button"
+              onClick={() => setBsPanelOpen((prev) => !prev)}
+              className="flex w-full items-center justify-between gap-3 rounded-[22px] text-left"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white">{"Баланс BS"}</p>
+              </div>
+              <div className="flex items-center gap-3 text-right">
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-[var(--crm-muted)]">{"Сейчас BS"}</p>
+                  <p className="text-sm font-semibold text-white">{currentBsBalance} BS</p>
+                </div>
+                <svg className={classNames('h-4 w-4 text-[var(--crm-muted)] transition-transform', bsPanelOpen && 'rotate-180')} viewBox="0 0 20 20" fill="none">
+                  <path d="M5 7.5l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+            </button>
+            <div className={classNames('crm-sheet-disclosure', bsPanelOpen && 'crm-sheet-disclosure-open')}>
+              <div className="crm-sheet-disclosure-inner">
+                <div className="space-y-3 pt-1">
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="space-y-1 text-sm text-slate-300">
+                    {"Режим"}
+                    <CustomSelect
+                      value={bsMode}
+                      onChange={(value) => handleBsFieldChange('bsMode', value)}
+                      buttonClassName="!h-10 min-h-0 px-3"
+                      portalMenu
+                      options={[
+                        { value: 'add', label: 'Прибавить' },
+                        { value: 'subtract', label: 'Списать' },
+                        { value: 'set', label: 'Установить вручную' },
+                      ]}
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm text-slate-300">
+                    {bsMode === 'set'
+                      ? "Новый баланс"
+                      : bsMode === 'subtract'
+                        ? "Сумма списания"
+                        : "Сумма начисления"}
+                    <input
+                      name="clientBs"
+                      aria-label={"Баланс BS"}
+                      value={bsInput}
+                      onChange={(event) => handleBsFieldChange('bsInput', event.target.value)}
+                      placeholder={bsMode === 'set' ? "Например, 120" : "Например, 15"}
+                      className="h-10 w-full px-3 text-white"
+                    />
+                  </label>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-[color:var(--crm-surface-4)]/70 px-3 py-2 text-sm">
+                  <span className="text-[var(--crm-muted)]">{"Будет"}</span>
+                  <span className={classNames('font-semibold', projectedBsBalance < 0 ? 'text-rose-300' : 'text-white')}>{Number.isNaN(projectedBsBalance) ? '?' : `${projectedBsBalance} BS`}</span>
+                </div>
+                <label className="space-y-1 text-sm text-slate-300">
+                  {"Комментарий"}
+                  <input
+                    name="clientBsComment"
+                    aria-label={"Комментарий к изменению BS"}
+                    value={bsComment}
+                    onChange={(event) => handleBsFieldChange('bsComment', event.target.value)}
+                    placeholder={"Например, ручная корректировка или списание за услугу"}
+                    className="h-10 w-full px-3 text-white"
+                  />
+                </label>
+                {bsError && <p className="text-sm text-rose-300">{bsError}</p>}
+                </div>
+              </div>
             </div>
-            <div>
-              <span className="text-[var(--crm-muted)]">Телеграм:</span>{" "}
-              {telegramHandle && telegramHref ? (
-                <a href={telegramHref} target={telegramTarget} rel={telegramRel} className="text-[color:var(--crm-primary)] hover:text-white">
-                  {telegramHandle}
-                </a>
-              ) : (
-                "-"
-              )}
-            </div>
-            <div><span className="text-[var(--crm-muted)]">Любимый барбер:</span> {user.Barber || "-"}</div>
           </div>
-          <div>
+          <div className="space-y-2">
             <p className="text-sm text-[var(--crm-muted)]">История визитов</p>
-            <div className="mt-2">
-              <VisitHistoryList visits={visitHistory} emptyMessage="История пуста." />
-            </div>
+            <VisitHistoryList
+              visits={history}
+              loading={isLoading}
+              error={error}
+              emptyMessage="История визитов пуста."
+              maxHeightClass="max-h-56"
+            />
           </div>
         </div>
       )}
@@ -356,7 +773,7 @@ const AppointmentModal = ({
     setDetailsOpen(false);
     setValidationError('');
     setValidationWarning('');
-    setManualEndOverride(false);
+    setManualEndOverride(Boolean(parseTimeRangeParts(appointment?.Time || '').end));
     setSaveWarningConfirmArmed(false);
     setDismissedNoticeKeys([]);
     setQuickCreateBusy(false);
@@ -556,16 +973,33 @@ const AppointmentModal = ({
       if (!start) return nextDraft;
       const duration = getServicesDuration(nextDraft.Services);
       const currentEnd = parseTimeRangeParts(nextDraft.Time || '').end || '';
-      const nextEnd = !preserveManualEnd && duration > 0
-        ? addMinutesToTimeToken(start, duration)
-        : currentEnd;
-      const nextTime = preserveManualEnd
+      const isManual = preserveManualEnd || manualEndOverride;
+
+      let nextEnd = currentEnd;
+      let isStillManual = isManual;
+
+      if (isManual && currentEnd) {
+        const startMins = parseSlotTimeMinutes(start);
+        const endMins = parseSlotTimeMinutes(currentEnd);
+        const manualDuration = (endMins - startMins + 1440) % 1440;
+        if (duration > manualDuration) {
+          nextEnd = duration > 0 ? addMinutesToTimeToken(start, duration) : currentEnd;
+          isStillManual = false;
+          setManualEndOverride(false);
+        } else {
+          nextEnd = currentEnd;
+        }
+      } else {
+        nextEnd = duration > 0 ? addMinutesToTimeToken(start, duration) : currentEnd;
+      }
+
+      const nextTime = isStillManual
         ? buildManualTimeRangeValue(start, nextEnd)
         : buildTimeRangeValue(start, nextEnd);
       if (nextTime === (nextDraft.Time || '')) return nextDraft;
       return { ...nextDraft, Time: nextTime };
     },
-    [getServicesDuration]
+    [getServicesDuration, manualEndOverride]
   );
   useEffect(() => {
     if (!open) return;
@@ -605,13 +1039,10 @@ const AppointmentModal = ({
   const handleChange = (field, value) => {
     setValidationError('');
     setSaveWarningConfirmArmed(false);
-    if (field === 'Services') {
-      setManualEndOverride(false);
-    }
     setDraft((prev) => {
       if (!prev) return prev;
       const nextDraft = field === 'Services' || field === 'Time'
-        ? syncDraftTimeWithServices({ ...prev, [field]: value }, { preserveManualEnd: field !== 'Services' && manualEndOverride })
+        ? syncDraftTimeWithServices({ ...prev, [field]: value }, { preserveManualEnd: manualEndOverride })
         : { ...prev, [field]: value };
       updateWarningForDraft(nextDraft);
       return nextDraft;
@@ -624,9 +1055,6 @@ const AppointmentModal = ({
           ? buildManualTimeRangeValue(nextStart, appointmentEndTime)
           : buildTimeRangeValue(nextStart, autoEnd || appointmentEndTime))
       : '';
-    if (autoEnd) {
-      setManualEndOverride(false);
-    }
     handleChange('Time', nextTime);
   };
   const handleEndTimeChange = (nextEnd) => {

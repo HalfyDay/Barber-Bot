@@ -1924,6 +1924,23 @@ const handleBarberFieldChange = (id, field, value) => {
         state={profileModal}
         onClose={() => setProfileModal({ open: false, data: null, loading: false })}
         onBlockClient={handleBlockClient}
+        onAdjustBs={handleAdjustClientBs}
+        onAddWarning={handleAddClientWarning}
+        barbers={barbers}
+        onRequestConfirm={requestConfirm}
+        onUpdate={async (recordId, payload) => {
+          await apiRequest(`/Users/${encodeURIComponent(recordId)}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+          });
+          fetchAll({ silent: true });
+        }}
+        onDelete={async (record) => {
+          const recordId = getRecordId(record) || record?.id;
+          if (!recordId) return;
+          await apiRequest(`/Users/${encodeURIComponent(recordId)}`, { method: 'DELETE' });
+          fetchAll({ silent: true });
+        }}
       />
       <AppointmentModal
         open={appointmentModal.open}

@@ -1874,11 +1874,6 @@ const isTodayDate = (dateValue) => {
     today.getDate() === target.getDate()
   );
 };
-const parseSlotTimeMinutes = (value) => {
-  const match = normalizeText(value).match(/(\d{1,2}):(\d{2})/);
-  if (!match) return 0;
-  return Number(match[1]) * 60 + Number(match[2]);
-};
 const getScheduleSortValue = (slot) => {
   const safeDate = normalizeText(slot.Date);
   if (safeDate) {

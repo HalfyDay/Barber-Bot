@@ -59,8 +59,8 @@ const VisitHistoryList = ({
     </div>
   );
 };
-const SectionCard = ({ title, actions, children, hideTitleOnMobile = false }) => (
-  <div className="crm-section-card space-y-5 p-5 sm:p-6">
+const SectionCard = ({ title, actions, children, hideTitleOnMobile = false, className = '' }) => (
+  <div className={classNames('crm-section-card space-y-5 p-5 sm:p-6', className)}>
     <div
       className={classNames(
         'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between',

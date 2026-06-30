@@ -25,6 +25,7 @@ const createDashboardSnapshotService = ({
   warningBlockThreshold,
   botRuntime,
   buildUserInsightsMap,
+  statusNoShow,
 }) => {
   const isTransientPrismaDisconnect = (error) => {
     const message = String(error?.message || error || "");
@@ -258,6 +259,12 @@ const createDashboardSnapshotService = ({
         appt.Date &&
         appt.Date >= monthStartKey,
     ).length;
+    const noShowsMonth = appointments.filter(
+      (appt) =>
+        (normalizeText(appt.Status) === normalizeText(statusNoShow) || appt.Status === 'no_show') &&
+        appt.Date &&
+        appt.Date >= monthStartKey,
+    ).length;
     const barberLookup = new Map();
     barbers.forEach((barber) => {
       const variants = [
@@ -277,6 +284,7 @@ const createDashboardSnapshotService = ({
     const serviceLookup = buildServiceLookup(services);
     let incomeMonth = 0;
     appointments.forEach((appt) => {
+      if (appt.Services && splitServiceList(appt.Services).includes('Прочее')) return;
       if (!isCompletedStatus(appt.Status)) return;
       if (!appt.Date || appt.Date < monthStartKey) return;
       const serviceNames = splitServiceList(appt.Services);
@@ -305,6 +313,7 @@ const createDashboardSnapshotService = ({
       confirmedYear,
       recurringClients,
       confirmedMonth,
+      noShowsMonth,
       incomeMonth,
       blockedClients,
       earningsMonth: null,
@@ -364,6 +373,7 @@ const createDashboardSnapshotService = ({
       let staffMonthlyGross = 0;
       let staffMonthlyCommission = 0;
       staffAppointments.forEach((appt) => {
+        if (appt.Services && splitServiceList(appt.Services).includes('Прочее')) return;
         if (!isCompletedStatus(appt.Status)) return;
         if (!appt.Date || appt.Date < monthStartKey) return;
         const serviceNames = splitServiceList(appt.Services);

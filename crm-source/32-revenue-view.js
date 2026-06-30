@@ -1,4 +1,4 @@
-﻿const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh, requestConfirm }) => {
+const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh, requestConfirm }) => {
   const [newPosition, setNewPosition] = useState({ name: '', rate: '' });
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [drafts, setDrafts] = useState({});
@@ -310,44 +310,105 @@
     </div>
   );
 };
+const PRESETS = [
+  { label: '1Н', value: '1W' },
+  { label: '1М', value: '1M' },
+  { label: '3М', value: '3M' },
+  { label: '6М', value: '6M' },
+  { label: '1Г', value: '1Y' },
+  { label: 'ВСЕ', value: 'ALL' },
+];
+
 const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberId = null }) => {
   const isStaffMode = role === ROLE_STAFF;
   const staffBarberFilterValue =
     staffBarberId !== null && staffBarberId !== undefined ? String(staffBarberId) : '';
+  
   const defaultRange = useMemo(() => getCurrentMonthRange(), []);
   const defaultFilters = useMemo(
     () => ({
       start: toInputDate(defaultRange.start),
       end: toInputDate(defaultRange.end),
       barberId: isStaffMode && staffBarberFilterValue ? staffBarberFilterValue : 'all',
+      preset: '1M'
     }),
     [defaultRange.start, defaultRange.end, isStaffMode, staffBarberFilterValue]
   );
-  const [filters, setFilters] = useLocalStorage('revenue.filters', defaultFilters);
+  
+  const [filters, setFilters] = useLocalStorage('revenue.filters.v2', defaultFilters);
   const [state, setState] = useState({ loading: true, error: '', data: null });
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
   const [activePoint, setActivePoint] = useState(null);
+  const observerRef = useRef(null);
+  const chartContainerRef = useRef(null);
+  const [chartWidth, setChartWidth] = useState(600);
+  const [chartHeight, setChartHeight] = useState(380);
+  
+  const chartResizeRef = useCallback((node) => {
+    chartContainerRef.current = node;
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+    
+    if (node !== null) {
+      const rect = node.getBoundingClientRect();
+      if (rect.width > 0) setChartWidth(rect.width);
+      if (rect.height > 0) setChartHeight(rect.height);
+      
+      const observer = new ResizeObserver((entries) => {
+        for (let entry of entries) {
+          if (entry.contentRect.width > 0) {
+            setChartWidth(entry.contentRect.width);
+          }
+          if (entry.contentRect.height > 0) {
+            setChartHeight(entry.contentRect.height);
+          }
+        }
+      });
+      observer.observe(node);
+      observerRef.current = observer;
+    }
+  }, []);
+  
   const startDateId = useMemo(() => `revenue-start-${Math.random().toString(36).slice(2, 8)}`, []);
   const endDateId = useMemo(() => `revenue-end-${Math.random().toString(36).slice(2, 8)}`, []);
+  
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const handler = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
+  
   useEffect(() => {
     if (!filters) {
       setFilters(defaultFilters);
       return;
     }
-    if (!filters.start || !filters.end) {
-      setFilters((prev) => ({
-        start: prev?.start || defaultFilters.start,
-        end: prev?.end || defaultFilters.end,
-        barberId: prev?.barberId || defaultFilters.barberId,
-      }));
-    }
   }, [filters, defaultFilters, setFilters]);
+
+  const applyPreset = useCallback((presetValue) => {
+    if (presetValue === 'ALL') {
+      setFilters(prev => ({ ...prev, preset: presetValue, start: '', end: '' }));
+      return;
+    }
+    const endDt = new Date();
+    const startDt = new Date();
+    if (presetValue === '1W') startDt.setDate(startDt.getDate() - 7);
+    if (presetValue === '1M') startDt.setMonth(startDt.getMonth() - 1);
+    if (presetValue === '3M') startDt.setMonth(startDt.getMonth() - 3);
+    if (presetValue === '6M') startDt.setMonth(startDt.getMonth() - 6);
+    if (presetValue === '1Y') startDt.setFullYear(startDt.getFullYear() - 1);
+    
+    setFilters(prev => ({ 
+      ...prev, 
+      preset: presetValue, 
+      start: toInputDate(startDt), 
+      end: toInputDate(endDt) 
+    }));
+  }, [setFilters]);
+  
   const barberOptions = useMemo(
     () =>
       barbers
@@ -359,28 +420,19 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
         .filter(Boolean),
     [barbers]
   );
+  
   const staffBarberName = useMemo(() => {
     if (!isStaffMode || !staffBarberFilterValue) return '';
     const match = barberOptions.find((option) => option.id === staffBarberFilterValue);
     return match?.name || '';
   }, [isStaffMode, barberOptions, staffBarberFilterValue]);
-  useEffect(() => {
-    if (!filters || filters.barberId === 'all' || isStaffMode) return;
-    if (!barberOptions.some((option) => option.id === filters.barberId)) {
-      setFilters((prev) => ({ ...prev, barberId: 'all' }));
-    }
-  }, [filters, barberOptions, setFilters, isStaffMode]);
-  useEffect(() => {
-    if (!isStaffMode || !filters) return;
-    const nextValue = staffBarberFilterValue || 'all';
-    if (filters.barberId !== nextValue) {
-      setFilters((prev) => ({ ...prev, barberId: nextValue }));
-    }
-  }, [isStaffMode, filters, staffBarberFilterValue, setFilters]);
+  
   const startDate = filters?.start || '';
   const endDate = filters?.end || '';
   const selectedBarberId = filters?.barberId || 'all';
   const appliedBarberId = isStaffMode ? staffBarberFilterValue || 'all' : selectedBarberId;
+  const currentPreset = filters?.preset || 'CUSTOM';
+  
   const fetchRevenue = useCallback(async () => {
     if (isStaffMode && !staffBarberFilterValue) {
       setState({
@@ -407,30 +459,30 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
       });
     }
   }, [apiRequest, startDate, endDate, appliedBarberId, isStaffMode, staffBarberFilterValue]);
+  
   useEffect(() => {
     fetchRevenue();
   }, [fetchRevenue]);
+  
   const handleFilterChange = (field, value) => {
     if (isStaffMode && field === 'barberId') return;
-    setFilters((prev) => ({ ...prev, [field]: value }));
+    setFilters((prev) => ({ ...prev, [field]: value, preset: (field === 'start' || field === 'end') ? 'CUSTOM' : prev.preset }));
   };
+  
   const summary = state.data;
   const items = summary?.items || [];
+  
   const rawTimeline = useMemo(() => {
     if (Array.isArray(summary?.timeline)) return summary.timeline;
     if (summary?.timeline && typeof summary.timeline === 'object') {
       return Object.entries(summary.timeline).map(([key, value]) => {
-        if (value && typeof value === 'object') {
-          return { date: key, ...value };
-        }
+        if (value && typeof value === 'object') return { date: key, ...value };
         return { date: key, gross: value };
       });
     }
     return [];
   }, [summary?.timeline]);
-  const totalGross = summary?.totalGross ?? 0;
-  const totalCommission = summary?.totalCommission ?? 0;
-  const totalNet = summary?.totalNet ?? totalGross - totalCommission;
+  
   const parseGrossValue = useCallback((value) => {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (value == null) return 0;
@@ -438,6 +490,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
     const numeric = Number(normalized);
     return Number.isFinite(numeric) ? numeric : 0;
   }, []);
+  
   const normalizedTimeline = useMemo(
     () =>
       rawTimeline.map((point) => ({
@@ -451,303 +504,374 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
       })),
     [rawTimeline, parseGrossValue]
   );
-  useEffect(() => {
-    setActivePoint(null);
-  }, [normalizedTimeline, isMobile]);
+  
+  const totalGross = summary?.totalGross ?? 0;
+  const totalCommission = summary?.totalCommission ?? 0;
+  const totalNet = summary?.totalNet ?? totalGross - totalCommission;
+  
+  const timelineLength = normalizedTimeline.length || 1;
+  const avgDaily = totalGross / timelineLength;
+  let trendPercent = 0;
+  if (timelineLength > 1) {
+    const half = Math.floor(timelineLength / 2);
+    const firstHalfAvg = normalizedTimeline.slice(0, half).reduce((sum, p) => sum + p.grossValue, 0) / half;
+    const secondHalfAvg = normalizedTimeline.slice(half).reduce((sum, p) => sum + p.grossValue, 0) / (timelineLength - half);
+    if (firstHalfAvg > 0) {
+      trendPercent = ((secondHalfAvg - firstHalfAvg) / firstHalfAvg) * 100;
+    }
+  }
+  const trendColor = trendPercent >= 0 ? 'text-[#00e676]' : 'text-[#ff5252]';
+  const trendIcon = trendPercent >= 0 ? '▲' : '▼';
+  
   const chartMax = normalizedTimeline.reduce((max, point) => Math.max(max, point.grossValue), 0);
   const safeChartMax = chartMax > 0 ? chartMax : 1;
-  const lineChartHeight = isMobile ? 220 : 260;
-  const lineChartWidth = Math.max(normalizedTimeline.length * (isMobile ? 64 : 88), isMobile ? 280 : 520);
-  const lineChartPaddingX = 24;
-  const lineChartPaddingY = 24;
-  const lineChartInnerWidth = Math.max(lineChartWidth - lineChartPaddingX * 2, 1);
+  const lineChartHeight = isMobile ? 220 : chartHeight;
+  
+  const lineChartPaddingX = isMobile ? 32 : 64;
+  const lineChartPaddingY = 30;
+  const lineChartInnerWidth = Math.max(chartWidth - lineChartPaddingX * 2, 1);
   const lineChartInnerHeight = Math.max(lineChartHeight - lineChartPaddingY * 2, 1);
+  
   const lineChartPoints = normalizedTimeline.map((point, index) => {
     const safeValue = point.grossValue || 0;
     const ratio = normalizedTimeline.length > 1 ? index / (normalizedTimeline.length - 1) : 0.5;
     const x = lineChartPaddingX + ratio * lineChartInnerWidth;
-    const y = lineChartPaddingY + (1 - (safeChartMax ? safeValue / safeChartMax : 0)) * lineChartInnerHeight;
+    const y = lineChartPaddingY + (1 - (safeValue / safeChartMax)) * lineChartInnerHeight;
     return {
       x: Number(x.toFixed(2)),
       y: Number(y.toFixed(2)),
       value: safeValue,
       label: formatShortDateLabel(point.date || point.label),
+      index
     };
   });
-  const linePath = lineChartPoints.map((point, idx) => `${idx === 0 ? 'M' : 'L'}${point.x},${point.y}`).join(' ');
+  
+  const linePath = lineChartPoints.map((p, idx) => `${idx === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
   const baseLineY = lineChartHeight - lineChartPaddingY;
   const areaPath =
     lineChartPoints.length > 0
       ? [
           `M${lineChartPoints[0].x},${baseLineY}`,
-          ...lineChartPoints.map((point) => `L${point.x},${point.y}`),
+          ...lineChartPoints.map((p) => `L${p.x},${p.y}`),
           `L${lineChartPoints[lineChartPoints.length - 1].x},${baseLineY}`,
           'Z',
         ].join(' ')
       : '';
-  const handlePointHover = useCallback(
-    (point, index) => {
-      if (isMobile) return;
-      setActivePoint({ ...point, index });
-    },
-    [isMobile]
-  );
-  const handlePointLeave = useCallback(() => {
-    if (isMobile) return;
+      
+  const handleMouseMove = useCallback((e) => {
+    if (!chartContainerRef.current || lineChartPoints.length === 0) return;
+    const rect = chartContainerRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    
+    let closestPoint = lineChartPoints[0];
+    let minDiff = Math.abs(mouseX - closestPoint.x);
+    for (let i = 1; i < lineChartPoints.length; i++) {
+      const diff = Math.abs(mouseX - lineChartPoints[i].x);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestPoint = lineChartPoints[i];
+      }
+    }
+    setActivePoint(closestPoint);
+  }, [lineChartPoints]);
+
+  const handleMouseLeave = useCallback(() => {
     setActivePoint(null);
-  }, [isMobile]);
-  const handlePointClick = useCallback(
-    (point, index) => {
-      if (!isMobile) return;
-      setActivePoint((prev) => (prev?.index === index ? null : { ...point, index }));
-    },
-    [isMobile]
-  );
+  }, []);
+
   return (
     <div className="space-y-6 overflow-x-hidden">
-      <SectionCard title="Доходы барберов" hideTitleOnMobile>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="grid grid-cols-2 gap-3 sm:col-span-2 lg:col-span-2">
-            <div className="space-y-1">
-              <label className="text-xs uppercase tracking-wide text-slate-400" htmlFor={startDateId}>
-                Дата с
-              </label>
-              <input
-                id={startDateId}
-                name="revenueStartDate"
-                aria-label="Дата с"
-                type="date"
-                value={startDate}
-                onChange={(event) => handleFilterChange('start', event.target.value)}
-                className="revenue-date-input w-full px-3 py-2 text-white"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs uppercase tracking-wide text-slate-400" htmlFor={endDateId}>
-                Дата по
-              </label>
-              <input
-                id={endDateId}
-                name="revenueEndDate"
-                aria-label="Дата по"
-                type="date"
-                value={endDate}
-                onChange={(event) => handleFilterChange('end', event.target.value)}
-                className="revenue-date-input w-full px-3 py-2 text-white"
-              />
-            </div>
-          </div>
-          {isStaffMode ? (
-            <div className="space-y-1 sm:col-span-2 lg:col-span-1">
-              <label className="text-xs uppercase tracking-wide text-slate-400">Барбер</label>
-              <div className="crm-inline-panel flex h-11 items-center px-3 text-sm text-white">
-                {staffBarberName || 'Не указан'}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-1 sm:col-span-2 lg:col-span-1">
-              <label className="text-xs uppercase tracking-wide text-slate-400">Барбер</label>
-              <CustomSelect
-                value={selectedBarberId}
-                onChange={(nextValue) => handleFilterChange('barberId', nextValue)}
-                options={[
-                  { value: 'all', label: 'Все барберы' },
-                  ...barberOptions.map((option) => ({ value: option.id, label: option.name })),
-                ]}
-                buttonClassName="h-11 px-4"
-              />
-            </div>
-          )}
-          <div className="flex items-stretch sm:col-span-2 sm:items-end sm:justify-end lg:col-span-1">
-            <button
-              type="button"
-              onClick={fetchRevenue}
-              className="crm-ghost-btn w-full px-4 py-2 text-sm font-semibold sm:w-auto sm:px-6"
-            >
-              Обновить
-            </button>
-          </div>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div className="hidden xl:block">
+          <h1 className="text-2xl font-bold tracking-tight text-white mb-1">Доходы</h1>
+          <p className="text-sm text-[var(--crm-muted)]">Аналитика выручки и выплат</p>
         </div>
-        {state.error && <ErrorBanner message={state.error} />}
-        {state.loading ? (
-          <LoadingState label="Считаю доходы..." />
-        ) : (
-          <>
+        
+        <div className="flex flex-col gap-3 w-full sm:flex-row sm:flex-wrap sm:items-center sm:justify-start xl:flex-nowrap xl:justify-end xl:w-auto">
+          {/* Preset Buttons */}
+          <div className="flex crm-soft-panel p-1 w-full justify-between items-center h-9 sm:min-w-[240px] flex-grow xl:flex-none xl:w-auto xl:min-w-[240px]">
+            {PRESETS.map(preset => (
+              <button
+                key={preset.value}
+                onClick={() => applyPreset(preset.value)}
+                className={classNames(
+                  "flex-1 h-7 flex items-center justify-center text-xs font-semibold rounded-xl transition-all duration-200",
+                  currentPreset === preset.value
+                    ? "bg-[color:var(--crm-primary)] text-zinc-950 shadow-md"
+                    : "text-[var(--crm-muted)] hover:text-white hover:bg-white/5"
+                )}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          
+          {/* Date Picker Row */}
+          <div className="flex items-center justify-between gap-2 crm-soft-panel px-3 h-9 w-full flex-grow xl:flex-none xl:w-auto">
+            <input
+              id={startDateId}
+              type="date"
+              value={startDate}
+              onChange={(e) => handleFilterChange('start', e.target.value)}
+              className="flex-1 w-24 sm:w-28 h-7 !bg-transparent !border-none !shadow-none !outline-none !ring-0 text-xs text-white text-center"
+            />
+            <span className="text-[var(--crm-muted)] text-xs">-</span>
+            <input
+              id={endDateId}
+              type="date"
+              value={endDate}
+              onChange={(e) => handleFilterChange('end', e.target.value)}
+              className="flex-1 w-24 sm:w-28 h-7 !bg-transparent !border-none !shadow-none !outline-none !ring-0 text-xs text-white text-center"
+            />
+          </div>
+          
+          {/* Barber Select */}
+          {!isStaffMode && (
+            <CustomSelect
+              value={selectedBarberId}
+              onChange={(v) => handleFilterChange('barberId', v)}
+              options={[
+                { value: 'all', label: 'Все барберы' },
+                ...barberOptions.map((opt) => ({ value: opt.id, label: opt.name })),
+              ]}
+              className="w-full flex-grow xl:flex-none xl:w-48"
+              buttonClassName="!h-9 !px-4 text-xs !border-none"
+            />
+          )}
+        </div>
+      </div>
+
+      {state.error && <ErrorBanner message={state.error} />}
+      
+      {state.loading ? (
+        <LoadingState label="Считаю доходы..." />
+      ) : (
+        <div className="space-y-6">
+          <div className={classNames(
+            "grid grid-cols-1 gap-6",
+            !isStaffMode && "lg:grid-cols-12"
+          )}>
+            
+            {/* STATS CARDS (right on PC, top on mobile) */}
             {!isStaffMode && (
-              <div className="mt-6 grid gap-3 md:grid-cols-3">
-                <StatCard label="Общая выручка" value={formatCurrency(totalGross)} />
-                <StatCard label="Начислено сотрудникам" value={formatCurrency(totalCommission)} accent="text-[color:var(--crm-highlight)]" />
-                <StatCard label="В кассу" value={formatCurrency(totalNet)} accent="text-[color:var(--crm-primary)]" />
-              </div>
-            )}
-            <div className="mt-6">
-              {items.length === 0 ? (
-                <p className="crm-inline-panel p-4 text-sm text-[var(--crm-muted)]">Нет выполненных услуг за выбранный период.</p>
-              ) : (
-                <>
-                  {!isMobile && (
-                    <div className="crm-table-shell overflow-x-auto">
-                      <table className="min-w-full text-sm">
-                        <thead className="bg-[color:var(--crm-surface-4)] text-[var(--crm-muted)]">
-                          <tr>
-                            <th className="px-4 py-3 text-left font-semibold">Барбер</th>
-                            <th className="px-4 py-3 text-right font-semibold">Записи</th>
-                            <th className="px-4 py-3 text-right font-semibold">Выручка</th>
-                            <th className="px-4 py-3 text-right font-semibold">Комиссия</th>
-                            <th className="px-4 py-3 text-right font-semibold">Выплаты</th>
-                            <th className="px-4 py-3 text-right font-semibold">В кассу</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {items.map((item) => (
-                            <tr key={item.id} className="hover:bg-[color:var(--crm-surface-4)]">
-                              <td className="px-4 py-3 text-white">{item.name}</td>
-                              <td className="px-4 py-3 text-right text-slate-300">{item.appointments}</td>
-                              <td className="px-4 py-3 text-right text-slate-100">{formatCurrency(item.gross)}</td>
-                              <td className="px-4 py-3 text-right text-slate-300">{formatPercent(item.commissionRate)}</td>
-                              <td className="px-4 py-3 text-right text-[color:var(--crm-highlight)]">{formatCurrency(item.commission)}</td>
-                              <td className="px-4 py-3 text-right text-[color:var(--crm-primary)]">{formatCurrency(item.net)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+              <div className="order-1 lg:order-2 lg:col-span-4 grid grid-cols-2 gap-3 lg:grid-cols-1 lg:gap-4 lg:flex lg:flex-col lg:justify-between">
+                {/* Card 1 */}
+                <div className="crm-soft-card p-4 sm:p-5 flex flex-col justify-center h-full">
+                  <p className="text-[10px] sm:text-xs uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-2 truncate">Общая выручка</p>
+                  <div className="flex items-baseline gap-2">
+                    <h2 className="text-lg sm:text-2xl lg:text-3xl font-bold tracking-tight text-white truncate whitespace-nowrap">{formatCurrency(totalGross)}</h2>
+                  </div>
+                  {timelineLength > 1 && (
+                    <p className={classNames("text-[10px] sm:text-xs font-semibold mt-2 flex items-center gap-1", trendColor)}>
+                      <span>{trendIcon}</span> {Math.abs(trendPercent).toFixed(1)}% <span className="text-[var(--crm-muted)] font-normal ml-0.5 hidden sm:inline">тренд</span>
+                    </p>
                   )}
-                  {isMobile && (
-                    <div className="space-y-4 w-full">
-                      {items.map((item) => {
-                        const mobileStats = [
-                          { label: 'Выручка', value: formatCurrency(item.gross), accent: 'text-white', wrapper: 'crm-soft-panel' },
-                          { label: 'Комиссия', value: formatPercent(item.commissionRate), accent: 'text-[var(--crm-text)]', wrapper: 'crm-soft-panel' },
-                          { label: 'Выплаты', value: formatCurrency(item.commission), accent: 'text-[color:var(--crm-highlight)]', wrapper: 'crm-soft-panel' },
-                          { label: 'В кассу', value: formatCurrency(item.net), accent: 'text-[color:var(--crm-primary)]', wrapper: 'crm-soft-panel' },
-                        ];
-                        return (
-                          <div key={item.id} className="crm-soft-card p-4">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-base font-semibold text-white">{item.name}</p>
-                              <span className="text-xs uppercase tracking-wide text-[var(--crm-muted)]">{item.appointments} записей</span>
-                            </div>
-                            <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-300">
-                              {mobileStats.map((metric) => (
-                                <div
-                                  key={metric.label}
-                                  className={`rounded-xl px-3 py-2 ${metric.wrapper}`}
-                                >
-                                  <p className="text-xs uppercase tracking-wide text-[var(--crm-muted)]">{metric.label}</p>
-                                  <p className={`text-lg font-semibold ${metric.accent}`}>{metric.value}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </>
-        )}
-      </SectionCard>
-      <SectionCard title="Динамика выручки">
-        {state.loading ? (
-          <LoadingState label="Загрузка данных..." />
-        ) : normalizedTimeline.length === 0 ? (
-          <p className="text-sm text-[var(--crm-muted)]">Нет данных для выбранного периода.</p>
-        ) : (
-          <div className="mt-2">
-            <div className="crm-soft-card p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs uppercase tracking-wide text-[var(--crm-muted)]">Линейный график</p>
-                <p className="text-xs text-[var(--crm-text)]">
-                  Пиковое значение:{' '}
-                  <span className="font-semibold text-white">{formatCurrency(chartMax)}</span>
-                </p>
-              </div>
-              <div className="mt-4 overflow-x-auto pb-1">
-                <div className="relative inline-block" style={{ minWidth: `${lineChartWidth}px` }}>
-                  {activePoint && (
-                    <div
-                      className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-3/4 whitespace-nowrap rounded-xl bg-[color:var(--crm-surface-5)] px-3 py-2 text-xs shadow-2xl shadow-black/40"
-                      style={{ left: `${activePoint.x}px`, top: `${activePoint.y}px` }}
-                    >
-                      <p className="font-semibold text-white">{formatCurrency(activePoint.value)}</p>
-                      <p className="text-[11px] uppercase tracking-wide text-[var(--crm-muted)]">{activePoint.label}</p>
-                    </div>
-                  )}
-                  <svg
-                    width={lineChartWidth}
-                    height={lineChartHeight}
-                    viewBox={`0 0 ${lineChartWidth} ${lineChartHeight}`}
-                    role="img"
-                    aria-label="Линейный график динамики выручки"
-                    onMouseLeave={handlePointLeave}
-                  >
-                    <defs>
-                      <linearGradient id="revenueLineFill" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="rgba(0, 191, 175, 0.3)" />
-                        <stop offset="100%" stopColor="rgba(0, 191, 175, 0)" />
-                      </linearGradient>
-                      <linearGradient id="revenueLineStroke" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#7be8dc" />
-                        <stop offset="100%" stopColor="#00bfaf" />
-                      </linearGradient>
-                    </defs>
-                    {areaPath && <path d={areaPath} fill="url(#revenueLineFill)" stroke="none" />}
-                    {linePath && (
-                      <path
-                        d={linePath}
-                        fill="none"
-                        stroke="url(#revenueLineStroke)"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    )}
-                    {lineChartPoints.map((point, index) => {
-                      const isActive = activePoint?.index === index;
-                      return (
-                        <g key={`line-point-${index}-${point.label}`}>
-                          <circle
-                            cx={point.x}
-                            cy={point.y}
-                            r={isActive ? 5.5 : 4}
-                            fill={isActive ? '#f8fafc' : '#7be8dc'}
-                            stroke={isActive ? '#00bfaf' : '#0a3a35'}
-                            strokeWidth={isActive ? 3 : 2}
-                            className={isMobile ? 'cursor-pointer' : 'cursor-default'}
-                            onMouseEnter={() => handlePointHover(point, index)}
-                            onMouseLeave={handlePointLeave}
-                            onFocus={() => handlePointHover(point, index)}
-                            onBlur={handlePointLeave}
-                            onClick={() => handlePointClick(point, index)}
-                            role="button"
-                            tabIndex={0}
-                            aria-label={`${point.label}: ${formatCurrency(point.value)}`}
-                          >
-                            <title>{`${point.label}: ${formatCurrency(point.value)}`}</title>
-                          </circle>
-                          <text
-                            x={point.x}
-                            y={lineChartHeight - 6}
-                            textAnchor="middle"
-                            fontSize="10"
-                            fill={isActive ? '#ebfffb' : '#94a3b8'}
-                          >
-                            {point.label}
-                          </text>
-                        </g>
-                      );
-                    })}
-                  </svg>
+                </div>
+
+                {/* Card 2 */}
+                <div className="crm-soft-card p-4 sm:p-5 flex flex-col justify-center h-full">
+                  <p className="text-[10px] sm:text-xs uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-2 truncate">Начислено сотрудникам</p>
+                  <h2 className="text-lg sm:text-2xl lg:text-3xl font-bold tracking-tight text-[color:var(--crm-highlight)] truncate whitespace-nowrap">{formatCurrency(totalCommission)}</h2>
+                  <p className="text-[10px] sm:text-xs text-[var(--crm-muted)] mt-2 truncate">
+                    {totalGross > 0 ? ((totalCommission / totalGross) * 100).toFixed(1) : 0}% <span className="hidden sm:inline">от выручки</span>
+                  </p>
+                </div>
+
+                {/* Card 3 */}
+                <div className="crm-soft-card p-4 sm:p-5 flex flex-col justify-center h-full">
+                  <p className="text-[10px] sm:text-xs uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-2 truncate">В кассу</p>
+                  <h2 className="text-lg sm:text-2xl lg:text-3xl font-bold tracking-tight text-[color:var(--crm-primary)] drop-shadow-[0_0_8px_rgba(0,191,175,0.4)] truncate whitespace-nowrap">{formatCurrency(totalNet)}</h2>
+                  <p className="text-[10px] sm:text-xs text-[var(--crm-muted)] mt-2 truncate">
+                    Чистая прибыль
+                  </p>
+                </div>
+
+                {/* Card 4 */}
+                <div className="crm-soft-card p-4 sm:p-5 flex flex-col justify-center h-full">
+                  <p className="text-[10px] sm:text-xs uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-2 truncate">Средняя в день</p>
+                  <h2 className="text-lg sm:text-2xl lg:text-3xl font-bold tracking-tight text-white truncate whitespace-nowrap">{formatCurrency(avgDaily)}</h2>
+                  <p className="text-[10px] sm:text-xs text-[var(--crm-muted)] mt-2 truncate">
+                    За {timelineLength} {timelineLength === 1 ? 'день' : 'дн.'}
+                  </p>
                 </div>
               </div>
+            )}
+
+            {/* CHART CARD (left on PC, bottom on mobile) */}
+            <div className={classNames(
+              "order-2 lg:order-1 flex flex-col",
+              !isStaffMode ? "lg:col-span-8" : "w-full"
+            )}>
+              <SectionCard title="Динамика выручки" hideTitleOnMobile className="h-full flex flex-col">
+                {normalizedTimeline.length === 0 ? (
+                  <div className="py-12 text-center text-[var(--crm-muted)]">Нет данных за этот период</div>
+                ) : (
+                  <div 
+                    ref={chartResizeRef}
+                    className="relative w-full overflow-hidden rounded-lg mt-2 cursor-crosshair flex-grow"
+                    onMouseMove={handleMouseMove}
+                    onMouseLeave={handleMouseLeave}
+                    onTouchMove={(e) => {
+                      const touch = e.touches[0];
+                      if(touch) handleMouseMove(touch);
+                    }}
+                    onTouchEnd={handleMouseLeave}
+                  >
+                    {activePoint && (
+                      <div
+                        className="pointer-events-none absolute z-20 flex flex-col items-center"
+                        style={{ left: `${activePoint.x}px`, top: `0px`, height: `${lineChartHeight}px`, transform: 'translateX(-50%)' }}
+                      >
+                        <div className="absolute top-0 bottom-0 w-px border-l border-dashed border-[color:var(--crm-primary)]/50"></div>
+                        
+                        <div 
+                          className="absolute w-screen border-t border-dashed border-[color:var(--crm-primary)]/30 left-1/2 -translate-x-1/2 pointer-events-none" 
+                          style={{ top: `${activePoint.y}px` }}
+                        ></div>
+                        
+                        <div 
+                          className="absolute rounded-full bg-[color:var(--crm-primary)] shadow-[0_0_10px_2px_rgba(0,191,175,0.8)]"
+                          style={{ width: '10px', height: '10px', top: `${activePoint.y - 5}px`, left: '50%', transform: 'translateX(-50%)' }}
+                        ></div>
+                        
+                        <div 
+                          className="absolute z-30 flex flex-col items-start justify-center rounded-lg border border-[color:var(--crm-primary)]/40 bg-[color:var(--crm-surface-1)]/95 px-3 py-2 shadow-2xl backdrop-blur-sm"
+                          style={{
+                            top: activePoint.y < lineChartHeight / 2 ? `${activePoint.y + 15}px` : `${activePoint.y - 65}px`,
+                            left: activePoint.x < 120 ? '15px' : (activePoint.x > chartWidth - 120 ? '-15px' : '0px'),
+                            transform: activePoint.x < 120 ? 'translateX(0)' : (activePoint.x > chartWidth - 120 ? 'translateX(-100%)' : 'translateX(-50%)')
+                          }}
+                        >
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--crm-muted)]">{activePoint.label}</p>
+                          <p className="text-base font-bold text-white drop-shadow-md whitespace-nowrap">{formatCurrency(activePoint.value)}</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <svg
+                      width={chartWidth}
+                      height={lineChartHeight}
+                      className="block"
+                      style={{ touchAction: 'none' }}
+                    >
+                      <defs>
+                        <linearGradient id="neonGradientArea" x1="0%" y1="0%" x2="0%" y2="100%">
+                          <stop offset="0%" stopColor="rgba(0, 191, 175, 0.4)" />
+                          <stop offset="50%" stopColor="rgba(0, 191, 175, 0.1)" />
+                          <stop offset="100%" stopColor="rgba(0, 191, 175, 0)" />
+                        </linearGradient>
+                        <linearGradient id="neonGradientLine" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor="#29ffd4" />
+                          <stop offset="50%" stopColor="#00bfaf" />
+                          <stop offset="100%" stopColor="#009688" />
+                        </linearGradient>
+                      </defs>
+                      
+                      {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+                        const y = lineChartPaddingY + ratio * lineChartInnerHeight;
+                        const value = safeChartMax * (1 - ratio);
+                        return (
+                          <g key={`grid-${ratio}`}>
+                            <line x1={lineChartPaddingX} y1={y} x2={chartWidth} y2={y} stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+                            {ratio < 1 && (
+                              <text x={12} y={y - 4} fontSize="10" fill="#475569" className="select-none">
+                                {formatCurrency(value)}
+                              </text>
+                            )}
+                          </g>
+                        );
+                      })}
+                      
+                      {areaPath && <path d={areaPath} fill="url(#neonGradientArea)" />}
+                      {linePath && (
+                        <path
+                          d={linePath}
+                          fill="none"
+                          stroke="url(#neonGradientLine)"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      )}
+                      
+                      {lineChartPoints.map((p, i) => (
+                        <circle key={`dot-${i}`} cx={p.x} cy={p.y} r="2" fill="#00bfaf" opacity="0.5" />
+                      ))}
+                      
+                      {lineChartPoints.filter((_, i) => i % Math.ceil(lineChartPoints.length / (isMobile ? 4 : 8)) === 0).map((p, i) => (
+                        <text key={`label-${i}`} x={p.x} y={lineChartHeight - 5} textAnchor="middle" fontSize="10" fill="#475569" className="select-none">
+                          {p.label}
+                        </text>
+                      ))}
+                    </svg>
+                  </div>
+                )}
+              </SectionCard>
             </div>
+
           </div>
-        )}
-      </SectionCard>
+
+          {items.length > 0 && (
+            <SectionCard title="Детализация по сотрудникам">
+              {!isMobile ? (
+                <div className="crm-table-shell overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-[color:var(--crm-surface-4)] text-[var(--crm-muted)]">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold">Барбер</th>
+                        <th className="px-4 py-3 text-right font-semibold">Записи</th>
+                        <th className="px-4 py-3 text-right font-semibold">Выручка</th>
+                        <th className="px-4 py-3 text-right font-semibold">Комиссия</th>
+                        <th className="px-4 py-3 text-right font-semibold">Выплаты</th>
+                        <th className="px-4 py-3 text-right font-semibold">В кассу</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {items.map((item) => (
+                        <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 py-4 text-white font-medium">{item.name}</td>
+                          <td className="px-4 py-4 text-right text-slate-400">{item.appointments}</td>
+                          <td className="px-4 py-4 text-right text-slate-200 font-medium whitespace-nowrap">{formatCurrency(item.gross)}</td>
+                          <td className="px-4 py-4 text-right text-slate-400">{formatPercent(item.commissionRate)}</td>
+                          <td className="px-4 py-4 text-right text-[color:var(--crm-highlight)] font-semibold whitespace-nowrap">{formatCurrency(item.commission)}</td>
+                          <td className="px-4 py-4 text-right text-[color:var(--crm-primary)] font-semibold whitespace-nowrap">{formatCurrency(item.net)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="space-y-4 w-full">
+                  {items.map((item) => {
+                    const mobileStats = [
+                      { label: 'Выручка', value: formatCurrency(item.gross), accent: 'text-white' },
+                      { label: 'Комиссия', value: formatPercent(item.commissionRate), accent: 'text-slate-400' },
+                      { label: 'Выплаты', value: formatCurrency(item.commission), accent: 'text-[color:var(--crm-highlight)]' },
+                      { label: 'В кассу', value: formatCurrency(item.net), accent: 'text-[color:var(--crm-primary)]' },
+                    ];
+                    return (
+                      <div key={item.id} className="crm-soft-card p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-3">
+                          <p className="text-base font-bold text-white">{item.name}</p>
+                          <span className="text-xs uppercase tracking-wider text-[var(--crm-muted)] px-2 py-1 bg-white/5 rounded-full">{item.appointments} записей</span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                          {mobileStats.map((metric) => (
+                            <div key={metric.label}>
+                              <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)]">{metric.label}</p>
+                              <p className={`text-sm font-semibold mt-0.5 whitespace-nowrap ${metric.accent}`}>{metric.value}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </SectionCard>
+          )}
+        </div>
+      )}
     </div>
   );
 };
-

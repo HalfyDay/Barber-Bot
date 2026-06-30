@@ -928,10 +928,13 @@ const AppointmentModal = ({
   const amountToPay = Math.max(0, totalPrice - discountRub);
 
   const servicesSelection = parseMultiValue(draft?.Services);
-  const appointmentServiceOptions = useMemo(
-    () => dedupeOptionList(options.services || []),
-    [options.services]
-  );
+  const appointmentServiceOptions = useMemo(() => {
+    const list = dedupeOptionList(options.services || []);
+    if (!list.includes('Прочее')) {
+      list.push('Прочее');
+    }
+    return list;
+  }, [options.services]);
   const serviceDurationLookup = useMemo(
     () =>
       new Map(
@@ -969,6 +972,10 @@ const AppointmentModal = ({
   const syncDraftTimeWithServices = useCallback(
     (nextDraft, { preserveManualEnd = false } = {}) => {
       if (!nextDraft) return nextDraft;
+      const nextServices = parseMultiValue(nextDraft.Services);
+      if (nextServices.includes('Прочее')) {
+        return nextDraft;
+      }
       const start = extractTimeStart(nextDraft.Time || '');
       if (!start) return nextDraft;
       const duration = getServicesDuration(nextDraft.Services);
@@ -1410,7 +1417,18 @@ const AppointmentModal = ({
 	            label="Услуги"
 	            options={appointmentServiceOptions}
 	            value={servicesSelection}
-	            onChange={(selected) => handleChange('Services', selected.join(', '))}
+	            onChange={(selected) => {
+                let nextSelected = selected;
+                if (selected.includes('Прочее')) {
+                  const wasProcheeSelected = servicesSelection.includes('Прочее');
+                  if (wasProcheeSelected) {
+                    nextSelected = selected.filter(x => x !== 'Прочее');
+                  } else {
+                    nextSelected = ['Прочее'];
+                  }
+                }
+                handleChange('Services', nextSelected.join(', '));
+              }}
             placeholder="Нет доступных услуг"
           />
         </div>

@@ -328,8 +328,14 @@ const DashboardView = ({
               />
               <StatCard
                 compact
-                label="Подтверждено за месяц"
-                value={stats.confirmedMonth ?? 0}
+                label="Подтверждено / Неявка"
+                value={
+                  <>
+                    <span>{stats.confirmedMonth ?? 0}</span>
+                    <span className="text-zinc-500 mx-1.5">/</span>
+                    <span className="text-[#ff617f]">{stats.noShowsMonth ?? 0}</span>
+                  </>
+                }
                 accent="text-[color:var(--crm-highlight)]"
                 onClick={
                   typeof onNavigateTable === 'function'

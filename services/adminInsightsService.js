@@ -54,6 +54,7 @@ const createAdminInsightsService = ({
     let totalCommission = 0;
 
     appointments.forEach((appointment) => {
+      if (appointment.Services && splitServiceList(appointment.Services).includes('Прочее')) return;
       if (!isCompletedStatus(appointment.Status)) return;
       const barber = barberLookup.get(canonicalizeKey(appointment.Barber));
       if (!barber) return;

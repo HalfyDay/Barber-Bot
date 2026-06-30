@@ -252,6 +252,11 @@ const ClientsList = ({
         hidden.push(enriched);
       }
     });
+    visible.sort((a, b) => {
+      if (a.activity.key === 'regular' && b.activity.key === 'rare') return -1;
+      if (a.activity.key === 'rare' && b.activity.key === 'regular') return 1;
+      return 0;
+    });
     return { visible, hidden };
   }, [clients, classifyClientActivity]);
   const openClientModal = async (client) => {

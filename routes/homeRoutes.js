@@ -3078,6 +3078,646 @@ const registerHomeRoutes = ({
       return res.status(500).json({ error: "Не удалось отменить запись." });
     }
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BARBER CRM — Personal CRM panel for barbers, accessible from client app
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const requireBarber = (req, res, next) => {
+    if (!req.homeUser) return res.sendStatus(401);
+    const access = req.homeUser.access || {};
+    if (!access.isBarber || !access.barberId) {
+      return res.status(403).json({ error: "Доступ только для барберов." });
+    }
+    req.barberId = normalizeText(access.barberId);
+    req.barberName = normalizeText(access.barberName);
+    next();
+  };
+
+  // ── Dashboard ──────────────────────────────────────────────────────────────
+
+  app.get("/api/home/barber/dashboard", authenticateHomeToken, async (req, res) => {
+    try {
+      const homeUser = await resolveHomeBookingUser(req);
+      if (!homeUser) return res.sendStatus(401);
+      req.homeUser = homeUser;
+      const access = homeUser.access || {};
+      if (!access.isBarber || !access.barberId) {
+        return res.status(403).json({ error: "Доступ только для барберов." });
+      }
+      const barberName = normalizeText(access.barberName);
+      const barberId = normalizeText(access.barberId);
+      const today = new Date();
+      const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+      const [todayAppointments, weekAppointments, barber] = await Promise.all([
+        prisma.appointments.findMany({
+          where: { Barber: barberName, Date: todayKey },
+          orderBy: { Time: "asc" },
+        }),
+        prisma.appointments.findMany({
+          where: {
+            Barber: barberName,
+            Date: { gte: todayKey },
+          },
+          orderBy: { Date: "asc" },
+          take: 50,
+        }),
+        prisma.barbers.findFirst({
+          where: { id: barberId },
+          include: { position: true },
+        }),
+      ]);
+
+      const activeStatuses = ["Активная"];
+      const doneStatuses = ["Выполнена"];
+      const todayActive = todayAppointments.filter((a) => activeStatuses.includes(normalizeText(a.Status)));
+      const todayDone = todayAppointments.filter((a) => doneStatuses.includes(normalizeText(a.Status)));
+
+      const parsePriceFromServices = (servicesStr) => {
+        if (!servicesStr) return 0;
+        const prices = servicesStr.match(/(\d[\d\s]*)\s*₽/g) || [];
+        return prices.reduce((sum, p) => sum + (parseInt(p.replace(/\s/g, ""), 10) || 0), 0);
+      };
+
+      const todayRevenue = todayDone.reduce((sum, a) => sum + parsePriceFromServices(a.Services), 0);
+      const commissionRate = barber?.position?.commissionRate || 0;
+      const barberShare = commissionRate > 0 ? Math.round(todayRevenue * commissionRate / 100) : todayRevenue;
+
+      const nowMinutes = today.getHours() * 60 + today.getMinutes();
+      const parseTimeRange = (timeStr) => {
+        if (!timeStr) return { start: 0, end: 0 };
+        const parts = timeStr.split("–").map((s) => s.trim());
+        const toMin = (t) => { const [h, m] = (t || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+        return { start: toMin(parts[0]), end: toMin(parts[1] || parts[0]) };
+      };
+
+      const nextAppointment = todayActive
+        .filter((a) => parseTimeRange(a.Time).start >= nowMinutes - 15)
+        .sort((a, b) => parseTimeRange(a.Time).start - parseTimeRange(b.Time).start)[0] || null;
+
+      const weekStart = new Date(today);
+      weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
+      const weekKey = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, "0")}-${String(weekStart.getDate()).padStart(2, "0")}`;
+
+      const thisWeekDone = weekAppointments.filter(
+        (a) => doneStatuses.includes(normalizeText(a.Status)) && a.Date >= weekKey,
+      );
+      const weekRevenue = thisWeekDone.reduce((sum, a) => sum + parsePriceFromServices(a.Services), 0);
+
+      return res.json({
+        today: {
+          date: todayKey,
+          totalAppointments: todayAppointments.length,
+          activeAppointments: todayActive.length,
+          completedAppointments: todayDone.length,
+          revenue: todayRevenue,
+          barberShare,
+          appointments: todayAppointments.map((a) => ({
+            id: a.id,
+            clientName: normalizeText(a.CustomerName),
+            phone: normalizeText(a.Phone),
+            time: normalizeText(a.Time),
+            services: normalizeText(a.Services),
+            status: normalizeText(a.Status),
+            comment: normalizeText(a.Comment),
+            userId: normalizeText(a.UserID),
+          })),
+          nextAppointment: nextAppointment
+            ? {
+                id: nextAppointment.id,
+                clientName: normalizeText(nextAppointment.CustomerName),
+                phone: normalizeText(nextAppointment.Phone),
+                time: normalizeText(nextAppointment.Time),
+                services: normalizeText(nextAppointment.Services),
+                status: normalizeText(nextAppointment.Status),
+                comment: normalizeText(nextAppointment.Comment),
+                etaMinutes: Math.max(0, parseTimeRange(nextAppointment.Time).start - nowMinutes),
+              }
+            : null,
+        },
+        week: {
+          revenue: weekRevenue,
+          barberShare: commissionRate > 0 ? Math.round(weekRevenue * commissionRate / 100) : weekRevenue,
+          appointmentsCount: thisWeekDone.length,
+        },
+        barber: {
+          id: barberId,
+          name: normalizeText(barber?.name),
+          avatarUrl: normalizeText(barber?.avatarUrl),
+          rating: normalizeText(barber?.rating),
+          position: normalizeText(barber?.position?.name),
+          commissionRate,
+        },
+      });
+    } catch (error) {
+      console.error("Barber dashboard error:", error);
+      return res.status(500).json({ error: "Ошибка загрузки дашборда." });
+    }
+  });
+
+  // ── Appointments ───────────────────────────────────────────────────────────
+
+  app.get("/api/home/barber/appointments", authenticateHomeToken, async (req, res) => {
+    try {
+      const homeUser = await resolveHomeBookingUser(req);
+      if (!homeUser) return res.sendStatus(401);
+      const access = homeUser.access || {};
+      if (!access.isBarber) return res.status(403).json({ error: "Доступ только для барберов." });
+      const barberName = normalizeText(access.barberName);
+
+      const dateFilter = normalizeText(req.query.date);
+      const statusFilter = normalizeText(req.query.status);
+      const where = { Barber: barberName };
+      if (dateFilter) where.Date = dateFilter;
+      if (statusFilter) where.Status = statusFilter;
+
+      const appointments = await prisma.appointments.findMany({
+        where,
+        orderBy: [{ Date: "desc" }, { Time: "asc" }],
+        take: 200,
+      });
+
+      return res.json({
+        appointments: appointments.map((a) => ({
+          id: a.id,
+          clientName: normalizeText(a.CustomerName),
+          phone: normalizeText(a.Phone),
+          date: normalizeText(a.Date),
+          time: normalizeText(a.Time),
+          services: normalizeText(a.Services),
+          status: normalizeText(a.Status),
+          comment: normalizeText(a.Comment),
+          userId: normalizeText(a.UserID),
+          coverBs: a.CoverBs || 0,
+          discountRub: a.DiscountRub || 0,
+        })),
+      });
+    } catch (error) {
+      console.error("Barber appointments error:", error);
+      return res.status(500).json({ error: "Ошибка загрузки записей." });
+    }
+  });
+
+  app.post("/api/home/barber/appointments", authenticateHomeToken, async (req, res) => {
+    try {
+      const homeUser = await resolveHomeBookingUser(req);
+      if (!homeUser) return res.sendStatus(401);
+      const access = homeUser.access || {};
+      if (!access.isBarber) return res.status(403).json({ error: "Доступ только для барберов." });
+      const barberName = normalizeText(access.barberName);
+      const barberId = normalizeText(access.barberId);
+
+      const clientName = normalizeText(req.body?.clientName);
+      const clientPhone = normalizePhone(req.body?.clientPhone);
+      const serviceIds = appointmentService.parseServiceIdsInput(req.body?.serviceIds);
+      const dateKey = normalizeText(req.body?.date);
+      const startTime = normalizeText(req.body?.startTime);
+      const comment = normalizeText(req.body?.comment) || null;
+      const startNow = req.body?.startNow === true;
+
+      if (!dateKey || !startTime) {
+        return res.status(400).json({ error: "Укажите дату и время." });
+      }
+      if (!appointmentService.isIsoDateKey(dateKey)) {
+        return res.status(400).json({ error: "Некорректная дата." });
+      }
+      const startMinute = appointmentService.parseTimeLabelToMinutes(startTime);
+      if (startMinute == null) {
+        return res.status(400).json({ error: "Некорректное время." });
+      }
+
+      const [barber, servicesCatalog] = await Promise.all([
+        prisma.barbers.findFirst({ where: { id: barberId } }),
+        getServiceCatalog(false),
+      ]);
+      if (!barber) return res.status(404).json({ error: "Барбер не найден." });
+
+      let servicesLabel = "";
+      let totalDuration = 30;
+      if (serviceIds.length) {
+        const bookableServices = appointmentService.resolveBookableServicesForBarber(servicesCatalog, barberId);
+        const selectedServices = serviceIds.map((id) => bookableServices.find((s) => s.id === id)).filter(Boolean);
+        if (selectedServices.length) {
+          servicesLabel = selectedServices.map((s) => `${normalizeText(s.name)} ${Math.round(Number(s.price) || 0)} ₽`).join(", ");
+          totalDuration = Math.max(selectedServices.reduce((sum, s) => sum + (Number(s.duration) || 0), 0), 15);
+        }
+      }
+      if (!servicesLabel && normalizeText(req.body?.servicesText)) {
+        servicesLabel = normalizeText(req.body.servicesText);
+      }
+
+      const endMinute = startMinute + totalDuration;
+      const formatTime = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+      const timeRange = `${formatTime(startMinute)}–${formatTime(endMinute)}`;
+
+      const appointment = await prisma.appointments.create({
+        data: {
+          id: randomUUID(),
+          CustomerName: clientName || "Walk-in",
+          Phone: clientPhone || null,
+          Barber: barberName,
+          Date: dateKey,
+          Time: timeRange,
+          Status: startNow ? "Выполнена" : "Активная",
+          Services: servicesLabel || null,
+          Comment: comment,
+          UserID: null,
+        },
+      });
+
+      requestRealtimePush(true);
+      return res.json({ appointment });
+    } catch (error) {
+      console.error("Barber create appointment error:", error);
+      return res.status(500).json({ error: "Ошибка создания записи." });
+    }
+  });
+
+  app.put("/api/home/barber/appointments/:id/status", authenticateHomeToken, async (req, res) => {
+    try {
+      const homeUser = await resolveHomeBookingUser(req);
+      if (!homeUser) return res.sendStatus(401);
+      const access = homeUser.access || {};
+      if (!access.isBarber) return res.status(403).json({ error: "Доступ только для барберов." });
+      const barberName = normalizeText(access.barberName);
+
+      const appointmentId = normalizeText(req.params.id);
+      const newStatus = normalizeText(req.body?.status);
+      const validStatuses = ["Активная", "Выполнена", "Отмена", "Неявка"];
+      if (!validStatuses.includes(newStatus)) {
+        return res.status(400).json({ error: "Некорректный статус." });
+      }
+
+      const existing = await prisma.appointments.findFirst({ where: { id: appointmentId } });
+      if (!existing || normalizeText(existing.Barber) !== barberName) {
+        return res.status(404).json({ error: "Запись не найдена." });
+      }
+
+      const updated = await prisma.appointments.update({
+        where: { id: appointmentId },
+        data: { Status: newStatus },
+      });
+
+      requestRealtimePush(true);
+      return res.json({ appointment: updated });
+    } catch (error) {
+      console.error("Barber status update error:", error);
+      return res.status(500).json({ error: "Ошибка обновления статуса." });
+    }
+  });
+
+  // ── Clients ────────────────────────────────────────────────────────────────
+
+  app.get("/api/home/barber/clients", authenticateHomeToken, async (req, res) => {
+    try {
+      const homeUser = await resolveHomeBookingUser(req);
+      if (!homeUser) return res.sendStatus(401);
+      const access = homeUser.access || {};
+      if (!access.isBarber) return res.status(403).json({ error: "Доступ только для барберов." });
+      const barberName = normalizeText(access.barberName);
+
+      const allAppointments = await prisma.appointments.findMany({
+        where: { Barber: barberName, CustomerName: { not: null } },
+        orderBy: { Date: "desc" },
+      });
+
+      const clientMap = new Map();
+      for (const apt of allAppointments) {
+        const phone = normalizePhone(apt.Phone || "");
+        const name = normalizeText(apt.CustomerName || "");
+        const key = phone || name;
+        if (!key) continue;
+        if (!clientMap.has(key)) {
+          clientMap.set(key, {
+            name,
+            phone,
+            visits: 0,
+            completedVisits: 0,
+            totalSpent: 0,
+            lastVisit: null,
+            firstVisit: null,
+            userId: null,
+          });
+        }
+        const client = clientMap.get(key);
+        client.visits += 1;
+        if (normalizeText(apt.Status) === "Выполнена") {
+          client.completedVisits += 1;
+          const price = (apt.Services || "").match(/(\d[\d\s]*)\s*₽/g) || [];
+          client.totalSpent += price.reduce((sum, p) => sum + (parseInt(p.replace(/\s/g, ""), 10) || 0), 0);
+        }
+        if (!client.lastVisit || apt.Date > client.lastVisit) client.lastVisit = apt.Date;
+        if (!client.firstVisit || apt.Date < client.firstVisit) client.firstVisit = apt.Date;
+        if (apt.UserID && !client.userId) client.userId = normalizeText(apt.UserID);
+        if (name && !client.name) client.name = name;
+      }
+
+      const clients = Array.from(clientMap.values())
+        .sort((a, b) => (b.lastVisit || "").localeCompare(a.lastVisit || ""));
+
+      return res.json({ clients });
+    } catch (error) {
+      console.error("Barber clients error:", error);
+      return res.status(500).json({ error: "Ошибка загрузки клиентов." });
+    }
+  });
+
+  app.get("/api/home/barber/clients/:phone", authenticateHomeToken, async (req, res) => {
+    try {
+      const homeUser = await resolveHomeBookingUser(req);
+      if (!homeUser) return res.sendStatus(401);
+      const access = homeUser.access || {};
+      if (!access.isBarber) return res.status(403).json({ error: "Доступ только для барберов." });
+      const barberName = normalizeText(access.barberName);
+      const clientPhone = normalizePhone(req.params.phone);
+      if (!clientPhone) return res.status(400).json({ error: "Укажите телефон клиента." });
+
+      const appointments = await prisma.appointments.findMany({
+        where: { Barber: barberName, Phone: clientPhone },
+        orderBy: { Date: "desc" },
+      });
+
+      if (!appointments.length) {
+        return res.status(404).json({ error: "Клиент не найден." });
+      }
+
+      const clientName = normalizeText(appointments[0].CustomerName || "");
+      const userId = appointments.find((a) => a.UserID)?.UserID || null;
+
+      let notes = "";
+      if (userId) {
+        const meta = await getUserMeta(userId);
+        const barberNotes = meta?.payload?.barberNotes;
+        if (barberNotes && typeof barberNotes === "object") {
+          notes = normalizeText(barberNotes[normalizeText(access.barberId)] || "");
+        }
+      }
+
+      const completed = appointments.filter((a) => normalizeText(a.Status) === "Выполнена");
+      const totalSpent = completed.reduce((sum, a) => {
+        const prices = (a.Services || "").match(/(\d[\d\s]*)\s*₽/g) || [];
+        return sum + prices.reduce((s, p) => s + (parseInt(p.replace(/\s/g, ""), 10) || 0), 0);
+      }, 0);
+
+      return res.json({
+        client: {
+          name: clientName,
+          phone: clientPhone,
+          userId,
+          visits: appointments.length,
+          completedVisits: completed.length,
+          totalSpent,
+          lastVisit: appointments[0]?.Date || null,
+          firstVisit: appointments[appointments.length - 1]?.Date || null,
+          notes,
+        },
+        appointments: appointments.map((a) => ({
+          id: a.id,
+          date: normalizeText(a.Date),
+          time: normalizeText(a.Time),
+          services: normalizeText(a.Services),
+          status: normalizeText(a.Status),
+          comment: normalizeText(a.Comment),
+        })),
+      });
+    } catch (error) {
+      console.error("Barber client detail error:", error);
+      return res.status(500).json({ error: "Ошибка загрузки клиента." });
+    }
+  });
+
+  app.put("/api/home/barber/clients/:phone/notes", authenticateHomeToken, async (req, res) => {
+    try {
+      const homeUser = await resolveHomeBookingUser(req);
+      if (!homeUser) return res.sendStatus(401);
+      const access = homeUser.access || {};
+      if (!access.isBarber) return res.status(403).json({ error: "Доступ только для барберов." });
+      const barberId = normalizeText(access.barberId);
+      const clientPhone = normalizePhone(req.params.phone);
+      const notesText = normalizeText(req.body?.notes);
+
+      if (!clientPhone) return res.status(400).json({ error: "Укажите телефон клиента." });
+
+      const clientAppointment = await prisma.appointments.findFirst({
+        where: { Barber: normalizeText(access.barberName), Phone: clientPhone, UserID: { not: null } },
+        select: { UserID: true },
+      });
+
+      if (!clientAppointment?.UserID) {
+        return res.status(404).json({ error: "Клиент не привязан к аккаунту." });
+      }
+
+      const userId = normalizeText(clientAppointment.UserID);
+      const meta = await getUserMeta(userId);
+      const existingPayload = meta?.payload || {};
+      const barberNotes = existingPayload.barberNotes || {};
+      barberNotes[barberId] = notesText;
+
+      await updateUserMeta(userId, { ...existingPayload, barberNotes });
+
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Barber notes save error:", error);
+      return res.status(500).json({ error: "Ошибка сохранения заметок." });
+    }
+  });
+
+  // ── Finance ────────────────────────────────────────────────────────────────
+
+  app.get("/api/home/barber/finance", authenticateHomeToken, async (req, res) => {
+    try {
+      const homeUser = await resolveHomeBookingUser(req);
+      if (!homeUser) return res.sendStatus(401);
+      const access = homeUser.access || {};
+      if (!access.isBarber) return res.status(403).json({ error: "Доступ только для барберов." });
+      const barberName = normalizeText(access.barberName);
+      const barberId = normalizeText(access.barberId);
+
+      const period = normalizeText(req.query.period) || "month";
+      const today = new Date();
+      const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+      let startDate;
+      if (period === "today") {
+        startDate = todayKey;
+      } else if (period === "week") {
+        const d = new Date(today);
+        d.setDate(d.getDate() - d.getDay() + 1);
+        startDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      } else {
+        const d = new Date(today.getFullYear(), today.getMonth(), 1);
+        startDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+
+      const [appointments, barber] = await Promise.all([
+        prisma.appointments.findMany({
+          where: {
+            Barber: barberName,
+            Date: { gte: startDate, lte: todayKey },
+            Status: "Выполнена",
+          },
+          orderBy: { Date: "asc" },
+        }),
+        prisma.barbers.findFirst({
+          where: { id: barberId },
+          include: { position: true },
+        }),
+      ]);
+
+      const commissionRate = barber?.position?.commissionRate || 0;
+
+      const parsePriceFromServices = (servicesStr) => {
+        if (!servicesStr) return 0;
+        const prices = servicesStr.match(/(\d[\d\s]*)\s*₽/g) || [];
+        return prices.reduce((sum, p) => sum + (parseInt(p.replace(/\s/g, ""), 10) || 0), 0);
+      };
+
+      const totalRevenue = appointments.reduce((sum, a) => sum + parsePriceFromServices(a.Services), 0);
+      const barberShare = commissionRate > 0 ? Math.round(totalRevenue * commissionRate / 100) : totalRevenue;
+
+      const byDay = {};
+      for (const a of appointments) {
+        const day = normalizeText(a.Date);
+        if (!byDay[day]) byDay[day] = { date: day, revenue: 0, count: 0 };
+        byDay[day].revenue += parsePriceFromServices(a.Services);
+        byDay[day].count += 1;
+      }
+
+      const byService = {};
+      for (const a of appointments) {
+        const parts = (a.Services || "").split(",").map((s) => s.trim()).filter(Boolean);
+        for (const part of parts) {
+          const nameMatch = part.match(/^(.+?)\s+\d/);
+          const serviceName = nameMatch ? nameMatch[1].trim() : part;
+          const price = parsePriceFromServices(part);
+          if (!byService[serviceName]) byService[serviceName] = { name: serviceName, revenue: 0, count: 0 };
+          byService[serviceName].revenue += price;
+          byService[serviceName].count += 1;
+        }
+      }
+
+      return res.json({
+        period,
+        startDate,
+        endDate: todayKey,
+        totalRevenue,
+        barberShare,
+        commissionRate,
+        totalAppointments: appointments.length,
+        averageCheck: appointments.length > 0 ? Math.round(totalRevenue / appointments.length) : 0,
+        dailyBreakdown: Object.values(byDay).sort((a, b) => a.date.localeCompare(b.date)),
+        serviceBreakdown: Object.values(byService).sort((a, b) => b.revenue - a.revenue),
+      });
+    } catch (error) {
+      console.error("Barber finance error:", error);
+      return res.status(500).json({ error: "Ошибка загрузки финансов." });
+    }
+  });
+
+  // ── Schedule ───────────────────────────────────────────────────────────────
+
+  app.get("/api/home/barber/schedule", authenticateHomeToken, async (req, res) => {
+    try {
+      const homeUser = await resolveHomeBookingUser(req);
+      if (!homeUser) return res.sendStatus(401);
+      const access = homeUser.access || {};
+      if (!access.isBarber) return res.status(403).json({ error: "Доступ только для барберов." });
+      const barberName = normalizeText(access.barberName);
+
+      const schedules = await prisma.schedules.findMany({
+        where: { Barber: barberName },
+        orderBy: { Date: "asc" },
+      });
+
+      return res.json({
+        schedules: schedules.map((s) => ({
+          id: s.id,
+          dayOfWeek: normalizeText(s.DayOfWeek),
+          date: normalizeText(s.Date),
+          time: normalizeText(s.Time),
+          isToday: s.Today === true,
+          week: normalizeText(s.Week),
+        })),
+      });
+    } catch (error) {
+      console.error("Barber schedule error:", error);
+      return res.status(500).json({ error: "Ошибка загрузки расписания." });
+    }
+  });
+
+  app.put("/api/home/barber/schedule", authenticateHomeToken, async (req, res) => {
+    try {
+      const homeUser = await resolveHomeBookingUser(req);
+      if (!homeUser) return res.sendStatus(401);
+      const access = homeUser.access || {};
+      if (!access.isBarber) return res.status(403).json({ error: "Доступ только для барберов." });
+      const barberName = normalizeText(access.barberName);
+
+      const entries = Array.isArray(req.body?.entries) ? req.body.entries : [];
+      if (!entries.length) return res.status(400).json({ error: "Нет данных расписания." });
+
+      for (const entry of entries) {
+        const date = normalizeText(entry.date);
+        const time = normalizeText(entry.time);
+        if (!date) continue;
+
+        const existing = await prisma.schedules.findFirst({
+          where: { Barber: barberName, Date: date },
+        });
+
+        if (existing) {
+          await prisma.schedules.update({
+            where: { id: existing.id },
+            data: { Time: time || null },
+          });
+        } else if (time) {
+          await prisma.schedules.create({
+            data: {
+              id: randomUUID(),
+              Barber: barberName,
+              Date: date,
+              Time: time,
+            },
+          });
+        }
+      }
+
+      requestRealtimePush(true);
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Barber schedule update error:", error);
+      return res.status(500).json({ error: "Ошибка обновления расписания." });
+    }
+  });
+
+  // ── Services ───────────────────────────────────────────────────────────────
+
+  app.get("/api/home/barber/services", authenticateHomeToken, async (req, res) => {
+    try {
+      const homeUser = await resolveHomeBookingUser(req);
+      if (!homeUser) return res.sendStatus(401);
+      const access = homeUser.access || {};
+      if (!access.isBarber) return res.status(403).json({ error: "Доступ только для барберов." });
+      const barberId = normalizeText(access.barberId);
+
+      const servicesCatalog = await getServiceCatalog(false);
+      const bookableServices = appointmentService.resolveBookableServicesForBarber(servicesCatalog, barberId);
+
+      return res.json({
+        services: bookableServices.map((s) => ({
+          id: s.id,
+          name: normalizeText(s.name),
+          category: normalizeText(s.category),
+          duration: Number(s.duration) || 0,
+          price: Number(s.price) || 0,
+        })),
+      });
+    } catch (error) {
+      console.error("Barber services error:", error);
+      return res.status(500).json({ error: "Ошибка загрузки услуг." });
+    }
+  });
 };
 
 module.exports = {

@@ -8613,3 +8613,2056 @@ button.referral-level-card:active {
     transform: translateY(calc(-1 * var(--nav-booking-lift)));
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   BARBER CRM PANEL — Material 3 Expressive Dark Theme
+   All styles scoped under .barber-crm to avoid conflicts with client-facing styles.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ─── KEYFRAME ANIMATIONS ──────────────────────────────────────────────────── */
+
+@keyframes barberPulse {
+  0%, 100% { opacity: 1; transform: scaleX(1); }
+  50% { opacity: 0.5; transform: scaleX(1.04); }
+}
+
+@keyframes barberSlideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes barberFadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes barberShimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes barberGlow {
+  0%, 100% { box-shadow: 0 0 8px rgba(0, 191, 175, 0.25); }
+  50% { box-shadow: 0 0 18px rgba(0, 191, 175, 0.45); }
+}
+
+@keyframes barberDotPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.6); opacity: 0.4; }
+}
+
+/* ─── CRM STATUS CUSTOM PROPERTIES ─────────────────────────────────────────── */
+
+.barber-crm {
+  --crm-status-confirmed: var(--primary);
+  --crm-status-pending: var(--warn);
+  --crm-status-completed: var(--good);
+  --crm-status-cancelled: var(--md-sys-color-error);
+  --crm-status-no-show: var(--danger);
+  --crm-status-in-progress: var(--primary);
+  --crm-glass-bg: rgba(19, 20, 20, 0.72);
+  --crm-glass-border: rgba(255, 255, 255, 0.04);
+  --crm-glass-blur: 18px;
+  --crm-card-bg: var(--surface);
+  --crm-card-border: var(--outline);
+  --crm-transition: 0.3s ease;
+  --crm-transition-fast: 0.18s ease;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   1. BARBER DASHBOARD PAGE
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Page Wrapper ─────────────────────────────────────────────────────────── */
+
+.barber-page {
+  display: grid;
+  gap: 20px;
+  padding: 16px 16px 100px;
+  max-width: 600px;
+  margin: 0 auto;
+  animation: barberSlideUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* ─── Header / Greeting ───────────────────────────────────────────────────── */
+
+.barber-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 0 4px;
+}
+
+.barber-header .profile-avatar,
+.barber-header img {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--outline-strong);
+  flex-shrink: 0;
+}
+
+.barber-header-greeting {
+  font: 700 var(--type-title-lg)/1.2 var(--font-display);
+  color: var(--text);
+  margin: 0;
+}
+
+.barber-header-date {
+  font: 400 var(--type-body-md)/1.3 var(--font-body);
+  color: var(--muted);
+  margin: 2px 0 0;
+}
+
+/* ─── Status Badge (Online/Offline toggle) ─────────────────────────────────── */
+
+.barber-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 8px 16px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--surface-strong);
+  border: 1px solid var(--crm-glass-border);
+  color: var(--muted);
+  font: 600 var(--type-label-md)/1 var(--font-body);
+  cursor: pointer;
+  transition: background var(--crm-transition), color var(--crm-transition), border-color var(--crm-transition), box-shadow var(--crm-transition);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.barber-status-badge::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: background var(--crm-transition), box-shadow var(--crm-transition);
+  flex-shrink: 0;
+}
+
+.barber-status-badge.on-shift {
+  background: rgba(0, 191, 175, 0.1);
+  border-color: rgba(0, 191, 175, 0.18);
+  color: var(--primary);
+}
+
+.barber-status-badge.on-shift::before {
+  background: var(--primary);
+  box-shadow: 0 0 8px rgba(0, 191, 175, 0.5);
+}
+
+/* ─── Next Appointment Card (Hero) ─────────────────────────────────────────── */
+
+.barber-next-card {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  padding: 22px 20px;
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(0, 191, 175, 0.06) 0%, rgba(0, 191, 175, 0.01) 50%, transparent 100%),
+    var(--crm-glass-bg);
+  border: 1px solid rgba(0, 191, 175, 0.12);
+  backdrop-filter: blur(var(--crm-glass-blur)) saturate(1.1);
+  -webkit-backdrop-filter: blur(var(--crm-glass-blur)) saturate(1.1);
+  box-shadow: var(--md-sys-elevation-2), 0 0 0 1px rgba(0, 191, 175, 0.04);
+  overflow: hidden;
+  animation: barberFadeIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.1s both;
+}
+
+.barber-next-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 191, 175, 0.3), transparent);
+}
+
+.barber-next-card-eta {
+  font: 700 var(--type-label-lg)/1 var(--font-body);
+  color: var(--primary);
+  letter-spacing: 0.02em;
+}
+
+.barber-next-card-time {
+  font: 600 var(--type-headline-md)/1.1 var(--font-display);
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.barber-next-card-client {
+  font: 500 var(--type-title-md)/1.3 var(--font-body);
+  color: var(--text);
+}
+
+.barber-next-card-services {
+  font: 400 var(--type-body-md)/1.4 var(--font-body);
+  color: var(--muted);
+}
+
+.barber-next-card-price {
+  font: 700 var(--type-title-lg)/1 var(--font-display);
+  color: var(--text);
+}
+
+.barber-next-card-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.barber-next-card-actions > * {
+  flex: 1;
+}
+
+.barber-next-card-empty {
+  display: grid;
+  place-items: center;
+  padding: 40px 20px;
+  text-align: center;
+  border-radius: var(--radius-md);
+  background: var(--crm-glass-bg);
+  border: 1px dashed rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(var(--crm-glass-blur));
+  -webkit-backdrop-filter: blur(var(--crm-glass-blur));
+  color: var(--muted);
+  font: 500 var(--type-body-lg)/1.5 var(--font-body);
+  animation: barberFadeIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.1s both;
+}
+
+/* ─── Metrics Grid ─────────────────────────────────────────────────────────── */
+
+.barber-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  animation: barberFadeIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.2s both;
+}
+
+.barber-metric-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px 14px;
+  border-radius: var(--md-sys-shape-corner-sm);
+  background: var(--crm-glass-bg);
+  border: 1px solid var(--crm-glass-border);
+  backdrop-filter: blur(var(--crm-glass-blur));
+  -webkit-backdrop-filter: blur(var(--crm-glass-blur));
+  box-shadow: var(--md-sys-elevation-1);
+  transition: transform var(--crm-transition), box-shadow var(--crm-transition);
+}
+
+.barber-metric-card:active {
+  transform: scale(0.97);
+}
+
+.barber-metric-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.barber-metric-value {
+  font: 800 var(--type-title-lg)/1 var(--font-display);
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.barber-metric-label {
+  font: 400 var(--type-label-md)/1.2 var(--font-body);
+  color: var(--muted);
+}
+
+/* ─── Mini Timeline (Horizontal) ───────────────────────────────────────────── */
+
+.barber-mini-timeline {
+  display: grid;
+  gap: 8px;
+  animation: barberFadeIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.3s both;
+}
+
+.barber-mini-timeline-track {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.barber-mini-timeline-track::-webkit-scrollbar {
+  display: none;
+}
+
+.barber-mini-timeline-hour {
+  flex-shrink: 0;
+  width: 48px;
+  text-align: center;
+  font: 500 var(--type-label-md)/1 var(--font-body);
+  color: var(--muted);
+  padding: 4px 0;
+}
+
+.barber-mini-timeline-block {
+  position: relative;
+  flex-shrink: 0;
+  min-width: 54px;
+  height: 36px;
+  border-radius: var(--md-sys-shape-corner-xs);
+  background: var(--surface-strong);
+  border: 1px solid var(--crm-glass-border);
+  display: grid;
+  place-items: center;
+  font: 600 var(--type-label-md)/1 var(--font-body);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--crm-transition-fast), border-color var(--crm-transition-fast), transform var(--crm-transition-fast);
+  overflow: hidden;
+}
+
+.barber-mini-timeline-block:active {
+  transform: scale(0.95);
+}
+
+.barber-mini-timeline-block.confirmed {
+  background: rgba(0, 191, 175, 0.1);
+  border-color: rgba(0, 191, 175, 0.2);
+  color: var(--primary);
+}
+
+.barber-mini-timeline-block.pending {
+  background: rgba(184, 214, 209, 0.08);
+  border-color: rgba(184, 214, 209, 0.15);
+  color: var(--warn);
+}
+
+.barber-mini-timeline-block.in-progress {
+  background: rgba(0, 191, 175, 0.15);
+  border-color: rgba(0, 191, 175, 0.3);
+  color: var(--primary);
+  animation: barberGlow 2s ease-in-out infinite;
+}
+
+.barber-mini-timeline-now {
+  position: relative;
+  flex-shrink: 0;
+  width: 3px;
+  height: 36px;
+  border-radius: 2px;
+  background: var(--primary);
+  box-shadow: 0 0 10px rgba(0, 191, 175, 0.4);
+  animation: barberPulse 2s ease-in-out infinite;
+}
+
+.barber-mini-timeline-now::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.barber-mini-timeline-gap {
+  flex-shrink: 0;
+  min-width: 54px;
+  height: 36px;
+  border-radius: var(--md-sys-shape-corner-xs);
+  border: 1px dashed rgba(255, 255, 255, 0.06);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--crm-transition-fast), border-color var(--crm-transition-fast);
+}
+
+.barber-mini-timeline-gap:hover {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ─── Activity Feed ────────────────────────────────────────────────────────── */
+
+.barber-activity-feed {
+  display: grid;
+  gap: 2px;
+  animation: barberFadeIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.35s both;
+}
+
+.barber-activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--md-sys-shape-corner-xs);
+  background: transparent;
+  transition: background var(--crm-transition-fast);
+}
+
+.barber-activity-item:active {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.barber-activity-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-strong);
+  font-size: 0.9rem;
+}
+
+.barber-activity-text {
+  flex: 1;
+  min-width: 0;
+  font: 400 var(--type-body-md)/1.45 var(--font-body);
+  color: var(--text);
+}
+
+.barber-activity-time {
+  flex-shrink: 0;
+  font: 400 var(--type-label-md)/1 var(--font-body);
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   2. SCHEDULE / APPOINTMENTS PAGE
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.barber-schedule-page {
+  display: grid;
+  gap: 16px;
+  padding: 16px 16px 100px;
+  max-width: 600px;
+  margin: 0 auto;
+  animation: barberSlideUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* ─── Segment Control (Day/Week/Month) ─────────────────────────────────────── */
+
+.barber-schedule-segments {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--surface);
+  border: 1px solid var(--crm-glass-border);
+}
+
+.barber-schedule-segment {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 38px;
+  border: none;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: transparent;
+  color: var(--muted);
+  font: 600 var(--type-label-lg)/1 var(--font-body);
+  cursor: pointer;
+  transition: background var(--crm-transition), color var(--crm-transition), box-shadow var(--crm-transition);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.barber-schedule-segment.active {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 30%),
+    var(--primary);
+  color: var(--md-sys-color-on-primary);
+  box-shadow: var(--md-sys-elevation-1);
+  font-weight: 700;
+}
+
+.barber-schedule-segment:not(.active):active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ─── Date Navigation ──────────────────────────────────────────────────────── */
+
+.barber-schedule-date-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.barber-schedule-date-nav button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-strong);
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--crm-transition-fast), transform var(--crm-transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.barber-schedule-date-nav button:active {
+  transform: scale(0.9);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.barber-schedule-date-nav span {
+  font: 600 var(--type-title-md)/1 var(--font-body);
+  color: var(--text);
+}
+
+/* ─── Day Timeline (Vertical) ──────────────────────────────────────────────── */
+
+.barber-day-timeline {
+  display: grid;
+  gap: 0;
+  position: relative;
+}
+
+.barber-day-timeline-slot {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  min-height: 52px;
+  border-top: 1px solid rgba(255, 255, 255, 0.025);
+}
+
+.barber-day-timeline-time {
+  padding: 8px 8px 8px 0;
+  font: 500 var(--type-label-md)/1 var(--font-body);
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+}
+
+.barber-day-timeline-content {
+  padding: 4px 0 4px 8px;
+  min-height: 48px;
+  position: relative;
+}
+
+/* ─── Appointment Card (on timeline) ───────────────────────────────────────── */
+
+.barber-appointment-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--md-sys-shape-corner-sm);
+  background: var(--crm-glass-bg);
+  border: 1px solid var(--crm-glass-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--md-sys-elevation-1);
+  cursor: pointer;
+  transition: transform var(--crm-transition), box-shadow var(--crm-transition), border-color var(--crm-transition);
+  animation: barberFadeIn 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  position: relative;
+  overflow: hidden;
+}
+
+.barber-appointment-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--muted);
+  transition: background var(--crm-transition);
+}
+
+.barber-appointment-card:active {
+  transform: scale(0.98);
+}
+
+.barber-appointment-card.status-confirmed::before {
+  background: var(--crm-status-confirmed);
+}
+
+.barber-appointment-card.status-confirmed {
+  border-color: rgba(0, 191, 175, 0.12);
+}
+
+.barber-appointment-card.status-active::before {
+  background: var(--crm-status-pending);
+}
+
+.barber-appointment-card.status-active {
+  border-color: rgba(184, 214, 209, 0.12);
+}
+
+.barber-appointment-card.status-in-progress {
+  border-color: rgba(0, 191, 175, 0.25);
+  box-shadow: var(--md-sys-elevation-2), 0 0 20px rgba(0, 191, 175, 0.08);
+  animation: barberGlow 2.5s ease-in-out infinite, barberFadeIn 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.barber-appointment-card.status-in-progress::before {
+  background: var(--crm-status-in-progress);
+  box-shadow: 0 0 8px rgba(0, 191, 175, 0.4);
+}
+
+.barber-appointment-card.status-done {
+  opacity: 0.7;
+  border-color: rgba(0, 191, 175, 0.06);
+}
+
+.barber-appointment-card.status-done::before {
+  background: var(--crm-status-completed);
+}
+
+.barber-appointment-card.status-cancelled {
+  opacity: 0.45;
+}
+
+.barber-appointment-card.status-cancelled::before {
+  background: var(--crm-status-cancelled);
+}
+
+.barber-appointment-card.status-no-show {
+  opacity: 0.45;
+}
+
+.barber-appointment-card.status-no-show::before {
+  background: var(--crm-status-no-show);
+}
+
+.barber-appointment-time {
+  font: 700 var(--type-label-lg)/1 var(--font-body);
+  color: var(--text);
+}
+
+.barber-appointment-client {
+  font: 500 var(--type-body-lg)/1.3 var(--font-body);
+  color: var(--text);
+}
+
+.barber-appointment-services {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.barber-appointment-services span {
+  display: inline-flex;
+  padding: 3px 9px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: rgba(255, 255, 255, 0.04);
+  font: 500 var(--type-label-md)/1.3 var(--font-body);
+  color: var(--muted);
+}
+
+.barber-appointment-price {
+  font: 700 var(--type-title-md)/1 var(--font-display);
+  color: var(--text);
+}
+
+.barber-appointment-note {
+  font: 400 var(--type-body-md)/1.45 var(--font-body);
+  color: var(--muted);
+  font-style: italic;
+  padding: 6px 10px;
+  border-radius: var(--md-sys-shape-corner-xs);
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 2px solid rgba(255, 255, 255, 0.06);
+}
+
+.barber-appointment-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.barber-appointment-actions > * {
+  flex: 1;
+  min-height: 36px;
+  font-size: var(--type-label-md);
+}
+
+/* ─── Status Badge (Inline) ────────────────────────────────────────────────── */
+
+.barber-status-badge-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 var(--type-label-md)/1 var(--font-body);
+  color: var(--muted);
+}
+
+.barber-status-badge-inline::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.barber-status-badge-inline.status-confirmed {
+  color: var(--crm-status-confirmed);
+}
+
+.barber-status-badge-inline.status-pending {
+  color: var(--crm-status-pending);
+}
+
+.barber-status-badge-inline.status-completed {
+  color: var(--crm-status-completed);
+}
+
+.barber-status-badge-inline.status-cancelled {
+  color: var(--crm-status-cancelled);
+}
+
+.barber-status-badge-inline.status-no-show {
+  color: var(--crm-status-no-show);
+}
+
+.barber-status-badge-inline.status-in-progress {
+  color: var(--crm-status-in-progress);
+}
+
+.barber-status-badge-inline.status-in-progress::before {
+  animation: barberDotPulse 1.5s ease-in-out infinite;
+}
+
+/* ─── Now Marker (Horizontal line on timeline) ─────────────────────────────── */
+
+.barber-timeline-now-marker {
+  position: absolute;
+  left: 52px;
+  right: 0;
+  height: 2px;
+  background: var(--primary);
+  z-index: 5;
+  pointer-events: none;
+  box-shadow: 0 0 12px rgba(0, 191, 175, 0.35);
+  animation: barberPulse 3s ease-in-out infinite;
+}
+
+.barber-timeline-now-marker::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 8px rgba(0, 191, 175, 0.5);
+}
+
+/* ─── Free Slot ────────────────────────────────────────────────────────────── */
+
+.barber-free-slot {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  border: 1px dashed rgba(255, 255, 255, 0.06);
+  border-radius: var(--md-sys-shape-corner-xs);
+  color: var(--muted);
+  font: 500 var(--type-label-md)/1 var(--font-body);
+  cursor: pointer;
+  transition: background var(--crm-transition-fast), border-color var(--crm-transition-fast), color var(--crm-transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.barber-free-slot:hover,
+.barber-free-slot:active {
+  background: rgba(0, 191, 175, 0.04);
+  border-color: rgba(0, 191, 175, 0.15);
+  color: var(--primary);
+}
+
+/* ─── Week View ────────────────────────────────────────────────────────────── */
+
+.barber-week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.barber-week-day-header {
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  padding: 8px 2px;
+  text-align: center;
+}
+
+.barber-week-day-header span:first-child {
+  font: 600 var(--type-label-md)/1 var(--font-body);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.barber-week-day-header span:last-child {
+  font: 700 var(--type-title-md)/1 var(--font-display);
+  color: var(--text);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.barber-week-day-header.today span:last-child {
+  background: var(--primary);
+  color: var(--md-sys-color-on-primary);
+}
+
+.barber-week-day-cell {
+  display: grid;
+  gap: 3px;
+  padding: 6px 4px;
+  min-height: 60px;
+  border-radius: var(--md-sys-shape-corner-xs);
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: background var(--crm-transition-fast);
+}
+
+.barber-week-day-cell:active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.barber-week-appointment-dot {
+  width: 100%;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--crm-status-confirmed);
+  opacity: 0.6;
+}
+
+.barber-week-appointment-dot.pending {
+  background: var(--crm-status-pending);
+}
+
+.barber-week-appointment-dot.cancelled {
+  background: var(--crm-status-cancelled);
+  opacity: 0.35;
+}
+
+/* ─── Month View ───────────────────────────────────────────────────────────── */
+
+.barber-month-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.barber-month-day {
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  padding: 8px 2px;
+  min-height: 50px;
+  border-radius: var(--md-sys-shape-corner-xs);
+  cursor: pointer;
+  transition: background var(--crm-transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.barber-month-day:active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.barber-month-day.today .barber-month-day-number {
+  background: var(--primary);
+  color: var(--md-sys-color-on-primary);
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+}
+
+.barber-month-day.off {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.barber-month-day-number {
+  font: 600 var(--type-body-md)/1 var(--font-body);
+  color: var(--text);
+}
+
+.barber-month-day-count {
+  font: 700 var(--type-label-md)/1 var(--font-body);
+  color: var(--primary);
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: rgba(0, 191, 175, 0.12);
+}
+
+/* ─── Filter Chips ─────────────────────────────────────────────────────────── */
+
+.barber-filter-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 6px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.barber-filter-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.barber-filter-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--md-sys-shape-corner-full);
+  border: 1px solid var(--outline-strong);
+  background: transparent;
+  color: var(--muted);
+  font: 500 var(--type-label-lg)/1 var(--font-body);
+  cursor: pointer;
+  transition: background var(--crm-transition), color var(--crm-transition), border-color var(--crm-transition);
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+}
+
+.barber-filter-chip.active {
+  background: rgba(0, 191, 175, 0.12);
+  border-color: rgba(0, 191, 175, 0.25);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.barber-filter-chip:not(.active):active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ─── FAB (Floating Action Button) ─────────────────────────────────────────── */
+
+.barber-fab {
+  position: fixed;
+  bottom: 88px;
+  right: 20px;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 30%),
+    var(--primary);
+  color: var(--md-sys-color-on-primary);
+  box-shadow: var(--md-sys-elevation-3);
+  cursor: pointer;
+  transition: transform var(--crm-transition), box-shadow var(--crm-transition);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.barber-fab:active {
+  transform: scale(0.9);
+  box-shadow: var(--md-sys-elevation-1);
+}
+
+.barber-fab svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  fill: none;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   3. CLIENTS PAGE
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.barber-clients-page {
+  display: grid;
+  gap: 14px;
+  padding: 16px 16px 100px;
+  max-width: 600px;
+  margin: 0 auto;
+  animation: barberSlideUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* ─── Search Bar ───────────────────────────────────────────────────────────── */
+
+.barber-search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.barber-search-bar input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 16px 0 46px;
+  border: 1px solid var(--outline-strong);
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--surface);
+  color: var(--text);
+  font: 400 var(--type-body-lg)/1 var(--font-body);
+  outline: none;
+  transition: border-color var(--crm-transition), box-shadow var(--crm-transition), background var(--crm-transition);
+}
+
+.barber-search-bar input::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.barber-search-bar input:focus {
+  border-color: rgba(0, 191, 175, 0.35);
+  box-shadow: 0 0 0 3px rgba(0, 191, 175, 0.08);
+  background: var(--surface-strong);
+}
+
+.barber-search-bar svg,
+.barber-search-bar .barber-search-icon {
+  position: absolute;
+  left: 16px;
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* ─── Client Card ──────────────────────────────────────────────────────────── */
+
+.barber-client-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--md-sys-shape-corner-sm);
+  background: var(--crm-glass-bg);
+  border: 1px solid var(--crm-glass-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: transform var(--crm-transition-fast), background var(--crm-transition-fast), border-color var(--crm-transition-fast);
+  animation: barberFadeIn 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.barber-client-card:active {
+  transform: scale(0.985);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.barber-client-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--surface-strong);
+  display: grid;
+  place-items: center;
+  font: 700 var(--type-body-lg)/1 var(--font-display);
+  color: var(--primary);
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.barber-client-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.barber-client-info {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.barber-client-name {
+  font: 600 var(--type-body-lg)/1.2 var(--font-body);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barber-client-phone {
+  font: 400 var(--type-body-md)/1.2 var(--font-body);
+  color: var(--muted);
+}
+
+.barber-client-stats {
+  display: flex;
+  gap: 12px;
+  font: 500 var(--type-label-md)/1 var(--font-body);
+  color: var(--muted);
+}
+
+.barber-client-stats span {
+  white-space: nowrap;
+}
+
+.barber-client-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--md-sys-shape-corner-full);
+  font: 700 0.7rem/1 var(--font-body);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.barber-client-tag.vip {
+  background: rgba(0, 191, 175, 0.12);
+  color: var(--primary);
+}
+
+.barber-client-tag.regular {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+}
+
+.barber-client-tag.new {
+  background: rgba(184, 214, 209, 0.1);
+  color: var(--warn);
+}
+
+/* ─── Client Detail Page ───────────────────────────────────────────────────── */
+
+.barber-client-detail {
+  display: grid;
+  gap: 20px;
+  padding: 16px 16px 100px;
+  max-width: 600px;
+  margin: 0 auto;
+  animation: barberSlideUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.barber-client-detail-hero {
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  padding: 28px 20px 24px;
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(0, 191, 175, 0.05) 0%, transparent 50%),
+    var(--crm-glass-bg);
+  border: 1px solid var(--crm-glass-border);
+  backdrop-filter: blur(var(--crm-glass-blur));
+  -webkit-backdrop-filter: blur(var(--crm-glass-blur));
+  text-align: center;
+}
+
+.barber-client-detail-hero .barber-client-avatar {
+  width: 72px;
+  height: 72px;
+  font-size: var(--type-title-lg);
+}
+
+.barber-client-detail-hero .barber-client-name {
+  font: 700 var(--type-title-lg)/1.2 var(--font-display);
+}
+
+.barber-client-detail-section {
+  display: grid;
+  gap: 12px;
+}
+
+.barber-section-title {
+  font: 700 var(--type-title-md)/1 var(--font-display);
+  color: var(--text);
+  padding: 0;
+  margin: 0;
+}
+
+/* ─── Tech Card (Notes) ────────────────────────────────────────────────────── */
+
+.barber-tech-card {
+  padding: 16px;
+  border-radius: var(--md-sys-shape-corner-sm);
+  background:
+    linear-gradient(135deg, rgba(0, 191, 175, 0.04) 0%, transparent 100%),
+    var(--surface);
+  border: 1px solid rgba(0, 191, 175, 0.08);
+  box-shadow: var(--md-sys-elevation-1);
+}
+
+.barber-tech-card-text {
+  font: 400 var(--type-body-md)/1.6 var(--font-body);
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+/* ─── Visit History ────────────────────────────────────────────────────────── */
+
+.barber-visit-history {
+  display: grid;
+  gap: 6px;
+}
+
+.barber-visit-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 12px 14px;
+  border-radius: var(--md-sys-shape-corner-xs);
+  background: var(--surface);
+  border: 1px solid var(--crm-glass-border);
+  transition: background var(--crm-transition-fast);
+}
+
+.barber-visit-item:active {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.barber-visit-date {
+  font: 600 var(--type-label-lg)/1.2 var(--font-body);
+  color: var(--text);
+}
+
+.barber-visit-services {
+  font: 400 var(--type-body-md)/1.3 var(--font-body);
+  color: var(--muted);
+  grid-column: 1;
+}
+
+.barber-visit-price {
+  font: 700 var(--type-label-lg)/1 var(--font-display);
+  color: var(--text);
+  justify-self: end;
+}
+
+.barber-visit-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--md-sys-shape-corner-full);
+  font: 600 0.72rem/1 var(--font-body);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  justify-self: end;
+}
+
+.barber-visit-status.confirmed {
+  background: rgba(0, 191, 175, 0.1);
+  color: var(--crm-status-confirmed);
+}
+
+.barber-visit-status.completed {
+  background: rgba(0, 191, 175, 0.08);
+  color: var(--crm-status-completed);
+}
+
+.barber-visit-status.cancelled {
+  background: rgba(200, 35, 95, 0.1);
+  color: var(--crm-status-cancelled);
+}
+
+.barber-visit-status.pending {
+  background: rgba(184, 214, 209, 0.1);
+  color: var(--crm-status-pending);
+}
+
+.barber-visit-status.no-show {
+  background: rgba(179, 83, 57, 0.1);
+  color: var(--crm-status-no-show);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   4. PROFILE PAGE (CRM — scoped under .barber-crm to avoid client-side conflicts)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.barber-crm .barber-profile-page {
+  display: grid;
+  gap: 20px;
+  padding: 16px 16px 100px;
+  max-width: 600px;
+  margin: 0 auto;
+  animation: barberSlideUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.barber-crm .barber-profile-hero {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  padding: 32px 20px 28px;
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(0, 191, 175, 0.06) 0%, rgba(0, 191, 175, 0.01) 40%, transparent 100%),
+    var(--crm-glass-bg);
+  border: 1px solid rgba(0, 191, 175, 0.1);
+  backdrop-filter: blur(var(--crm-glass-blur)) saturate(1.1);
+  -webkit-backdrop-filter: blur(var(--crm-glass-blur)) saturate(1.1);
+  box-shadow: var(--md-sys-elevation-2);
+  text-align: center;
+  overflow: hidden;
+  perspective: none;
+  min-height: auto;
+  margin: 0;
+}
+
+.barber-crm .barber-profile-hero::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 191, 175, 0.25), transparent);
+}
+
+.barber-crm .barber-profile-avatar,
+.barber-profile-avatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: var(--surface-strong);
+  display: grid;
+  place-items: center;
+  font: 800 var(--type-headline-md)/1 var(--font-display);
+  color: var(--primary);
+  border: 3px solid rgba(0, 191, 175, 0.2);
+  overflow: hidden;
+  box-shadow: 0 0 20px rgba(0, 191, 175, 0.1);
+}
+
+.barber-crm .barber-profile-avatar img,
+.barber-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.barber-crm .barber-profile-name,
+.barber-profile-name {
+  font: 700 var(--type-title-lg)/1.2 var(--font-display);
+  color: var(--text);
+  margin: 0;
+}
+
+.barber-crm .barber-profile-position,
+.barber-profile-position {
+  font: 500 var(--type-body-md)/1.2 var(--font-body);
+  color: var(--muted);
+}
+
+.barber-crm .barber-profile-rating,
+.barber-profile-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 600 var(--type-body-lg)/1 var(--font-body);
+  color: #FFD54F;
+}
+
+.barber-crm .barber-profile-section,
+.barber-profile-section {
+  display: grid;
+  gap: 14px;
+}
+
+/* ─── Schedule Editor ──────────────────────────────────────────────────────── */
+
+.barber-schedule-editor {
+  display: grid;
+  gap: 6px;
+}
+
+.barber-schedule-day-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--md-sys-shape-corner-xs);
+  background: var(--surface);
+  border: 1px solid var(--crm-glass-border);
+  min-height: 48px;
+  transition: background var(--crm-transition-fast);
+}
+
+.barber-schedule-day-label {
+  font: 700 var(--type-label-lg)/1 var(--font-body);
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.barber-schedule-day-times {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 var(--type-body-md)/1 var(--font-body);
+  color: var(--muted);
+}
+
+.barber-schedule-day-times input {
+  background: var(--surface-strong);
+  border: 1px solid var(--outline-strong);
+  border-radius: var(--md-sys-shape-corner-xs);
+  color: var(--text);
+  padding: 6px 10px;
+  font: 500 var(--type-body-md)/1 var(--font-body);
+  width: 72px;
+  text-align: center;
+  outline: none;
+  transition: border-color var(--crm-transition-fast);
+}
+
+.barber-schedule-day-times input:focus {
+  border-color: rgba(0, 191, 175, 0.35);
+}
+
+.barber-schedule-day-toggle {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  border-radius: 13px;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: background var(--crm-transition);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.barber-schedule-day-toggle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform var(--crm-transition), background var(--crm-transition);
+}
+
+.barber-schedule-day-toggle.active {
+  background: rgba(0, 191, 175, 0.25);
+}
+
+.barber-schedule-day-toggle.active::after {
+  transform: translateX(18px);
+  background: var(--primary);
+}
+
+/* ─── Finance Card ─────────────────────────────────────────────────────────── */
+
+.barber-finance-card {
+  display: grid;
+  gap: 16px;
+  padding: 22px 20px;
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(0, 191, 175, 0.05) 0%, transparent 60%),
+    var(--crm-glass-bg);
+  border: 1px solid var(--crm-glass-border);
+  backdrop-filter: blur(var(--crm-glass-blur));
+  -webkit-backdrop-filter: blur(var(--crm-glass-blur));
+  box-shadow: var(--md-sys-elevation-1);
+}
+
+.barber-finance-amount {
+  font: 800 var(--type-headline-lg)/1 var(--font-display);
+  color: var(--text);
+  letter-spacing: -0.03em;
+}
+
+.barber-finance-period-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--surface);
+  border: 1px solid var(--crm-glass-border);
+}
+
+.barber-finance-period-tab {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 34px;
+  border: none;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: transparent;
+  color: var(--muted);
+  font: 600 var(--type-label-md)/1 var(--font-body);
+  cursor: pointer;
+  transition: background var(--crm-transition), color var(--crm-transition);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.barber-finance-period-tab.active {
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.barber-finance-breakdown {
+  display: grid;
+  gap: 8px;
+}
+
+.barber-finance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.025);
+}
+
+.barber-finance-row:last-child {
+  border-bottom: none;
+}
+
+.barber-finance-row span:first-child {
+  font: 400 var(--type-body-md)/1 var(--font-body);
+  color: var(--muted);
+}
+
+.barber-finance-row span:last-child {
+  font: 700 var(--type-body-lg)/1 var(--font-display);
+  color: var(--text);
+}
+
+/* ─── Finance Chart ────────────────────────────────────────────────────────── */
+
+.barber-finance-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 120px;
+  padding: 8px 0 0;
+}
+
+.barber-finance-bar {
+  flex: 1;
+  min-width: 0;
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, var(--primary), rgba(0, 191, 175, 0.3));
+  transition: height var(--crm-transition);
+  position: relative;
+}
+
+.barber-finance-bar::after {
+  content: attr(data-label);
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font: 500 0.65rem/1 var(--font-body);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ─── Services List ────────────────────────────────────────────────────────── */
+
+.barber-services-list {
+  display: grid;
+  gap: 6px;
+}
+
+.barber-service-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--md-sys-shape-corner-xs);
+  background: var(--surface);
+  border: 1px solid var(--crm-glass-border);
+  transition: background var(--crm-transition-fast);
+}
+
+.barber-service-item:active {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.barber-service-name {
+  font: 500 var(--type-body-lg)/1.3 var(--font-body);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barber-service-price {
+  font: 700 var(--type-label-lg)/1 var(--font-display);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.barber-service-duration {
+  font: 500 var(--type-label-md)/1 var(--font-body);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ─── Settings List ────────────────────────────────────────────────────────── */
+
+.barber-settings-list {
+  display: grid;
+  gap: 2px;
+}
+
+.barber-settings-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--md-sys-shape-corner-xs);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--crm-transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.barber-settings-item:active {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.barber-settings-item span {
+  font: 500 var(--type-body-lg)/1.3 var(--font-body);
+  color: var(--text);
+}
+
+.barber-settings-item .barber-schedule-day-toggle {
+  flex-shrink: 0;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   5. CREATE APPOINTMENT SHEET
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.barber-create-sheet {
+  display: grid;
+  gap: 24px;
+}
+
+.barber-create-step {
+  display: grid;
+  gap: 12px;
+  animation: barberFadeIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.barber-create-step-title {
+  font: 700 var(--type-title-md)/1.2 var(--font-display);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.barber-create-step-title::before {
+  content: attr(data-step);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0, 191, 175, 0.12);
+  color: var(--primary);
+  font: 700 var(--type-label-md)/1 var(--font-body);
+  flex-shrink: 0;
+}
+
+/* ─── Client Search (Autocomplete) ─────────────────────────────────────────── */
+
+.barber-client-search-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid var(--outline-strong);
+  border-radius: var(--md-sys-shape-corner-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: 400 var(--type-body-lg)/1 var(--font-body);
+  outline: none;
+  transition: border-color var(--crm-transition), box-shadow var(--crm-transition);
+}
+
+.barber-client-search-input::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.barber-client-search-input:focus {
+  border-color: rgba(0, 191, 175, 0.35);
+  box-shadow: 0 0 0 3px rgba(0, 191, 175, 0.08);
+}
+
+.barber-client-search-results {
+  display: grid;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  border-radius: var(--md-sys-shape-corner-sm);
+  background: var(--surface-strong);
+  border: 1px solid var(--outline-strong);
+  box-shadow: var(--md-sys-elevation-2);
+  animation: barberFadeIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.barber-client-search-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background var(--crm-transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.barber-client-search-item:active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.barber-client-search-item .barber-client-avatar {
+  width: 36px;
+  height: 36px;
+  font-size: var(--type-label-lg);
+}
+
+/* ─── Service Selection ────────────────────────────────────────────────────── */
+
+.barber-service-select {
+  display: grid;
+  gap: 6px;
+}
+
+.barber-service-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--md-sys-shape-corner-sm);
+  background: var(--surface);
+  border: 1px solid var(--crm-glass-border);
+  cursor: pointer;
+  transition: background var(--crm-transition-fast), border-color var(--crm-transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.barber-service-option:active {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.barber-service-option.selected {
+  background: rgba(0, 191, 175, 0.06);
+  border-color: rgba(0, 191, 175, 0.2);
+}
+
+.barber-service-option.selected::before {
+  content: "✓";
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--md-sys-color-on-primary);
+  font: 700 0.75rem/1 var(--font-body);
+  flex-shrink: 0;
+}
+
+.barber-service-option::before {
+  content: "";
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--outline-strong);
+  background: transparent;
+  flex-shrink: 0;
+  transition: border-color var(--crm-transition-fast), background var(--crm-transition-fast);
+}
+
+.barber-service-option .barber-service-name {
+  flex: 1;
+}
+
+/* ─── Time Slots ───────────────────────────────────────────────────────────── */
+
+.barber-time-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
+}
+
+.barber-time-slot {
+  display: grid;
+  place-items: center;
+  min-height: 42px;
+  border: 1px solid var(--outline-strong);
+  border-radius: var(--md-sys-shape-corner-xs);
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--type-label-lg)/1 var(--font-body);
+  cursor: pointer;
+  transition: background var(--crm-transition-fast), border-color var(--crm-transition-fast), color var(--crm-transition-fast), transform var(--crm-transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.barber-time-slot:active {
+  transform: scale(0.95);
+}
+
+.barber-time-slot.selected {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 30%),
+    var(--primary);
+  border-color: var(--primary);
+  color: var(--md-sys-color-on-primary);
+  box-shadow: var(--md-sys-elevation-1);
+  font-weight: 700;
+}
+
+.barber-time-slot.taken {
+  opacity: 0.3;
+  pointer-events: none;
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+/* ─── Create Summary ───────────────────────────────────────────────────────── */
+
+.barber-create-summary {
+  display: grid;
+  gap: 10px;
+  padding: 18px 16px;
+  border-radius: var(--md-sys-shape-corner-sm);
+  background:
+    linear-gradient(135deg, rgba(0, 191, 175, 0.04) 0%, transparent 100%),
+    var(--surface);
+  border: 1px solid rgba(0, 191, 175, 0.1);
+  box-shadow: var(--md-sys-elevation-1);
+}
+
+.barber-create-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.barber-create-summary-row:not(:last-child) {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.025);
+}
+
+.barber-create-summary-row span:first-child {
+  font: 400 var(--type-body-md)/1 var(--font-body);
+  color: var(--muted);
+}
+
+.barber-create-summary-row span:last-child {
+  font: 600 var(--type-body-lg)/1 var(--font-body);
+  color: var(--text);
+  text-align: right;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   6. SHARED / UTILITY
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Empty State ──────────────────────────────────────────────────────────── */
+
+.barber-empty-state {
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--muted);
+  font: 500 var(--type-body-lg)/1.5 var(--font-body);
+  animation: barberFadeIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.barber-empty-state .emoji,
+.barber-empty-state svg {
+  font-size: 2.5rem;
+  opacity: 0.5;
+}
+
+/* ─── Skeleton Loading ─────────────────────────────────────────────────────── */
+
+.barber-loading {
+  background: linear-gradient(
+    90deg,
+    var(--surface) 25%,
+    var(--surface-strong) 50%,
+    var(--surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: barberShimmer 1.5s ease-in-out infinite;
+  border-radius: var(--md-sys-shape-corner-xs);
+  min-height: 20px;
+}
+
+/* ─── Section Header ──────────────────────────────────────────────────────── */
+
+.barber-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.barber-section-header .barber-section-title {
+  flex: 1;
+}
+
+.barber-section-header a,
+.barber-section-header button {
+  font: 600 var(--type-label-lg)/1 var(--font-body);
+  color: var(--primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+  transition: opacity var(--crm-transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.barber-section-header a:active,
+.barber-section-header button:active {
+  opacity: 0.6;
+}
+
+/* ─── Divider ──────────────────────────────────────────────────────────────── */
+
+.barber-divider {
+  height: 1px;
+  border: none;
+  background: rgba(255, 255, 255, 0.03);
+  margin: 4px 0;
+}
+
+/* ─── Quick Actions ────────────────────────────────────────────────────────── */
+
+.barber-quick-actions {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 6px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.barber-quick-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.barber-quick-action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: var(--md-sys-shape-corner-full);
+  border: 1px solid var(--outline-strong);
+  background: rgba(18, 22, 22, 0.96);
+  color: var(--text);
+  font: 500 var(--type-label-lg)/1 var(--font-body);
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--md-sys-elevation-1);
+  transition: transform var(--crm-transition-fast), background var(--crm-transition-fast), border-color var(--crm-transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.barber-quick-action:active {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.barber-quick-action svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  flex-shrink: 0;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — LARGER SCREENS
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@media (min-width: 600px) {
+  .barber-page,
+  .barber-schedule-page,
+  .barber-clients-page,
+  .barber-client-detail,
+  .barber-crm .barber-profile-page {
+    padding: 24px 24px 100px;
+  }
+
+  .barber-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .barber-time-slots {
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  }
+
+  .barber-next-card {
+    padding: 28px 26px;
+  }
+
+  .barber-next-card-time {
+    font-size: var(--type-headline-lg);
+  }
+
+  .barber-fab {
+    bottom: 32px;
+    right: 32px;
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-lg);
+  }
+
+  .barber-fab svg {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+@media (min-width: 960px) {
+  .barber-page,
+  .barber-schedule-page,
+  .barber-clients-page,
+  .barber-client-detail,
+  .barber-crm .barber-profile-page {
+    max-width: 960px;
+  }
+
+  .barber-week-grid .barber-week-day-cell {
+    min-height: 80px;
+  }
+}

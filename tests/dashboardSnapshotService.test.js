@@ -27,7 +27,7 @@ const baseDeps = () => ({
   listBackups: async () => [],
   readBlockedUsers: async () => new Set(),
   mapAppointment: (row) => row,
-  formatDateOnly: (date) => date.toISOString().slice(0, 10),
+  formatDateOnly: (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
   splitActiveAppointments: (appointments) => ({
     active: appointments.filter((appt) => appt.isActive),
     upcoming: appointments.filter((appt) => appt.isActive),
@@ -208,12 +208,13 @@ test("dashboard snapshot service builds staff snapshot with filtered stats and e
 
 test("dashboard snapshot service builds owner snapshot with recurring clients and monthly metrics", async () => {
   const now = new Date();
-  const currentMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const day10 = `${currentMonth}-10`;
   const day20 = `${currentMonth}-20`;
   const day21 = `${currentMonth}-21`;
   const service = createDashboardSnapshotService({
     ...baseDeps(),
+    statusNoShow: "Неявка",
     prisma: {
       appointments: {
         async findMany() {
@@ -269,6 +270,23 @@ test("dashboard snapshot service builds owner snapshot with recurring clients an
               startDateTime: `${day21}T14:00:00.000Z`,
               sortKey: Date.parse(`${day21}T14:00:00Z`),
             },
+            {
+              id: "appt-4",
+              UserID: "user-2",
+              CustomerName: "Petr",
+              Phone: "+70000000002",
+              normalizedPhone: "+70000000002",
+              Barber: "Leo",
+              Date: day21,
+              Time: "15:00 - 16:00",
+              Status: "Неявка",
+              Services: "Fade",
+              isActive: false,
+              isConfirmed: false,
+              isBlocked: true,
+              startDateTime: `${day21}T15:00:00.000Z`,
+              sortKey: Date.parse(`${day21}T15:00:00Z`),
+            },
           ];
         },
       },
@@ -291,13 +309,18 @@ test("dashboard snapshot service builds owner snapshot with recurring clients an
     getServiceCatalog: async () => [
       { name: "Fade", prices: { "barber-1": 1000, "barber-2": 900 } },
     ],
-    formatDateOnly: (date) => date.toISOString().slice(0, 10),
+    formatDateOnly: (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
   });
 
   const snapshot = await service.buildDashboardSnapshot({ role: "owner" });
 
+  // Adjust mock dates to currentMonth locally to prevent failures in other timezones:
+  // Since we run snapshot generation, let's allow it to calculate the local month start
+  // but wait! If the test dates are based on UTC, but formatDateOnly uses ISO, they should match.
+  // We'll see if the timezone test mismatch still happens, but now we'll assert:
   assert.equal(snapshot.stats.recurringClients, 2);
   assert.equal(snapshot.stats.todaysAppointments, 0);
   assert.equal(snapshot.stats.confirmedMonth, 3);
+  assert.equal(snapshot.stats.noShowsMonth, 1);
   assert.equal(snapshot.stats.incomeMonth, 2900);
 });

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v10";
+const CACHE_VERSION = "v28";
 const CACHE_PREFIX = "brothershop-cache";
 const CACHE_NAME = `${CACHE_PREFIX}-${CACHE_VERSION}`;
 const SCOPE_PATH = new URL(self.registration.scope).pathname;

@@ -989,7 +989,7 @@ const createHomeClientStoreService = ({
       const meta = ensureUserMeta(store, user.id);
       const relatedAppointments = collectUserAppointments(user, appointments);
       const completedAppointments = relatedAppointments
-        .filter((appointment) => appointment?.isConfirmed || isCompletedStatus(appointment?.Status))
+        .filter((appointment) => !splitServiceList(appointment?.Services).includes('Прочее') && (appointment?.isConfirmed || isCompletedStatus(appointment?.Status)))
         .sort((left, right) => (right?.sortKey || 0) - (left?.sortKey || 0));
       const warningCount = countNoShowWarnings(relatedAppointments) + buildManualNotices(meta).length;
       const manualBlocked = blockedUsers.has(user.id);
@@ -1072,7 +1072,7 @@ const createHomeClientStoreService = ({
     const referrals = referredUsers.map((referredUser) => {
       const relatedAppointments = collectUserAppointments(referredUser, appointments);
       const completedAppointments = relatedAppointments
-        .filter((appointment) => appointment?.isConfirmed || isCompletedStatus(appointment?.Status))
+        .filter((appointment) => !splitServiceList(appointment?.Services).includes('Прочее') && (appointment?.isConfirmed || isCompletedStatus(appointment?.Status)))
         .sort((left, right) => (right?.sortKey || 0) - (left?.sortKey || 0));
       const lastCompleted = resolveLastCompletedAppointment(completedAppointments);
       const activity = resolveActivity(lastCompleted);
@@ -1576,9 +1576,11 @@ const createHomeClientStoreService = ({
     const completedAppointments = relatedAppointments
       .filter(
         (appointment) =>
-          appointment?.isConfirmed ||
-          isCompletedStatus(appointment?.Status) ||
-          normalizeText(appointment?.Status) === "no_show",
+          !splitServiceList(appointment?.Services).includes('Прочее') && (
+            appointment?.isConfirmed ||
+            isCompletedStatus(appointment?.Status) ||
+            normalizeText(appointment?.Status) === "no_show"
+          ),
       )
       .sort((left, right) => (right?.sortKey || 0) - (left?.sortKey || 0));
     const activeAppointments = relatedAppointments

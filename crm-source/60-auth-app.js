@@ -1923,6 +1923,7 @@ const handleBarberFieldChange = (id, field, value) => {
       <ProfileModal
         state={profileModal}
         onClose={() => setProfileModal({ open: false, data: null, loading: false })}
+        role={role}
         onBlockClient={handleBlockClient}
         onAdjustBs={handleAdjustClientBs}
         onAddWarning={handleAddClientWarning}

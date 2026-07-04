@@ -147,6 +147,7 @@ const ProfileModal = ({
   client: clientProp,
   onClose,
   barbers = [],
+  role = ROLE_OWNER,
   onUpdate = null,
   onAdjustBs = null,
   onAddWarning = null,
@@ -251,6 +252,7 @@ const ProfileModal = ({
   const warningCount = Number(blockState?.warningCount ?? modalRecord?.warningCount ?? externalData?.warningCount ?? externalData?.user?.warningCount ?? 0);
   const manualBlocked = Boolean(blockState?.manualBlocked ?? modalRecord?.manualBlocked ?? externalData?.manualBlocked ?? externalData?.user?.manualBlocked);
   const isBlocked = blockState?.isBlocked ?? blockState?.blocked ?? modalRecord?.isBlocked ?? externalData?.isBlocked ?? externalData?.user?.isBlocked ?? manualBlocked;
+  const isOwner = role === ROLE_OWNER || role === ROLE_CREATOR;
 
   const clientAvatarSrc = resolveAssetUrl(
     normalizeImagePath(modalRecord?.avatarUrl || modalRecord?.AvatarURL || externalData?.user?.avatarUrl || externalData?.user?.AvatarURL || '')
@@ -425,7 +427,7 @@ const ProfileModal = ({
       maxWidthClass="max-w-3xl"
       footer={
         <div className="flex flex-nowrap items-center justify-end gap-2 sm:gap-3">
-          {modalRecord && onDelete && (
+          {isOwner && modalRecord && onDelete && (
             <button
               onClick={handleDelete}
               className={classNames(
@@ -440,6 +442,7 @@ const ProfileModal = ({
               <span className="hidden sm:inline">Удалить</span>
             </button>
           )}
+          {isOwner && (
           <button
             onClick={handleBlockToggle}
             disabled={blockBusy || !onBlockClient || !modalRecord}
@@ -457,6 +460,7 @@ const ProfileModal = ({
             <IconBan className="h-5 w-5" aria-hidden="true" />
             <span className="hidden sm:inline">{isBlocked ? 'Разблокировать' : 'Заблокировать'}</span>
           </button>
+          )}
           <button
             onClick={onClose}
             disabled={saveBusy}
@@ -512,10 +516,24 @@ const ProfileModal = ({
             <div className="min-w-0">
               <p className="text-lg font-semibold text-white">{modalRecord?.Name || 'Без имени'}</p>
               {modalRecord?.Phone && (
-                <p className="text-sm text-[var(--crm-muted)]">{formatPhoneInput(modalRecord.Phone)}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const digits = modalRecord.Phone.replace(/\D/g, '');
+                    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                      window.location.href = `tel:${digits}`;
+                    } else {
+                      navigator.clipboard.writeText(digits).catch(() => {});
+                    }
+                  }}
+                  className="text-sm text-[color:var(--crm-primary)] hover:underline cursor-pointer text-left"
+                >
+                  {formatPhoneInput(modalRecord.Phone)}
+                </button>
               )}
             </div>
           </div>
+          {isOwner && (
           <div className="crm-inline-panel px-4 py-3">
             <button
               type="button"
@@ -562,6 +580,8 @@ const ProfileModal = ({
               </div>
             </div>
           </div>
+          )}
+          {isOwner && (
           <div className="grid grid-cols-2 gap-3">
             <label className="col-span-2 space-y-1 text-sm text-slate-300 md:col-span-1">
               Имя
@@ -608,6 +628,8 @@ const ProfileModal = ({
               />
             </label>
           </div>
+          )}
+          {isOwner && (
           <div className="crm-soft-card p-3">
             <button
               type="button"
@@ -681,6 +703,7 @@ const ProfileModal = ({
               </div>
             </div>
           </div>
+          )}
           <div className="space-y-2">
             <p className="text-sm text-[var(--crm-muted)]">История визитов</p>
             <VisitHistoryList

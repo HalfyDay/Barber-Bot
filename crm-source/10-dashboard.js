@@ -309,7 +309,11 @@ const DashboardView = ({
                 label="Заработано за месяц"
                 value={stats.earningsMonth == null ? '—' : formatCurrencyValue(stats.earningsMonth)}
                 accent="text-[color:var(--crm-highlight)]"
-                onClick={resolveStatHandler('Revenue')}
+                onClick={
+                  typeof onNavigateTable === 'function'
+                    ? () => handleStatNavigate({ tableId: 'Revenue', revenuePeriod: '1M' })
+                    : undefined
+                }
               />
               <StatCard
                 compact
@@ -360,7 +364,11 @@ const DashboardView = ({
                 label="Доход за месяц"
                 value={stats.incomeMonth == null ? '—' : formatCurrencyValue(stats.incomeMonth)}
                 accent="text-[color:var(--crm-highlight)]"
-                onClick={resolveStatHandler('Revenue')}
+                onClick={
+                  typeof onNavigateTable === 'function'
+                    ? () => handleStatNavigate({ tableId: 'Revenue', revenuePeriod: '1M' })
+                    : undefined
+                }
               />
             </>
           )}

@@ -163,6 +163,7 @@ const DataTable = ({
 const ClientsList = ({
   clients = [],
   barbers = [],
+  role = ROLE_OWNER,
   onUpdate,
   onAdjustBs,
   onDelete,
@@ -569,6 +570,7 @@ const ClientsList = ({
         client={modalState.record}
         onClose={closeClientModal}
         barbers={barbers}
+        role={role}
         onUpdate={onUpdate}
         onAdjustBs={onAdjustBs}
         onDelete={onDelete}

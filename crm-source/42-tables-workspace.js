@@ -79,6 +79,7 @@ const TablesWorkspace = ({
   const [appointmentCalendarScale, setAppointmentCalendarScale] = useLocalStorage('tables.appointmentsCalendarScale', 'normal');
   const [appointmentCalendarDate, setAppointmentCalendarDate] = useLocalStorage('tables.appointmentsCalendarDate', getLocalISODateString());
   const [appointmentTodayJumpSignal, setAppointmentTodayJumpSignal] = useState(0);
+  const [pendingRevenuePeriod, setPendingRevenuePeriod] = useState(null);
   const previousActiveTableRef = useRef(activeTable);
   const [scheduleFillDays, setScheduleFillDays] = useLocalStorage('tables.schedulesFillDays', 14);
   const restrictStaffBarberFilter = role === ROLE_STAFF && activeTable === 'Appointments';
@@ -158,6 +159,9 @@ const TablesWorkspace = ({
       if (preferredTable.appointmentStatusMode) {
         setAppointmentStatusMode(preferredTable.appointmentStatusMode);
       }
+    }
+    if (nextTable === 'Revenue' && preferredTable && typeof preferredTable === 'object' && preferredTable.revenuePeriod) {
+      setPendingRevenuePeriod(preferredTable.revenuePeriod);
     }
     onPreferredTableConsumed?.();
   }, [
@@ -681,7 +685,7 @@ const TablesWorkspace = ({
             />
           )}
           {activeTable === 'Revenue' && (
-            <RevenueView apiRequest={apiRequest} barbers={barbers} role={role} staffBarberId={staffBarberId} />
+            <RevenueView apiRequest={apiRequest} barbers={barbers} role={role} staffBarberId={staffBarberId} revenuePeriod={pendingRevenuePeriod} />
           )}
         </div>
       ) : (
@@ -745,6 +749,7 @@ const TablesWorkspace = ({
                       <ClientsList
                         clients={processedRows}
                         barbers={dropdownOptions.barbers || []}
+                        role={role}
                         onUpdate={handleUpdate}
                         onAdjustBs={onAdjustClientBs}
                         onDelete={handleDelete}

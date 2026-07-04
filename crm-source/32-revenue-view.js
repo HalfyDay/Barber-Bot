@@ -311,6 +311,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
   );
 };
 const PRESETS = [
+  { label: '1Д', value: '1D' },
   { label: '1Н', value: '1W' },
   { label: '1М', value: '1M' },
   { label: '3М', value: '3M' },
@@ -319,7 +320,7 @@ const PRESETS = [
   { label: 'ВСЕ', value: 'ALL' },
 ];
 
-const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberId = null }) => {
+const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberId = null, revenuePeriod = null }) => {
   const isStaffMode = role === ROLE_STAFF;
   const staffBarberFilterValue =
     staffBarberId !== null && staffBarberId !== undefined ? String(staffBarberId) : '';
@@ -380,6 +381,10 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
+
+  useEffect(() => {
+    if (revenuePeriod) applyPreset(revenuePeriod);
+  }, [revenuePeriod]);
   
   useEffect(() => {
     if (!filters) {
@@ -395,6 +400,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
     }
     const endDt = new Date();
     const startDt = new Date();
+    if (presetValue === '1D') startDt.setDate(startDt.getDate() - 1);
     if (presetValue === '1W') startDt.setDate(startDt.getDate() - 7);
     if (presetValue === '1M') startDt.setMonth(startDt.getMonth() - 1);
     if (presetValue === '3M') startDt.setMonth(startDt.getMonth() - 3);

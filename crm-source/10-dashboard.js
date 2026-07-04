@@ -124,6 +124,52 @@ const DashboardView = ({
       .slice(0, 12)
       .map(({ startTs, endTs, ...rest }) => rest);
   }, [useExplicitOverdue, normalizedOverdue, nowTs]);
+  const mergedList = useMemo(() => {
+    const taggedUpcoming = upcomingList.map((appt) => ({ ...appt, _type: 'upcoming' }));
+    const taggedOverdue = overdueList.map((appt) => ({ ...appt, _type: 'overdue' }));
+    return [...taggedUpcoming, ...taggedOverdue].sort((a, b) => {
+      const left = a.startDate?.getTime() || Number.MAX_SAFE_INTEGER;
+      const right = b.startDate?.getTime() || Number.MAX_SAFE_INTEGER;
+      return left - right;
+    });
+  }, [upcomingList, overdueList]);
+  const formatGroupLabel = useCallback((dateValue) => {
+    if (!dateValue || dateValue === 'Без даты') return 'Без даты';
+    try {
+      const parsed = new Date(`${dateValue}T00:00:00`);
+      if (Number.isNaN(parsed.getTime())) return dateValue;
+      return new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).format(parsed);
+    } catch {
+      return dateValue;
+    }
+  }, []);
+  const groupedMerged = useMemo(() => {
+    const groups = new Map();
+    mergedList.forEach((appt) => {
+      const key = appt.Date || 'Без даты';
+      const bucket = groups.get(key) || [];
+      bucket.push(appt);
+      groups.set(key, bucket);
+    });
+    return Array.from(groups.entries())
+      .map(([key, items]) => ({
+        key,
+        label: formatGroupLabel(key),
+        items,
+        sortValue: Math.min(
+          ...items.map((item) => getAppointmentStartDate(item.Date, item.Time, item.startDateTime)?.getTime() || Number.MAX_SAFE_INTEGER)
+        ),
+      }))
+      .sort((a, b) => a.sortValue - b.sortValue);
+  }, [formatGroupLabel, mergedList]);
+  const showMergedBarber = useMemo(() => {
+    const uniqueBarbers = new Set(
+      mergedList
+        .map((appt) => canonicalizeName(appt.Barber))
+        .filter(Boolean)
+    );
+    return uniqueBarbers.size > 1;
+  }, [mergedList]);
   const handleStatusShortcut = useCallback(
     async (appointment, status) => {
       if (!appointment || !status) return;
@@ -145,51 +191,6 @@ const DashboardView = ({
     },
     [onQuickUpdateStatus, onOpenAppointment]
   );
-  const formatGroupLabel = useCallback((dateValue) => {
-    if (!dateValue || dateValue === 'Без даты') return 'Без даты';
-    try {
-      const parsed = new Date(`${dateValue}T00:00:00`);
-      if (Number.isNaN(parsed.getTime())) return dateValue;
-      return new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).format(parsed);
-    } catch {
-      return dateValue;
-    }
-  }, []);
-  const groupedUpcoming = useMemo(() => {
-    const groups = new Map();
-    upcomingList.forEach((appt) => {
-      const key = appt.Date || 'Без даты';
-      const bucket = groups.get(key) || [];
-      bucket.push(appt);
-      groups.set(key, bucket);
-    });
-    return Array.from(groups.entries())
-      .map(([key, items]) => ({
-        key,
-        label: formatGroupLabel(key),
-        items,
-        sortValue: Math.min(
-          ...items.map((item) => getAppointmentStartDate(item.Date, item.Time, item.startDateTime)?.getTime() || Number.MAX_SAFE_INTEGER)
-        ),
-      }))
-      .sort((a, b) => a.sortValue - b.sortValue);
-  }, [formatGroupLabel, upcomingList]);
-  const showUpcomingBarber = useMemo(() => {
-    const uniqueBarbers = new Set(
-      upcomingList
-        .map((appt) => canonicalizeName(appt.Barber))
-        .filter(Boolean)
-    );
-    return uniqueBarbers.size > 1;
-  }, [upcomingList]);
-  const showOverdueBarber = useMemo(() => {
-    const uniqueBarbers = new Set(
-      overdueList
-        .map((appt) => canonicalizeName(appt.Barber))
-        .filter(Boolean)
-    );
-    return uniqueBarbers.size > 1;
-  }, [overdueList]);
   const clientAvatarLookup = useMemo(() => {
     const lookup = new Map();
     const sourceClients = Array.isArray(data?.clients) ? data.clients : [];
@@ -374,12 +375,12 @@ const DashboardView = ({
           )}
         </div>
       </div>
-      <SectionCard title="Ближайшие записи" actions={upcomingActions}>
-        {groupedUpcoming.length === 0 ? (
-          <p className="text-[var(--crm-muted)]">Нет ближайших записей.</p>
+      <SectionCard title="Записи" actions={upcomingActions}>
+        {mergedList.length === 0 ? (
+          <p className="text-[var(--crm-muted)]">Нет записей.</p>
         ) : (
           <div className="space-y-5">
-            {groupedUpcoming.map((group) => (
+            {groupedMerged.map((group) => (
               <div key={group.key} className="space-y-3">
                 <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--crm-muted)]">
                   <span className="h-px flex-1 bg-[color:var(--crm-outline)]" />
@@ -388,24 +389,120 @@ const DashboardView = ({
                 </div>
                 <div className="grid gap-3 xl:grid-cols-2">
                   {group.items.map((appt) => {
-                    const inProgress = isAppointmentOngoing(appt, nowTs);
-                    const cardProps = {
-                      role: 'button',
-                      tabIndex: 0,
-                      onClick: () => onOpenAppointment?.(appt, { allowDelete: true }),
-                      onKeyDown: (event) => event.key === 'Enter' && onOpenAppointment?.(appt, { allowDelete: true }),
-                      className: classNames(
-                        'group upcoming-card crm-soft-card relative w-full cursor-pointer overflow-hidden px-3.5 pb-3.5 pt-0.5 text-left transition hover:-translate-y-0.5 hover:border-[color:var(--crm-primary)]/70 focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)] sm:px-4 sm:pb-4 sm:pt-1',
-                        inProgress && 'border-[color:var(--crm-primary)]/80 !bg-[color:var(--crm-primary-container)] shadow-[0_0_25px_rgba(0,191,175,0.18)] hover:!bg-[color:var(--crm-primary-container)]'
-                      ),
-                    };
+                    const isOverdue = appt._type === 'overdue';
+                    const inProgress = !isOverdue && isAppointmentOngoing(appt, nowTs);
                     const { start, end } = parseTimeRangeParts(appt.Time);
+                    const timeLabel = [start || '—', end ? `до ${end}` : ''].filter(Boolean).join(' ');
                     const statusLabel = normalizeStatusValue(appt.Status);
                     const servicesList = parseMultiValue(appt.Services);
                     const apptId = String(
                       getRecordId(appt) || `${group.key || appt.Date || 'no-date'}-${appt.Time || 'no-time'}-${appt.CustomerName || 'no-name'}`
                     );
                     const isPending = pendingStatusId === apptId;
+                    const handleOpen = () => onOpenAppointment?.(appt, { allowDelete: true });
+                    if (isOverdue) {
+                      return (
+                        <div
+                          key={apptId}
+                          role="button"
+                          tabIndex={0}
+                          onClick={handleOpen}
+                          onKeyDown={(event) => event.key === 'Enter' && handleOpen()}
+                          className="crm-soft-card relative rounded-[24px] bg-[rgba(78,28,38,0.6)] px-4 pb-4 pt-0 transition hover:-translate-y-0.5 hover:bg-[rgba(96,34,46,0.74)] focus:outline-none focus:ring-2 focus:ring-[rgba(132,48,64,0.22)]"
+                        >
+                          <div className="absolute left-0 top-0 overflow-hidden rounded-tl-[24px] rounded-br-[28px] shadow-[0_14px_30px_rgba(0,0,0,0.2)]">
+                            {renderAppointmentAvatar(appt, 56)}
+                          </div>
+                          <span className={classNames('absolute right-4 top-4 h-2.5 w-2.5 rounded-full sm:hidden', getDashboardStatusDotClass(statusLabel))} />
+                          <div className="flex min-h-[3.5rem] flex-wrap items-center justify-between gap-3">
+                            <div className="flex min-h-[56px] flex-col justify-center space-y-0.5 pl-[3.8rem] pr-4 sm:min-h-[56px] sm:space-y-0.5 sm:pr-0">
+                              <p className="text-[11px] uppercase leading-tight tracking-[0.25em] text-[#f0c8ce]/80">{formatDateBadgeLabel(appt.Date)}</p>
+                              <div className="flex items-baseline gap-2">
+                                <p className="text-xl font-semibold leading-none text-white sm:text-2xl">{start || '—'}</p>
+                                {end && <p className="text-xs leading-none text-[var(--crm-muted)] sm:text-sm">до {end}</p>}
+                                {!end && !start && <p className="text-xl font-semibold leading-none text-white sm:text-2xl">{timeLabel || 'Время не указано'}</p>}
+                              </div>
+                            </div>
+                            <span
+                              className={classNames(
+                                'hidden items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide sm:inline-flex sm:text-xs',
+                                getStatusBadgeClasses(statusLabel)
+                              )}
+                            >
+                              {statusLabel || 'Без статуса'}
+                            </span>
+                          </div>
+                          <div className="mt-1.5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0 space-y-0.5">
+                              <p className="text-base font-semibold text-white">{appt.CustomerName || 'Без имени'}</p>
+                              {showMergedBarber && appt.Barber ? (
+                                <p className="text-sm text-[var(--crm-text)]">
+                                  <span className="font-semibold text-white">{appt.Barber}</span>
+                                </p>
+                              ) : null}
+                            </div>
+                            <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 sm:flex sm:w-auto sm:flex-nowrap sm:items-center sm:justify-end sm:gap-3">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  handleStatusShortcut(appt, STATUS_DONE);
+                                }}
+                                onKeyDown={(event) => event.stopPropagation()}
+                                disabled={isPending}
+                                className={classNames(
+                                  'crm-action-btn w-full justify-center px-4 py-3 text-sm sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
+                                  isPending && 'cursor-wait opacity-70'
+                                )}
+                              >
+                                {isPending ? 'Сохраняю...' : 'Выполнена'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  handleStatusShortcut(appt, STATUS_NO_SHOW);
+                                }}
+                                onKeyDown={(event) => event.stopPropagation()}
+                                disabled={isPending}
+                                className={classNames(
+                                  'crm-ghost-btn w-full justify-center px-4 py-3 text-sm text-rose-200 hover:bg-[rgba(96,34,46,0.74)] hover:text-white sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
+                                  isPending && 'cursor-wait opacity-70'
+                                )}
+                              >
+                                {isPending ? 'Сохраняю...' : 'Неявка'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  onDeleteAppointment?.(appt);
+                                }}
+                                onKeyDown={(event) => event.stopPropagation()}
+                                className="crm-ghost-btn inline-flex h-[46px] w-[46px] min-h-0 items-center justify-center rounded-full p-0 text-rose-200 transition hover:bg-[rgba(96,34,46,0.74)] hover:text-white focus:outline-none focus:ring-0 focus-visible:ring-0 sm:h-[42px] sm:w-[42px]"
+                                aria-label="Удалить запись"
+                                title="Удалить запись"
+                              >
+                                <IconTrash className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    const cardProps = {
+                      role: 'button',
+                      tabIndex: 0,
+                      onClick: handleOpen,
+                      onKeyDown: (event) => event.key === 'Enter' && handleOpen(),
+                      className: classNames(
+                        'group upcoming-card crm-soft-card relative w-full cursor-pointer overflow-hidden px-3.5 pb-3.5 pt-0.5 text-left transition hover:-translate-y-0.5 hover:border-[color:var(--crm-primary)]/70 focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)] sm:px-4 sm:pb-4 sm:pt-1',
+                        inProgress && 'border-[color:var(--crm-primary)]/80 !bg-[color:var(--crm-primary-container)] shadow-[0_0_25px_rgba(0,191,175,0.18)] hover:!bg-[color:var(--crm-primary-container)]'
+                      ),
+                    };
                     return (
                       <div key={appt.id || `${group.key}-${appt.CustomerName}-${appt.Time}`} {...cardProps}>
                         <div className="absolute left-0 top-0 overflow-hidden rounded-br-[30px] shadow-[0_14px_30px_rgba(0,0,0,0.2)]">
@@ -449,7 +546,7 @@ const DashboardView = ({
                                   <p className="text-[1.05rem] font-semibold leading-tight text-white sm:text-[1.15rem]">Без имени</p>
                                 )}
                               </div>
-                              {showUpcomingBarber && appt.Barber ? (
+                              {showMergedBarber && appt.Barber ? (
                                 <p className="text-[13px] leading-tight text-[var(--crm-muted)] sm:text-sm">
                                   <span className="font-semibold text-white">{appt.Barber}</span>
                                 </p>
@@ -523,136 +620,27 @@ const DashboardView = ({
                               {servicesList.map((service, index) => (
                                 <span
                                   key={`${service}-${index}`}
-                                className="rounded-full border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-2.5 py-0.5 text-[10px] text-[var(--crm-text)] sm:px-3 sm:py-1 sm:text-[11px]"
-                              >
-                                {service}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-[var(--crm-muted)] sm:text-sm">Нет выбранных услуг</p>
-                        )}
-                        {appt.Comment ? (
-                          <div className="mt-2 text-xs text-[var(--crm-muted)] italic whitespace-pre-wrap break-words min-w-0">
-                            {appt.Comment}
-                          </div>
-                        ) : null}
-                      </div>
+                                  className="rounded-full border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-2.5 py-0.5 text-[10px] text-[var(--crm-text)] sm:px-3 sm:py-1 sm:text-[11px]"
+                                >
+                                  {service}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-[var(--crm-muted)] sm:text-sm">Нет выбранных услуг</p>
+                          )}
+                          {appt.Comment ? (
+                            <div className="mt-2 text-xs text-[var(--crm-muted)] italic whitespace-pre-wrap break-words min-w-0">
+                              {appt.Comment}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               </div>
             ))}
-          </div>
-        )}
-      </SectionCard>
-      <SectionCard title="Прошедшие">
-        {overdueList.length === 0 ? (
-          <p className="text-[var(--crm-muted)]">Нет активных записей, время которых уже прошло.</p>
-        ) : (
-          <div className="grid gap-3 xl:grid-cols-2">
-            {overdueList.map((appt) => {
-              const apptId = String(
-                getRecordId(appt) || `${appt.Date || 'no-date'}-${appt.Time || 'no-time'}-${appt.CustomerName || 'no-name'}`
-              );
-              const { start, end } = parseTimeRangeParts(appt.Time);
-              const timeLabel = [start || '—', end ? `до ${end}` : ''].filter(Boolean).join(' ');
-              const statusLabel = normalizeStatusValue(appt.Status);
-              const isPending = pendingStatusId === apptId;
-              const handleOpen = () => onOpenAppointment?.(appt, { allowDelete: true });
-                return (
-                <div
-                  key={apptId}
-                  role="button"
-                  tabIndex={0}
-                  onClick={handleOpen}
-                  onKeyDown={(event) => event.key === 'Enter' && handleOpen()}
-                  className="crm-soft-card relative rounded-[24px] bg-[rgba(78,28,38,0.6)] px-4 pb-4 pt-0 transition hover:-translate-y-0.5 hover:bg-[rgba(96,34,46,0.74)] focus:outline-none focus:ring-2 focus:ring-[rgba(132,48,64,0.22)]"
-                >
-                  <div className="absolute left-0 top-0 overflow-hidden rounded-tl-[24px] rounded-br-[28px] shadow-[0_14px_30px_rgba(0,0,0,0.2)]">
-                    {renderAppointmentAvatar(appt, 56)}
-                  </div>
-                  <span className={classNames('absolute right-4 top-4 h-2.5 w-2.5 rounded-full sm:hidden', getDashboardStatusDotClass(statusLabel))} />
-                  <div className="flex min-h-[3.5rem] flex-wrap items-center justify-between gap-3">
-                    <div className="flex min-h-[56px] flex-col justify-center space-y-0.5 pl-[3.8rem] pr-4 sm:min-h-[56px] sm:space-y-0.5 sm:pr-0">
-                      <p className="text-[11px] uppercase leading-tight tracking-[0.25em] text-[#f0c8ce]/80">{formatDateBadgeLabel(appt.Date)}</p>
-                      <div className="flex items-baseline gap-2">
-                        <p className="text-xl font-semibold leading-none text-white sm:text-2xl">{start || '—'}</p>
-                        {end && <p className="text-xs leading-none text-[var(--crm-muted)] sm:text-sm">до {end}</p>}
-                        {!end && !start && <p className="text-xl font-semibold leading-none text-white sm:text-2xl">{timeLabel || 'Время не указано'}</p>}
-                      </div>
-                    </div>
-                    <span
-                      className={classNames(
-                        'hidden items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide sm:inline-flex sm:text-xs',
-                        getStatusBadgeClasses(statusLabel)
-                      )}
-                    >
-                      {statusLabel || 'Без статуса'}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0 space-y-0.5">
-                        <p className="text-base font-semibold text-white">{appt.CustomerName || 'Без имени'}</p>
-                      {showOverdueBarber && appt.Barber ? (
-                        <p className="text-sm text-[var(--crm-text)]">
-                          <span className="font-semibold text-white">{appt.Barber}</span>
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 sm:flex sm:w-auto sm:flex-nowrap sm:items-center sm:justify-end sm:gap-3">
-                      <button
-	                        type="button"
-	                        onClick={(event) => {
-	                          event.preventDefault();
-	                          event.stopPropagation();
-	                          handleStatusShortcut(appt, STATUS_DONE);
-	                        }}
-	                        onKeyDown={(event) => event.stopPropagation()}
-	                        disabled={isPending}
-	                        className={classNames(
-	                          'crm-action-btn w-full justify-center px-4 py-3 text-sm sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
-	                          isPending && 'cursor-wait opacity-70'
-	                        )}
-                      >
-                        {isPending ? 'Сохраняю...' : 'Выполнена'}
-                      </button>
-	                      <button
-	                        type="button"
-	                        onClick={(event) => {
-	                          event.preventDefault();
-	                          event.stopPropagation();
-	                          handleStatusShortcut(appt, STATUS_NO_SHOW);
-	                        }}
-	                        onKeyDown={(event) => event.stopPropagation()}
-	                        disabled={isPending}
-	                        className={classNames(
-	                          'crm-ghost-btn w-full justify-center px-4 py-3 text-sm text-rose-200 hover:bg-[rgba(96,34,46,0.74)] hover:text-white sm:w-auto sm:min-w-[120px] sm:px-4 sm:py-2 sm:text-sm',
-	                          isPending && 'cursor-wait opacity-70'
-	                        )}
-                      >
-                        {isPending ? 'Сохраняю...' : 'Неявка'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          onDeleteAppointment?.(appt);
-                        }}
-                        onKeyDown={(event) => event.stopPropagation()}
-                        className="crm-ghost-btn inline-flex h-[46px] w-[46px] min-h-0 items-center justify-center rounded-full p-0 text-rose-200 transition hover:bg-[rgba(96,34,46,0.74)] hover:text-white focus:outline-none focus:ring-0 focus-visible:ring-0 sm:h-[42px] sm:w-[42px]"
-                        aria-label="Удалить запись"
-                        title="Удалить запись"
-                      >
-                        <IconTrash className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
           </div>
         )}
       </SectionCard>

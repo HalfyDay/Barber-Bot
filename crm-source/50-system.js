@@ -1914,6 +1914,27 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
 
   const renderReferralTab = () => (
     <div className="space-y-5">
+      <SectionCard title="Переводы на клиентском сайте">
+        <div className="crm-soft-card flex flex-col gap-3 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">Кнопка «Перевести BS»</p>
+              <p className="mt-1 text-sm text-[var(--crm-muted)]">Показывать кнопку перевода BS на клиентском сайте в кошельке бонусов.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => updateReferralField('translationsEnabled', !(draft?.referral?.translationsEnabled === true))}
+              className={classNames(
+                'min-w-[112px] px-4 py-2 text-sm',
+                draft?.referral?.translationsEnabled === true ? 'crm-action-btn' : 'crm-ghost-btn'
+              )}
+            >
+              {draft?.referral?.translationsEnabled === true ? 'Включено' : 'Выключено'}
+            </button>
+          </div>
+        </div>
+      </SectionCard>
+
       <SectionCard title="Реферальная программа">
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_320px]">
           <div className="grid gap-4 lg:grid-cols-2">

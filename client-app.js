@@ -140,6 +140,7 @@
   let promoMarqueeAutoScroll = null;
   let cachedPushPublicConfig = null;
   let cachedPushPublicConfigAt = 0;
+
   const isEditableTarget = (target) => {
     if (!(target instanceof HTMLElement)) return false;
     return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
@@ -3021,7 +3022,7 @@
     const transferRecipients = Array.isArray(referral.recentTransferRecipients) ? referral.recentTransferRecipients : [];
     const levels = Array.isArray(referralProgram.levels) ? referralProgram.levels : [];
     const operations = Array.isArray(referral.operations) ? referral.operations : [];
-    return memoizeRenderedFragment("page-referral", [referral, state.transferHistoryFilter, state.referralLinkCopied, state.referralSection], () => {
+    return memoizeRenderedFragment("page-referral", [referral, state.transferHistoryFilter, state.referralLinkCopied, state.referralSection, referralProgram.translationsEnabled], () => {
       const referralPreview = referrals.slice(0, 4);
       const { transferOut: transferOutOperations, transferIn: transferInOperations } = getReferralOperationGroups(operations);
       const filteredBsActivity = getFilteredReferralActivity(operations, state.transferHistoryFilter);
@@ -3075,7 +3076,7 @@
             <div class="referral-wallet-footer">
               <div class="referral-wallet-actions">
                 <button class="referral-wallet-action referral-copy-btn ${state.referralLinkCopied ? "is-copied" : ""}" type="button" data-action="copy-referral">${iconMarkup("copy")}<span>${state.referralLinkCopied ? "Ссылка скопирована" : "Реферальная ссылка"}</span></button>
-                <button class="referral-wallet-action" type="button" data-action="open-sheet" data-sheet="transfer-bs">${iconMarkup("transfer")}<span>Перевести BS</span></button>
+                ${referralProgram.translationsEnabled ? `<button class="referral-wallet-action" type="button" data-action="open-sheet" data-sheet="transfer-bs">${iconMarkup("transfer")}<span>Перевести BS</span></button>` : ""}
               </div>
             </div>
           </article>

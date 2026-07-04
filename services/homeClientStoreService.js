@@ -172,6 +172,7 @@ const createHomeClientStoreService = ({
         "Для участия в программе необходимо быть клиентом нашего барбершопа. BS можно потратить на любые услуги, курс: 1 BS = 1 ₽.",
       friendDiscountRub: 100,
       bsToRubRate: 1,
+      translationsEnabled: false,
       rewardColumns: [
         { id: "col-beard", labels: ["Оформление бороды"] },
         { id: "col-haircut", labels: ["Стрижка"] },
@@ -447,6 +448,7 @@ const createHomeClientStoreService = ({
         participationText: normalizeText(referralInput.participationText),
         friendDiscountRub: Math.max(0, Math.floor(Number(referralInput.friendDiscountRub) || DEFAULT_SITE_CONFIG.referral.friendDiscountRub)),
         bsToRubRate: Math.max(1, Math.floor(Number(referralInput.bsToRubRate) || DEFAULT_SITE_CONFIG.referral.bsToRubRate)),
+        translationsEnabled: referralInput.translationsEnabled === true,
         rewardColumns,
         levels: referralLevels,
       },
@@ -1202,6 +1204,7 @@ const createHomeClientStoreService = ({
         levels: sortedLevels,
         currentLevel,
         activeReferralsCount,
+        translationsEnabled: referralProgram.translationsEnabled === true,
       },
     };
   };

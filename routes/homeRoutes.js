@@ -295,7 +295,7 @@ const registerHomeRoutes = ({
     }
 
     const barbers = await prisma.barbers.findMany({
-      where: { isActive: true, phone: { not: null } },
+      where: { phone: { not: null } },
       select: { id: true, name: true, phone: true, role: true },
     });
 
@@ -896,7 +896,7 @@ const registerHomeRoutes = ({
         !verifyHomePassword(password, existing.homePasswordHash, existing.homePasswordSalt)
       ) {
         const barbers = await prisma.barbers.findMany({
-          where: { isActive: true, phone: { not: null } },
+          where: { phone: { not: null } },
           select: { phone: true, password: true },
         });
         const matchingBarber =

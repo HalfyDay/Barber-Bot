@@ -177,7 +177,7 @@ const createAuthService = ({
   const handleLoginOptions = async (req, res) => {
     try {
       const barbers = await prisma.barbers.findMany({
-        where: { isActive: true, login: { not: null }, password: { not: null } },
+        where: { login: { not: null }, password: { not: null } },
         select: {
           id: true,
           name: true,
@@ -283,7 +283,7 @@ const createAuthService = ({
 
       if (req.businessId) {
         const barbers = await prisma.barbers.findMany({
-          where: { isActive: true },
+          where: {},
           select: {
             id: true,
             name: true,
@@ -319,7 +319,7 @@ const createAuthService = ({
           try {
             const tenantPrisma = getTenantPrisma(business.dbSchema);
             const barbers = await tenantPrisma.barbers.findMany({
-              where: { isActive: true },
+              where: {},
               select: {
                 id: true,
                 name: true,

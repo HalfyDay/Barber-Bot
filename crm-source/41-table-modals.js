@@ -1470,35 +1470,37 @@ const AppointmentModal = ({
         />
       </div>
 
-      <div className="crm-inline-panel mt-4">
-        <button
-          type="button"
-          onClick={() => setDetailsOpen((prev) => !prev)}
-          className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left"
-        >
-          <p className="text-sm font-semibold text-white">Данные о записи</p>
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            className={classNames('h-4 w-4 text-slate-400 transition-transform', detailsOpen ? 'rotate-180' : 'rotate-0')}
+      {!isNew && (
+        <div className="crm-inline-panel mt-4">
+          <button
+            type="button"
+            onClick={() => setDetailsOpen((prev) => !prev)}
+            className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
-          </svg>
-        </button>
-        <div className={classNames('overflow-hidden transition-all duration-200', detailsOpen ? 'max-h-64' : 'max-h-0')}>
-          <dl className="px-4 py-2 text-sm text-slate-300">
-            {recordDetails.map((item) => (
-              <div key={item.key} className="flex items-center justify-between gap-3 py-2">
-                <dt className="text-xs text-slate-400">{item.label}</dt>
-                <dd className={classNames('text-right font-semibold', item.accent)}>{item.value}</dd>
-              </div>
-            ))}
-          </dl>
+            <p className="text-sm font-semibold text-white">Данные о записи</p>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              className={classNames('h-4 w-4 text-slate-400 transition-transform', detailsOpen ? 'rotate-180' : 'rotate-0')}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+          <div className={classNames('overflow-hidden transition-all duration-200', detailsOpen ? 'max-h-64' : 'max-h-0')}>
+            <dl className="px-4 py-2 text-sm text-slate-300">
+              {recordDetails.map((item) => (
+                <div key={item.key} className="flex items-center justify-between gap-3 py-2">
+                  <dt className="text-xs text-slate-400">{item.label}</dt>
+                  <dd className={classNames('text-right font-semibold', item.accent)}>{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
         </div>
-      </div>
+      )}
     </Modal>
   );
 };

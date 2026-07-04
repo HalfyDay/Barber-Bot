@@ -1089,7 +1089,8 @@ const createHomeClientStoreService = ({
         lastVisitAt: activity.lastVisitAt,
       };
     });
-    const activeReferralsCount = referrals.filter((referral) => referral.color === 'green').length;
+    const nonRedReferrals = referrals.filter((referral) => normalizeText(referral.color) !== 'red');
+    const activeReferralsCount = nonRedReferrals.filter((referral) => referral.color === 'green').length;
     const sortedLevels = [...referralLevels].sort(
       (left, right) => Math.max(0, Number(left?.minReferrals) || 0) - Math.max(0, Number(right?.minReferrals) || 0),
     );
@@ -1098,6 +1099,7 @@ const createHomeClientStoreService = ({
       sortedLevels.find((level) => Math.max(0, Number(level?.minReferrals) || 0) > activeReferralsCount) || null;
     const rewardOperations = [];
     const visibleReferrals = referrals
+      .filter((referral) => normalizeText(referral.color) !== 'red')
       .map((referral) => {
         let totalReward = 0;
         if (referral.color === 'green') {
@@ -1186,9 +1188,9 @@ const createHomeClientStoreService = ({
       referralLink: `/login/?ref=${encodeURIComponent(ownerMeta.referralCode)}`,
       referrals: visibleReferrals,
       stats: {
-        total: referrals.length,
+        total: nonRedReferrals.length,
         green: activeReferralsCount,
-        yellow: referrals.filter((referral) => referral.color === 'yellow').length,
+        yellow: nonRedReferrals.filter((referral) => referral.color === 'yellow').length,
       },
       operations,
       recentTransferRecipients: recentTransferRecipients.slice(0, 8),

@@ -3040,7 +3040,6 @@
       const isStatsSection = state.referralSection === "stats";
       const activeReferralsCount = referrals.filter((item) => normalizeText(item.color) === "green").length;
       const warmReferralsCount = referrals.filter((item) => normalizeText(item.color) === "yellow").length;
-      const inactiveReferralsCount = referrals.filter((item) => normalizeText(item.color) === "red" || !["green", "yellow"].includes(normalizeText(item.color))).length;
       const totalReferralVisits = referrals.reduce((total, item) => total + Math.max(0, Number(item.completedVisits) || 0), 0);
       const totalReferralBs = referrals.reduce((total, item) => total + Math.max(0, Number(item.rewardedVisits) || 0), 0);
       const networkCoverage = referrals.length ? Math.round((activeReferralsCount / referrals.length) * 100) : 0;
@@ -3152,11 +3151,6 @@
               <span class="field-label">Редкие</span>
               <strong>${warmReferralsCount}</strong>
               <span class="subtitle">Нужен новый визит</span>
-            </div>
-            <div class="referral-insight-tile">
-              <span class="field-label">Неактивные</span>
-              <strong>${inactiveReferralsCount}</strong>
-              <span class="subtitle">Без текущей активности</span>
             </div>
             <div class="referral-insight-tile">
               <span class="field-label">Всего визитов</span>

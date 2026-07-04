@@ -34,9 +34,11 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
       UserID: client.telegramId || client.TelegramID || client.id || prev.UserID || '',
     }));
   };
+  const isClientsCreate = tableId === 'Users';
+  const sheetTitle = isClientsCreate ? 'Добавить клиента' : `Новая запись: ${tableName}`;
   return (
     <Modal
-      title={`Новая запись: ${tableName}`}
+      title={sheetTitle}
       isOpen={isOpen}
       onClose={onClose}
       footer={
@@ -62,7 +64,7 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
         </div>
       }
     >
-      <form className="space-y-4">
+      <form className={isClientsCreate ? 'grid grid-cols-1 gap-3 sm:grid-cols-2' : 'space-y-4'}>
         {visibleColumns.map((column) => {
           const value = draft[column.key];
           if (isAppointmentsCreate && column.key === 'CustomerName') {
@@ -117,6 +119,11 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
               </div>
             );
           }
+          const placeholderMap = {
+            Name: 'Введите имя клиента',
+            Phone: 'Введите номер телефона',
+            TelegramID: 'Введите Telegram ID',
+          };
           return (
             <div key={column.key} className="space-y-1">
               <label className="text-sm text-slate-300">{column.label}</label>
@@ -125,13 +132,14 @@ const CreateRecordModal = ({ isOpen, onClose, onSave, columns, tableName, option
                 aria-label={column.label || column.key}
                 type={column.type === 'date' ? 'date' : 'text'}
                 value={value || ''}
+                placeholder={placeholderMap[column.key] || ''}
                 onChange={(event) => {
                   const val = event.target.value;
                   const isPhoneField = column.key.toLowerCase() === 'phone';
                   const formattedVal = isPhoneField ? formatPhoneDisplay(val) : val;
                   setDraft((prev) => ({ ...prev, [column.key]: formattedVal }));
                 }}
-                className="w-full px-3 py-2 text-white"
+                className="h-11 w-full px-3 text-white"
               />
             </div>
           );
@@ -1358,6 +1366,7 @@ const AppointmentModal = ({
 	          onChange={(nextValue) => handleChange('CustomerName', nextValue)}
           clients={clients}
           onSelectClient={handleClientAutoFill}
+          placeholder="Введите имя клиента"
         />
         <div className="space-y-1">
           <label className="text-sm text-slate-300">Телефон</label>
@@ -1367,7 +1376,7 @@ const AppointmentModal = ({
             type="tel"
             value={draft.Phone || ''}
             onChange={(event) => handleChange('Phone', formatPhoneDisplay(event.target.value))}
-            placeholder="+7..."
+            placeholder="Введите номер телефона"
             className="h-11 w-full px-3 text-white"
           />
         </div>

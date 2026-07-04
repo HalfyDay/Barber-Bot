@@ -819,7 +819,7 @@ const TablesWorkspace = ({
               options={dropdownOptions}
               tableId={activeTable}
               clients={clients}
-              hiddenFields={activeTable === 'Appointments' ? ['UserID', 'Reminder2hClientSent', 'Reminder2hBarberSent'] : []}
+              hiddenFields={activeTable === 'Appointments' ? ['UserID', 'Reminder2hClientSent', 'Reminder2hBarberSent'] : activeTable === 'Users' ? ['TelegramID', 'Barber'] : []}
             />
           )}
         </>

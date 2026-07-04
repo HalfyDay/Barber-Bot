@@ -86,7 +86,7 @@ const AppointmentsList = ({ groups = [], onOpen, columns = [], hiddenColumns = [
                       </span>
                       {record.Barber && (
                         <p className="text-xs text-[var(--crm-muted)] sm:text-sm">
-                          Барбер: <span className="font-semibold text-white">{record.Barber}</span>
+                          Сотрудник: <span className="font-semibold text-white">{record.Barber}</span>
                         </p>
                       )}
                     </div>
@@ -363,7 +363,7 @@ const AppointmentCalendarCard = ({ record, onOpen, onOpenProfile, compact = fals
             )}
             {showBarber && record.Barber && (
               <p className={classNames('text-[var(--crm-muted)]', compact ? 'min-w-0 text-[11px]' : 'text-xs sm:text-sm')}>
-                Барбер: <span className="font-semibold text-white">{record.Barber}</span>
+                Сотрудник: <span className="font-semibold text-white">{record.Barber}</span>
               </p>
             )}
           </div>

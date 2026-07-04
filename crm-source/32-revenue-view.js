@@ -443,7 +443,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
     if (isStaffMode && !staffBarberFilterValue) {
       setState({
         loading: false,
-        error: 'Профиль сотрудника не привязан к барберу, доходы недоступны.',
+        error: 'Профиль сотрудника не привязан к сотруднику, доходы недоступны.',
         data: null,
       });
       return;
@@ -637,7 +637,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
               value={selectedBarberId}
               onChange={(v) => handleFilterChange('barberId', v)}
               options={[
-                { value: 'all', label: 'Все барберы' },
+                { value: 'all', label: 'Все сотрудники' },
                 ...barberOptions.map((opt) => ({ value: opt.id, label: opt.name })),
               ]}
               className="w-full flex-grow xl:flex-none xl:w-48"
@@ -824,7 +824,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
                   <table className="min-w-full text-sm">
                     <thead className="bg-[color:var(--crm-surface-4)] text-[var(--crm-muted)]">
                       <tr>
-                        <th className="px-4 py-3 text-left font-semibold">Барбер</th>
+                        <th className="px-4 py-3 text-left font-semibold">Сотрудник</th>
                         <th className="px-4 py-3 text-right font-semibold">Записи</th>
                         <th className="px-4 py-3 text-right font-semibold">Выручка</th>
                         <th className="px-4 py-3 text-right font-semibold">Комиссия</th>

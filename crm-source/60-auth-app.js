@@ -956,8 +956,8 @@ const handleBarberFieldChange = (id, field, value) => {
   const handleDeleteBarber = async (barber) => {
     if (!barber?.id) return;
     const confirmed = await requestConfirm({
-      title: 'Удалить барбера?',
-      message: `Барбер «${barber.name || 'Без имени'}» будет удален без возможности восстановления.`,
+      title: 'Удалить сотрудника?',
+      message: `Сотрудник «${barber.name || 'Без имени'}» будет удален без возможности восстановления.`,
       confirmLabel: 'Удалить',
       tone: 'danger',
     });
@@ -966,12 +966,12 @@ const handleBarberFieldChange = (id, field, value) => {
       await apiRequest(`/barbers/${encodeURIComponent(barber.id)}`, { method: 'DELETE' });
       fetchAll();
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось удалить барбера');
+      setGlobalError(error.message || 'Не удалось удалить сотрудника');
     }
   };
   const handleAddBarber = async (payload) => {
     if (!payload.name || !payload.password) {
-      setGlobalError('Заполните имя, логин и пароль барбера');
+      setGlobalError('Заполните имя, логин и пароль сотрудника');
       return null;
     }
     try {
@@ -981,7 +981,7 @@ const handleBarberFieldChange = (id, field, value) => {
       fetchAll();
       return created || null;
     } catch (error) {
-      setGlobalError(error.message || 'Не удалось добавить барбера');
+      setGlobalError(error.message || 'Не удалось добавить сотрудника');
       throw error;
     }
   };
@@ -1136,7 +1136,7 @@ const handleBarberFieldChange = (id, field, value) => {
         }
       } catch (error) {
         setBarbers(previousBarbers);
-        setGlobalError(error.message || 'Не удалось сохранить порядок барберов');
+        setGlobalError(error.message || 'Не удалось сохранить порядок сотрудников');
       } finally {
         setBarberReorderBusy(false);
       }
@@ -1158,7 +1158,7 @@ const handleBarberFieldChange = (id, field, value) => {
   const handleUploadCard = useCallback(
     async ({ barberId, name, data }) => {
       if (!barberId || !data) {
-        throw new Error('Нужны id барбера и данные карточки.');
+        throw new Error('Нужны id сотрудника и данные карточки.');
       }
       return apiRequest('/assets/cards/upload', {
         method: 'POST',

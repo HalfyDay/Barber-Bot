@@ -97,7 +97,7 @@ const TABLE_CONFIG = {
   Appointments: { label: 'Записи', mode: 'data', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'desc' } },
   Schedules: { label: 'Расписание', mode: 'custom' },
   Users: { label: 'Клиенты', mode: 'data', canCreate: true, defaultSort: { key: 'Name', direction: 'asc' } },
-  Barbers: { label: 'Барберы', mode: 'custom' },
+  Barbers: { label: 'Сотрудники', mode: 'custom' },
   Services: { label: 'Услуги', mode: 'custom' },
   Positions: { label: 'Должности', mode: 'custom' },
   Revenue: { label: 'Доходы', mode: 'custom' },

@@ -1459,7 +1459,7 @@ const BarberAvatarPicker = ({
         ref={photoInputRef}
         type="file"
         name="barberPhoto"
-        aria-label="Фото барбера"
+        aria-label="Фото сотрудника"
         accept="image/*"
         className="hidden"
         onChange={handlePhotoFileChange}
@@ -1485,7 +1485,7 @@ const BarberAvatarPicker = ({
       {!showCardEditor ? (
         <div className="space-y-4 p-5">
           {(() => {
-            const profileName = normalizeText(initialName || 'Барбер');
+            const profileName = normalizeText(initialName || 'Сотрудник');
             const profileDescription = normalizeText(initialDescription || '');
             const profilePhrase = normalizeText(cardFields.phrase);
             return (
@@ -1670,7 +1670,7 @@ const BarberAvatarPicker = ({
               />
               {!cardPreview && (
                 <div className="absolute inset-0 flex items-center justify-center bg-[color:var(--crm-surface-4)]/70 p-6 text-center text-sm text-[var(--crm-text)]">
-                  <p>Загрузите фото барбера, чтобы увидеть карточку.</p>
+                  <p>Загрузите фото сотрудника, чтобы увидеть карточку.</p>
                 </div>
               )}
             </div>
@@ -1717,11 +1717,11 @@ const BarberAvatarPicker = ({
                 />
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-semibold text-white">Фото барбера</p>
+                <p className="text-sm font-semibold text-white">Фото сотрудника</p>
                 <div className="crm-inline-panel flex items-center gap-3 p-3">
                   <div className="crm-soft-panel h-16 w-16 overflow-hidden rounded-xl">
                     {photoPreview ? (
-                      <img src={photoPreview} alt="Фото барбера" className="h-full w-full object-cover" />
+                      <img src={photoPreview} alt="Фото сотрудника" className="h-full w-full object-cover" />
                     ) : (
                       <DefaultProfileIcon className="h-full w-full bg-[color:var(--crm-surface-4)]/60" iconClassName="h-10 w-10" />
                     )}

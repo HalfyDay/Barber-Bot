@@ -2,17 +2,17 @@ const TABLE_COLUMNS = {
   Appointments: [
     { key: 'CustomerName', label: 'Клиент', editable: true, type: 'text', isProfileLink: true, minWidth: 'w-48' },
     { key: 'Phone', label: 'Телефон', editable: true, type: 'text', minWidth: 'w-36' },
-    { key: 'Barber', label: 'Барбер', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-32' },
+    { key: 'Barber', label: 'Сотрудник', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-32' },
     { key: 'Date', label: 'Дата', editable: true, type: 'date', minWidth: 'w-32' },
     { key: 'Time', label: 'Время', editable: true, type: 'text', minWidth: 'w-28', noWrap: true },
     { key: 'Status', label: 'Статус', editable: true, type: 'select', optionsKey: 'statuses', align: 'center', minWidth: 'w-28' },
     { key: 'Services', label: 'Услуги', editable: true, type: 'multi-select', optionsKey: 'services', minWidth: 'w-56' },
     { key: 'UserID', label: 'ID клиента', editable: true, type: 'text', minWidth: 'w-24' },
     { key: 'Reminder2hClientSent', label: 'Напоминание клиенту', editable: true, type: 'boolean', align: 'center' },
-    { key: 'Reminder2hBarberSent', label: 'Напоминание барберу', editable: true, type: 'boolean', align: 'center' },
+    { key: 'Reminder2hBarberSent', label: 'Напоминание сотруднику', editable: true, type: 'boolean', align: 'center' },
   ],
   Schedules: [
-    { key: 'Barber', label: 'Барбер', editable: false, minWidth: 'w-40' },
+    { key: 'Barber', label: 'Сотрудник', editable: false, minWidth: 'w-40' },
     { key: 'DayOfWeek', label: 'День недели', editable: false, minWidth: 'w-32' },
     { key: 'Date', label: 'Дата', editable: false, minWidth: 'w-32' },
     { key: 'Week', label: 'Слоты', editable: true, type: 'text', align: 'center', minWidth: 'w-40' },
@@ -27,27 +27,27 @@ const TABLE_COLUMNS = {
 TABLE_CONFIG.Appointments.label = 'Записи';
 TABLE_CONFIG.Schedules.label = 'Расписание';
 TABLE_CONFIG.Users.label = 'Клиенты';
-TABLE_CONFIG.Barbers.label = 'Барберы';
+TABLE_CONFIG.Barbers.label = 'Сотрудники';
 TABLE_CONFIG.Services.label = 'Услуги';
 TABLE_CONFIG.Positions.label = 'Должности';
 TABLE_CONFIG.Revenue.label = 'Доходы';
 TABLE_COLUMNS.Appointments[0].label = 'Клиент';
 TABLE_COLUMNS.Appointments[1].label = 'Телефон';
-TABLE_COLUMNS.Appointments[2].label = 'Барбер';
+TABLE_COLUMNS.Appointments[2].label = 'Сотрудник';
 TABLE_COLUMNS.Appointments[3].label = 'Дата';
 TABLE_COLUMNS.Appointments[4].label = 'Время';
 TABLE_COLUMNS.Appointments[5].label = 'Статус';
 TABLE_COLUMNS.Appointments[6].label = 'Услуги';
 TABLE_COLUMNS.Appointments[7].label = 'ID клиента';
 TABLE_COLUMNS.Appointments[8].label = 'Напоминание клиенту';
-TABLE_COLUMNS.Appointments[9].label = 'Напоминание барберу';
-TABLE_COLUMNS.Schedules[0].label = 'Барбер';
+TABLE_COLUMNS.Appointments[9].label = 'Напоминание сотруднику';
+TABLE_COLUMNS.Schedules[0].label = 'Сотрудник';
 TABLE_COLUMNS.Schedules[1].label = 'День недели';
 TABLE_COLUMNS.Schedules[2].label = 'Дата';
 TABLE_COLUMNS.Schedules[3].label = 'Слоты';
 TABLE_COLUMNS.Users[0].label = 'Имя';
 TABLE_COLUMNS.Users[1].label = 'Телефон';
-TABLE_COLUMNS.Users[3].label = 'Любимый мастер';
+TABLE_COLUMNS.Users[3].label = 'Любимый сотрудник';
 const BOT_SUPPORTED_STATUS_OPTIONS = ['\u0410\u043a\u0442\u0438\u0432\u043d\u0430\u044f', '\u0412\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430', '\u041e\u0442\u043c\u0435\u043d\u0430', '\u041d\u0435\u044f\u0432\u043a\u0430'];
 const [STATUS_ACTIVE, STATUS_DONE, STATUS_CANCELLED, STATUS_NO_SHOW] = BOT_SUPPORTED_STATUS_OPTIONS;
 const CLIENT_BLOCK_THRESHOLD = 3;

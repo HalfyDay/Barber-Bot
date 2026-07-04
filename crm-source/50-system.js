@@ -686,7 +686,7 @@ const CreatorBusinessesView = ({ apiRequest, onImpersonate, role }) => {
                       value={newBusName} 
                       onChange={e => setNewBusName(e.target.value)} 
                       className="w-full bg-[color:var(--crm-surface-2)] border-0 text-white rounded-xl px-3 py-2 focus:ring-1 focus:ring-[color:var(--crm-primary)]" 
-                      placeholder="Барбершоп 1"
+                      placeholder="Организация 1"
                     />
                   </label>
                   <label className="block space-y-1">

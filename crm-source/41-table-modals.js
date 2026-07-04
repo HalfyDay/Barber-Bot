@@ -622,7 +622,7 @@ const ProfileModal = ({
               />
             </label>
             <label className="space-y-1 text-sm text-slate-300">
-              {"Любимый барбер"}
+              {"Любимый сотрудник"}
               <CustomSelect
                 value={modalRecord.Barber || ''}
                 onChange={(value) => handleFieldChange('Barber', value)}
@@ -825,7 +825,7 @@ const AppointmentModal = ({
       const hasTime = Boolean(timeParts.start);
       const selectedServices = parseMultiValue(nextDraft.Services);
       if (!normalizeText(nextDraft.CustomerName)) missingFields.push('клиент');
-      if (!normalizeText(nextDraft.Barber)) missingFields.push('барбер');
+      if (!normalizeText(nextDraft.Barber)) missingFields.push('сотрудник');
       if (!getDateOnlyValue(nextDraft.Date)) missingFields.push('дата');
       if (!hasTime) missingFields.push('время');
       if (!normalizeStatusValue(nextDraft.Status)) missingFields.push('статус');
@@ -862,7 +862,7 @@ const AppointmentModal = ({
           return rangesOverlap(draftRange, { start, end });
         });
         if (conflictExists) {
-          warnings.push('У барбера уже есть запись на это время.');
+          warnings.push('У сотрудника уже есть запись на это время.');
         }
       }
       if (draftRange && (schedules || []).length && normalizedBarber && dateOnly) {
@@ -875,7 +875,7 @@ const AppointmentModal = ({
             return getDayIndex(slot.DayOfWeek) === dayIndex;
           });
           if (!daySlots.length) {
-            warnings.push('Барбер не работает в этот день.');
+            warnings.push('Сотрудник не работает в этот день.');
           } else {
             const fitsSchedule = daySlots.some((slot) => {
               const slotTime = slot.Week || slot.Time || '';
@@ -887,7 +887,7 @@ const AppointmentModal = ({
               return draftRange.start >= slotStart && draftRange.end <= slotEnd;
             });
             if (!fitsSchedule) {
-              warnings.push('Время вне смены барбера.');
+              warnings.push('Время вне смены сотрудника.');
             }
           }
         }
@@ -1135,7 +1135,7 @@ const AppointmentModal = ({
     },
     {
       key: 'barberReminder',
-      label: 'Напоминание барберу (2ч)',
+      label: 'Напоминание сотруднику (2ч)',
       value: getReminderLabel(draft.Reminder2hBarberSent),
       accent: getReminderAccent(draft.Reminder2hBarberSent),
     },
@@ -1398,8 +1398,8 @@ const AppointmentModal = ({
         <CustomSelect
           value={draft.Barber || ''}
           onChange={(nextValue) => handleChange('Barber', nextValue)}
-          options={[{ value: '', label: 'Барбер' }, ...((options.barbers || []).map((barber) => ({ value: barber, label: barber })))]}
-          placeholder="Барбер"
+          options={[{ value: '', label: 'Сотрудник' }, ...((options.barbers || []).map((barber) => ({ value: barber, label: barber })))]}
+          placeholder="Сотрудник"
           buttonClassName="h-11 px-4"
         />
         <div className="relative">

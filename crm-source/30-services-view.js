@@ -1,4 +1,4 @@
-﻿const ServicesView = ({
+const ServicesView = ({
   services = [],
   barbers = [],
   onFieldChange,
@@ -228,7 +228,7 @@
     const count = values.length;
     return {
       label: min === max ? formatCurrency(min) : `${formatCurrency(min)} – ${formatCurrency(max)}`,
-      details: `Для ${count} ${pluralize(count, ['барбера', 'барбера', 'барберов'])}`,
+      details: `Для ${count} ${pluralize(count, ['сотрудника', 'сотрудника', 'сотрудников'])}`,
     };
   };
   const canSubmit = isCreateMode ? Boolean(workingService?.name?.trim()) : true;
@@ -489,8 +489,8 @@
             <div className="crm-soft-card space-y-3 p-4">
               <div className="flex flex-wrap items-end justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-slate-200">Цены по барберам</p>
-                  <p className="text-xs text-slate-500">Индивидуальные цены для каждого мастера.</p>
+                  <p className="text-sm font-semibold text-slate-200">Цены по сотрудникам</p>
+                  <p className="text-xs text-slate-500">Индивидуальные цены для каждого сотрудника.</p>
                 </div>
                 {isStaffMode && (
                   <p className="text-xs text-slate-500">Вы можете редактировать только свою стоимость.</p>
@@ -505,7 +505,7 @@
                       </div>
                       <input
                         name={`servicePrice-${barber.id}`}
-                        aria-label={`Цена для ${barber.name || 'барбера'}`}
+                        aria-label={`Цена для ${barber.name || 'сотрудника'}`}
                         type="number"
                         min={0}
                         value={workingService.prices?.[barber.id] ?? ''}
@@ -518,7 +518,7 @@
                 </div>
               ) : (
                 <p className="text-sm text-slate-500">
-                  {isStaffMode ? 'Ваш профиль не привязан к барберу. Обратитесь к администратору.' : 'Добавьте барберов, чтобы назначать цены.'}
+                  {isStaffMode ? 'Ваш профиль не привязан к сотруднику. Обратитесь к администратору.' : 'Добавьте сотрудников, чтобы назначать цены.'}
                 </p>
               )}
             </div>

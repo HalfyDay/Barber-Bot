@@ -1,4 +1,4 @@
-﻿const BarbersView = ({
+const BarbersView = ({
   barbers = [],
   services = [],
   positions = [],
@@ -383,7 +383,7 @@
   return (
     <div className="space-y-6 overflow-x-hidden">
       <SectionCard
-        title="Барберы"
+        title="Сотрудники"
         hideTitleOnMobile
         actions={
           canManageBarbers ? (
@@ -391,13 +391,13 @@
               onClick={() => openEditor('create')}
               className="crm-action-btn w-full px-4 py-2 text-sm sm:w-auto"
             >
-              + Добавить барбера
+              + Добавить сотрудника
             </button>
           ) : null
         }
       >
         {sortedBarbers.length === 0 ? (
-          <p className="text-[var(--crm-muted)]">Список барберов пока пуст. Добавьте первого сотрудника.</p>
+          <p className="text-[var(--crm-muted)]">Список сотрудников пока пуст. Добавьте первого сотрудника.</p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {visibleBarbers.map((barber, index) => {
@@ -440,7 +440,7 @@
                   {canManageBarbers ? (
                     <button
                       type="button"
-                      aria-label={`Переместить барбера ${barber.name || index + 1}`}
+                      aria-label={`Переместить сотрудника ${barber.name || index + 1}`}
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
@@ -518,7 +518,7 @@
         )}
       </SectionCard>
       <Modal
-        title={isCreateMode ? 'Добавить барбера' : workingBarber?.name || 'Редактирование барбера'}
+        title={isCreateMode ? 'Добавить сотрудника' : workingBarber?.name || 'Редактирование сотрудника'}
         isOpen={editorState.open}
         onClose={closeEditor}
         maxWidthClass="max-w-4xl"
@@ -675,7 +675,7 @@
             </div>
           </div>
         ) : (
-          <p className="text-[var(--crm-text)]">Выберите барбера, чтобы отредактировать данные.</p>
+          <p className="text-[var(--crm-text)]">Выберите сотрудника, чтобы отредактировать данные.</p>
         )}
       </Modal>
     </div>

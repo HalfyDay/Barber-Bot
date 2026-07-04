@@ -509,7 +509,7 @@ const ClientsList = ({
                         <p className={classNames('text-base font-semibold', client.activity?.nameClassName || 'text-white')}>
                           {client.Name || 'Нет имени'}
                         </p>
-                        {client.Barber && <p className="text-xs text-[var(--crm-muted)]">Любимый барбер: {client.Barber}</p>}
+                        {client.Barber && <p className="text-xs text-[var(--crm-muted)]">Любимый сотрудник: {client.Barber}</p>}
                         <p className="text-xs text-[var(--crm-muted)]">
                           Последний визит:{' '}
                           <span className="font-medium text-slate-300">

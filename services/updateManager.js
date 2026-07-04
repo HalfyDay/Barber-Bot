@@ -636,6 +636,8 @@ const buildIdempotentTenantPatch = (templateSql) => {
   const lines = templateSql.split(/\r?\n/);
   const output = [];
   let skipBlock = false;
+  let insideCreateTable = false;
+  let parenDepth = 0;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -662,7 +664,29 @@ const buildIdempotentTenantPatch = (templateSql) => {
     // Make CREATE TABLE idempotent
     if (/^CREATE TABLE "/.test(trimmed)) {
       output.push(line.replace('CREATE TABLE "', 'CREATE TABLE IF NOT EXISTS "'));
+      insideCreateTable = true;
+      parenDepth = 0;
+      for (const ch of trimmed) {
+        if (ch === '(') parenDepth++;
+        if (ch === ')') parenDepth--;
+      }
+      if (trimmed.endsWith(';') && parenDepth <= 0) insideCreateTable = false;
       continue;
+    }
+
+    // Track parentheses inside CREATE TABLE block
+    if (insideCreateTable) {
+      for (const ch of trimmed) {
+        if (ch === '(') parenDepth++;
+        if (ch === ')') parenDepth--;
+      }
+      if (trimmed.endsWith(';') && parenDepth <= 0) {
+        insideCreateTable = false;
+      }
+      // Drop inline CONSTRAINT lines (primary keys, unique constraints, etc.)
+      if (/^\s*CONSTRAINT\s+/i.test(trimmed)) {
+        continue;
+      }
     }
 
     // Make CREATE UNIQUE INDEX idempotent

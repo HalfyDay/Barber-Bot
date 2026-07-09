@@ -768,32 +768,19 @@ const apiRequest = useCallback(
   const handleReorderPositions = useCallback(
     async (orderedIds) => {
       if (role === ROLE_STAFF || positionReorderBusy || !Array.isArray(orderedIds) || !orderedIds.length) return;
-      const previousPositions = positions;
-      const orderMap = new Map(orderedIds.map((id, index) => [id, index]));
-      const nextPositions = sortServicesByOrder(
-        positions.map((pos) => ({
-          ...pos,
-          orderIndex: orderMap.has(pos.id) ? orderMap.get(pos.id) : orderedIds.length,
-        }))
-      );
-      setPositions(nextPositions);
       try {
         setPositionReorderBusy(true);
-        const response = await apiRequest('/Positions/reorder', {
+        await apiRequest('/Positions/reorder', {
           method: 'POST',
           body: JSON.stringify({ orderedIds }),
         });
-        if (Array.isArray(response?.positions)) {
-          setPositions(sortServicesByOrder(response.positions));
-        }
       } catch (error) {
-        setPositions(previousPositions);
         setGlobalError(error.message || 'Не удалось сохранить порядок должностей');
       } finally {
         setPositionReorderBusy(false);
       }
     },
-    [apiRequest, role, positionReorderBusy, positions]
+    [apiRequest, role, positionReorderBusy]
   );
   useEffect(() => {
     if (!realtimeSnapshot) return;

@@ -172,7 +172,8 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
     const changed = finalIds.some((id, index) => id !== meta.sourceIds[index]);
     if (!changed) return;
     await onReorder?.(finalIds);
-  }, [dragOrderIds, onReorder]);
+    await refreshPositionsList();
+  }, [dragOrderIds, onReorder, refreshPositionsList]);
   // Pointer event listeners for drag
   useEffect(() => {
     if (!dragState) return undefined;

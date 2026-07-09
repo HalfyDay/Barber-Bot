@@ -706,6 +706,7 @@ const TablesWorkspace = ({
               positions={positions}
               currentBarber={currentBarber}
               services={services}
+              apiRequest={apiRequest}
             />
           )}
           {activeTable === 'Revenue' && (

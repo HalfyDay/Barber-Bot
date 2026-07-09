@@ -94,7 +94,6 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
     name: '',
     masterSharePercent: '',
     requiredClientVolume: '',
-    requiredRetainedClients: '',
     targetReturnPercent: '',
     specialConditions: '',
     privileges: '',
@@ -268,7 +267,6 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
         masterSharePercent: normalizePercentValue(newPosition.masterSharePercent),
         orderIndex: sortedPositions.length,
         requiredClientVolume: normalizeIntValue(newPosition.requiredClientVolume),
-        requiredRetainedClients: normalizeIntValue(newPosition.requiredRetainedClients),
         targetReturnPercent: normalizePercentValue(newPosition.targetReturnPercent),
         specialConditions: newPosition.specialConditions.trim() || null,
         privileges: newPosition.privileges.trim() || null,
@@ -294,7 +292,6 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
       name: draft.name ?? position.name ?? '',
       masterSharePercent: draft.masterSharePercent ?? position.masterSharePercent ?? '',
       requiredClientVolume: draft.requiredClientVolume ?? position.requiredClientVolume ?? '',
-      requiredRetainedClients: draft.requiredRetainedClients ?? position.requiredRetainedClients ?? '',
       targetReturnPercent: draft.targetReturnPercent ?? position.targetReturnPercent ?? '',
       specialConditions: draft.specialConditions ?? position.specialConditions ?? '',
       privileges: draft.privileges ?? position.privileges ?? '',
@@ -310,7 +307,6 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
       name: nextName,
       masterSharePercent: normalizePercentValue(draft?.masterSharePercent),
       requiredClientVolume: normalizeIntValue(draft?.requiredClientVolume),
-      requiredRetainedClients: normalizeIntValue(draft?.requiredRetainedClients),
       targetReturnPercent: normalizePercentValue(draft?.targetReturnPercent),
       specialConditions: (draft?.specialConditions || '').trim() || null,
       privileges: (draft?.privileges || '').trim() || null,
@@ -329,7 +325,7 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
           const nextName = draft.name.trim();
           const currentName = (position.name || '').trim();
           const fieldsChanged = [
-            'masterSharePercent', 'requiredClientVolume', 'requiredRetainedClients',
+            'masterSharePercent', 'requiredClientVolume',
             'targetReturnPercent', 'specialConditions', 'privileges',
           ].some((field) => {
             const nextVal = draft[field];
@@ -567,20 +563,6 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
                           className="w-full px-3 py-2 text-white text-sm"
                         />
                       </div>
-
-                      {/* Удержанные клиенты */}
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Удержанные клиенты</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={draft.requiredRetainedClients}
-                          onChange={(event) => handleDraftChange(position.id, 'requiredRetainedClients', event.target.value)}
-                          placeholder="0"
-                          className="w-full px-3 py-2 text-white text-sm"
-                        />
-                      </div>
                     </div>
 
                     {/* Особые условия */}
@@ -699,18 +681,6 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
                 className="w-full px-4 py-2 text-white"
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-slate-300">Удержанные клиенты</label>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={newPosition.requiredRetainedClients}
-                onChange={(event) => setNewPosition((prev) => ({ ...prev, requiredRetainedClients: event.target.value }))}
-                placeholder="0"
-                className="w-full px-4 py-2 text-white"
-              />
-            </div>
           </div>
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-slate-300">Особые условия</label>
@@ -738,7 +708,10 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
   );
 };
 
-const LevelView = ({ positions = [], currentBarber = null, services = [] }) => {
+const LevelView = ({ positions = [], currentBarber = null, services = [], apiRequest = null }) => {
+  const [maxPrices, setMaxPrices] = useState({});
+  const [loadingPrices, setLoadingPrices] = useState(false);
+
   const position = useMemo(() => {
     if (!currentBarber?.positionId || !Array.isArray(positions)) return null;
     return positions.find((p) => p.id === currentBarber.positionId) || null;
@@ -755,6 +728,30 @@ const LevelView = ({ positions = [], currentBarber = null, services = [] }) => {
   }, [positions]);
 
   const levelNumber = position ? (Number(position.orderIndex) || 0) + 1 : null;
+
+  // Fetch max prices for current position
+  useEffect(() => {
+    if (!position?.id || !apiRequest) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingPrices(true);
+      try {
+        const data = await apiRequest(`/PositionServiceMaxPrices?positionId=${encodeURIComponent(position.id)}`);
+        const map = {};
+        if (Array.isArray(data)) {
+          data.forEach((entry) => {
+            map[entry.serviceId] = entry.maxPrice;
+          });
+        }
+        if (!cancelled) setMaxPrices(map);
+      } catch {
+        if (!cancelled) setMaxPrices({});
+      } finally {
+        if (!cancelled) setLoadingPrices(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [position?.id, apiRequest]);
 
   if (!position) {
     return (
@@ -796,42 +793,29 @@ const LevelView = ({ positions = [], currentBarber = null, services = [] }) => {
             <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-1">Объем клиентов</p>
             <p className="text-xl font-bold text-white">{position.requiredClientVolume ?? 0}</p>
           </div>
-          <div className="crm-soft-card p-4">
-            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-1">Удержанные клиенты</p>
-            <p className="text-xl font-bold text-white">{position.requiredRetainedClients ?? 0}</p>
-          </div>
         </div>
-
-        {/* Special conditions & privileges */}
-        {(position.specialConditions || position.privileges) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 md:p-5 pt-0">
-            {position.specialConditions && (
-              <div className="crm-soft-card p-4">
-                <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-2">Особые условия</p>
-                <p className="text-sm text-slate-300 whitespace-pre-wrap">{position.specialConditions}</p>
-              </div>
-            )}
-            {position.privileges && (
-              <div className="crm-soft-card p-4">
-                <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-2">Привилегии</p>
-                <p className="text-sm text-slate-300 whitespace-pre-wrap">{position.privileges}</p>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Service max prices */}
         {Array.isArray(services) && services.length > 0 && (
           <div className="p-4 md:p-5 pt-0">
             <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-3">Макс. стоимость услуг</p>
-            <div className="space-y-2">
-              {services.filter((s) => s.isActive !== false).map((service) => (
-                <div key={service.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
-                  <span className="text-sm text-slate-300">{service.name}</span>
-                  <span className="text-sm text-white font-medium">—</span>
-                </div>
-              ))}
-            </div>
+            {loadingPrices ? (
+              <p className="text-xs text-[var(--crm-muted)]">Загрузка...</p>
+            ) : (
+              <div className="space-y-2">
+                {services.filter((s) => s.isActive !== false).map((service) => {
+                  const price = maxPrices[service.id];
+                  return (
+                    <div key={service.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
+                      <span className="text-sm text-slate-300">{service.name}</span>
+                      <span className="text-sm text-white font-medium">
+                        {price != null ? `${formatCurrency(price)}` : '—'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

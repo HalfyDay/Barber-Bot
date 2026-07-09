@@ -891,8 +891,25 @@ const runPostUpdateDatabaseFixes = async () => {
         CREATE INDEX IF NOT EXISTS "TelegramAuthRequests_status_expiresAt_idx" ON "TelegramAuthRequests"("status", "expiresAt");
         CREATE INDEX IF NOT EXISTS "TelegramAuthRequests_flow_targetUserId_idx" ON "TelegramAuthRequests"("flow", "targetUserId");
         CREATE INDEX IF NOT EXISTS "TelegramAuthRequests_code_idx" ON "TelegramAuthRequests"("code");
+
+        CREATE TABLE IF NOT EXISTS "CreatorIncome" (
+          "id" TEXT NOT NULL,
+          "businessId" TEXT NOT NULL,
+          "amount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+          "periodStart" TEXT,
+          "periodEnd" TEXT,
+          "date" TEXT NOT NULL,
+          "note" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "CreatorIncome_pkey" PRIMARY KEY ("id")
+        );
+        CREATE INDEX IF NOT EXISTS "CreatorIncome_businessId_idx" ON "CreatorIncome"("businessId");
+        CREATE INDEX IF NOT EXISTS "CreatorIncome_date_idx" ON "CreatorIncome"("date");
+        ALTER TABLE "CreatorIncome" ADD CONSTRAINT IF NOT EXISTS "CreatorIncome_businessId_fkey"
+          FOREIGN KEY ("businessId") REFERENCES "Businesses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
       `);
-      console.log('[update] Public schema tables verified/created (Businesses, TelegramAuthRequests)');
+      console.log('[update] Public schema tables verified/created (Businesses, TelegramAuthRequests, CreatorIncome)');
 
       // If Appointments table exists in public schema, ensure Comment/CoverBs/DiscountRub exist
       const tableCheck = await publicClient.query(`

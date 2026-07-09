@@ -525,6 +525,10 @@ const registerAdminCrudRoutes = ({
       if (TABLE_ORDERING[tableName]) {
         queryOptions.orderBy = TABLE_ORDERING[tableName];
       }
+      // Support filtering by positionId for PositionServiceMaxPrices
+      if (tableName === "PositionServiceMaxPrices" && req.query?.positionId) {
+        queryOptions.where = { positionId: req.query.positionId };
+      }
       let records = await prisma[modelName].findMany(queryOptions);
       if (tableName === "Users" && typeof buildUserInsightsMap === "function") {
         const [appointmentsRaw, blockedUsers] = await Promise.all([

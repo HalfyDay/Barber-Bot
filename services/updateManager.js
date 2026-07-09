@@ -393,6 +393,12 @@ const runPrismaMigrations = async () => {
           );
           break;
         }
+        if (command === migrate && /\bP3005\b/i.test(message)) {
+          console.warn(
+            `[update] ${command} skipped because database schema is not empty (P3005); schema is managed by runtime patches.`,
+          );
+          break;
+        }
         const isLocked = /database is locked/i.test(message);
         const isEpermPrismaEngine =
           /query_engine.*\.dll/i.test(message) && /EPERM/i.test(message);

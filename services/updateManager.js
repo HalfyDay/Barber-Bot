@@ -691,6 +691,11 @@ const buildIdempotentTenantPatch = (templateSql) => {
       }
       // Drop inline CONSTRAINT lines (primary keys, unique constraints, etc.)
       if (/^\s*CONSTRAINT\s+/i.test(trimmed)) {
+        // Remove trailing comma from the last output line to avoid syntax error
+        if (output.length > 0) {
+          const lastIdx = output.length - 1;
+          output[lastIdx] = output[lastIdx].replace(/,\s*$/, '');
+        }
         continue;
       }
     }
@@ -992,7 +997,14 @@ const applyUpdate = async () => {
     if (shouldRunPrisma) {
       await runPrismaMigrations();
     } else {
-      console.log('[update] prisma schema unchanged, skipping migrations/generate');
+      console.log('[update] prisma schema unchanged, skipping migrations');
+      // Always regenerate Prisma client to ensure it matches the current schema
+      try {
+        const { schemaArg } = buildPrismaUpdateCommands(PRISMA_SCHEMA_PATH);
+        await runCommand(`npx prisma generate ${schemaArg}`);
+      } catch (genError) {
+        console.warn('[update] prisma generate failed (non-fatal):', genError?.message || genError);
+      }
     }
     // Always run post-update DB fixes to ensure Businesses table and tenant
     // schemas are in sync with the current codebase, regardless of whether

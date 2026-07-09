@@ -906,9 +906,19 @@ const runPostUpdateDatabaseFixes = async () => {
         );
         CREATE INDEX IF NOT EXISTS "CreatorIncome_businessId_idx" ON "CreatorIncome"("businessId");
         CREATE INDEX IF NOT EXISTS "CreatorIncome_date_idx" ON "CreatorIncome"("date");
-        ALTER TABLE "CreatorIncome" ADD CONSTRAINT IF NOT EXISTS "CreatorIncome_businessId_fkey"
-          FOREIGN KEY ("businessId") REFERENCES "Businesses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
       `);
+      // Add foreign key separately (PostgreSQL doesn't support ADD CONSTRAINT IF NOT EXISTS)
+      try {
+        await publicClient.query(`
+          DO $$ BEGIN
+            ALTER TABLE "CreatorIncome" ADD CONSTRAINT "CreatorIncome_businessId_fkey"
+              FOREIGN KEY ("businessId") REFERENCES "Businesses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          EXCEPTION WHEN duplicate_object THEN null;
+          END $$;
+        `);
+      } catch (fkError) {
+        // Non-fatal: FK may already exist
+      }
       console.log('[update] Public schema tables verified/created (Businesses, TelegramAuthRequests, CreatorIncome)');
 
       // If Appointments table exists in public schema, ensure Comment/CoverBs/DiscountRub exist

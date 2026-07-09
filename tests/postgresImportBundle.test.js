@@ -96,7 +96,8 @@ test("postgres import bundle exports ordered tables and cleanup suggestions", ()
   assert.equal(bundle.cleanup.summary.appointmentsMissingUserReferenceWithSuggestion, 1);
   assert.equal(bundle.cleanup.appointmentsMissingUserReference[0].suggestedUserId, "user-1");
   assert.equal(bundle.cleanup.summary.incompleteSchedules, 1);
-  assert.equal(bundle.legacyTables.Cost.length, 1);
+  // Cost table was removed from LEGACY_TABLES in multi-tenant migration
+  assert.equal(bundle.legacyTables?.Cost?.length || 0, 0);
 
   db.close();
 });

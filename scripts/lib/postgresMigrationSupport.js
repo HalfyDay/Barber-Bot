@@ -110,7 +110,6 @@ const collectInventory = (
     "Users",
     "Appointments",
     "Schedules",
-    "Cost",
     "Barbers",
     "Positions",
     "Services",

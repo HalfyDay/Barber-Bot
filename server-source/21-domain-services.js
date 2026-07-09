@@ -89,7 +89,6 @@ const {
   normalizeAppointmentStatus,
   DEFAULT_BOT_DESCRIPTION,
   DEFAULT_ABOUT_TEXT,
-  RESERVED_COST_FIELDS,
   buildBarberLookup,
   resolveBarberIdFromLookup,
   filterServicesForIdentity,
@@ -260,4 +259,11 @@ const {
   statusNoShow: STATUS_NO_SHOW,
 });
 const dashboardSnapshotCache = new Map();
+const {
+  loadBotMenu: loadBotMenuFromDb,
+  saveBotMenu: saveBotMenuToDb,
+} = createBotMenuService({
+  prisma,
+  randomUUID,
+});
 

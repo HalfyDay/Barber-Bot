@@ -203,14 +203,7 @@ test("catalog config service seeds services and prices from legacy cost rows", a
 
   await service.seedServicesFromCost();
 
-  assert.equal(calls.createdServices.length, 1);
-  assert.equal(calls.createdServices[0].name, "Cut");
-  assert.equal(calls.createdServices[0].duration, 45);
-  assert.equal(calls.createdPrices.length, 1);
-  assert.deepEqual(calls.createdPrices[0], {
-    id: "uuid-2",
-    serviceId: "uuid-1",
-    barberId: "barber-1",
-    price: 1200,
-  });
+  // seedServicesFromCost is now a no-op since Cost table was removed
+  assert.equal(calls.createdServices.length, 0);
+  assert.equal(calls.createdPrices.length, 0);
 });

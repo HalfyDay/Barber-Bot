@@ -35,19 +35,22 @@ const baseDeps = (overrides = {}) => ({
 });
 
 test("home data service reads and writes blocked users list", async () => {
-  let written = null;
+  let deleted = false;
+  let createdMany = null;
   const service = createHomeDataService(
     baseDeps({
-      fs: {
-        async readJson() {
-          return ["user-1", "user-2"];
-        },
-        async ensureDir() {},
-        async writeJson(_target, payload) {
-          written = payload;
-        },
-        existsSync() {
-          return false;
+      prisma: {
+        blockedUsers: {
+          findMany: async () => [
+            { userId: "user-1" },
+            { userId: "user-2" },
+          ],
+          deleteMany: async () => {
+            deleted = true;
+          },
+          createMany: async ({ data }) => {
+            createdMany = data;
+          },
         },
       },
     }),
@@ -57,7 +60,28 @@ test("home data service reads and writes blocked users list", async () => {
   await service.writeBlockedUsers(new Set(["user-3"]));
 
   assert.deepEqual(Array.from(blocked), ["user-1", "user-2"]);
-  assert.deepEqual(written, ["user-3"]);
+  assert.equal(deleted, true);
+  assert.equal(createdMany.length, 1);
+  assert.equal(createdMany[0].userId, "user-3");
+});
+
+test("home data service readBlockedUsers returns empty set on error", async () => {
+  const service = createHomeDataService(
+    baseDeps({
+      prisma: {
+        blockedUsers: {
+          findMany: async () => {
+            throw new Error("Database connection failed");
+          },
+        },
+      },
+    }),
+  );
+
+  const blocked = await service.readBlockedUsers();
+
+  assert.ok(blocked instanceof Set);
+  assert.equal(blocked.size, 0);
 });
 
 test("home data service finds home user by phone preferring active account with password", async () => {

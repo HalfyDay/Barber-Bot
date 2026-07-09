@@ -6,7 +6,6 @@ const createCatalogConfigService = ({
   normalizeAppointmentStatus,
   DEFAULT_BOT_DESCRIPTION,
   DEFAULT_ABOUT_TEXT,
-  RESERVED_COST_FIELDS,
   buildBarberLookup,
   resolveBarberIdFromLookup,
   filterServicesForIdentity,
@@ -74,50 +73,8 @@ const createCatalogConfigService = ({
   const seedServicesFromCost = async () => {
     const servicesCount = await prisma.services.count();
     if (servicesCount) return;
-    const costRows = await prisma.cost.findMany();
-    if (!costRows.length) return;
-    const barbers = await prisma.barbers.findMany();
-    const barberLookup = buildBarberLookup(barbers);
-    await prisma.$transaction(async (tx) => {
-      for (const [index, row] of costRows.entries()) {
-        const durationMatch = normalizeText(row.Dlitelnost).match(/(\d+)/);
-        const duration = durationMatch ? Number(durationMatch[1]) : 0;
-        const service = await tx.services.create({
-          data: {
-            id: randomUUID(),
-            name: row.Uslugi || `Услуга #${index + 1}`,
-            description: "",
-            category: null,
-            duration,
-            orderIndex: index,
-            isActive: true,
-          },
-        });
-        const priceRecords = [];
-        for (const [fieldName, priceValue] of Object.entries(row)) {
-          if (RESERVED_COST_FIELDS.has(fieldName)) continue;
-          if (
-            priceValue === null ||
-            priceValue === undefined ||
-            priceValue === ""
-          ) {
-            continue;
-          }
-          const barberId = resolveBarberIdFromLookup(barberLookup, fieldName);
-          const parsedPrice = Number(priceValue);
-          if (!barberId || Number.isNaN(parsedPrice)) continue;
-          priceRecords.push({
-            id: randomUUID(),
-            serviceId: service.id,
-            barberId,
-            price: parsedPrice,
-          });
-        }
-        if (priceRecords.length) {
-          await tx.servicePrices.createMany({ data: priceRecords });
-        }
-      }
-    });
+    // Cost table removed in multi-tenant migration; legacy seed is no longer possible
+    console.log('[catalog] seedServicesFromCost skipped: Cost table removed, use Services/ServicePrices directly');
   };
 
   const propagateBarberRename = async ({ barberId, oldName, newName }) => {
@@ -180,18 +137,6 @@ const createCatalogConfigService = ({
       where,
       orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
     });
-    if (!services.length) {
-      services = (await prisma.cost.findMany()).map((row, index) => ({
-        id: row.id,
-        name: row.Uslugi || `Услуга #${index + 1}`,
-        description: "",
-        category: null,
-        duration: Number(normalizeText(row.Dlitelnost).match(/(\d+)/)?.[1] ?? 0),
-        isActive: true,
-        orderIndex: index,
-        legacy: true,
-      }));
-    }
     const prices = await prisma.servicePrices.findMany();
     const priceMap = new Map(
       prices.map((price) => [`${price.serviceId}:${price.barberId}`, price.price]),

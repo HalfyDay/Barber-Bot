@@ -20,7 +20,7 @@ const IMPORT_TABLES = [
   "TelegramAuthRequests",
 ];
 
-const LEGACY_TABLES = ["Cost"];
+const LEGACY_TABLES = [];
 
 const readTableRows = (db, tableName) => {
   const columns = db.prepare(`PRAGMA table_info("${tableName}")`).all();

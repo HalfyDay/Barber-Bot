@@ -61,18 +61,6 @@ model Schedules {
   @@map("Schedules")
 }
 
-model Cost {
-  id         String  @id
-  Uslugi     String? @map("Услуги")
-  Timur      Float?  @map("Тимур")
-  Vladimir   Float?  @map("Владимир")
-  Alina      Float?  @map("Алина")
-  Aleksey    Float?  @map("Алексей")
-  Dlitelnost String? @map("Длительность")
-
-  @@map("Cost")
-}
-
 enum BarberRole {
   owner
   staff
@@ -222,6 +210,34 @@ model TelegramAuthRequests {
   @@index([flow, targetUserId])
   @@index([code])
   @@map("TelegramAuthRequests")
+}
+
+model BlockedUsers {
+  id        String    @id
+  userId    String    @unique
+  reason    String?
+  blockedAt DateTime  @default(now())
+  blockedBy String?
+
+  @@map("BlockedUsers")
+}
+
+model BarberAliases {
+  id        String   @id
+  barberId  String
+  alias     String
+  createdAt DateTime @default(now())
+
+  @@unique([barberId, alias])
+  @@map("BarberAliases")
+}
+
+model BotMenu {
+  id        String   @id @default("default")
+  payload   Json
+  updatedAt DateTime @updatedAt
+
+  @@map("BotMenu")
 }
 
 model Businesses {

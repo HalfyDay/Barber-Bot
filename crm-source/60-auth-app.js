@@ -637,13 +637,21 @@ const apiRequest = useCallback(
       return undefined;
     }
     if (typeof EventSource === 'undefined') return undefined;
-    const tokenParam = encodeURIComponent(session.token);
-    const streamUrl = `${API_BASE_URL}/events/stream?token=${tokenParam}`;
-    const eventSource = new EventSource(streamUrl);
-    eventSource.onopen = () => setConnectionStatus('online');
+    
+    let reconnectTimeout = null;
+    let reconnectDelay = 1000; // Start with 1 second
+    const maxReconnectDelay = 30000; // Max 30 seconds
+    
     const handleEvent = (event) => {
       try {
         const payload = JSON.parse(event.data);
+        
+        // Handle system update notification
+        if (payload?.type === 'system:updating') {
+          setConnectionStatus('updating');
+          return;
+        }
+        
         if (payload?.type !== 'appointments:update') return;
         const details = payload.payload || {};
         setRealtimeSnapshot({
@@ -658,13 +666,44 @@ const apiRequest = useCallback(
         console.error('Realtime event parse error:', error);
       }
     };
-    eventSource.addEventListener('appointments', handleEvent);
-    eventSource.onerror = () => {
-      setConnectionStatus('offline');
+    
+    const connectSSE = () => {
+      const tokenParam = encodeURIComponent(session.token);
+      const streamUrl = `${API_BASE_URL}/events/stream?token=${tokenParam}`;
+      const eventSource = new EventSource(streamUrl);
+      
+      eventSource.onopen = () => {
+        setConnectionStatus('online');
+        reconnectDelay = 1000; // Reset delay on successful connection
+      };
+      
+      eventSource.addEventListener('appointments', handleEvent);
+      eventSource.addEventListener('system', handleEvent);
+      
+      eventSource.onerror = () => {
+        setConnectionStatus('offline');
+        eventSource.close();
+        // Schedule reconnection with exponential backoff
+        reconnectTimeout = setTimeout(() => {
+          reconnectDelay = Math.min(reconnectDelay * 2, maxReconnectDelay);
+          connectSSE();
+        }, reconnectDelay);
+      };
+      
+      return eventSource;
     };
+    
+    let currentSource = connectSSE();
+    
     return () => {
-      eventSource.removeEventListener('appointments', handleEvent);
-      eventSource.close();
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      if (currentSource) {
+        currentSource.removeEventListener('appointments', handleEvent);
+        currentSource.removeEventListener('system', handleEvent);
+        currentSource.close();
+      }
     };
   }, [session?.token, canUseRealtime]);
   const refreshRealtimeViews = useCallback(async () => {

@@ -127,18 +127,28 @@ const createHomeDataService = ({
 
   const readBlockedUsers = async () => {
     try {
-      const payload = await fs.readJson(BLOCKLIST_FILE);
-      const list = Array.isArray(payload) ? payload : payload?.blocked || [];
-      return new Set(list.filter(Boolean).map(String));
+      const rows = await prisma.blockedUsers.findMany({
+        select: { userId: true },
+      });
+      return new Set(rows.map((r) => r.userId).filter(Boolean));
     } catch {
       return new Set();
     }
   };
 
   const writeBlockedUsers = async (blockedSet) => {
-    const list = Array.from(blockedSet);
-    await fs.ensureDir(path.dirname(BLOCKLIST_FILE));
-    await fs.writeJson(BLOCKLIST_FILE, list, { spaces: 2 });
+    const list = Array.from(blockedSet).map(String);
+    // Replace all blocked users with current set
+    await prisma.blockedUsers.deleteMany();
+    if (list.length) {
+      await prisma.blockedUsers.createMany({
+        data: list.map((userId) => ({
+          id: randomUUID(),
+          userId,
+          blockedAt: new Date(),
+        })),
+      });
+    }
   };
 
   const listUsersWithHaircutReminderState = async () => {

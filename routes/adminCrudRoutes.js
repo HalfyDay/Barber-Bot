@@ -651,17 +651,6 @@ const registerAdminCrudRoutes = ({
         data.TelegramID = Number.isNaN(parsed) ? null : parsed;
       }
     }
-    if (tableName === "Cost") {
-      ["Timur", "Vladimir", "Alina", "Aleksey", "Dlitelnost"].forEach((field) => {
-        if (data[field] === undefined) return;
-        if (data[field] === null || data[field] === "") {
-          data[field] = null;
-          return;
-        }
-        const parsed = Number(data[field]);
-        data[field] = Number.isNaN(parsed) ? null : parsed;
-      });
-    }
     try {
       const updated = await prisma[modelName].update({ where: { id }, data });
       res.json(updated);

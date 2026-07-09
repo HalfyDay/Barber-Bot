@@ -142,3 +142,94 @@ test("server lifecycle service shuts down dependencies and exits", async () => {
   assert.equal(events[6], "prismaDisconnect");
   assert.deepEqual(events[7], { type: "exit", code: 0 });
 });
+
+test("server lifecycle service gracefulShutdown sends ready signal in PM2", async () => {
+  const originalPm2Home = process.env.PM2_HOME;
+  process.env.PM2_HOME = "/home/user/.pm2";
+  
+  try {
+    const sentSignals = [];
+    const { service, events } = createBaseService({
+      processObj: {
+        handlers: {},
+        on(event, handler) {
+          this.handlers[event] = handler;
+        },
+        exit(code) {
+          events.push({ type: "exit", code });
+        },
+        send(signal) {
+          sentSignals.push(signal);
+        },
+      },
+    });
+
+    await service.gracefulShutdown();
+
+    assert.ok(sentSignals.includes("ready"), "Should send 'ready' signal to PM2");
+    assert.deepEqual(events[7], { type: "exit", code: 0 });
+  } finally {
+    if (originalPm2Home === undefined) {
+      delete process.env.PM2_HOME;
+    } else {
+      process.env.PM2_HOME = originalPm2Home;
+    }
+  }
+});
+
+test("server lifecycle service gracefulShutdown does not send ready without PM2", async () => {
+  const originalPm2Home = process.env.PM2_HOME;
+  const originalPmId = process.env.pm_id;
+  delete process.env.PM2_HOME;
+  delete process.env.pm_id;
+  
+  try {
+    const sentSignals = [];
+    const { service, events } = createBaseService({
+      processObj: {
+        handlers: {},
+        on(event, handler) {
+          this.handlers[event] = handler;
+        },
+        exit(code) {
+          events.push({ type: "exit", code });
+        },
+        send(signal) {
+          sentSignals.push(signal);
+        },
+      },
+    });
+
+    await service.gracefulShutdown();
+
+    assert.equal(sentSignals.length, 0, "Should not send any signal without PM2");
+    assert.deepEqual(events[7], { type: "exit", code: 0 });
+  } finally {
+    if (originalPm2Home !== undefined) {
+      process.env.PM2_HOME = originalPm2Home;
+    }
+    if (originalPmId !== undefined) {
+      process.env.pm_id = originalPmId;
+    }
+  }
+});
+
+test("server lifecycle service registerShutdownHandlers registers SIGINT SIGTERM SIGUSR2", async () => {
+  const registeredSignals = [];
+  const { service } = createBaseService({
+    processObj: {
+      handlers: {},
+      on(event, handler) {
+        registeredSignals.push(event);
+        this.handlers[event] = handler;
+      },
+      exit() {},
+    },
+  });
+
+  service.registerShutdownHandlers();
+
+  assert.ok(registeredSignals.includes("SIGINT"), "Should register SIGINT handler");
+  assert.ok(registeredSignals.includes("SIGTERM"), "Should register SIGTERM handler");
+  assert.ok(registeredSignals.includes("SIGUSR2"), "Should register SIGUSR2 handler");
+});

@@ -36,7 +36,6 @@ const main = async () => {
       "Users",
       "Appointments",
       "Schedules",
-      "Cost",
       "BotSettings",
       "BotMessages",
       "SiteSettings",

@@ -41,6 +41,7 @@ const { createIdentityAccessService } = require("./services/identityAccessServic
 const { createCatalogLookupService } = require("./services/catalogLookupService");
 const { createBookingUtilityService } = require("./services/bookingUtilityService");
 const { createBarberAliasService } = require("./services/barberAliasService");
+const { createBotMenuService } = require("./services/botMenuService");
 const { createSitePresenceService } = require("./services/sitePresenceService");
 const { createHomeRealtimeService } = require("./services/homeRealtimeService");
 const { createPrismaClient, getPrismaRuntimeConfig, validatePrismaRuntimeConfig } = require("./services/prismaRuntime");
@@ -184,25 +185,20 @@ const toWindows1251Mojibake = (value = "") => {
     return value;
   }
 };
-const RESERVED_COST_FIELDS = new Set([
-  "id",
-  "Id",
-  "ID",
-  "Uslugi",
-  "Dlitelnost",
-]);
 const SLOT_BLOCK_TOKENS = ["block", "\u0431\u043b\u043e\u043a"];
 const tableToModelMap = {
   Appointments: "appointments",
   Schedules: "schedules",
   Users: "users",
-  Cost: "cost",
   Barbers: "barbers",
   Services: "services",
   ServicePrices: "servicePrices",
   BotSettings: "botSettings",
   Positions: "positions",
   PositionServiceMaxPrices: "positionServiceMaxPrices",
+  BlockedUsers: "blockedUsers",
+  BarberAliases: "barberAliases",
+  BotMenu: "botMenu",
 };
 const TABLE_ORDERING = {
   Positions: [{ orderIndex: "asc" }, { name: "asc" }],
@@ -211,7 +207,6 @@ const numericFields = {
   Users: [],
   Appointments: ["CoverBs", "DiscountRub"],
   Schedules: [],
-  Cost: [],
   Barbers: ["orderIndex"],
   Services: ["duration", "orderIndex"],
   ServicePrices: ["price"],

@@ -60,12 +60,14 @@ const {
   getBarberAliasLookup,
   setBarberAliasLookup,
 } = createBarberAliasService({
-  fs,
-  path,
-  barberAliasFile: BARBER_ALIAS_FILE,
+  prisma,
   canonicalizeKey,
+  randomUUID,
 });
-loadBarberAliasesFromDisk();
+// Load aliases from database (async, non-blocking)
+loadBarberAliasesFromDisk().catch((err) =>
+  console.warn("Failed to load barber aliases:", err?.message || err),
+);
 barberAliases = getBarberAliases();
 barberAliasLookup = getBarberAliasLookup();
 const STAFF_READ_TABLES = new Set(["Appointments", "Schedules", "Services", "Positions", "PositionServiceMaxPrices"]);

@@ -128,3 +128,70 @@ test("realtime service replays last event to newly attached client and cleans up
   assert.equal(res1.endCalled, true);
   assert.ok(cleared.length >= 1);
 });
+
+test("realtime service shutdownClients sends system:updating notification before closing", async () => {
+  const req = new EventEmitter();
+  const res = createResponse();
+  const cleared = [];
+  const service = createRealtimeService({
+    createHash: require("crypto").createHash,
+    buildPayload: async () => ({
+      appointmentsRaw: [],
+      active: [],
+      upcoming: [],
+      overdue: [],
+      stats: {},
+      updatedAt: "2026-03-17T00:00:00.000Z",
+    }),
+    pollIntervalMs: 5000,
+    keepAliveMs: 15000,
+    randomUUID: () => "client-1",
+    setIntervalFn() {
+      return { id: "timer" };
+    },
+    clearIntervalFn(token) {
+      cleared.push(token);
+    },
+  });
+
+  service.attachClient({ req, res });
+  service.shutdownClients();
+
+  // Find the system notification write
+  const systemEvent = res.writes.find((w) => w.includes("system:updating"));
+  assert.ok(systemEvent, "Should write system:updating event");
+  assert.match(systemEvent, /event: system/);
+  assert.match(systemEvent, /"type":"system:updating"/);
+  assert.match(systemEvent, /переподключение/);
+  
+  // end() should be called after the notification
+  assert.equal(res.endCalled, true);
+  assert.ok(cleared.length >= 1, "Should clear keepAlive interval");
+});
+
+test("realtime service hasLoop reports loop state correctly", async () => {
+  const service = createRealtimeService({
+    createHash: require("crypto").createHash,
+    buildPayload: async () => ({
+      appointmentsRaw: [],
+      active: [],
+      upcoming: [],
+      overdue: [],
+      stats: {},
+      updatedAt: "2026-03-17T00:00:00.000Z",
+    }),
+    pollIntervalMs: 5000,
+    keepAliveMs: 15000,
+    randomUUID: () => "client-1",
+    setIntervalFn() {
+      return { id: "timer" };
+    },
+    clearIntervalFn() {},
+  });
+
+  assert.equal(service.hasLoop(), false);
+  service.ensureLoop();
+  assert.equal(service.hasLoop(), true);
+  service.stopLoop();
+  assert.equal(service.hasLoop(), false);
+});

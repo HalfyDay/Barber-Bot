@@ -57,19 +57,6 @@ CREATE TABLE "Schedules" (
 );
 
 -- CreateTable
-CREATE TABLE "Cost" (
-    "id" TEXT NOT NULL,
-    "Услуги" TEXT,
-    "Тимур" DOUBLE PRECISION,
-    "Владимир" DOUBLE PRECISION,
-    "Алина" DOUBLE PRECISION,
-    "Алексей" DOUBLE PRECISION,
-    "Длительность" TEXT,
-
-    CONSTRAINT "Cost_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "Barbers" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -220,6 +207,36 @@ CREATE TABLE "TelegramAuthRequests" (
 );
 
 -- CreateTable
+CREATE TABLE "BlockedUsers" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "reason" TEXT,
+    "blockedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "blockedBy" TEXT,
+
+    CONSTRAINT "BlockedUsers_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "BarberAliases" (
+    "id" TEXT NOT NULL,
+    "barberId" TEXT NOT NULL,
+    "alias" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "BarberAliases_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "BotMenu" (
+    "id" TEXT NOT NULL DEFAULT 'default',
+    "payload" JSONB NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "BotMenu_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Businesses" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -262,6 +279,12 @@ CREATE INDEX "TelegramAuthRequests_flow_targetUserId_idx" ON "TelegramAuthReques
 
 -- CreateIndex
 CREATE INDEX "TelegramAuthRequests_code_idx" ON "TelegramAuthRequests"("code");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "BlockedUsers_userId_key" ON "BlockedUsers"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "BarberAliases_barberId_alias_key" ON "BarberAliases"("barberId", "alias");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Businesses_subdomain_key" ON "Businesses"("subdomain");

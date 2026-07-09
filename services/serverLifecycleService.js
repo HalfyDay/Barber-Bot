@@ -74,25 +74,60 @@ const createServerLifecycleService = ({
     }
   };
 
-  const gracefulShutdown = async () => {
+  const gracefulShutdown = async (signal) => {
+    const isPm2 = process.env.PM2_HOME || process.env.pm_id;
+    const timeoutMs = 30000;
+    
+    console.log(`[shutdown] Received ${signal || 'shutdown'}, draining connections...`);
+    
+    // Set a hard timeout to prevent hanging
+    const forceExitTimer = setTimeout(() => {
+      console.error('[shutdown] Forced exit after timeout');
+      processObj.exit(1);
+    }, timeoutMs);
+    forceExitTimer.unref();
+    
     try {
+      // 1. Stop accepting new connections
       stopAppointmentReminderLoop();
       stopRealtimeLoop();
-      shutdownRealtimeClients();
-      shutdownHomeRealtimeClients?.();
+      
+      // 2. Notify SSE clients about upcoming restart
+      try {
+        shutdownRealtimeClients();
+        shutdownHomeRealtimeClients?.();
+      } catch (e) {
+        // Non-fatal
+      }
+      
+      // 3. Stop bot process
       await stopBotProcess();
+      
+      // 4. Drain HTTP connections (give in-flight requests time to complete)
       await stopHttpServer();
+      
+      // 5. Disconnect Prisma
       await prisma.$disconnect();
+      
+      // 6. If PM2, signal readiness for graceful reload
+      if (isPm2 && processObj.send) {
+        console.log('[shutdown] Signaling PM2 readiness');
+        processObj.send('ready');
+      }
+      
+      clearTimeout(forceExitTimer);
       processObj.exit(0);
     } catch (error) {
-      console.error("Shutdown error:", error);
+      console.error('[shutdown] Error during graceful shutdown:', error);
+      clearTimeout(forceExitTimer);
       processObj.exit(1);
     }
   };
 
   const registerShutdownHandlers = () => {
-    processObj.on("SIGINT", gracefulShutdown);
-    processObj.on("SIGTERM", gracefulShutdown);
+    processObj.on("SIGINT", () => gracefulShutdown("SIGINT"));
+    processObj.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+    processObj.on("SIGUSR2", () => gracefulShutdown("SIGUSR2")); // PM2 reload signal
   };
 
   const bootstrap = async () => {

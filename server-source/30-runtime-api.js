@@ -104,11 +104,40 @@ const scheduleSelfRestart = (delayMs = 500) => {
   updateInProgress = true;
   const restartStrategy = getRestartStrategy();
   const { command, args } = restartCommand();
+  const isPm2 = process.env.PM2_HOME || process.env.pm_id;
+  
   console.log(
-    `[update] Scheduling self-restart in ${delayMs}ms (strategy: ${restartStrategy}) with: ${command} ${args.join(
-      " ",
-    )}`,
+    `[update] Scheduling self-restart in ${delayMs}ms (strategy: ${restartStrategy}, pm2: ${!!isPm2})`,
   );
+  
+  // PM2 rolling restart: use PM2's built-in reload for zero-downtime
+  if (isPm2 && process.env.pm_id !== undefined) {
+    setTimeout(async () => {
+      try {
+        stopAppointmentReminderLoop();
+        stopRealtimeLoop();
+        shutdownRealtimeClients();
+        await stopBotProcess();
+        await stopHttpServer();
+        await prisma.$disconnect();
+        
+        // Signal PM2 that we're ready for reload
+        if (process.send) {
+          process.send('ready');
+          console.log('[update] PM2 ready signal sent, waiting for reload...');
+        } else {
+          // Fallback: exit and let PM2 restart us
+          process.exit(0);
+        }
+      } catch (error) {
+        console.error('[update] PM2 restart preparation failed:', error);
+        process.exit(1);
+      }
+    }, delayMs);
+    return;
+  }
+  
+  // Legacy restart strategy (non-PM2)
   setTimeout(async () => {
     let relaunched = false;
     try {
@@ -420,8 +449,8 @@ registerOwnerAssetsRoutes({
   getExistingImageFilename,
   listMenuImages,
   MENU_IMAGE_DIR,
-  loadBotMenu,
-  saveBotMenu,
+  loadBotMenu: loadBotMenuFromDb,
+  saveBotMenu: saveBotMenuToDb,
   prisma,
 });
 app.get("/api/events/stream", authenticateStream, (req, res) => {

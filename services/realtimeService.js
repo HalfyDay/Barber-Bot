@@ -117,7 +117,17 @@ const createRealtimeService = ({
   };
 
   const shutdownClients = () => {
+    // Send update notification before closing
+    const notificationEvent = formatSseEventString("system", {
+      type: "system:updating",
+      message: "Система обновляется, переподключение через несколько секунд...",
+    });
     clients.forEach((client) => {
+      try {
+        client.res.write(notificationEvent);
+      } catch {
+        // ignore
+      }
       removeClient(client);
       try {
         client.res.end();

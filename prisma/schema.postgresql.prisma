@@ -235,6 +235,26 @@ model Businesses {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  income CreatorIncome[]
+
   @@map("Businesses")
+}
+
+model CreatorIncome {
+  id          String   @id
+  businessId  String
+  amount      Float
+  periodStart String?
+  periodEnd   String?
+  date        String
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business Businesses @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([date])
+  @@map("CreatorIncome")
 }
 

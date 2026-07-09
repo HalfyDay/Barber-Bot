@@ -764,6 +764,37 @@ const apiRequest = useCallback(
     (id) => apiRequest(`/PositionServiceMaxPrices/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     [apiRequest]
   );
+  const [positionReorderBusy, setPositionReorderBusy] = useState(false);
+  const handleReorderPositions = useCallback(
+    async (orderedIds) => {
+      if (role === ROLE_STAFF || positionReorderBusy || !Array.isArray(orderedIds) || !orderedIds.length) return;
+      const previousPositions = positions;
+      const orderMap = new Map(orderedIds.map((id, index) => [id, index]));
+      const nextPositions = sortServicesByOrder(
+        positions.map((pos) => ({
+          ...pos,
+          orderIndex: orderMap.has(pos.id) ? orderMap.get(pos.id) : orderedIds.length,
+        }))
+      );
+      setPositions(nextPositions);
+      try {
+        setPositionReorderBusy(true);
+        const response = await apiRequest('/Positions/reorder', {
+          method: 'POST',
+          body: JSON.stringify({ orderedIds }),
+        });
+        if (Array.isArray(response?.positions)) {
+          setPositions(sortServicesByOrder(response.positions));
+        }
+      } catch (error) {
+        setPositions(previousPositions);
+        setGlobalError(error.message || 'Не удалось сохранить порядок должностей');
+      } finally {
+        setPositionReorderBusy(false);
+      }
+    },
+    [apiRequest, role, positionReorderBusy, positions]
+  );
   useEffect(() => {
     if (!realtimeSnapshot) return;
     const isStaffMode = role === ROLE_STAFF;
@@ -1759,6 +1790,8 @@ const handleBarberFieldChange = (id, field, value) => {
             onCreatePositionServiceMaxPrice={handleCreatePositionServiceMaxPrice}
             onUpdatePositionServiceMaxPrice={handleUpdatePositionServiceMaxPrice}
             onDeletePositionServiceMaxPrice={handleDeletePositionServiceMaxPrice}
+            onReorderPositions={handleReorderPositions}
+            positionReorderBusy={positionReorderBusy}
             onActiveTableChange={handleActiveTableSync}
             preferredTable={preferredTableTarget}
             onPreferredTableConsumed={handlePreferredTableConsumed}
@@ -1790,6 +1823,12 @@ const handleBarberFieldChange = (id, field, value) => {
               onSave={handleSaveBarber}
               allowRatingEdit={role === ROLE_OWNER || role === ROLE_CREATOR}
             />
+          </div>
+        );
+      case 'income':
+        return (
+          <div className="mx-auto w-full max-w-[1200px]">
+            <CreatorIncomeView apiRequest={apiRequest} />
           </div>
         );
       case 'system':

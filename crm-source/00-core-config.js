@@ -82,6 +82,7 @@ VIEW_TABS_BY_ROLE[ROLE_STAFF] = [
   { id: 'profile', label: 'Профиль' },
 ];
 VIEW_TABS_BY_ROLE[ROLE_CREATOR] = [
+  { id: 'income', label: 'Доходы' },
   { id: 'system', label: 'Система' },
 ];
 const TABLE_ORDER = ['Appointments', 'Schedules', 'Users', 'Barbers', 'Services', 'Positions', 'Revenue'];

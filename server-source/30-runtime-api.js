@@ -397,6 +397,12 @@ registerCreatorRoutes({
   resolveUserIdentity,
   creatorAccount: CREATOR_ACCOUNT,
 });
+const { registerCreatorIncomeRoutes } = require("./routes/creatorIncomeRoutes");
+registerCreatorIncomeRoutes({
+  app,
+  prisma,
+  authService: { authenticateToken },
+});
 registerOwnerAssetsRoutes({
   app,
   authenticateToken,

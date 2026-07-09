@@ -112,7 +112,7 @@ const WARNING_BLOCK_THRESHOLD =
 const BACKUP_DIR = path.join(__dirname, "backups");
 const LEGACY_HOME_USERS_DB_PATH =
   process.env.HOME_USERS_DB_PATH || path.join(__dirname, "data", "home-users.db");
-const BACKUP_RETENTION_DAYS = 30;
+const BACKUP_RETENTION_DAYS = 10;
 const BACKUP_CRON_EXPRESSION =
   (process.env.BACKUP_CRON_EXPRESSION || "0 3 * * *").toString().trim() ||
   "0 3 * * *";

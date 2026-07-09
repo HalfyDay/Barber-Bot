@@ -88,7 +88,8 @@ const ServiceMaxPricesEditor = ({ positionId, services = [], onGetMaxPrices, onC
   );
 };
 
-const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDelete, onRefresh, requestConfirm, onGetPositionServiceMaxPrices, onCreatePositionServiceMaxPrice, onUpdatePositionServiceMaxPrice, onDeletePositionServiceMaxPrice }) => {
+const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDelete, onRefresh, requestConfirm, onGetPositionServiceMaxPrices, onCreatePositionServiceMaxPrice, onUpdatePositionServiceMaxPrice, onDeletePositionServiceMaxPrice, onReorder, reorderBusy = false, role = ROLE_OWNER }) => {
+  const canManagePositions = role !== ROLE_STAFF;
   const initialDraftState = {
     name: '',
     masterSharePercent: '',
@@ -104,6 +105,13 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
   const [error, setError] = useState('');
   const [savingKey, setSavingKey] = useState(null);
   const [expandedCards, setExpandedCards] = useState({});
+  // Drag-and-drop state
+  const [dragOrderIds, setDragOrderIds] = useState([]);
+  const [dragState, setDragState] = useState(null);
+  const positionItemRefs = useRef(new Map());
+  const dragMetaRef = useRef(null);
+  const layoutRectsRef = useRef(new Map());
+  const suppressOpenUntilRef = useRef(0);
   const refreshPositionsList = useCallback(async () => {
     if (typeof onRefresh !== 'function') return;
     try {
@@ -124,6 +132,115 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
       return normalizeText(a?.name).localeCompare(normalizeText(b?.name), 'ru');
     });
   }, [positions]);
+  // Visible positions: use drag order during drag, otherwise sorted
+  const visiblePositions = useMemo(() => {
+    if (dragOrderIds.length) {
+      const posMap = new Map(positions.map((p) => [p.id, p]));
+      return dragOrderIds.map((id) => posMap.get(id)).filter(Boolean);
+    }
+    return sortedPositions;
+  }, [sortedPositions, dragOrderIds, positions]);
+  const buildReorderedIds = useCallback((sourceIds, activeId, clientY) => {
+    const idleIds = sourceIds.filter((id) => id !== activeId);
+    let targetIndex = idleIds.length;
+    for (let index = 0; index < idleIds.length; index += 1) {
+      const element = positionItemRefs.current.get(idleIds[index]);
+      if (!element) continue;
+      const rect = element.getBoundingClientRect();
+      const middle = rect.top + rect.height / 2;
+      if (clientY < middle) {
+        targetIndex = index;
+        break;
+      }
+    }
+    const nextIds = [...idleIds];
+    nextIds.splice(targetIndex, 0, activeId);
+    return nextIds;
+  }, []);
+  const finishDrag = useCallback(async (shouldSave = true) => {
+    const meta = dragMetaRef.current;
+    dragMetaRef.current = null;
+    setDragState(null);
+    if (!meta?.started) {
+      setDragOrderIds([]);
+      return;
+    }
+    suppressOpenUntilRef.current = Date.now() + 260;
+    const finalIds = dragOrderIds.length ? dragOrderIds : meta.sourceIds;
+    setDragOrderIds([]);
+    if (!shouldSave || !Array.isArray(finalIds) || !finalIds.length) return;
+    const changed = finalIds.some((id, index) => id !== meta.sourceIds[index]);
+    if (!changed) return;
+    await onReorder?.(finalIds);
+  }, [dragOrderIds, onReorder]);
+  // Pointer event listeners for drag
+  useEffect(() => {
+    if (!dragState) return undefined;
+    const handlePointerMove = (event) => {
+      const meta = dragMetaRef.current;
+      if (!meta || event.pointerId !== meta.pointerId) return;
+      const dx = event.clientX - meta.startX;
+      const dy = event.clientY - meta.startY;
+      const threshold = meta.pointerType === 'touch' ? 10 : 6;
+      if (!meta.started && Math.hypot(dx, dy) < threshold) return;
+      if (!meta.started) {
+        meta.started = true;
+        setDragOrderIds(meta.sourceIds);
+        setDragState({ activeId: meta.activeId, pointerType: meta.pointerType });
+      }
+      const baseIds = meta.sourceIds;
+      const nextIds = buildReorderedIds(baseIds, meta.activeId, event.clientY);
+      setDragOrderIds((prev) => {
+        if (prev.length === nextIds.length && prev.every((id, i) => id === nextIds[i])) return prev;
+        return nextIds;
+      });
+    };
+    const handlePointerUp = () => finishDrag(true);
+    const handlePointerCancel = () => finishDrag(false);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+    document.body.style.userSelect = 'none';
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+      document.body.style.userSelect = '';
+    };
+  }, [dragState, buildReorderedIds, finishDrag]);
+  // FLIP animation
+  useLayoutEffect(() => {
+    if (!dragState || !dragOrderIds.length) return;
+    const prevRects = layoutRectsRef.current;
+    const nextRects = new Map();
+    for (const id of dragOrderIds) {
+      const el = positionItemRefs.current.get(id);
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      nextRects.set(id, rect);
+      const prev = prevRects.get(id);
+      if (!prev) continue;
+      const dy = prev.top - rect.top;
+      if (Math.abs(dy) < 1) continue;
+      el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }], { duration: 220, easing: 'cubic-bezier(0.2,0,0,1)' });
+    }
+    layoutRectsRef.current = nextRects;
+  }, [dragState, dragOrderIds]);
+  const handleReorderPointerDown = useCallback((event, positionId) => {
+    if (!canManagePositions || reorderBusy) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragMetaRef.current = {
+      activeId: positionId,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType || 'mouse',
+      startX: event.clientX,
+      startY: event.clientY,
+      started: false,
+      sourceIds: sortedPositions.map((s) => s.id),
+    };
+    setDragState({ activeId: positionId, pointerType: event.pointerType || 'mouse' });
+  }, [canManagePositions, reorderBusy, sortedPositions]);
   const normalizePercentValue = (value) => {
     if (value === '' || value === null || value === undefined) return null;
     const parsed = Number(value);
@@ -304,19 +421,49 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
         )}
         <div className="mt-6 space-y-3">
           {sortedPositions.length === 0 && <p className="text-sm text-[var(--crm-muted)]">Должности еще не созданы.</p>}
-          {sortedPositions.map((position, positionIndex) => {
+          {visiblePositions.map((position, positionIndex) => {
             const draft = getDraft(position);
             const isDirty = pendingChanges.some((change) => change.position.id === position.id);
             const isSaving = savingKey === position.id;
             const isExpanded = expandedCards[position.id] || false;
-            const levelNumber = (Number(position.orderIndex) || 0) + 1;
+            const levelNumber = positionIndex + 1;
+            const isDragging = dragState?.activeId === position.id;
             return (
-              <div key={position.id} className="crm-soft-card">
+              <div
+                key={position.id}
+                ref={(node) => {
+                  if (node) {
+                    positionItemRefs.current.set(position.id, node);
+                  } else {
+                    positionItemRefs.current.delete(position.id);
+                  }
+                }}
+                className={classNames('crm-soft-card transition-opacity', isDragging && 'opacity-50')}
+              >
                 {/* Collapsed header */}
                 <div
                   className="flex items-center gap-3 p-3.5 md:p-4 cursor-pointer select-none"
-                  onClick={() => toggleExpanded(position.id)}
+                  onClick={() => {
+                    if (suppressOpenUntilRef.current > Date.now()) return;
+                    toggleExpanded(position.id);
+                  }}
                 >
+                  {canManagePositions && (
+                    <div
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-white/5 text-[var(--crm-muted)] cursor-grab active:cursor-grabbing hover:bg-white/10 transition touch-none"
+                      onPointerDown={(e) => handleReorderPointerDown(e, position.id)}
+                      aria-label={`Переместить должность ${position.name}`}
+                    >
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="9" cy="6" r="1.5" />
+                        <circle cx="15" cy="6" r="1.5" />
+                        <circle cx="9" cy="12" r="1.5" />
+                        <circle cx="15" cy="12" r="1.5" />
+                        <circle cx="9" cy="18" r="1.5" />
+                        <circle cx="15" cy="18" r="1.5" />
+                      </svg>
+                    </div>
+                  )}
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color:var(--crm-primary)]/15 text-xs font-bold text-[color:var(--crm-primary)]">
                     {levelNumber}
                   </span>

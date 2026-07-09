@@ -31,6 +31,8 @@ const TablesWorkspace = ({
   onCreatePositionServiceMaxPrice,
   onUpdatePositionServiceMaxPrice,
   onDeletePositionServiceMaxPrice,
+  onReorderPositions,
+  positionReorderBusy = false,
   onActiveTableChange,
   preferredTable = null,
   onPreferredTableConsumed,
@@ -694,6 +696,9 @@ const TablesWorkspace = ({
               onCreatePositionServiceMaxPrice={onCreatePositionServiceMaxPrice}
               onUpdatePositionServiceMaxPrice={onUpdatePositionServiceMaxPrice}
               onDeletePositionServiceMaxPrice={onDeletePositionServiceMaxPrice}
+              onReorder={onReorderPositions}
+              reorderBusy={positionReorderBusy}
+              role={role}
             />
           )}
           {activeTable === 'Level' && (

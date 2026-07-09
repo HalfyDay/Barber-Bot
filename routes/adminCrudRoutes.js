@@ -720,6 +720,43 @@ const registerAdminCrudRoutes = ({
       res.status(500).json({ error: "Не удалось удалить запись." });
     }
   });
+
+  // ── Positions reorder ─────────────────────────────────────────────────────
+  app.post("/api/Positions/reorder", authenticateToken, async (req, res) => {
+    if (!isOwnerRequest(req)) {
+      return res.status(403).json({ error: "Недостаточно прав для изменения порядка должностей." });
+    }
+    const orderedIds = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds : [];
+    try {
+      const existingPositions = await prisma.positions.findMany({
+        select: { id: true, orderIndex: true },
+        orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+      });
+      const knownIds = new Set(existingPositions.map((p) => p.id));
+      const uniqueIds = orderedIds
+        .map((value) => normalizeText(value))
+        .filter((value, index, values) => value && knownIds.has(value) && values.indexOf(value) === index);
+      const remainingIds = existingPositions
+        .map((p) => p.id)
+        .filter((id) => !uniqueIds.includes(id));
+      const finalOrder = [...uniqueIds, ...remainingIds];
+      await prisma.$transaction(
+        finalOrder.map((id, index) =>
+          prisma.positions.update({
+            where: { id },
+            data: { orderIndex: index },
+          }),
+        ),
+      );
+      const positions = await prisma.positions.findMany({
+        orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+      });
+      return res.json({ positions });
+    } catch (error) {
+      console.error("Reorder positions error:", error);
+      return res.status(500).json({ error: "Не удалось изменить порядок должностей." });
+    }
+  });
 };
 
 module.exports = {

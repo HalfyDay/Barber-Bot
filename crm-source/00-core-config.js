@@ -1,5 +1,6 @@
 const { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, Fragment } = React;
 const { createPortal, createRoot } = ReactDOM;
+// CRM core configuration
 const sendClientLog = (data) => {
   try {
     const payload = {

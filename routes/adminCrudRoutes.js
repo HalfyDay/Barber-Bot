@@ -723,7 +723,7 @@ const registerAdminCrudRoutes = ({
 
   // ── Positions reorder ─────────────────────────────────────────────────────
   app.post("/api/Positions/reorder", authenticateToken, async (req, res) => {
-    if (!isOwnerRequest(req)) {
+    if (isStaffIdentity(req.identity)) {
       return res.status(403).json({ error: "Недостаточно прав для изменения порядка должностей." });
     }
     const orderedIds = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds : [];

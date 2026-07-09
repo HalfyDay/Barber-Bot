@@ -815,6 +815,14 @@ const applyTenantSchemaPatch = async (schema, templateSql, connectionString) => 
  *    so existing tenants receive any new columns/tables/indexes.
  */
 const runPostUpdateDatabaseFixes = async () => {
+  // Always ensure Prisma client is generated to match the current schema
+  try {
+    const { schemaArg } = buildPrismaUpdateCommands(PRISMA_SCHEMA_PATH);
+    await runCommand(`npx prisma generate ${schemaArg}`);
+  } catch (genError) {
+    console.warn('[update] prisma generate failed (non-fatal):', genError?.message || genError);
+  }
+
   if (!fs.existsSync(TENANT_TEMPLATE_PATH)) {
     console.warn('[update] tenant_template.sql not found, skipping tenant schema patches');
     return;

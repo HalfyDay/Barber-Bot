@@ -178,12 +178,12 @@ test("dashboard snapshot service builds staff snapshot with filtered stats and e
       {
         id: "barber-1",
         name: "Max",
-        position: { commissionRate: 20, name: "Senior" },
+        position: { masterSharePercent: 20, name: "Senior" },
       },
       {
         id: "barber-2",
         name: "Leo",
-        position: { commissionRate: 10, name: "Junior" },
+        position: { masterSharePercent: 10, name: "Junior" },
       },
     ],
     getServiceCatalog: async () => [

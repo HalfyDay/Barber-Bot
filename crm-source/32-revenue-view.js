@@ -1,9 +1,109 @@
-const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh, requestConfirm }) => {
-  const [newPosition, setNewPosition] = useState({ name: '', rate: '' });
+const ServiceMaxPricesEditor = ({ positionId, services = [], onGetMaxPrices, onCreateMaxPrice, onUpdateMaxPrice, onDeleteMaxPrice }) => {
+  const [maxPrices, setMaxPrices] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [savingServiceId, setSavingServiceId] = useState(null);
+  useEffect(() => {
+    if (!positionId || !onGetMaxPrices) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await onGetMaxPrices(positionId);
+        const map = {};
+        if (Array.isArray(data)) {
+          data.forEach((entry) => {
+            map[entry.serviceId] = { id: entry.id, maxPrice: String(entry.maxPrice ?? '') };
+          });
+        }
+        if (!cancelled) setMaxPrices(map);
+      } catch {
+        if (!cancelled) setMaxPrices({});
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [positionId, onGetMaxPrices]);
+  const handlePriceChange = (serviceId, value) => {
+    setMaxPrices((prev) => ({
+      ...prev,
+      [serviceId]: { ...(prev[serviceId] || {}), maxPrice: value },
+    }));
+  };
+  const handleSavePrice = async (serviceId) => {
+    if (!onCreateMaxPrice || !onUpdateMaxPrice) return;
+    const entry = maxPrices[serviceId];
+    const parsed = parseFloat(entry?.maxPrice);
+    const maxPrice = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+    setSavingServiceId(serviceId);
+    try {
+      if (entry?.id) {
+        await onUpdateMaxPrice(entry.id, { maxPrice });
+      } else {
+        const created = await onCreateMaxPrice({ positionId, serviceId, maxPrice });
+        if (created?.id) {
+          setMaxPrices((prev) => ({
+            ...prev,
+            [serviceId]: { id: created.id, maxPrice: String(maxPrice) },
+          }));
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setSavingServiceId(null);
+    }
+  };
+  if (!services.length) return null;
+  return (
+    <div className="space-y-2">
+      <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Макс. стоимость услуг</label>
+      {loading ? (
+        <p className="text-xs text-[var(--crm-muted)]">Загрузка...</p>
+      ) : (
+        <div className="space-y-1.5">
+          {services.map((service) => {
+            const entry = maxPrices[service.id] || {};
+            const isSaving = savingServiceId === service.id;
+            return (
+              <div key={service.id} className="flex items-center gap-2">
+                <span className="flex-1 text-sm text-slate-300 truncate">{service.name}</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={entry.maxPrice ?? ''}
+                  onChange={(event) => handlePriceChange(service.id, event.target.value)}
+                  onBlur={() => handleSavePrice(service.id)}
+                  placeholder="—"
+                  className="w-24 px-2 py-1 text-white text-sm text-right"
+                />
+                {isSaving && <span className="text-[10px] text-white/50">...</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDelete, onRefresh, requestConfirm, onGetPositionServiceMaxPrices, onCreatePositionServiceMaxPrice, onUpdatePositionServiceMaxPrice, onDeletePositionServiceMaxPrice }) => {
+  const initialDraftState = {
+    name: '',
+    masterSharePercent: '',
+    requiredClientVolume: '',
+    requiredRetainedClients: '',
+    targetReturnPercent: '',
+    specialConditions: '',
+    privileges: '',
+  };
+  const [newPosition, setNewPosition] = useState({ ...initialDraftState });
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [drafts, setDrafts] = useState({});
   const [error, setError] = useState('');
   const [savingKey, setSavingKey] = useState(null);
+  const [expandedCards, setExpandedCards] = useState({});
   const refreshPositionsList = useCallback(async () => {
     if (typeof onRefresh !== 'function') return;
     try {
@@ -24,12 +124,17 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
       return normalizeText(a?.name).localeCompare(normalizeText(b?.name), 'ru');
     });
   }, [positions]);
-  const normalizeCommissionValue = (value) => {
+  const normalizePercentValue = (value) => {
     if (value === '' || value === null || value === undefined) return null;
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return null;
-    const clamped = Math.min(Math.max(parsed, 0), 100);
-    return clamped;
+    return Math.min(Math.max(parsed, 0), 100);
+  };
+  const normalizeIntValue = (value) => {
+    if (value === '' || value === null || value === undefined) return null;
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return null;
+    return Math.max(parsed, 0);
   };
   const handleCreate = async (event) => {
     event?.preventDefault?.();
@@ -42,10 +147,15 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
       setError('');
       await onCreate?.({
         name: newPosition.name.trim(),
-        commissionRate: normalizeCommissionValue(newPosition.rate),
+        masterSharePercent: normalizePercentValue(newPosition.masterSharePercent),
         orderIndex: sortedPositions.length,
+        requiredClientVolume: normalizeIntValue(newPosition.requiredClientVolume),
+        requiredRetainedClients: normalizeIntValue(newPosition.requiredRetainedClients),
+        targetReturnPercent: normalizePercentValue(newPosition.targetReturnPercent),
+        specialConditions: newPosition.specialConditions.trim() || null,
+        privileges: newPosition.privileges.trim() || null,
       });
-      setNewPosition({ name: '', rate: '' });
+      setNewPosition({ ...initialDraftState });
       setCreateSheetOpen(false);
       await refreshPositionsList();
     } catch (createError) {
@@ -61,12 +171,15 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
     }));
   };
   const getDraft = (position) => {
-    const draft = drafts[position.id];
-    const resolvedRate =
-      draft?.rate ?? draft?.commissionRate ?? position.commissionRate;
+    const draft = drafts[position.id] || {};
     return {
-      name: draft?.name ?? position.name ?? '',
-      rate: resolvedRate === undefined || resolvedRate === null ? '' : String(resolvedRate),
+      name: draft.name ?? position.name ?? '',
+      masterSharePercent: draft.masterSharePercent ?? position.masterSharePercent ?? '',
+      requiredClientVolume: draft.requiredClientVolume ?? position.requiredClientVolume ?? '',
+      requiredRetainedClients: draft.requiredRetainedClients ?? position.requiredRetainedClients ?? '',
+      targetReturnPercent: draft.targetReturnPercent ?? position.targetReturnPercent ?? '',
+      specialConditions: draft.specialConditions ?? position.specialConditions ?? '',
+      privileges: draft.privileges ?? position.privileges ?? '',
     };
   };
   const commitPositionUpdate = useCallback(async (position, draft) => {
@@ -77,7 +190,12 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
     }
     await onUpdate?.(position.id, {
       name: nextName,
-      commissionRate: normalizeCommissionValue(draft?.rate),
+      masterSharePercent: normalizePercentValue(draft?.masterSharePercent),
+      requiredClientVolume: normalizeIntValue(draft?.requiredClientVolume),
+      requiredRetainedClients: normalizeIntValue(draft?.requiredRetainedClients),
+      targetReturnPercent: normalizePercentValue(draft?.targetReturnPercent),
+      specialConditions: (draft?.specialConditions || '').trim() || null,
+      privileges: (draft?.privileges || '').trim() || null,
     });
     setDrafts((prev) => {
       const next = { ...prev };
@@ -91,10 +209,16 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
         .map((position) => {
           const draft = getDraft(position);
           const nextName = draft.name.trim();
-          const nextRate = normalizeCommissionValue(draft.rate);
           const currentName = (position.name || '').trim();
-          const currentRate = normalizeCommissionValue(position.commissionRate);
-          if (nextName === currentName && nextRate === currentRate) {
+          const fieldsChanged = [
+            'masterSharePercent', 'requiredClientVolume', 'requiredRetainedClients',
+            'targetReturnPercent', 'specialConditions', 'privileges',
+          ].some((field) => {
+            const nextVal = draft[field];
+            const curVal = position[field];
+            return String(nextVal ?? '') !== String(curVal ?? '');
+          });
+          if (nextName === currentName && !fieldsChanged) {
             return null;
           }
           return { position, draft };
@@ -147,6 +271,13 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
       setSavingKey(null);
     }
   };
+  const toggleExpanded = (id) => {
+    setExpandedCards((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+  const activeServices = useMemo(() => {
+    if (!Array.isArray(services)) return [];
+    return services.filter((s) => s.isActive !== false);
+  }, [services]);
   return (
     <div className="space-y-6">
       <SectionCard
@@ -157,7 +288,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
             type="button"
             onClick={() => {
               setError('');
-              setNewPosition({ name: '', rate: '' });
+              setNewPosition({ ...initialDraftState });
               setCreateSheetOpen(true);
             }}
             className="crm-action-btn w-full px-4 py-2 text-sm sm:w-auto"
@@ -173,61 +304,36 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
         )}
         <div className="mt-6 space-y-3">
           {sortedPositions.length === 0 && <p className="text-sm text-[var(--crm-muted)]">Должности еще не созданы.</p>}
-          {sortedPositions.map((position) => {
+          {sortedPositions.map((position, positionIndex) => {
             const draft = getDraft(position);
             const isDirty = pendingChanges.some((change) => change.position.id === position.id);
             const isSaving = savingKey === position.id;
+            const isExpanded = expandedCards[position.id] || false;
+            const levelNumber = (Number(position.orderIndex) || 0) + 1;
             return (
-              <div
-                key={position.id}
-                className="crm-soft-card p-3.5 md:p-4"
-              >
-                <div className="grid grid-cols-[minmax(0,1fr),4.75rem,2.5rem] items-center gap-2.5 md:flex md:items-center md:gap-4">
-                  <div className="min-w-0 md:flex-1">
-                      <input
-                        name={`positionName-${position.id}`}
-                        aria-label="Название должности"
-                        value={draft.name}
-                        onChange={(event) => handleDraftChange(position.id, 'name', event.target.value)}
-                        className="min-w-0 w-full px-4 py-2 text-white md:min-w-[160px]"
-                      />
-                  </div>
-                  <input
-                    name={`positionRateMobile-${position.id}`}
-                    aria-label="Процент"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    value={draft.rate}
-                    onChange={(event) => handleDraftChange(position.id, 'rate', event.target.value)}
-                    placeholder="—"
-                    className="w-full px-3 py-2 text-center text-white md:hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(position)}
-                    disabled={isSaving || bulkSaving}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--crm-error-container)]/18 text-[color:var(--crm-error)] transition hover:bg-[color:var(--crm-error-container)]/28 disabled:cursor-not-allowed disabled:opacity-50 md:hidden"
-                    aria-label={`Удалить должность ${position.name}`}
-                  >
-                    <IconTrash className="h-4 w-4" />
-                  </button>
-                  <div className="hidden md:block">
+              <div key={position.id} className="crm-soft-card">
+                {/* Collapsed header */}
+                <div
+                  className="flex items-center gap-3 p-3.5 md:p-4 cursor-pointer select-none"
+                  onClick={() => toggleExpanded(position.id)}
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color:var(--crm-primary)]/15 text-xs font-bold text-[color:var(--crm-primary)]">
+                    {levelNumber}
+                  </span>
+                  <div className="min-w-0 flex-1">
                     <input
-                      name={`positionRate-${position.id}`}
-                      aria-label="Процент"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.1"
-                      value={draft.rate}
-                      onChange={(event) => handleDraftChange(position.id, 'rate', event.target.value)}
-                      placeholder="Комиссия, %"
-                      className="w-32 px-4 py-2 text-white"
+                      name={`positionName-${position.id}`}
+                      aria-label="Название должности"
+                      value={draft.name}
+                      onChange={(event) => {
+                        event.stopPropagation();
+                        handleDraftChange(position.id, 'name', event.target.value);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="min-w-0 w-full px-3 py-1.5 text-white font-semibold md:min-w-[160px]"
                     />
                   </div>
-                  <div className="hidden w-full flex-wrap items-center justify-end gap-3 md:flex md:w-auto md:flex-nowrap">
+                  <div className="hidden md:flex items-center gap-2">
                     {isSaving && (
                       <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white/70">
                         Сохраняем...
@@ -240,14 +346,130 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
                     )}
                     <button
                       type="button"
-                      onClick={() => handleDelete(position)}
+                      onClick={(e) => { e.stopPropagation(); handleDelete(position); }}
                       disabled={isSaving || bulkSaving}
-                      className="crm-danger-btn flex-1 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50 md:flex-none"
+                      className="crm-danger-btn px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Удалить
                     </button>
                   </div>
+                  <div className="flex items-center gap-2 md:hidden">
+                    {isSaving && (
+                      <span className="text-[10px] text-white/50">...</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleDelete(position); }}
+                      disabled={isSaving || bulkSaving}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--crm-error-container)]/18 text-[color:var(--crm-error)] transition hover:bg-[color:var(--crm-error-container)]/28 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label={`Удалить должность ${position.name}`}
+                    >
+                      <IconTrash className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <svg className={`h-4 w-4 shrink-0 text-[var(--crm-muted)] transition-transform ${isExpanded ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
                 </div>
+
+                {/* Expanded body */}
+                {isExpanded && (
+                  <div className="border-t border-white/5 p-4 md:p-5 space-y-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Доля мастера */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Доля мастера, %</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={draft.masterSharePercent}
+                          onChange={(event) => handleDraftChange(position.id, 'masterSharePercent', event.target.value)}
+                          placeholder="0"
+                          className="w-full px-3 py-2 text-white text-sm"
+                        />
+                      </div>
+
+                      {/* Целевой % возвращаемости */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Возвращаемость, %</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={draft.targetReturnPercent}
+                          onChange={(event) => handleDraftChange(position.id, 'targetReturnPercent', event.target.value)}
+                          placeholder="0"
+                          className="w-full px-3 py-2 text-white text-sm"
+                        />
+                      </div>
+
+                      {/* Объем клиентов */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Объем клиентов для уровня</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={draft.requiredClientVolume}
+                          onChange={(event) => handleDraftChange(position.id, 'requiredClientVolume', event.target.value)}
+                          placeholder="0"
+                          className="w-full px-3 py-2 text-white text-sm"
+                        />
+                      </div>
+
+                      {/* Удержанные клиенты */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Удержанные клиенты</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={draft.requiredRetainedClients}
+                          onChange={(event) => handleDraftChange(position.id, 'requiredRetainedClients', event.target.value)}
+                          placeholder="0"
+                          className="w-full px-3 py-2 text-white text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Особые условия */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Особые условия</label>
+                      <textarea
+                        value={draft.specialConditions}
+                        onChange={(event) => handleDraftChange(position.id, 'specialConditions', event.target.value)}
+                        placeholder="Опишите особые условия для этой должности..."
+                        rows={3}
+                        className="w-full px-3 py-2 text-white text-sm resize-none"
+                      />
+                    </div>
+
+                    {/* Привилегии */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Привилегии</label>
+                      <textarea
+                        value={draft.privileges}
+                        onChange={(event) => handleDraftChange(position.id, 'privileges', event.target.value)}
+                        placeholder="Опишите привилегии для этой должности..."
+                        rows={3}
+                        className="w-full px-3 py-2 text-white text-sm resize-none"
+                      />
+                    </div>
+
+                    {/* Макс. стоимость услуг */}
+                    <ServiceMaxPricesEditor
+                      positionId={position.id}
+                      services={activeServices}
+                      onGetMaxPrices={onGetPositionServiceMaxPrices}
+                      onCreateMaxPrice={onCreatePositionServiceMaxPrice}
+                      onUpdateMaxPrice={onUpdatePositionServiceMaxPrice}
+                      onDeleteMaxPrice={onDeletePositionServiceMaxPrice}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -257,7 +479,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
         title="Новая должность"
         isOpen={createSheetOpen}
         onClose={() => setCreateSheetOpen(false)}
-        maxWidthClass="max-w-md"
+        maxWidthClass="max-w-lg"
         footer={(
           <>
             <button
@@ -278,7 +500,7 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
           </>
         )}
       >
-        <form onSubmit={handleCreate} className="space-y-3">
+        <form onSubmit={handleCreate} className="space-y-4">
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-slate-300">Название</label>
             <input
@@ -290,19 +512,76 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
               className="w-full px-4 py-2 text-white"
             />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-slate-300">Доля мастера, %</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={newPosition.masterSharePercent}
+                onChange={(event) => setNewPosition((prev) => ({ ...prev, masterSharePercent: event.target.value }))}
+                placeholder="0"
+                className="w-full px-4 py-2 text-white"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-slate-300">Возвращаемость, %</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={newPosition.targetReturnPercent}
+                onChange={(event) => setNewPosition((prev) => ({ ...prev, targetReturnPercent: event.target.value }))}
+                placeholder="0"
+                className="w-full px-4 py-2 text-white"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-slate-300">Объем клиентов</label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={newPosition.requiredClientVolume}
+                onChange={(event) => setNewPosition((prev) => ({ ...prev, requiredClientVolume: event.target.value }))}
+                placeholder="0"
+                className="w-full px-4 py-2 text-white"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-slate-300">Удержанные клиенты</label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={newPosition.requiredRetainedClients}
+                onChange={(event) => setNewPosition((prev) => ({ ...prev, requiredRetainedClients: event.target.value }))}
+                placeholder="0"
+                className="w-full px-4 py-2 text-white"
+              />
+            </div>
+          </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-slate-300">Процент</label>
-            <input
-              name="positionRate"
-              aria-label="Процент"
-              type="number"
-              min="0"
-              max="100"
-              step="0.1"
-              value={newPosition.rate}
-              onChange={(event) => setNewPosition((prev) => ({ ...prev, rate: event.target.value }))}
-              placeholder="Процент, %"
-              className="w-full px-4 py-2 text-white"
+            <label className="block text-sm font-medium text-slate-300">Особые условия</label>
+            <textarea
+              value={newPosition.specialConditions}
+              onChange={(event) => setNewPosition((prev) => ({ ...prev, specialConditions: event.target.value }))}
+              placeholder="Опишите особые условия..."
+              rows={2}
+              className="w-full px-4 py-2 text-white resize-none"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-slate-300">Привилегии</label>
+            <textarea
+              value={newPosition.privileges}
+              onChange={(event) => setNewPosition((prev) => ({ ...prev, privileges: event.target.value }))}
+              placeholder="Опишите привилегии..."
+              rows={2}
+              className="w-full px-4 py-2 text-white resize-none"
             />
           </div>
         </form>
@@ -310,6 +589,130 @@ const PositionsView = ({ positions = [], onCreate, onUpdate, onDelete, onRefresh
     </div>
   );
 };
+
+const LevelView = ({ positions = [], currentBarber = null, services = [] }) => {
+  const position = useMemo(() => {
+    if (!currentBarber?.positionId || !Array.isArray(positions)) return null;
+    return positions.find((p) => p.id === currentBarber.positionId) || null;
+  }, [positions, currentBarber]);
+
+  const sortedPositions = useMemo(() => {
+    if (!Array.isArray(positions) || !positions.length) return [];
+    return [...positions].sort((a, b) => {
+      const leftOrder = Number(a?.orderIndex) || 0;
+      const rightOrder = Number(b?.orderIndex) || 0;
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+      return normalizeText(a?.name).localeCompare(normalizeText(b?.name), 'ru');
+    });
+  }, [positions]);
+
+  const levelNumber = position ? (Number(position.orderIndex) || 0) + 1 : null;
+
+  if (!position) {
+    return (
+      <div className="space-y-6">
+        <SectionCard title="Мой уровень" hideTitleOnMobile>
+          <div className="py-12 text-center">
+            <p className="text-sm text-[var(--crm-muted)]">Должность не назначена. Обратитесь к администратору.</p>
+          </div>
+        </SectionCard>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <SectionCard title="Мой уровень" hideTitleOnMobile>
+        {/* Level badge */}
+        <div className="flex items-center gap-4 p-4 md:p-5">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[color:var(--crm-primary)]/15 text-xl font-bold text-[color:var(--crm-primary)]">
+            {levelNumber}
+          </span>
+          <div>
+            <h2 className="text-lg font-bold text-white">{position.name}</h2>
+            <p className="text-sm text-[var(--crm-muted)]">Уровень {levelNumber} из {sortedPositions.length}</p>
+          </div>
+        </div>
+
+        {/* Stats grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 md:p-5 pt-0">
+          <div className="crm-soft-card p-4">
+            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-1">Доля мастера</p>
+            <p className="text-xl font-bold text-white">{position.masterSharePercent ?? 0}%</p>
+          </div>
+          <div className="crm-soft-card p-4">
+            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-1">Целевая возвращаемость</p>
+            <p className="text-xl font-bold text-white">{position.targetReturnPercent ?? 0}%</p>
+          </div>
+          <div className="crm-soft-card p-4">
+            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-1">Объем клиентов</p>
+            <p className="text-xl font-bold text-white">{position.requiredClientVolume ?? 0}</p>
+          </div>
+          <div className="crm-soft-card p-4">
+            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-1">Удержанные клиенты</p>
+            <p className="text-xl font-bold text-white">{position.requiredRetainedClients ?? 0}</p>
+          </div>
+        </div>
+
+        {/* Special conditions & privileges */}
+        {(position.specialConditions || position.privileges) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 md:p-5 pt-0">
+            {position.specialConditions && (
+              <div className="crm-soft-card p-4">
+                <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-2">Особые условия</p>
+                <p className="text-sm text-slate-300 whitespace-pre-wrap">{position.specialConditions}</p>
+              </div>
+            )}
+            {position.privileges && (
+              <div className="crm-soft-card p-4">
+                <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-2">Привилегии</p>
+                <p className="text-sm text-slate-300 whitespace-pre-wrap">{position.privileges}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Service max prices */}
+        {Array.isArray(services) && services.length > 0 && (
+          <div className="p-4 md:p-5 pt-0">
+            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-3">Макс. стоимость услуг</p>
+            <div className="space-y-2">
+              {services.filter((s) => s.isActive !== false).map((service) => (
+                <div key={service.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
+                  <span className="text-sm text-slate-300">{service.name}</span>
+                  <span className="text-sm text-white font-medium">—</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Levels overview */}
+        {sortedPositions.length > 1 && (
+          <div className="p-4 md:p-5 pt-0">
+            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-3">Уровни</p>
+            <div className="space-y-2">
+              {sortedPositions.map((pos, idx) => {
+                const num = idx + 1;
+                const isCurrent = pos.id === position.id;
+                return (
+                  <div key={pos.id} className={`flex items-center gap-3 p-2.5 rounded-lg ${isCurrent ? 'bg-[color:var(--crm-primary)]/10 border border-[color:var(--crm-primary)]/30' : 'opacity-60'}`}>
+                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${isCurrent ? 'bg-[color:var(--crm-primary)] text-zinc-950' : 'bg-white/10 text-white/50'}`}>
+                      {num}
+                    </span>
+                    <span className={`text-sm ${isCurrent ? 'text-white font-semibold' : 'text-slate-400'}`}>{pos.name}</span>
+                    {isCurrent && <span className="ml-auto text-[10px] uppercase tracking-wider text-[color:var(--crm-primary)] font-semibold">Текущий</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </SectionCard>
+    </div>
+  );
+};
+
 const PRESETS = [
   { label: '1Д', value: '1D' },
   { label: '1Н', value: '1W' },
@@ -838,7 +1241,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
                           <td className="px-4 py-4 text-white font-medium">{item.name}</td>
                           <td className="px-4 py-4 text-right text-slate-400">{item.appointments}</td>
                           <td className="px-4 py-4 text-right text-slate-200 font-medium whitespace-nowrap">{formatCurrency(item.gross)}</td>
-                          <td className="px-4 py-4 text-right text-slate-400">{formatPercent(item.commissionRate)}</td>
+                          <td className="px-4 py-4 text-right text-slate-400">{formatPercent(item.masterSharePercent)}</td>
                           <td className="px-4 py-4 text-right text-[color:var(--crm-highlight)] font-semibold whitespace-nowrap">{formatCurrency(item.commission)}</td>
                           <td className="px-4 py-4 text-right text-[color:var(--crm-primary)] font-semibold whitespace-nowrap">{formatCurrency(item.net)}</td>
                         </tr>
@@ -851,7 +1254,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
                   {items.map((item) => {
                     const mobileStats = [
                       { label: 'Выручка', value: formatCurrency(item.gross), accent: 'text-white' },
-                      { label: 'Комиссия', value: formatPercent(item.commissionRate), accent: 'text-slate-400' },
+                      { label: 'Комиссия', value: formatPercent(item.masterSharePercent), accent: 'text-slate-400' },
                       { label: 'Выплаты', value: formatCurrency(item.commission), accent: 'text-[color:var(--crm-highlight)]' },
                       { label: 'В кассу', value: formatCurrency(item.net), accent: 'text-[color:var(--crm-primary)]' },
                     ];

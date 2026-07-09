@@ -71,15 +71,15 @@ const createAdminInsightsService = ({
         appointmentGross += numericPrice;
       });
       if (!appointmentGross) return;
-      const commissionRate = Number(barber.position?.commissionRate ?? 0);
-      const commissionValue = appointmentGross * (commissionRate / 100);
+      const masterSharePercent = Number(barber.position?.masterSharePercent ?? 0);
+      const commissionValue = appointmentGross * (masterSharePercent / 100);
       totalGross += appointmentGross;
       totalCommission += commissionValue;
       const existing = summaryMap.get(barber.id) || {
         id: barber.id,
         name: barber.name,
         color: barber.color,
-        commissionRate,
+        masterSharePercent,
         appointments: 0,
         gross: 0,
         commission: 0,

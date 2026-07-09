@@ -109,14 +109,20 @@ model Barbers {
 }
 
 model Positions {
-  id             String   @id
-  name           String   @unique
-  commissionRate Float?   @default(0)
-  orderIndex     Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                      String   @id
+  name                    String   @unique
+  masterSharePercent      Float?   @default(0)
+  orderIndex              Int      @default(0)
+  requiredClientVolume    Int?     @default(0)
+  requiredRetainedClients Int?     @default(0)
+  targetReturnPercent     Float?   @default(0)
+  specialConditions       String?
+  privileges              String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
-  barbers Barbers[]
+  barbers           Barbers[]
+  serviceMaxPrices  PositionServiceMaxPrices[]
 }
 
 model Services {
@@ -130,7 +136,8 @@ model Services {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  prices ServicePrices[]
+  prices            ServicePrices[]
+  positionMaxPrices PositionServiceMaxPrices[]
 }
 
 model ServicePrices {
@@ -144,6 +151,19 @@ model ServicePrices {
   barber  Barbers  @relation(fields: [barberId], references: [id], onDelete: Cascade)
 
   @@unique([serviceId, barberId])
+}
+
+model PositionServiceMaxPrices {
+  id         String   @id
+  positionId String
+  serviceId  String
+  maxPrice   Float    @default(0)
+  createdAt  DateTime @default(now())
+
+  position Positions @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  service  Services  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([positionId, serviceId])
 }
 
 model BotSettings {

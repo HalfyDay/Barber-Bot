@@ -202,6 +202,7 @@ const tableToModelMap = {
   ServicePrices: "servicePrices",
   BotSettings: "botSettings",
   Positions: "positions",
+  PositionServiceMaxPrices: "positionServiceMaxPrices",
 };
 const TABLE_ORDERING = {
   Positions: [{ orderIndex: "asc" }, { name: "asc" }],
@@ -215,7 +216,8 @@ const numericFields = {
   Services: ["duration", "orderIndex"],
   ServicePrices: ["price"],
   BotSettings: ["bookingLimit", "minLeadHours", "maxDaysAhead"],
-  Positions: ["commissionRate", "orderIndex"],
+  Positions: ["masterSharePercent", "orderIndex", "requiredClientVolume", "requiredRetainedClients", "targetReturnPercent"],
+  PositionServiceMaxPrices: ["maxPrice"],
 };
 const booleanFields = {
   Barbers: ["isActive", "cardPhotoGrayscale", "cardPhotoOutline"],

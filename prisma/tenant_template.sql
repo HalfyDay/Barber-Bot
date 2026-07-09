@@ -103,8 +103,13 @@ CREATE TABLE "Barbers" (
 CREATE TABLE "Positions" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "commissionRate" DOUBLE PRECISION DEFAULT 0,
+    "masterSharePercent" DOUBLE PRECISION DEFAULT 0,
     "orderIndex" INTEGER NOT NULL DEFAULT 0,
+    "requiredClientVolume" INTEGER DEFAULT 0,
+    "requiredRetainedClients" INTEGER DEFAULT 0,
+    "targetReturnPercent" DOUBLE PRECISION DEFAULT 0,
+    "specialConditions" TEXT,
+    "privileges" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -135,6 +140,17 @@ CREATE TABLE "ServicePrices" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "ServicePrices_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "PositionServiceMaxPrices" (
+    "id" TEXT NOT NULL,
+    "positionId" TEXT NOT NULL,
+    "serviceId" TEXT NOT NULL,
+    "maxPrice" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "PositionServiceMaxPrices_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -228,6 +244,9 @@ CREATE UNIQUE INDEX "Positions_name_key" ON "Positions"("name");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ServicePrices_serviceId_barberId_key" ON "ServicePrices"("serviceId", "barberId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PositionServiceMaxPrices_positionId_serviceId_key" ON "PositionServiceMaxPrices"("positionId", "serviceId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "BotMessages_code_key" ON "BotMessages"("code");

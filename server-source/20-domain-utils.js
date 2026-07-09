@@ -1,4 +1,4 @@
-﻿const normalizeText = (value) => (value ?? "").toString().trim();
+const normalizeText = (value) => (value ?? "").toString().trim();
 const normalizePhone = (phone) => {
   if (!phone) return "";
   const raw = phone.toString().replace(/[^\d+]/g, "");
@@ -68,7 +68,7 @@ const {
 loadBarberAliasesFromDisk();
 barberAliases = getBarberAliases();
 barberAliasLookup = getBarberAliasLookup();
-const STAFF_READ_TABLES = new Set(["Appointments", "Schedules", "Services"]);
+const STAFF_READ_TABLES = new Set(["Appointments", "Schedules", "Services", "Positions"]);
 const STAFF_WRITE_TABLES = new Set(["Appointments", "Schedules"]);
 const STAFF_DELETE_TABLES = new Set(["Appointments"]);
 const {
@@ -112,17 +112,17 @@ const {
 });
 const sanitizeCommissionRates = async () => {
   const positions = await prisma.positions.findMany({
-    select: { id: true, commissionRate: true },
+    select: { id: true, masterSharePercent: true },
   });
   for (const position of positions) {
-    const rawRate = Number(position?.commissionRate);
+    const rawRate = Number(position?.masterSharePercent);
     const normalizedRate = Number.isFinite(rawRate)
       ? Math.max(0, Math.min(100, rawRate))
       : 0;
     if (rawRate === normalizedRate) continue;
     await prisma.positions.update({
       where: { id: position.id },
-      data: { commissionRate: normalizedRate },
+      data: { masterSharePercent: normalizedRate },
     });
   }
 };

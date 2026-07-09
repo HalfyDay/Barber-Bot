@@ -27,6 +27,10 @@ const TablesWorkspace = ({
   onCreatePosition,
   onUpdatePosition,
   onDeletePosition,
+  onGetPositionServiceMaxPrices,
+  onCreatePositionServiceMaxPrice,
+  onUpdatePositionServiceMaxPrice,
+  onDeletePositionServiceMaxPrice,
   onActiveTableChange,
   preferredTable = null,
   onPreferredTableConsumed,
@@ -42,6 +46,7 @@ const TablesWorkspace = ({
   visibleTableOrder = DEFAULT_VISIBLE_TABLE_ORDER,
   role = ROLE_OWNER,
   applyFavoriteBarberRule = null,
+  currentBarber = null,
 }) => {
   const resolvedDataTables = useMemo(
     () => (Array.isArray(dataTables) && dataTables.length ? dataTables : DEFAULT_DATA_TABLES),
@@ -239,7 +244,9 @@ const TablesWorkspace = ({
             ? '/services/full'
             : table === 'Schedules'
               ? `/schedules?days=${encodeURIComponent(normalizeScheduleFillDays(scheduleFillDays))}`
-              : `/${table}`,
+              : table === 'Level'
+                ? '/Positions'
+                : `/${table}`,
     [scheduleFillDays]
   );
   const fetchTables = useCallback(async () => {
@@ -269,7 +276,7 @@ const TablesWorkspace = ({
       setTables((prev) => {
         const nextTables = {
           ...prev,
-          [activeTable]:
+          [activeTable === 'Level' ? 'Positions' : activeTable]:
             activeTable === 'Appointments'
               ? records.map((row) => ({ ...row, Status: normalizeStatusValue(row.Status) }))
               : records,
@@ -677,11 +684,23 @@ const TablesWorkspace = ({
           {activeTable === 'Positions' && (
             <PositionsView
               positions={positions}
+              services={services}
               onCreate={onCreatePosition}
               onUpdate={onUpdatePosition}
               onDelete={onDeletePosition}
               onRefresh={refreshPositions}
               requestConfirm={onRequestConfirm}
+              onGetPositionServiceMaxPrices={onGetPositionServiceMaxPrices}
+              onCreatePositionServiceMaxPrice={onCreatePositionServiceMaxPrice}
+              onUpdatePositionServiceMaxPrice={onUpdatePositionServiceMaxPrice}
+              onDeletePositionServiceMaxPrice={onDeletePositionServiceMaxPrice}
+            />
+          )}
+          {activeTable === 'Level' && (
+            <LevelView
+              positions={positions}
+              currentBarber={currentBarber}
+              services={services}
             />
           )}
           {activeTable === 'Revenue' && (

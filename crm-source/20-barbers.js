@@ -405,9 +405,9 @@ const BarbersView = ({
               const phoneLabel = barber.phone ? formatPhoneInput(barber.phone) : '';
               const ratingLabel = clampRatingValue(barber.rating || RATING_MAX);
               const positionName = normalizeText(barber.position?.name);
-              const commissionRate =
-                typeof barber.position?.commissionRate === 'number' ? barber.position.commissionRate : null;
-              const commissionLabel = commissionRate !== null ? formatPercent(commissionRate) : null;
+              const masterSharePercent =
+                typeof barber.position?.masterSharePercent === 'number' ? barber.position.masterSharePercent : null;
+              const commissionLabel = masterSharePercent !== null ? formatPercent(masterSharePercent) : null;
               const isDragging = dragState?.activeId === barber.id;
               return (
                 <div
@@ -632,7 +632,7 @@ const BarbersView = ({
                         { value: '', label: 'Без должности' },
                         ...sortedPositions.map((position) => ({
                           value: position.id,
-                          label: `${position.name}${typeof position.commissionRate === 'number' ? ` · ${formatPercent(position.commissionRate)}` : ''}`,
+                          label: `${position.name}${typeof position.masterSharePercent === 'number' ? ` · ${formatPercent(position.masterSharePercent)}` : ''}`,
                         })),
                       ]}
                       buttonClassName="h-12 px-4"
@@ -854,7 +854,7 @@ const BarberProfileView = ({
               <div className="crm-inline-panel col-span-2 px-4 py-3">
                 <p className="text-sm text-[var(--crm-muted)]">Должность</p>
                 <p className="text-base font-semibold text-white">{normalizeText(barber.position?.name) || 'Не назначена'}</p>
-                {typeof barber.position?.commissionRate === 'number'}
+                {typeof barber.position?.masterSharePercent === 'number'}
               </div>
               <textarea
                 value={barber.description || ''}

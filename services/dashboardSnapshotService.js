@@ -391,10 +391,10 @@ const createDashboardSnapshotService = ({
           appointmentGross += numericPrice;
         });
         if (!appointmentGross) return;
-        const commissionRate = Number(
-          staffBarber?.position?.commissionRate ?? 0,
+        const masterSharePercent = Number(
+          staffBarber?.position?.masterSharePercent ?? 0,
         );
-        const commissionValue = appointmentGross * (commissionRate / 100);
+        const commissionValue = appointmentGross * (masterSharePercent / 100);
         staffMonthlyGross += appointmentGross;
         staffMonthlyCommission += commissionValue;
       });

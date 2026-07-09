@@ -83,7 +83,7 @@ test("admin insights service builds revenue summary totals and timeline", async 
       },
     },
     getBarbers: async () => [
-      { id: "barber-1", name: "Max", color: "#111", position: { commissionRate: 10 } },
+      { id: "barber-1", name: "Max", color: "#111", position: { masterSharePercent: 10 } },
     ],
     getServiceCatalog: async () => [
       { name: "Fade", prices: { "barber-1": 1000 } },

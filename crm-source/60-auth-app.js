@@ -744,6 +744,26 @@ const apiRequest = useCallback(
     (id) => apiRequest(`/Positions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     [apiRequest]
   );
+  const handleGetPositionServiceMaxPrices = useCallback(
+    (positionId) => apiRequest(`/PositionServiceMaxPrices?positionId=${encodeURIComponent(positionId)}`),
+    [apiRequest]
+  );
+  const handleCreatePositionServiceMaxPrice = useCallback(
+    (payload) => apiRequest('/PositionServiceMaxPrices', { method: 'POST', body: JSON.stringify(payload) }),
+    [apiRequest]
+  );
+  const handleUpdatePositionServiceMaxPrice = useCallback(
+    (id, payload) =>
+      apiRequest(`/PositionServiceMaxPrices/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      }),
+    [apiRequest]
+  );
+  const handleDeletePositionServiceMaxPrice = useCallback(
+    (id) => apiRequest(`/PositionServiceMaxPrices/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    [apiRequest]
+  );
   useEffect(() => {
     if (!realtimeSnapshot) return;
     const isStaffMode = role === ROLE_STAFF;
@@ -1735,6 +1755,10 @@ const handleBarberFieldChange = (id, field, value) => {
             onCreatePosition={handleCreatePosition}
             onUpdatePosition={handleUpdatePosition}
             onDeletePosition={handleDeletePosition}
+            onGetPositionServiceMaxPrices={handleGetPositionServiceMaxPrices}
+            onCreatePositionServiceMaxPrice={handleCreatePositionServiceMaxPrice}
+            onUpdatePositionServiceMaxPrice={handleUpdatePositionServiceMaxPrice}
+            onDeletePositionServiceMaxPrice={handleDeletePositionServiceMaxPrice}
             onActiveTableChange={handleActiveTableSync}
             preferredTable={preferredTableTarget}
             onPreferredTableConsumed={handlePreferredTableConsumed}
@@ -1750,6 +1774,7 @@ const handleBarberFieldChange = (id, field, value) => {
             visibleTableOrder={visibleTableOrder}
             role={role}
             applyFavoriteBarberRule={applyFavoriteBarberRule}
+            currentBarber={currentBarber}
           />
         );
       case 'profile':

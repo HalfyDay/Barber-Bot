@@ -740,6 +740,54 @@ const applyTenantSchemaPatch = async (schema, templateSql, connectionString) => 
       ALTER TABLE "Appointments" ADD COLUMN IF NOT EXISTS "CoverBs" INTEGER;
       ALTER TABLE "Appointments" ADD COLUMN IF NOT EXISTS "DiscountRub" INTEGER;
     `);
+    // Patch Positions: drop old columns, add new level fields
+    await client.query(`
+      ALTER TABLE "Positions" DROP COLUMN IF EXISTS "commissionRate";
+      ALTER TABLE "Positions" DROP COLUMN IF EXISTS "beardPrice";
+      ALTER TABLE "Positions" DROP COLUMN IF EXISTS "trimPrice";
+      ALTER TABLE "Positions" DROP COLUMN IF EXISTS "minClients";
+      ALTER TABLE "Positions" DROP COLUMN IF EXISTS "regularClients";
+      ALTER TABLE "Positions" DROP COLUMN IF EXISTS "returnRate";
+      ALTER TABLE "Positions" DROP COLUMN IF EXISTS "minIncome";
+      ALTER TABLE "Positions" ADD COLUMN IF NOT EXISTS "masterSharePercent" DOUBLE PRECISION DEFAULT 0;
+      ALTER TABLE "Positions" ADD COLUMN IF NOT EXISTS "requiredClientVolume" INTEGER DEFAULT 0;
+      ALTER TABLE "Positions" ADD COLUMN IF NOT EXISTS "requiredRetainedClients" INTEGER DEFAULT 0;
+      ALTER TABLE "Positions" ADD COLUMN IF NOT EXISTS "targetReturnPercent" DOUBLE PRECISION DEFAULT 0;
+      ALTER TABLE "Positions" ADD COLUMN IF NOT EXISTS "specialConditions" TEXT;
+      ALTER TABLE "Positions" ADD COLUMN IF NOT EXISTS "privileges" TEXT;
+    `);
+    // Create PositionServiceMaxPrices if not exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "PositionServiceMaxPrices" (
+        "id" TEXT NOT NULL,
+        "positionId" TEXT NOT NULL,
+        "serviceId" TEXT NOT NULL,
+        "maxPrice" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "PositionServiceMaxPrices_pkey" PRIMARY KEY ("id")
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS "PositionServiceMaxPrices_positionId_serviceId_key" 
+        ON "PositionServiceMaxPrices"("positionId", "serviceId");
+    `);
+    // Add foreign keys for PositionServiceMaxPrices (idempotent via DO block)
+    try {
+      await client.query(`
+        DO $$ BEGIN
+          ALTER TABLE "PositionServiceMaxPrices" ADD CONSTRAINT "PositionServiceMaxPrices_positionId_fkey" 
+            FOREIGN KEY ("positionId") REFERENCES "Positions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+      `);
+      await client.query(`
+        DO $$ BEGIN
+          ALTER TABLE "PositionServiceMaxPrices" ADD CONSTRAINT "PositionServiceMaxPrices_serviceId_fkey" 
+            FOREIGN KEY ("serviceId") REFERENCES "Services"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+      `);
+    } catch (fkError) {
+      // Non-fatal: FK may already exist
+    }
     const patchSql = buildIdempotentTenantPatch(templateSql);
     await client.query(patchSql);
   } finally {

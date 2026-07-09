@@ -3141,8 +3141,8 @@ const registerHomeRoutes = ({
       };
 
       const todayRevenue = todayDone.reduce((sum, a) => sum + parsePriceFromServices(a.Services), 0);
-      const commissionRate = barber?.position?.commissionRate || 0;
-      const barberShare = commissionRate > 0 ? Math.round(todayRevenue * commissionRate / 100) : todayRevenue;
+      const masterSharePercent = barber?.position?.masterSharePercent || 0;
+      const barberShare = masterSharePercent > 0 ? Math.round(todayRevenue * masterSharePercent / 100) : todayRevenue;
 
       const nowMinutes = today.getHours() * 60 + today.getMinutes();
       const parseTimeRange = (timeStr) => {
@@ -3198,7 +3198,7 @@ const registerHomeRoutes = ({
         },
         week: {
           revenue: weekRevenue,
-          barberShare: commissionRate > 0 ? Math.round(weekRevenue * commissionRate / 100) : weekRevenue,
+          barberShare: masterSharePercent > 0 ? Math.round(weekRevenue * masterSharePercent / 100) : weekRevenue,
           appointmentsCount: thisWeekDone.length,
         },
         barber: {
@@ -3207,7 +3207,7 @@ const registerHomeRoutes = ({
           avatarUrl: normalizeText(barber?.avatarUrl),
           rating: normalizeText(barber?.rating),
           position: normalizeText(barber?.position?.name),
-          commissionRate,
+          masterSharePercent,
         },
       });
     } catch (error) {
@@ -3565,7 +3565,7 @@ const registerHomeRoutes = ({
         }),
       ]);
 
-      const commissionRate = barber?.position?.commissionRate || 0;
+      const masterSharePercent = barber?.position?.masterSharePercent || 0;
 
       const parsePriceFromServices = (servicesStr) => {
         if (!servicesStr) return 0;
@@ -3574,7 +3574,7 @@ const registerHomeRoutes = ({
       };
 
       const totalRevenue = appointments.reduce((sum, a) => sum + parsePriceFromServices(a.Services), 0);
-      const barberShare = commissionRate > 0 ? Math.round(totalRevenue * commissionRate / 100) : totalRevenue;
+      const barberShare = masterSharePercent > 0 ? Math.round(totalRevenue * masterSharePercent / 100) : totalRevenue;
 
       const byDay = {};
       for (const a of appointments) {
@@ -3603,7 +3603,7 @@ const registerHomeRoutes = ({
         endDate: todayKey,
         totalRevenue,
         barberShare,
-        commissionRate,
+        masterSharePercent,
         totalAppointments: appointments.length,
         averageCheck: appointments.length > 0 ? Math.round(totalRevenue / appointments.length) : 0,
         dailyBreakdown: Object.values(byDay).sort((a, b) => a.date.localeCompare(b.date)),

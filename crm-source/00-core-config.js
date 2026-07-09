@@ -91,7 +91,7 @@ const DATA_TABLES_BY_ROLE = {
 };
 const VISIBLE_TABLE_ORDER_BY_ROLE = {
   [ROLE_OWNER]: ['Appointments', 'Schedules', 'Revenue', 'Users', 'Barbers', 'Services', 'Positions'],
-  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Revenue', 'Services'],
+  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Revenue', 'Services', 'Level'],
 };
 const TABLE_CONFIG = {
   Appointments: { label: 'Записи', mode: 'data', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'desc' } },
@@ -100,6 +100,7 @@ const TABLE_CONFIG = {
   Barbers: { label: 'Сотрудники', mode: 'custom' },
   Services: { label: 'Услуги', mode: 'custom' },
   Positions: { label: 'Должности', mode: 'custom' },
+  Level: { label: 'Уровень', mode: 'custom' },
   Revenue: { label: 'Доходы', mode: 'custom' },
 };
 const DATA_SHORTCUTS_BY_ROLE = {
@@ -107,7 +108,7 @@ const DATA_SHORTCUTS_BY_ROLE = {
     id: tableId,
     label: TABLE_CONFIG[tableId]?.label || tableId,
   })),
-  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Revenue', 'Services'].map((tableId) => ({
+  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Revenue', 'Services', 'Level'].map((tableId) => ({
     id: tableId,
     label: TABLE_CONFIG[tableId]?.label || tableId,
   })),

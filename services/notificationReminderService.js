@@ -13,6 +13,7 @@ const createNotificationReminderService = ({
   markUserHaircutReminderSent,
   getUserBookingSummaryByTelegram,
   getBotSettings,
+  homePushService,
   appointmentRetentionDays,
   appointmentReminderIntervalMs,
   statusActive,
@@ -212,6 +213,23 @@ const createNotificationReminderService = ({
               `Client reminder send failed for appointment ${appointment.id}:`,
               error?.message || error,
             );
+          }
+        }
+        // Push notification for client reminder
+        if (homePushService?.sendNotificationToUser) {
+          try {
+            await homePushService.sendNotificationToUser(
+              normalizeText(appointment?.UserID),
+              {
+                title: "Напоминание о записи",
+                body: `Сегодня в ${timeLabel} запись к ${appointment?.Barber}`,
+                tag: `reminder-${appointment.id}`,
+                url: "/booking/#booking",
+              },
+              { channel: "booking" }
+            );
+          } catch (pushError) {
+            logger.error(`Client push reminder failed:`, pushError?.message);
           }
         }
       }

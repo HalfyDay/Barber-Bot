@@ -216,6 +216,7 @@ const {
   markUserHaircutReminderSent,
   getUserBookingSummaryByTelegram,
   getBotSettings,
+  homePushService,
   appointmentRetentionDays: APPOINTMENT_RETENTION_DAYS,
   appointmentReminderIntervalMs: APPOINTMENT_REMINDER_INTERVAL_MS,
   statusActive: STATUS_ACTIVE,

@@ -2247,7 +2247,7 @@
     ) {
       return cachedPushPublicConfig;
     }
-    const payload = await apiRequest("/home/notifications/push/public-key");
+    const payload = await apiRequest("/notifications/push/public-key");
     cachedPushPublicConfig = payload || { enabled: false, publicKey: "" };
     cachedPushPublicConfigAt = now;
     return cachedPushPublicConfig;
@@ -2270,7 +2270,7 @@
     const registration = await getHomePushRegistration();
     const subscription = await registration?.pushManager?.getSubscription?.();
     if (!subscription) return "none";
-    await apiRequest("/home/notifications/push/unsubscribe", {
+    await apiRequest("/notifications/push/unsubscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ endpoint: subscription.endpoint }),
@@ -2303,7 +2303,7 @@
         applicationServerKey: urlBase64ToUint8Array(publicConfig.publicKey),
       });
     }
-    await apiRequest("/home/notifications/push/subscribe", {
+    await apiRequest("/notifications/push/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subscription: subscription.toJSON() }),

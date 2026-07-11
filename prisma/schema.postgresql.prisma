@@ -274,3 +274,77 @@ model CreatorIncome {
   @@map("CreatorIncome")
 }
 
+model ShopCategories {
+  id         String   @id @default(uuid())
+  name       String
+  isActive   Boolean  @default(true)
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  products ShopProducts[]
+}
+
+model ShopProducts {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Float
+  imageUrl    String?
+  categoryId  String?
+  stock       Int      @default(0)
+  isActive    Boolean  @default(true)
+  orderIndex  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category   ShopCategories?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  orderItems ShopOrderItems[]
+  stockEdits ShopStockEdits[]
+}
+
+model ShopOrders {
+  id             String    @id @default(uuid())
+  customerName   String?
+  customerPhone  String?
+  userId         String?
+  status         String    @default("new")
+  totalAmount    Float
+  paymentMethod  String    @default("cash")
+  bsAmount       Float     @default(0)
+  comment        String?
+  qrCode         String?   @unique
+  issuedById     String?
+  issuedByName   String?
+  issuedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  items ShopOrderItems[]
+}
+
+model ShopOrderItems {
+  id        String   @id @default(uuid())
+  orderId   String
+  productId String
+  name      String
+  price     Float
+  quantity  Int      @default(1)
+
+  order   ShopOrders    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product ShopProducts @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model ShopStockEdits {
+  id          String   @id @default(uuid())
+  productId   String
+  productName String
+  delta       Int
+  reason      String?
+  editorId    String?
+  editorName  String?
+  createdAt   DateTime @default(now())
+
+  product ShopProducts @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+

@@ -266,4 +266,9 @@ const {
   prisma,
   randomUUID,
 });
+const shopService = createShopService({
+  prisma,
+  randomUUID,
+  normalizeText,
+});
 

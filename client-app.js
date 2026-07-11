@@ -96,6 +96,13 @@
     topbarAnnouncementActive: false,
     topbarAnnouncementText: "",
     liveClockTick: Date.now(),
+    shopCart: [],
+    shopProducts: [],
+    shopCategories: [],
+    shopSettings: {},
+    shopOrderResult: null,
+    shopCategoryFilter: '',
+    shopAppliedBs: 0,
     booking: {
       barberId: "",
       services: [],
@@ -374,6 +381,11 @@
   };
 
   const normalizeText = (value) => (value == null ? "" : String(value).trim());
+  const formatPrice = (value) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "0 \u0440\u0443\u0431.";
+    return num.toLocaleString("ru-RU", { maximumFractionDigits: 0 }) + " \u0440\u0443\u0431.";
+  };
   const buildCurrentPageRedirectUrl = () => {
     const url = new URL(window.location.href);
     url.search = "";
@@ -4066,10 +4078,108 @@
   };
 
   const renderShopPage = () => {
-    const shop = state.payload?.site?.shop || {};
-    const teaserTitle = normalizeText(shop.teaserTitle);
-    const teaserText = normalizeText(shop.teaserText);
-    return `<section class="page shop-page"><article class="soon-card clean-soon-card shop-coming-card"><div class="shop-coming-shell"><div class="hero-eyebrow">Магазин</div>${teaserTitle ? `<h1 class="hero-title">${teaserTitle}</h1>` : ""}${teaserText ? `<p class="section-text">${teaserText}</p>` : ""}<div class="shop-teaser-grid"><div class="teaser-block"></div><div class="teaser-block"></div><div class="teaser-block"></div></div></div></article></section>`;
+    const products = Array.isArray(state.shopProducts) ? state.shopProducts : [];
+    const categories = Array.isArray(state.shopCategories) ? state.shopCategories : [];
+    const shopSettings = state.shopSettings || {};
+    const cart = Array.isArray(state.shopCart) ? state.shopCart : [];
+    const cartCount = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
+    const cartTotal = cart.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0);
+    const categoriesEnabled = shopSettings.categoriesEnabled === true;
+    const activeCategory = state.shopCategoryFilter || '';
+
+    const activeCategoryIds = new Set(categories.filter((c) => c.isActive !== false).map((c) => c.id));
+    const productsWithHiddenCategories = products.filter((p) => !p.categoryId || activeCategoryIds.has(p.categoryId));
+    const filteredProducts = (categoriesEnabled && activeCategory
+      ? productsWithHiddenCategories.filter((p) => p.categoryId === activeCategory)
+      : productsWithHiddenCategories
+    ).sort((a, b) => {
+      const aOut = a.stock <= 0 ? 1 : 0;
+      const bOut = b.stock <= 0 ? 1 : 0;
+      return aOut - bOut;
+    });
+
+    const productCards = filteredProducts.map((product) => {
+      const inCart = cart.find((c) => c.productId === product.id);
+      const outOfStock = product.stock <= 0;
+      return `
+        <div class="shop-product-card">
+          ${product.imageUrl ? `<div class="shop-product-img"><img src="${normalizeText(product.imageUrl)}" alt="${normalizeText(product.name)}" loading="lazy" /></div>` : '<div class="shop-product-img shop-product-img-placeholder"></div>'}
+          <div class="shop-product-info">
+            <p class="shop-product-name">${normalizeText(product.name)}</p>
+            ${product.description ? `<p class="shop-product-desc">${normalizeText(product.description)}</p>` : ''}
+            <p class="shop-product-stock ${outOfStock ? 'shop-product-stock-out' : ''}">${outOfStock ? 'Нет в наличии' : `В наличии: ${product.stock} шт.`}</p>
+            <div class="shop-product-bottom">
+              <span class="shop-product-price">${formatPrice(product.price)}</span>
+              ${outOfStock ? '' : inCart
+                ? `<div class="shop-qty-control">
+                    <button class="shop-qty-btn" data-action="shop-dec" data-product-id="${product.id}">−</button>
+                    <span class="shop-qty-value">${inCart.quantity || 1}</span>
+                    <button class="shop-qty-btn" data-action="shop-inc" data-product-id="${product.id}">+</button>
+                  </div>`
+                : `<button class="shop-add-btn" data-action="shop-add" data-product-id="${product.id}">В корзину</button>`
+              }
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const categoryTabs = categoriesEnabled && categories.length > 0
+      ? `<div class="shop-category-tabs">
+          <button class="shop-category-tab ${!activeCategory ? 'shop-category-tab-active' : ''}" data-action="shop-cat" data-cat-id="">Все</button>
+          ${categories.filter((c) => c.isActive !== false).map((cat) =>
+            `<button class="shop-category-tab ${activeCategory === cat.id ? 'shop-category-tab-active' : ''}" data-action="shop-cat" data-cat-id="${cat.id}">${normalizeText(cat.name)}</button>`
+          ).join('')}
+        </div>`
+      : '';
+
+    const cartItemsHtml = cart.length > 0
+      ? cart.map((item) => `
+          <div class="shop-cart-item">
+            <div class="shop-cart-item-info">
+              <span class="shop-cart-item-name">${normalizeText(item.name)}</span>
+              <span class="shop-cart-item-price">${formatPrice(item.price * (item.quantity || 1))}</span>
+            </div>
+            <div class="shop-cart-item-controls">
+              <button class="shop-qty-btn" data-action="shop-dec" data-product-id="${item.productId}">−</button>
+              <span class="shop-qty-value">${item.quantity || 1}</span>
+              <button class="shop-qty-btn" data-action="shop-inc" data-product-id="${item.productId}">+</button>
+              <button class="shop-cart-remove" data-action="shop-remove" data-product-id="${item.productId}">✕</button>
+            </div>
+          </div>
+        `).join('')
+      : '<p class="shop-cart-empty">Корзина пуста</p>';
+
+    if (state.shopOrderResult) {
+      const order = state.shopOrderResult;
+      return `
+        <section class="page shop-page">
+          <article class="shop-order-result">
+            <div class="shop-order-success-icon">✓</div>
+            <h2 class="shop-order-success-title">Заказ оформлен!</h2>
+            <p class="shop-order-success-sub">Покажите этот QR-код сотруднику при получении</p>
+            <div class="shop-order-qr" id="shop-order-qr-stage" data-qr-payload="${normalizeText(order.qrCode || order.id)}"></div>
+            <p class="shop-order-id">Заказ #${(order.id || '').slice(0, 8)}</p>
+            <p class="shop-order-total">Итого: ${formatPrice(order.totalAmount)}</p>
+            <div class="shop-order-items">
+              ${(order.items || []).map((item) => `<div class="shop-order-item-row"><span>${normalizeText(item.name)} × ${item.quantity}</span><span>${formatPrice(item.price * item.quantity)}</span></div>`).join('')}
+            </div>
+            <button class="shop-back-btn" data-action="shop-clear-order">Вернуться в магазин</button>
+          </article>
+        </section>
+      `;
+    }
+
+    return `
+      <section class="page shop-page">
+        ${categoryTabs}
+        <div class="shop-products-grid">${productCards || '<p class="shop-empty">Товаров пока нет</p>'}</div>
+        ${cartCount > 0 ? `<button class="shop-cart-toggle" data-action="shop-toggle-cart">
+          <span class="shop-cart-icon">🛒</span>
+          <span class="shop-cart-badge">${cartCount}</span>
+        </button>` : ''}
+      </section>
+    `;
   };
 
   const resolveBarberAccentColor = (value, fallback = "#ff8a2a") => {
@@ -4581,6 +4691,9 @@
     if (nextPage === "booking") {
       void syncBookingSelectionFromLocation();
     }
+    if (nextPage === "shop") {
+      void loadShopData();
+    }
     window.scrollTo({ top: 0, behavior: "auto" });
   };
 
@@ -4697,6 +4810,22 @@
     state.booking.comment = "";
     state.booking.loading = false;
     render();
+  };
+
+  const loadShopData = async () => {
+    try {
+      const response = await fetch(`${window.location.origin}/api/shop/products`);
+      const result = await response.json();
+      if (result?.success) {
+        state.shopProducts = result.products || [];
+        state.shopCategories = result.categories || [];
+      }
+      const settingsPayload = state.payload?.site?.shop || {};
+      state.shopSettings = settingsPayload;
+      render();
+    } catch (error) {
+      console.error("Failed to load shop data:", error);
+    }
   };
 
   const ensureBarberProfileServices = async (explicitBarberId = "", options = {}) => {
@@ -5414,6 +5543,74 @@
     );
   };
 
+  const getShopPricingSummary = () => {
+    const currentCart = Array.isArray(state.shopCart) ? state.shopCart : [];
+    const totalRub = Math.max(0, Math.round(currentCart.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0)));
+    const referral = state.payload?.referral || {};
+    const bsToRubRate = Math.max(1, Number(referral?.program?.bsToRubRate) || 1);
+    const balanceBs = Math.max(0, Math.trunc(Number(referral?.bsBalance) || 0));
+    const maxCoverBs = Math.max(0, Math.min(balanceBs, Math.floor(totalRub / bsToRubRate)));
+    const appliedBs = Math.max(0, Math.min(maxCoverBs, Math.trunc(Number(state.shopAppliedBs) || 0)));
+    const coveredRub = appliedBs * bsToRubRate;
+    return {
+      totalRub,
+      bsToRubRate,
+      balanceBs,
+      maxCoverBs,
+      appliedBs,
+      coveredRub,
+      payableRub: Math.max(0, totalRub - coveredRub),
+    };
+  };
+
+  const openShopCartSheet = () => {
+    const currentCart = Array.isArray(state.shopCart) ? state.shopCart : [];
+    const pricing = getShopPricingSummary();
+    const cartSheetItems = currentCart.map((item) => `
+      <div class="shop-cart-item">
+        <div class="shop-cart-item-info">
+          <span class="shop-cart-item-name">${normalizeText(item.name)}</span>
+          <span class="shop-cart-item-price">${formatPrice(item.price * (item.quantity || 1))}</span>
+        </div>
+        <div class="shop-cart-item-controls">
+          <button class="shop-qty-btn" data-action="shop-dec" data-product-id="${item.productId}">−</button>
+          <span class="shop-qty-value">${item.quantity || 1}</span>
+          <button class="shop-qty-btn" data-action="shop-inc" data-product-id="${item.productId}">+</button>
+          <button class="shop-cart-remove" data-action="shop-remove" data-product-id="${item.productId}">✕</button>
+        </div>
+      </div>
+    `).join('');
+    const bsSection = pricing.balanceBs > 0 ? `
+      <div class="shop-bs-cover-card">
+        <div class="shop-bs-cover-head">
+          <strong>${pricing.appliedBs > 0 ? `Списать ${pricing.appliedBs} BS` : 'Использовать BS'}</strong>
+          <span class="status-badge green">${pricing.maxCoverBs} BS</span>
+        </div>
+        <label class="field shop-bs-field">
+          <input id="shop-bs-input" type="number" min="0" max="${pricing.maxCoverBs}" step="1" value="${pricing.appliedBs || ''}" placeholder="0" />
+        </label>
+        <p class="subtitle shop-bs-note">К оплате: <strong>${formatPrice(pricing.payableRub)}</strong></p>
+      </div>
+    ` : '';
+    const cartSheetHtml = `
+      <div class="shop-cart-items">${currentCart.length > 0 ? cartSheetItems : '<p class="shop-cart-empty">Корзина пуста</p>'}</div>
+      ${currentCart.length > 0 ? `
+        <div class="shop-cart-footer">
+          <div class="shop-cart-total">
+            <span>Итого:</span>
+            <span>${formatPrice(pricing.totalRub)}</span>
+          </div>
+          ${bsSection}
+          <input class="shop-cart-comment" type="text" placeholder="Комментарий к заказу" data-action="shop-comment" />
+        </div>
+      ` : ''}
+    `;
+    const cartFooterHtml = currentCart.length > 0
+      ? `<button class="primary-btn shop-checkout-btn" data-action="shop-checkout">Оформить заказ</button>`
+      : '';
+    openSheet("Корзина", cartSheetHtml, cartFooterHtml, "shop-cart-sheet");
+  };
+
   const installDelegatedHandlers = () => {
     if (delegatedHandlersBound) return;
     delegatedHandlersBound = true;
@@ -5833,6 +6030,117 @@
             }
           })();
           return;
+        case "shop-add": {
+          event.preventDefault();
+          const productId = normalizeText(actionNode.dataset.productId);
+          const product = (state.shopProducts || []).find((p) => p.id === productId);
+          if (!product || product.stock <= 0) return;
+          const existing = state.shopCart.find((c) => c.productId === productId);
+          if (existing) {
+            existing.quantity = (existing.quantity || 1) + 1;
+          } else {
+            state.shopCart.push({ productId: product.id, name: product.name, price: product.price, quantity: 1 });
+          }
+          render();
+          return;
+        }
+        case "shop-inc": {
+          event.preventDefault();
+          const pid = normalizeText(actionNode.dataset.productId);
+          const ci = state.shopCart.find((c) => c.productId === pid);
+          if (ci) {
+            const prod = (state.shopProducts || []).find((p) => p.id === pid);
+            const maxQty = prod ? prod.stock : 99;
+            ci.quantity = Math.min(maxQty, (ci.quantity || 1) + 1);
+          }
+          openShopCartSheet();
+          return;
+        }
+        case "shop-dec": {
+          event.preventDefault();
+          const pid2 = normalizeText(actionNode.dataset.productId);
+          const ci2 = state.shopCart.find((c) => c.productId === pid2);
+          if (ci2) {
+            ci2.quantity = (ci2.quantity || 1) - 1;
+            if (ci2.quantity <= 0) {
+              state.shopCart = state.shopCart.filter((c) => c.productId !== pid2);
+            }
+          }
+          if (state.shopCart.length === 0) { closeSheet(); } else { openShopCartSheet(); }
+          return;
+        }
+        case "shop-remove": {
+          event.preventDefault();
+          const pid3 = normalizeText(actionNode.dataset.productId);
+          state.shopCart = state.shopCart.filter((c) => c.productId !== pid3);
+          if (state.shopCart.length === 0) { closeSheet(); } else { openShopCartSheet(); }
+          return;
+        }
+        case "shop-toggle-cart": {
+          event.preventDefault();
+          openShopCartSheet();
+          return;
+        }
+        case "shop-cat": {
+          event.preventDefault();
+          state.shopCategoryFilter = normalizeText(actionNode.dataset.catId);
+          render();
+          return;
+        }
+        case "shop-payment": {
+          const paymentMethod = normalizeText(actionNode.value);
+          state.shopPaymentMethod = paymentMethod;
+          return;
+        }
+        case "shop-comment": {
+          return;
+        }
+        case "shop-bs-change": {
+          return;
+        }
+        case "shop-checkout": {
+          event.preventDefault();
+          void (async () => {
+            try {
+              const token = normalizeText(state.session?.token);
+              if (!token) { openSheet("Вход", '<div class="list-item"><p class="list-title">Войдите, чтобы оформить заказ.</p></div>'); return; }
+              if (!state.shopCart.length) return;
+              const sheetRoot = document.getElementById("sheet-backdrop");
+              const commentEl = sheetRoot?.querySelector("[data-action='shop-comment']");
+              const paymentRadio = sheetRoot?.querySelector("input[name='shop-payment']:checked");
+              const body = {
+                items: state.shopCart.map((c) => ({ productId: c.productId, quantity: c.quantity || 1 })),
+                paymentMethod: normalizeText(paymentRadio?.value) || "cash",
+                bsAmount: Math.max(0, Math.trunc(Number(state.shopAppliedBs) || 0)),
+                comment: normalizeText(commentEl?.value),
+                customerName: normalizeText(state.payload?.user?.displayName),
+                customerPhone: normalizeText(state.payload?.user?.phone),
+                userId: normalizeText(state.payload?.user?.id),
+              };
+              const response = await fetch(`${window.location.origin}/api/shop/orders`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify(body),
+              });
+              const result = await response.json();
+              if (!result?.success) throw new Error(result?.message || "Не удалось создать заказ.");
+              state.shopOrderResult = result.order;
+              state.shopCart = [];
+              state.shopAppliedBs = 0;
+              closeSheet();
+              render();
+            } catch (error) {
+              openSheet("Ошибка", `<div class="list-item"><p class="list-title">${normalizeText(error.message || "Не удалось оформить заказ.")}</p></div>`);
+            }
+          })();
+          return;
+        }
+        case "shop-clear-order": {
+          event.preventDefault();
+          state.shopOrderResult = null;
+          render();
+          return;
+        }
         default:
           break;
       }
@@ -5914,6 +6222,15 @@
         render();
       });
     }
+    const shopBsInput = queryById(sheetRoot, "shop-bs-input");
+    if (shopBsInput) {
+      shopBsInput.addEventListener("input", () => {
+        state.shopAppliedBs = Math.max(0, Math.trunc(Number(shopBsInput.value) || 0));
+        const pricing = getShopPricingSummary();
+        const noteEl = sheetRoot.querySelector(".shop-bs-note");
+        if (noteEl) noteEl.innerHTML = `К оплате: <strong>${formatPrice(pricing.payableRub)}</strong>`;
+      });
+    }
     const profileAvatarDeviceInput = queryById(appRoot, "profile-avatar-device-input");
     if (profileAvatarDeviceInput) {
       profileAvatarDeviceInput.addEventListener("change", async () => {
@@ -5961,6 +6278,23 @@
         }
       })();
     });
+    const shopOrderQrStage = queryById(appRoot, "shop-order-qr-stage");
+    if (shopOrderQrStage) {
+      const qrPayload = normalizeText(shopOrderQrStage.dataset.qrPayload);
+      if (qrPayload) {
+        void (async () => {
+          try {
+            const response = await fetch(`/api/shop/orders/${encodeURIComponent(qrPayload)}/qr?size=320`);
+            if (response.ok) {
+              const svg = await response.text();
+              if (svg && svg.trim().startsWith("<")) {
+                shopOrderQrStage.innerHTML = svg;
+              }
+            }
+          } catch {}
+        })();
+      }
+    }
     const setupProfileFormDirtyState = (form, hasChanges) => {
       if (!form || typeof hasChanges !== "function") return;
       const submitButton = form.querySelector("button[type='submit']");
@@ -6439,6 +6773,9 @@
       if (state.currentPage === "booking") {
         void syncBookingSelectionFromLocation();
       }
+      if (state.currentPage === "shop") {
+        void loadShopData();
+      }
       suppressSheetHistoryBack = false;
     });
     if (!isAuthenticated()) {
@@ -6476,6 +6813,9 @@
       }
       if (state.currentPage === "booking") {
         await syncBookingSelectionFromLocation();
+      }
+      if (state.currentPage === "shop") {
+        void loadShopData();
       }
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") {

@@ -252,7 +252,7 @@ const TablesWorkspace = ({
     [scheduleFillDays]
   );
   const fetchTables = useCallback(async () => {
-    if (activeTable === 'Revenue') {
+    if (activeTable === 'Revenue' || activeTable === 'Shop') {
       setIsFetching(false);
       setTableError('');
       return;
@@ -711,6 +711,16 @@ const TablesWorkspace = ({
           )}
           {activeTable === 'Revenue' && (
             <RevenueView apiRequest={apiRequest} barbers={barbers} role={role} staffBarberId={staffBarberId} revenuePeriod={pendingRevenuePeriod} />
+          )}
+          {activeTable === 'Shop' && (
+            <ShopView
+              apiRequest={apiRequest}
+              role={role}
+              currentBarber={currentBarber}
+              onRequestConfirm={onRequestConfirm}
+              barbers={barbers}
+              uploadAvatar={uploadAvatar}
+            />
           )}
         </div>
       ) : (

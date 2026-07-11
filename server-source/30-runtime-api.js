@@ -432,6 +432,24 @@ registerCreatorIncomeRoutes({
   prisma,
   authService: { authenticateToken },
 });
+const { registerShopRoutes } = require("./routes/shopRoutes");
+registerShopRoutes({
+  app,
+  authenticateToken,
+  prisma,
+  randomUUID,
+  normalizeText,
+  isOwnerRequest,
+  isStaffIdentity,
+  resolveUserIdentity,
+  shopService,
+  fs,
+  path,
+  IMAGE_DIR,
+  decodeBase64Image,
+  buildSafeImageFilename,
+  ensureUniqueImageName,
+});
 registerOwnerAssetsRoutes({
   app,
   authenticateToken,

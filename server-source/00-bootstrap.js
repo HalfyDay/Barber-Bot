@@ -44,6 +44,7 @@ const { createBarberAliasService } = require("./services/barberAliasService");
 const { createBotMenuService } = require("./services/botMenuService");
 const { createSitePresenceService } = require("./services/sitePresenceService");
 const { createHomeRealtimeService } = require("./services/homeRealtimeService");
+const { createShopService } = require("./services/shopService");
 const { createPrismaClient, getPrismaRuntimeConfig, validatePrismaRuntimeConfig } = require("./services/prismaRuntime");
 const { tenantMiddleware } = require("./services/tenantMiddleware");
 const { registerAdminCrudRoutes } = require("./routes/adminCrudRoutes");

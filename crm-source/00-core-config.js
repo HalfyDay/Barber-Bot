@@ -85,15 +85,15 @@ VIEW_TABS_BY_ROLE[ROLE_CREATOR] = [
   { id: 'income', label: 'Доходы' },
   { id: 'system', label: 'Система' },
 ];
-const TABLE_ORDER = ['Appointments', 'Schedules', 'Users', 'Barbers', 'Services', 'Positions', 'Revenue'];
+const TABLE_ORDER = ['Appointments', 'Schedules', 'Users', 'Barbers', 'Services', 'Positions', 'Revenue', 'Shop'];
 const DATA_TABLES_BY_ROLE = {
-  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Users', 'Positions'],
-  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Services'],
+  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Users', 'Positions', 'Shop'],
+  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Services', 'Shop'],
   [ROLE_CREATOR]: ['Appointments', 'Schedules', 'Users', 'Positions'],
 };
 const VISIBLE_TABLE_ORDER_BY_ROLE = {
-  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Revenue', 'Users', 'Barbers', 'Services', 'Positions'],
-  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Revenue', 'Services', 'Level'],
+  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Revenue', 'Users', 'Barbers', 'Services', 'Positions', 'Shop'],
+  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Revenue', 'Services', 'Level', 'Shop'],
 };
 const TABLE_CONFIG = {
   Appointments: { label: 'Записи', mode: 'data', canCreate: true, supportsBarberFilter: true, supportsStatusFilter: true, defaultSort: { key: 'Date', direction: 'desc' } },
@@ -104,13 +104,14 @@ const TABLE_CONFIG = {
   Positions: { label: 'Должности', mode: 'custom' },
   Level: { label: 'Уровень', mode: 'custom' },
   Revenue: { label: 'Доходы', mode: 'custom' },
+  Shop: { label: 'Магазин', mode: 'custom' },
 };
 const DATA_SHORTCUTS_BY_ROLE = {
-  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Revenue', 'Users', 'Barbers', 'Services', 'Positions'].map((tableId) => ({
+  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Revenue', 'Users', 'Barbers', 'Services', 'Positions', 'Shop'].map((tableId) => ({
     id: tableId,
     label: TABLE_CONFIG[tableId]?.label || tableId,
   })),
-  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Revenue', 'Services', 'Level'].map((tableId) => ({
+  [ROLE_STAFF]: ['Appointments', 'Schedules', 'Revenue', 'Services', 'Level', 'Shop'].map((tableId) => ({
     id: tableId,
     label: TABLE_CONFIG[tableId]?.label || tableId,
   })),

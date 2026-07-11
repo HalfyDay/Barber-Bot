@@ -110,29 +110,20 @@ const scheduleSelfRestart = (delayMs = 500) => {
     `[update] Scheduling self-restart in ${delayMs}ms (strategy: ${restartStrategy}, pm2: ${!!isPm2})`,
   );
   
-  // PM2 rolling restart: use PM2's built-in reload for zero-downtime
+  // PM2 restart: clean up and exit, let PM2 autorestart handle the new process
   if (isPm2 && process.env.pm_id !== undefined) {
     setTimeout(async () => {
       try {
         stopAppointmentReminderLoop();
         stopRealtimeLoop();
-        shutdownRealtimeClients();
         await stopBotProcess();
-        await stopHttpServer();
-        await prisma.$disconnect();
-        
-        // Signal PM2 that we're ready for reload
-        if (process.send) {
-          process.send('ready');
-          console.log('[update] PM2 ready signal sent, waiting for reload...');
-        } else {
-          // Fallback: exit and let PM2 restart us
-          process.exit(0);
-        }
+        // DON'T shutdown realtime clients or HTTP server — let PM2 handle the swap
+        // DON'T disconnect Prisma — let the process exit naturally
       } catch (error) {
         console.error('[update] PM2 restart preparation failed:', error);
-        process.exit(1);
       }
+      console.log('[update] Exiting for PM2 restart...');
+      process.exit(0);
     }, delayMs);
     return;
   }
@@ -708,6 +699,20 @@ const {
 installBackupCron();
 registerShutdownHandlers();
 bootstrap();
+
+// Graceful shutdown on SIGTERM (PM2 sends this during restart)
+process.on('SIGTERM', () => {
+  console.log('[server] SIGTERM received, shutting down gracefully...');
+  if (httpServer) {
+    httpServer.close(() => {
+      console.log('[server] HTTP server closed');
+    });
+  }
+  setTimeout(() => {
+    process.exit(0);
+  }, 5000);
+});
+
 // Auto-cancel expired shop orders every 30 minutes
 if (shopService?.cancelExpiredShopOrders) {
   const runAutoCancel = async () => {

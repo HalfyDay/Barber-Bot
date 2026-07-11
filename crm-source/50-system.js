@@ -1475,6 +1475,119 @@ const CreatorBusinessesView = ({ apiRequest, onImpersonate, role }) => {
   );
 };
 
+const NotificationsSettingsView = () => {
+  const [prefs, setPrefs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('crm.notifications') || '{}'); } catch { return {}; }
+  });
+  const [notifPermission, setNotifPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+  );
+  const soundEnabled = prefs.soundEnabled !== false;
+  const newOrderToast = prefs.newOrderToast !== false;
+  const appointmentToast = prefs.appointmentToast !== false;
+  const statusChangeToast = prefs.statusChangeToast !== false;
+  const errorToast = prefs.errorToast !== false;
+  const browserNotify = prefs.browserNotify !== false;
+
+  const updatePref = (key, value) => {
+    const next = { ...prefs, [key]: value };
+    setPrefs(next);
+    localStorage.setItem('crm.notifications', JSON.stringify(next));
+  };
+
+  const toggleItem = (key, current, label, description) => (
+    <div className="flex items-center justify-between gap-3 rounded-xl bg-[color:var(--crm-surface-4)] px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-white">{label}</p>
+        <p className="text-xs text-[var(--crm-muted)]">{description}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={current}
+        onClick={() => updatePref(key, !current)}
+        className={classNames(
+          'relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors',
+          current ? 'bg-[color:var(--crm-primary)]' : 'bg-[color:var(--crm-surface-5)]'
+        )}
+      >
+        <span
+          className={classNames(
+            'inline-block h-4 w-4 rounded-full bg-white shadow-lg transition-transform',
+            current ? 'translate-x-[22px]' : 'translate-x-1'
+          )}
+        />
+      </button>
+    </div>
+  );
+
+  const handleTestSound = () => {
+    if (typeof playNotificationSound === 'function') playNotificationSound();
+  };
+
+  const handleRequestPermission = async () => {
+    if (typeof requestNotificationPermission === 'function') {
+      const result = await requestNotificationPermission();
+      setNotifPermission(result);
+    }
+  };
+
+  const handleTestNative = () => {
+    if (typeof showNativeNotification === 'function') {
+      showNativeNotification('Тест', 'Уведомление работает!', { tag: 'crm-test' });
+    }
+  };
+
+  const permLabel = notifPermission === 'granted' ? 'Разрешено' : notifPermission === 'denied' ? 'Заблокировано в настройках браузера' : 'Не запрошено';
+
+  return (
+    <div className="space-y-4">
+      <SectionCard title="Разрешения браузера">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-[color:var(--crm-surface-4)] px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-white">Уведомления ОС</p>
+              <p className="text-xs text-[var(--crm-muted)]">{permLabel}</p>
+            </div>
+            {notifPermission !== 'granted' && notifPermission !== 'denied' && notifPermission !== 'unsupported' && (
+              <button type="button" onClick={handleRequestPermission} className="crm-action-btn px-4 py-2 text-sm">
+                Разрешить
+              </button>
+            )}
+            {notifPermission === 'granted' && (
+              <button type="button" onClick={handleTestNative} className="crm-tonal-btn px-4 py-2 text-sm">
+                Тест
+              </button>
+            )}
+          </div>
+        </div>
+      </SectionCard>
+      <SectionCard title="Уведомления">
+        <div className="space-y-3">
+          {toggleItem('browserNotify', browserNotify, 'Уведомления браузера', 'Показывать уведомления вне браузера (ОС)')}
+          {toggleItem('soundEnabled', soundEnabled, 'Звук уведомлений', 'Воспроизводить звук при уведомлениях')}
+          {toggleItem('newOrderToast', newOrderToast, 'Новые заказы', 'Показывать уведомление о новом заказе в магазине')}
+          {toggleItem('appointmentToast', appointmentToast, 'Новые записи', 'Показывать уведомление о новой записи на приём')}
+          {toggleItem('statusChangeToast', statusChangeToast, 'Изменение статуса', 'Показывать уведомление при изменении статуса')}
+          {toggleItem('errorToast', errorToast, 'Ошибки', 'Показывать уведомления об ошибках')}
+        </div>
+      </SectionCard>
+      <SectionCard title="Тест">
+        <div className="flex gap-2">
+          <button type="button" onClick={handleTestSound} className="crm-tonal-btn px-4 py-2 text-sm">
+            Тест звука
+          </button>
+          {notifPermission === 'granted' && (
+            <button type="button" onClick={handleTestNative} className="crm-tonal-btn px-4 py-2 text-sm">
+              Тест уведомления
+            </button>
+          )}
+        </div>
+      </SectionCard>
+    </div>
+  );
+};
+
 const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
   const role = props.role || ROLE_OWNER;
   const sections = getSystemSubSections(role, props.session?.isImpersonated);
@@ -1488,6 +1601,10 @@ const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
 
   if (activeSection === 'businesses') {
     return <CreatorBusinessesView {...props} />;
+  }
+
+  if (activeSection === 'notifications') {
+    return <NotificationsSettingsView />;
   }
 
   return (

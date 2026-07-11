@@ -1970,6 +1970,9 @@
     if (name === "wallet") {
       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H5.5A2.5 2.5 0 0 1 3 16.5v-9Z"></path><path d="M16 12h5"></path><circle cx="16.5" cy="12" r="1"></circle></svg>';
     }
+    if (name === "cart") {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="21" r="1"></circle><circle cx="19" cy="21" r="1"></circle><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"></path></svg>';
+    }
     if (name === "qr") {
       return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="5" height="5" rx="1"></rect><rect x="16" y="3" width="5" height="5" rx="1"></rect><rect x="3" y="16" width="5" height="5" rx="1"></rect><path d="M21 16h-3a2 2 0 0 0-2 2v3"></path><path d="M21 21v.01"></path><path d="M12 7v3a2 2 0 0 1-2 2H7"></path><path d="M3 12h.01"></path><path d="M12 3h.01"></path><path d="M12 16v.01"></path><path d="M16 12h1"></path><path d="M21 12v.01"></path><path d="M12 21v-1"></path></svg>';
     }
@@ -2137,6 +2140,9 @@
           void syncBookingSelectionFromLocation();
         }
         refreshLiveAppDom({ animateReferralBalance: nextBalance > previousBalance });
+        if (state.currentPage === "shop" && state.shopTab === "orders") {
+          void loadShopOrders();
+        }
         return payload;
       } catch {
         return null;
@@ -3196,6 +3202,7 @@
               <button class="nav-pill ${state.transferHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="all">Все</button>
               <button class="nav-pill ${state.transferHistoryFilter === "transfers" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="transfers">Переводы</button>
               <button class="nav-pill ${state.transferHistoryFilter === "rewards" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="rewards">Награды</button>
+              <button class="nav-pill ${state.transferHistoryFilter === "shop" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="shop">Магазин</button>
             </div>
             <div class="referral-activity-list">
               ${activityPreview.length
@@ -3636,6 +3643,7 @@
     if (type === "transfer_out") return "transfer";
     if (type === "transfer_in") return "receive";
     if (type === "reward") return "reward";
+    if (type === "shop_purchase") return "cart";
     return "wallet";
   };
 
@@ -3644,6 +3652,7 @@
     if (type === "transfer_out") return "is-outgoing";
     if (type === "transfer_in") return "is-incoming";
     if (type === "reward") return "is-reward";
+    if (type === "shop_purchase") return "is-outgoing";
     return "";
   };
 
@@ -3652,6 +3661,7 @@
     if (type === "transfer_out") return "Отправка";
     if (type === "transfer_in") return "Поступление";
     if (type === "reward") return "Награда";
+    if (type === "shop_purchase") return "Покупка";
     return "Операция";
   };
   const getReferralOperationMetaLabel = (operation = {}) => {
@@ -3660,6 +3670,9 @@
     const timestamp = formatShortDateTime(operation.createdAt);
     if (type === "transfer_out" || type === "transfer_in") {
       return [counterpartName, timestamp].filter(Boolean).join(" · ");
+    }
+    if (type === "shop_purchase") {
+      return timestamp;
     }
     return timestamp;
   };
@@ -3717,6 +3730,7 @@
     const type = normalizeText(operation?.type);
     if (filter === "transfers") return type === "transfer_out" || type === "transfer_in";
     if (filter === "rewards") return type === "reward";
+    if (filter === "shop") return type === "shop_purchase";
     return true;
   };
   const getReferralOperationGroups = (operations = []) => {
@@ -4210,6 +4224,9 @@
             const date = new Date(order.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
             const time = new Date(order.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
             const isIssued = order.status === 'issued';
+            const bsToRubRate = Math.max(1, Number(state.payload?.referral?.program?.bsToRubRate) || 1);
+            const bsDiscount = (Number(order.bsAmount) || 0) * bsToRubRate;
+            const payableAmount = Math.max(0, (Number(order.totalAmount) || 0) - bsDiscount);
             return `
               <div class="shop-order-card" data-action="shop-order-detail" data-order-id="${order.id}">
                 <div class="shop-order-card-header">
@@ -4217,7 +4234,11 @@
                     <p class="shop-order-card-id">Заказ от ${date}</p>
                     <p class="shop-order-card-time">${time}</p>
                   </div>
-                  <span class="shop-order-card-total">${formatPrice(order.totalAmount)}</span>
+                  <div class="shop-order-card-total-wrap">
+                    ${bsDiscount > 0 ? `<span class="shop-order-card-total-original">${formatPrice(order.totalAmount)}</span>` : ''}
+                    <span class="shop-order-card-total">${formatPrice(payableAmount)}</span>
+                    ${bsDiscount > 0 ? `<span class="shop-order-card-bs-badge">−${Number(order.bsAmount)} BS</span>` : ''}
+                  </div>
                 </div>
                 ${isCancelled ? `
                   <div class="shop-order-status-cancelled">Заказ отменён</div>
@@ -5139,6 +5160,7 @@
               <button class="nav-pill ${state.transferHistoryFilter === "all" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="all">Все</button>
               <button class="nav-pill ${state.transferHistoryFilter === "transfers" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="transfers">Переводы</button>
               <button class="nav-pill ${state.transferHistoryFilter === "rewards" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="rewards">Награды</button>
+              <button class="nav-pill ${state.transferHistoryFilter === "shop" ? "active" : ""}" type="button" data-action="set-transfer-filter" data-filter="shop">Магазин</button>
             </div>
             <div class="referral-activity-list referral-history-list">${filteredOperations.length
               ? filteredOperations.map((operation) => renderReferralOperationCard(operation)).join("")
@@ -6194,14 +6216,14 @@
               state.shopCart = state.shopCart.filter((c) => c.productId !== pid2);
             }
           }
-          if (state.shopCart.length === 0) { closeSheet(); } else { openShopCartSheet(); }
+          if (state.shopCart.length === 0) { closeSheet(); render(); } else { openShopCartSheet(); }
           return;
         }
         case "shop-remove": {
           event.preventDefault();
           const pid3 = normalizeText(actionNode.dataset.productId);
           state.shopCart = state.shopCart.filter((c) => c.productId !== pid3);
-          if (state.shopCart.length === 0) { closeSheet(); } else { openShopCartSheet(); }
+          if (state.shopCart.length === 0) { closeSheet(); render(); } else { openShopCartSheet(); }
           return;
         }
         case "shop-toggle-cart": {
@@ -6252,11 +6274,18 @@
               });
               const result = await response.json();
               if (!result?.success) throw new Error(result?.message || "Не удалось создать заказ.");
+              const usedBs = body.bsAmount || 0;
+              if (usedBs > 0 && state.payload?.referral) {
+                state.payload.referral.bsBalance = Math.max(0, (Number(state.payload.referral.bsBalance) || 0) - usedBs);
+              }
               state.shopOrderResult = result.order;
               state.shopCart = [];
               state.shopAppliedBs = 0;
               closeSheet();
               render();
+              if (usedBs > 0) {
+                void apiRequest("/app").then(commitAppPayload).catch(() => {});
+              }
             } catch (error) {
               openSheet("Ошибка", `<div class="list-item"><p class="list-title">${normalizeText(error.message || "Не удалось оформить заказ.")}</p></div>`);
             }

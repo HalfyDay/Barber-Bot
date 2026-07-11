@@ -6,6 +6,75 @@ const LoadingState = ({ label = 'Загружаю данные...' } = {}) => (
 const ErrorBanner = ({ message }) => (
   <div className="crm-error-banner px-4 py-3 text-sm font-medium">{message}</div>
 );
+
+// ── Toast notification system ──
+const playNotificationSound = () => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  } catch {}
+};
+
+const getNotificationPrefs = () => {
+  try {
+    return JSON.parse(localStorage.getItem('crm.notifications') || '{}');
+  } catch { return {}; }
+};
+
+// ── Native browser notifications (OS-level) ──
+const requestNotificationPermission = async () => {
+  if (typeof Notification === 'undefined') return 'unsupported';
+  if (Notification.permission === 'granted') return 'granted';
+  if (Notification.permission === 'denied') return 'denied';
+  try { return await Notification.requestPermission(); } catch { return 'denied'; }
+};
+
+const showNativeNotification = (title, body, options = {}) => {
+  const prefs = getNotificationPrefs();
+  if (prefs.browserNotify === false) return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  try {
+    const n = new Notification(title, { body, tag: options.tag || 'crm-notification', ...options });
+    setTimeout(() => { try { n.close(); } catch {} }, 6000);
+  } catch {}
+};
+
+const urlBase64ToUint8Array = (base64String) => {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+};
+
+const ToastContext = React.createContext(null);
+const useToast = () => React.useContext(ToastContext);
+
+const ToastContainer = ({ toasts, onDismiss }) => {
+  if (!toasts.length) return null;
+  return (
+    <div className="crm-toast-container">
+      {toasts.map((t) => (
+        <div key={t.id} className={`crm-toast crm-toast-${t.type}`} onClick={() => onDismiss(t.id)}>
+          <span className="crm-toast-icon">{t.type === 'success' ? '✓' : t.type === 'error' ? '✕' : 'ℹ'}</span>
+          <span className="crm-toast-message">{t.message}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
 const VisitHistoryList = ({
   visits = [],
   loading = false,

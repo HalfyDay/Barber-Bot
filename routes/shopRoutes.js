@@ -14,6 +14,9 @@ const registerShopRoutes = ({
   decodeBase64Image,
   buildSafeImageFilename,
   ensureUniqueImageName,
+  adjustUserBsBalance,
+  requestRealtimePush,
+  homePushService,
   logger = console,
 }) => {
   const {
@@ -88,7 +91,37 @@ const registerShopRoutes = ({
         bsAmount,
         comment,
       });
+      const usedBs = Number(bsAmount) || 0;
+      if (usedBs > 0 && userId && typeof adjustUserBsBalance === "function") {
+        try {
+          await adjustUserBsBalance({
+            userId,
+            mode: "adjust",
+            amountBs: -usedBs,
+            comment: `Оплата заказа №${normalizeText(order.id).slice(0, 8)} в магазине`,
+            actorName: normalizeText(customerName),
+          });
+        } catch (bsError) {
+          logger.error("Failed to deduct BS for shop order:", bsError.message);
+        }
+      }
       res.json({ success: true, order });
+      if (typeof requestRealtimePush === "function") {
+        try { requestRealtimePush(); } catch {}
+      }
+      if (homePushService?.sendNotificationToUser) {
+        try {
+          const owners = await prisma.barbers.findMany({ where: { role: "owner" }, select: { id: true } });
+          for (const b of owners) {
+            await homePushService.sendNotificationToUser(`crm-${b.id}`, {
+              title: "Новый заказ!",
+              body: `Заказ от ${normalizeText(customerName || "клиента")} на ${order.totalAmount || 0} ₽`,
+              tag: "shop-new-order",
+              url: "/crm/",
+            }, { channel: "booking" });
+          }
+        } catch {}
+      }
     } catch (error) {
       logger.error("Shop create order error:", error.message);
       res.status(400).json({ success: false, message: error.message || "Не удалось создать заказ." });
@@ -349,6 +382,9 @@ const registerShopRoutes = ({
         editorName: resolveIdentityName(req),
       });
       res.json({ success: true, order });
+      if (typeof requestRealtimePush === "function") {
+        try { requestRealtimePush(); } catch {}
+      }
     } catch (error) {
       logger.error("Shop panel order status error:", error.message);
       res.status(400).json({ success: false, message: error.message || "Не удалось изменить статус." });
@@ -367,6 +403,9 @@ const registerShopRoutes = ({
         editorName: resolveIdentityName(req),
       });
       res.json({ success: true, order });
+      if (typeof requestRealtimePush === "function") {
+        try { requestRealtimePush(); } catch {}
+      }
     } catch (error) {
       logger.error("Shop panel order issue error:", error.message);
       res.status(400).json({ success: false, message: error.message || "Не удалось выдать заказ." });
@@ -389,6 +428,9 @@ const registerShopRoutes = ({
         editorName: resolveIdentityName(req),
       });
       res.json({ success: true, order });
+      if (typeof requestRealtimePush === "function") {
+        try { requestRealtimePush(); } catch {}
+      }
     } catch (error) {
       logger.error("Shop panel order issue by QR error:", error.message);
       res.status(400).json({ success: false, message: error.message || "Не удалось выдать заказ." });
@@ -399,6 +441,9 @@ const registerShopRoutes = ({
     try {
       const order = await cancelOrder(req.params.id);
       res.json({ success: true, order });
+      if (typeof requestRealtimePush === "function") {
+        try { requestRealtimePush(); } catch {}
+      }
     } catch (error) {
       logger.error("Shop panel order cancel error:", error.message);
       res.status(400).json({ success: false, message: error.message || "Не удалось отменить заказ." });

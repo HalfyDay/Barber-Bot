@@ -1616,6 +1616,21 @@ const createHomeClientStoreService = ({
       };
     });
     const referral = await buildReferralPayload(user);
+    const shopOrdersRaw = await prisma.shopOrders.findMany({
+      where: { userId: safeUserId, bsAmount: { gt: 0 } },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+    const shopOrderOperations = shopOrdersRaw.map((order) => ({
+      id: `shop-${normalizeText(order.id)}`,
+      type: "shop_purchase",
+      title: "Покупка в магазине",
+      description: `Заказ №${normalizeText(order.id).slice(0, 8)}`,
+      amountBs: -(Number(order.bsAmount) || 0),
+      amountRub: -(Number(order.totalAmount) || 0),
+      createdAt: normalizeText(order.createdAt) || new Date().toISOString(),
+      status: normalizeText(order.status) || "new",
+    }));
     const operations = [
       ...visitHistory.map((visit) => ({
         id: `visit-${visit.id}`,
@@ -1626,6 +1641,7 @@ const createHomeClientStoreService = ({
         amountBs: 0,
         createdAt: visit.when || (visit.date ? `${visit.date}T00:00:00.000Z` : new Date().toISOString()),
       })),
+      ...shopOrderOperations,
       ...((referral?.operations || []).map((operation) => ({
         ...operation,
         amountRub: 0,

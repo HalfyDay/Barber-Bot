@@ -449,7 +449,55 @@ registerShopRoutes({
   decodeBase64Image,
   buildSafeImageFilename,
   ensureUniqueImageName,
+  adjustUserBsBalance,
+  requestRealtimePush: requestUnifiedRealtimePush,
+  homePushService,
 });
+
+// ── CRM Push Notification Endpoints ──
+app.post("/api/crm/push/subscribe", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(" ")[1];
+    if (!token) return res.sendStatus(401);
+    const { payload } = verifyTokenGracefully(token);
+    const identity = resolveUserIdentity(payload || {});
+    const userId = normalizeText(identity.barberId || identity.username || identity.businessId);
+    if (!userId) return res.sendStatus(401);
+    if (!homePushService?.registerSubscription) {
+      return res.status(503).json({ success: false, message: "Push недоступен." });
+    }
+    const result = await homePushService.registerSubscription(`crm-${userId}`, req.body?.subscription, req.headers["user-agent"] || "");
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Не удалось сохранить push-подписку." });
+  }
+});
+
+app.post("/api/crm/push/unsubscribe", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(" ")[1];
+    if (!token) return res.sendStatus(401);
+    const { payload } = verifyTokenGracefully(token);
+    const identity = resolveUserIdentity(payload || {});
+    const userId = normalizeText(identity.barberId || identity.username || identity.businessId);
+    if (!userId) return res.sendStatus(401);
+    if (!homePushService?.unregisterSubscription) {
+      return res.json({ success: true, subscriptions: 0 });
+    }
+    const result = await homePushService.unregisterSubscription(`crm-${userId}`, req.body?.endpoint || "");
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Не удалось отменить push-подписку." });
+  }
+});
+
+app.get("/api/crm/push/config", async (req, res) => {
+  const config = homePushService?.getPublicConfig?.() || { enabled: false, publicKey: "" };
+  res.json({ success: true, ...config });
+});
+
 registerOwnerAssetsRoutes({
   app,
   authenticateToken,
@@ -660,3 +708,16 @@ const {
 installBackupCron();
 registerShutdownHandlers();
 bootstrap();
+// Auto-cancel expired shop orders every 30 minutes
+if (shopService?.cancelExpiredShopOrders) {
+  const runAutoCancel = async () => {
+    try {
+      const count = await shopService.cancelExpiredShopOrders();
+      if (count > 0) console.log(`[shop] Auto-cancelled ${count} expired order(s)`);
+    } catch (e) {
+      console.error("[shop] Auto-cancel error:", e.message);
+    }
+  };
+  runAutoCancel();
+  setInterval(runAutoCancel, 30 * 60 * 1000);
+}

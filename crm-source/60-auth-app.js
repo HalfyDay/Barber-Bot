@@ -222,6 +222,24 @@ const App = () => {
   const [appointmentModal, setAppointmentModal] = useState(buildAppointmentModalState);
   const [loading, setLoading] = useState(false);
   const [globalError, setGlobalError] = useState('');
+  const [toasts, setToasts] = useState([]);
+  const toastIdRef = useRef(0);
+  const addToast = useCallback((message, type = 'info') => {
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [...prev.slice(-4), { id, message, type }]);
+    const prefs = (() => { try { return JSON.parse(localStorage.getItem('crm.notifications') || '{}'); } catch { return {}; } })();
+    if (type === 'error' && prefs.errorToast === false) return;
+    if (type === 'success' && prefs.newOrderToast === false) return;
+    if (prefs.soundEnabled !== false && typeof playNotificationSound === 'function') {
+      playNotificationSound();
+    }
+    if (typeof showNativeNotification === 'function') {
+      const label = type === 'error' ? 'Ошибка' : type === 'success' ? 'Уведомление' : 'Информация';
+      showNativeNotification(label, message);
+    }
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
+  }, []);
+  const dismissToast = useCallback((id) => setToasts((prev) => prev.filter((t) => t.id !== id)), []);
   const [authError, setAuthError] = useState('');
   const [systemBusy, setSystemBusy] = useState(false);
   const [pendingReloadReason, setPendingReloadReason] = useState(null);
@@ -346,6 +364,49 @@ const App = () => {
       clearInterval(interval);
     };
   }, [session?.token, canUseRealtime]);
+  useEffect(() => {
+    if (!globalError) return;
+    addToast(globalError, 'error');
+    const timer = setTimeout(() => setGlobalError(''), 100);
+    return () => clearTimeout(timer);
+  }, [globalError, addToast]);
+  useEffect(() => {
+    if (session?.token && typeof requestNotificationPermission === 'function') {
+      requestNotificationPermission();
+    }
+  }, [session?.token]);
+  useEffect(() => {
+    if (!session?.token || typeof window === 'undefined') return;
+    const registerPush = async () => {
+      try {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+        const configRes = await fetch(`${API_BASE_URL}/crm/push/config`, {
+          headers: { Authorization: `Bearer ${session.token}` },
+        });
+        const config = await configRes.json();
+        if (!config?.enabled || !config?.publicKey) return;
+        const registration = await navigator.serviceWorker.ready;
+        let subscription = await registration.pushManager.getSubscription();
+        if (!subscription) {
+          const permission = await Notification.requestPermission();
+          if (permission !== 'granted') return;
+          const convertedKey = urlBase64ToUint8Array(config.publicKey);
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: convertedKey,
+          });
+        }
+        await fetch(`${API_BASE_URL}/crm/push/subscribe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+          body: JSON.stringify({ subscription: subscription.toJSON() }),
+        });
+      } catch (error) {
+        console.warn('Push registration failed:', error);
+      }
+    };
+    registerPush();
+  }, [session?.token]);
   const handleLogout = useCallback(() => {
     clearStoredSession();
     setSession(null);
@@ -706,6 +767,7 @@ const apiRequest = useCallback(
       }
     };
   }, [session?.token, canUseRealtime]);
+  const prevShopOrderCountRef = useRef(0);
   const refreshRealtimeViews = useCallback(async () => {
     if (!session?.token) return;
     try {
@@ -714,6 +776,11 @@ const apiRequest = useCallback(
         apiRequest('/appointments'),
         activeDataTable === 'Shop' ? apiRequest('/shop/panel/orders').catch(() => null) : Promise.resolve(null),
       ]);
+      const newShopOrders = shopOrdersResult?.success ? (shopOrdersResult.orders || []) : [];
+      if (newShopOrders.length > prevShopOrderCountRef.current && prevShopOrderCountRef.current > 0) {
+        addToast(`Новый заказ! (${newShopOrders.length - prevShopOrderCountRef.current})`, 'success');
+      }
+      prevShopOrderCountRef.current = newShopOrders.length;
       setDashboard((prev) => {
         if (!overview) return prev;
         if (!prev) return overview;
@@ -769,6 +836,20 @@ const apiRequest = useCallback(
       clearInterval(interval);
     };
   }, [activeDataTable, activeTab, canUseRealtime, connectionStatus, realtimeSnapshot, refreshRealtimeViews, session?.token]);
+  useEffect(() => {
+    if (!session?.token) return undefined;
+    if (activeTab !== 'tables' || activeDataTable !== 'Shop') return undefined;
+    let cancelled = false;
+    let inFlight = false;
+    const runRefresh = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      try { await refreshRealtimeViews(); } finally { inFlight = false; }
+    };
+    runRefresh();
+    const interval = setInterval(runRefresh, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [activeDataTable, activeTab, refreshRealtimeViews, session?.token]);
   const handleCreatePosition = useCallback(
     (payload) => apiRequest('/Positions', { method: 'POST', body: JSON.stringify(payload) }),
     [apiRequest]
@@ -2007,7 +2088,6 @@ const handleBarberFieldChange = (id, field, value) => {
           systemSubSections={systemSubSections}
         />
         <main className={mainClassName}>
-          {globalError && <ErrorBanner message={globalError} />}
           <div key={activeTab} className="crm-page-switch">
             {renderActive()}
           </div>
@@ -2053,6 +2133,9 @@ const handleBarberFieldChange = (id, field, value) => {
         barbers={barbers}
       />
       <ConfirmDialog {...confirmDialog} onResult={handleConfirmResult} />
+      <ToastContext.Provider value={addToast}>
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      </ToastContext.Provider>
     </div>
   );
 };

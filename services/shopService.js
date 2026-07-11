@@ -8,6 +8,8 @@ const createShopService = ({
   const DEFAULT_SHOP_SETTINGS = {
     categoriesEnabled: false,
     restrictedIssuers: [],
+    autoExpireDays: 3,
+    maxProductsPerPerson: 0,
   };
 
   // ── Categories ──
@@ -176,6 +178,17 @@ const createShopService = ({
     comment = "",
   }) => {
     if (!items.length) throw new Error("Заказ должен содержать хотя бы один товар.");
+
+    const settings = await getShopSettings();
+    const maxPerPerson = Number(settings.maxProductsPerPerson) || 0;
+    if (maxPerPerson > 0 && userId) {
+      const activeOrders = await prisma.shopOrders.count({
+        where: { userId: normalizeText(userId), status: { in: ["new", "processing", "ready"] } },
+      });
+      if (activeOrders >= maxPerPerson) {
+        throw new Error(`Превышен лимит заказов (${maxPerPerson} шт.)`);
+      }
+    }
 
     const productIds = [...new Set(items.map((i) => i.productId))];
     const products = await prisma.shopProducts.findMany({
@@ -351,6 +364,32 @@ const createShopService = ({
     return !restricted.includes(normalizeText(barberId));
   };
 
+  const cancelExpiredShopOrders = async () => {
+    try {
+      const settings = await getShopSettings();
+      const days = Number(settings.autoExpireDays) || 0;
+      if (days <= 0) return 0;
+      const cutoff = new Date(Date.now() - days * 86400000);
+      const expired = await prisma.shopOrders.findMany({
+        where: { status: { in: ["new", "processing"] }, createdAt: { lt: cutoff } },
+        include: { items: true },
+      });
+      let cancelled = 0;
+      for (const order of expired) {
+        try {
+          await cancelOrder(order.id);
+          cancelled++;
+        } catch (e) {
+          logger.error("Failed to auto-cancel order:", order.id, e.message);
+        }
+      }
+      return cancelled;
+    } catch (error) {
+      logger.error("cancelExpiredShopOrders error:", error.message);
+      return 0;
+    }
+  };
+
   return {
     SHOP_ORDER_STATUSES,
     listCategories,
@@ -374,6 +413,7 @@ const createShopService = ({
     getShopSettings,
     updateShopSettings,
     canIssueOrders,
+    cancelExpiredShopOrders,
   };
 };
 

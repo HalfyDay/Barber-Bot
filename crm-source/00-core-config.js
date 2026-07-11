@@ -131,6 +131,7 @@ const getSystemSubSections = (role, isImpersonated) => {
     { id: 'bot', label: 'Бот' },
     { id: 'site', label: 'Сайт' },
     { id: 'settings', label: 'Настройки' },
+    { id: 'notifications', label: 'Уведомления' },
   ];
 };
 

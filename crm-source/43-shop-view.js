@@ -178,7 +178,7 @@ const ShopView = ({
     if (activeTab === 'stock') { loadStock(); loadStockAudit(); }
     if (activeTab === 'categories') loadCategories();
     if (activeTab === 'settings' && isOwner) loadSettings();
-  }, [activeTab]);
+  }, [activeTab, loadOrders]);
 
   const handleDragStart = (e, productId) => {
     e.dataTransfer.setData('text/plain', productId);
@@ -541,7 +541,7 @@ const ShopView = ({
       { value: '', label: 'Все' },
       ...Object.entries(SHOP_ORDER_STATUS_LABELS).map(([id, label]) => ({ value: id, label })),
     ];
-    const displayOrders = liveShopOrders || orders;
+    const displayOrders = (Array.isArray(liveShopOrders) && liveShopOrders.length > 0) ? liveShopOrders : orders;
     const grouped = buildOrderGroups(displayOrders);
 
     return (
@@ -829,7 +829,7 @@ const ShopView = ({
                     </div>
                   </div>
                   {isOwner && (
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-row gap-2">
                       <button type="button" onClick={() => setProductDraft(product)} className="crm-ghost-btn h-9 w-9 p-0 flex items-center justify-center" style={{ borderRadius: '50%', minHeight: 0 }}>
                         <IconEdit className="h-4 w-4" />
                       </button>
@@ -1205,6 +1205,46 @@ const ShopView = ({
                   )}
                 />
               </button>
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Автоотмена заказов">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-[color:var(--crm-surface-4)] px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-white">Срок ожидания (дней)</p>
+                <p className="text-xs text-[var(--crm-muted)]">Невыданные заказы будут отменены автоматически</p>
+              </div>
+              <input
+                type="number"
+                min="0"
+                max="90"
+                value={settings?.autoExpireDays ?? 3}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setSettings({ ...settings, autoExpireDays: Math.max(0, Math.min(90, parseInt(e.target.value) || 0)) })}
+                className="w-20 text-center rounded-xl bg-[color:var(--crm-surface-2)] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[color:var(--crm-primary)]"
+              />
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Лимит товаров">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-[color:var(--crm-surface-4)] px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-white">Макс. количество на человека</p>
+                <p className="text-xs text-[var(--crm-muted)]">0 = без ограничений</p>
+              </div>
+              <input
+                type="number"
+                min="0"
+                max="999"
+                value={settings?.maxProductsPerPerson ?? 0}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setSettings({ ...settings, maxProductsPerPerson: Math.max(0, parseInt(e.target.value) || 0) })}
+                className="w-20 text-center rounded-xl bg-[color:var(--crm-surface-2)] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[color:var(--crm-primary)]"
+              />
             </div>
           </div>
         </SectionCard>

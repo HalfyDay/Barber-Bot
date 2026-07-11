@@ -8,6 +8,7 @@ const TablesWorkspace = ({
   clients = [],
   currentUser = null,
   liveAppointments = null,
+  liveShopOrders = null,
   liveUpdatedAt = null,
   liveStatus = 'unknown',
   barbers = [],
@@ -720,6 +721,10 @@ const TablesWorkspace = ({
               onRequestConfirm={onRequestConfirm}
               barbers={barbers}
               uploadAvatar={uploadAvatar}
+              liveShopOrders={liveShopOrders}
+              liveUpdatedAt={liveUpdatedAt}
+              liveStatus={liveStatus}
+              clients={clients}
             />
           )}
         </div>

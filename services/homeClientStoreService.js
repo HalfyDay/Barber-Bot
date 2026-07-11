@@ -459,6 +459,7 @@ const createHomeClientStoreService = ({
       shop: {
         teaserTitle: normalizeText(shopInput.teaserTitle),
         teaserText: normalizeText(shopInput.teaserText),
+        categoriesEnabled: shopInput.categoriesEnabled === true,
       },
       profile: {
         pageTitle: normalizeText(profileInput.pageTitle),

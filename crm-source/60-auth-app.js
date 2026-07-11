@@ -709,9 +709,10 @@ const apiRequest = useCallback(
   const refreshRealtimeViews = useCallback(async () => {
     if (!session?.token) return;
     try {
-      const [overview, appointments] = await Promise.all([
+      const [overview, appointments, shopOrdersResult] = await Promise.all([
         apiRequest('/dashboard/overview'),
         apiRequest('/appointments'),
+        activeDataTable === 'Shop' ? apiRequest('/shop/panel/orders').catch(() => null) : Promise.resolve(null),
       ]);
       setDashboard((prev) => {
         if (!overview) return prev;
@@ -725,6 +726,7 @@ const apiRequest = useCallback(
       });
       setRealtimeSnapshot((prev) => ({
         rows: Array.isArray(appointments) ? appointments : [],
+        shopOrders: shopOrdersResult?.success ? (shopOrdersResult.orders || []) : (prev?.shopOrders || []),
         active: Array.isArray(overview?.appointments?.active)
           ? overview.appointments.active
           : prev?.active || [],
@@ -1793,6 +1795,7 @@ const handleBarberFieldChange = (id, field, value) => {
             clients={dashboard?.clients || []}
             currentUser={session || null}
             liveAppointments={realtimeSnapshot?.rows || null}
+            liveShopOrders={realtimeSnapshot?.shopOrders || null}
             liveUpdatedAt={realtimeSnapshot?.updatedAt || null}
             liveStatus={effectiveLiveStatus}
             barbers={barbers}
@@ -1967,7 +1970,7 @@ const handleBarberFieldChange = (id, field, value) => {
   };
 
   return (
-    <div className="crm-app-shell min-h-screen text-white">
+    <div className="crm-app-shell min-h-screen overflow-x-hidden flex flex-col text-white">
       {renderImpersonationBanner()}
       {isMobile && (
         <MobileTabs
@@ -1987,7 +1990,7 @@ const handleBarberFieldChange = (id, field, value) => {
           systemSubSections={systemSubSections}
         />
       )}
-      <div className="flex w-full min-w-0">
+      <div className="flex w-full min-w-0 flex-1">
         <Sidebar
           session={session}
           activeTab={activeTab}

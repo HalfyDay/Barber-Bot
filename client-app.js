@@ -103,6 +103,9 @@
     shopOrderResult: null,
     shopCategoryFilter: '',
     shopAppliedBs: 0,
+    shopTab: 'products',
+    shopOrders: [],
+    shopOrdersLoading: false,
     booking: {
       barberId: "",
       services: [],
@@ -4077,6 +4080,24 @@
     `;
   };
 
+  const buildShopAddressBlock = () => {
+    const siteHome = state.payload?.site?.home || {};
+    const address = normalizeText(siteHome.mapCaption);
+    const mapLink = normalizeText(siteHome.mapLink);
+    const name = normalizeText(siteHome.logoText);
+    if (!address && !name) return '';
+    return `
+      <div class="shop-address-block">
+        <div class="shop-address-icon">📍</div>
+        <div class="shop-address-info">
+          ${name ? `<strong class="shop-address-name">${name}</strong>` : ''}
+          ${address ? `<span class="shop-address-text">${address}</span>` : ''}
+        </div>
+        ${mapLink ? `<a class="shop-address-map-link" href="${mapLink}" target="_blank" rel="noopener noreferrer">На карте</a>` : ''}
+      </div>
+    `;
+  };
+
   const renderShopPage = () => {
     const products = Array.isArray(state.shopProducts) ? state.shopProducts : [];
     const categories = Array.isArray(state.shopCategories) ? state.shopCategories : [];
@@ -4152,33 +4173,120 @@
 
     if (state.shopOrderResult) {
       const order = state.shopOrderResult;
-      return `
-        <section class="page shop-page">
-          <article class="shop-order-result">
-            <div class="shop-order-success-icon">✓</div>
-            <h2 class="shop-order-success-title">Заказ оформлен!</h2>
-            <p class="shop-order-success-sub">Покажите этот QR-код сотруднику при получении</p>
-            <div class="shop-order-qr" id="shop-order-qr-stage" data-qr-payload="${normalizeText(order.qrCode || order.id)}"></div>
-            <p class="shop-order-id">Заказ #${(order.id || '').slice(0, 8)}</p>
-            <p class="shop-order-total">Итого: ${formatPrice(order.totalAmount)}</p>
-            <div class="shop-order-items">
-              ${(order.items || []).map((item) => `<div class="shop-order-item-row"><span>${normalizeText(item.name)} × ${item.quantity}</span><span>${formatPrice(item.price * item.quantity)}</span></div>`).join('')}
-            </div>
-            <button class="shop-back-btn" data-action="shop-clear-order">Вернуться в магазин</button>
-          </article>
-        </section>
-      `;
+      state.shopOrderResult = null;
+      state.shopTab = 'orders';
+      setTimeout(() => void loadShopOrders(), 0);
     }
+
+    const shopTabs = [
+      { id: 'products', label: 'Товары', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>' },
+      { id: 'orders', label: 'Мои заказы', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>' },
+    ];
+    const currentShopTab = state.shopTab || 'products';
+
+    const ordersHtml = state.shopOrdersLoading
+      ? '<div class="shop-orders-loading"><span class="animate-pulse">Загружаем заказы...</span></div>'
+      : state.shopOrders.length === 0
+        ? `<div class="shop-empty-state" style="min-height:40vh">
+            <svg class="shop-empty-icon" viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <g>
+                <path d="M45 55 L80 35 L115 55 L115 100 L80 120 L45 100 Z" fill="#2a3130" stroke="#4a5554" stroke-width="1.5"/>
+                <path d="M45 55 L80 75 L115 55" fill="#1e2524" stroke="#4a5554" stroke-width="1.5"/>
+                <path d="M80 75 L80 120" stroke="#4a5554" stroke-width="1.5"/>
+              </g>
+            </svg>
+            <h3 class="shop-empty-title">Заказов пока нет</h3>
+            <p class="shop-empty-desc">Оформите первый заказ в магазине</p>
+          </div>`
+        : state.shopOrders.map((order) => {
+            const statuses = [
+              { key: 'new', label: 'Принят', icon: '✓' },
+              { key: 'processing', label: 'Собирается', icon: '📦' },
+              { key: 'ready', label: 'Готов', icon: '🏠' },
+              { key: 'issued', label: 'Выдан', icon: '🎉' },
+            ];
+            const currentIdx = statuses.findIndex((s) => s.key === order.status);
+            const isCancelled = order.status === 'cancelled';
+            const date = new Date(order.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+            const time = new Date(order.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+            const isIssued = order.status === 'issued';
+            return `
+              <div class="shop-order-card" data-action="shop-order-detail" data-order-id="${order.id}">
+                <div class="shop-order-card-header">
+                  <div>
+                    <p class="shop-order-card-id">Заказ от ${date}</p>
+                    <p class="shop-order-card-time">${time}</p>
+                  </div>
+                  <span class="shop-order-card-total">${formatPrice(order.totalAmount)}</span>
+                </div>
+                ${isCancelled ? `
+                  <div class="shop-order-status-cancelled">Заказ отменён</div>
+                ` : isIssued ? '' : `
+                  <div class="shop-order-track">
+                    ${statuses.map((s, i) => `
+                      <div class="shop-order-track-step ${i <= currentIdx ? 'active' : ''} ${i === currentIdx ? 'current' : ''}">
+                        <div class="shop-order-track-dot">${s.icon}</div>
+                        <span class="shop-order-track-label">${s.label}</span>
+                        ${i < statuses.length - 1 ? '<div class="shop-order-track-line"></div>' : ''}
+                      </div>
+                    `).join('')}
+                  </div>
+                `}
+                <div class="shop-order-card-items">
+                  ${(order.items || []).slice(0, 3).map((item) => {
+                    const img = item.product?.imageUrl || item.imageUrl || '';
+                    return `<div class="shop-order-card-item">${img ? `<img class="shop-order-card-item-img" src="${normalizeText(img)}" alt="" />` : ''}<span>${normalizeText(item.name)} × ${item.quantity}</span></div>`;
+                  }).join('')}
+                  ${(order.items || []).length > 3 ? `<div class="shop-order-card-item">+${order.items.length - 3} ещё</div>` : ''}
+                </div>
+                ${order.qrCode && !isIssued && !isCancelled ? `<button class="shop-order-qr-btn" data-action="shop-show-order-qr" data-qr="${order.qrCode}" data-order-id="${order.id}">Показать QR</button>` : ''}
+              </div>
+            `;
+          }).join('');
 
     return `
       <section class="page shop-page">
-        ${categoryTabs}
-        <div class="shop-products-grid">${productCards || '<p class="shop-empty">Товаров пока нет</p>'}</div>
-        ${cartCount > 0 ? `<button class="shop-cart-toggle" data-action="shop-toggle-cart">
-          <span class="shop-cart-icon">🛒</span>
-          <span class="shop-cart-badge">${cartCount}</span>
-        </button>` : ''}
+        <div class="shop-top-tabs">
+          ${shopTabs.map((tab) => `
+            <button class="shop-top-tab ${currentShopTab === tab.id ? 'active' : ''}" data-action="shop-set-tab" data-tab="${tab.id}">
+              <span class="shop-top-tab-icon">${tab.icon}</span>
+              <span>${tab.label}</span>
+            </button>
+          `).join('')}
+        </div>
+        ${currentShopTab === 'products' ? `
+          ${categoryTabs}
+          <div class="shop-products-grid">${productCards || `
+            <div class="shop-empty-state">
+              <svg class="shop-empty-icon" viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <g>
+                  <path d="M45 55 L80 35 L115 55 L115 100 L80 120 L45 100 Z" fill="#2a3130" stroke="#4a5554" stroke-width="1.5"/>
+                  <path d="M45 55 L80 75 L115 55" fill="#1e2524" stroke="#4a5554" stroke-width="1.5"/>
+                  <path d="M80 75 L80 120" stroke="#4a5554" stroke-width="1.5"/>
+                </g>
+                <g opacity="0.7" transform="translate(-25, -15) scale(0.55)">
+                  <path d="M45 55 L80 35 L115 55 L115 100 L80 120 L45 100 Z" fill="#2a3130" stroke="#4a5554" stroke-width="1.5"/>
+                  <path d="M45 55 L80 75 L115 55" fill="#1e2524" stroke="#4a5554" stroke-width="1.5"/>
+                  <path d="M80 75 L80 120" stroke="#4a5554" stroke-width="1.5"/>
+                </g>
+                <g opacity="0.5" transform="translate(100, 10) scale(0.45)">
+                  <path d="M45 55 L80 35 L115 55 L115 100 L80 120 L45 100 Z" fill="#2a3130" stroke="#4a5554" stroke-width="1.5"/>
+                  <path d="M45 55 L80 75 L115 55" fill="#1e2524" stroke="#4a5554" stroke-width="1.5"/>
+                  <path d="M80 75 L80 120" stroke="#4a5554" stroke-width="1.5"/>
+                </g>
+              </svg>
+              <h3 class="shop-empty-title">Товаров пока нет</h3>
+              <p class="shop-empty-desc">Скоро здесь появятся товары</p>
+            </div>
+          `}</div>
+        ` : `
+          <div class="shop-orders-list">${buildShopAddressBlock()}${ordersHtml}</div>
+        `}
       </section>
+      ${cartCount > 0 ? `<button class="shop-cart-toggle" data-action="shop-toggle-cart">
+        <svg class="shop-cart-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span class="shop-cart-badge">${cartCount}</span>
+      </button>` : ''}
     `;
   };
 
@@ -4693,6 +4801,7 @@
     }
     if (nextPage === "shop") {
       void loadShopData();
+      if (state.shopTab === 'orders') void loadShopOrders();
     }
     window.scrollTo({ top: 0, behavior: "auto" });
   };
@@ -4825,6 +4934,24 @@
       render();
     } catch (error) {
       console.error("Failed to load shop data:", error);
+    }
+  };
+
+  const loadShopOrders = async () => {
+    const userId = normalizeText(state.payload?.user?.id);
+    if (!userId) return;
+    state.shopOrdersLoading = true;
+    try {
+      const response = await fetch(`${window.location.origin}/api/shop/orders/user/${userId}`);
+      const result = await response.json();
+      if (result?.success) {
+        state.shopOrders = result.orders || [];
+      }
+    } catch (error) {
+      console.error("Failed to load shop orders:", error);
+    } finally {
+      state.shopOrdersLoading = false;
+      render();
     }
   };
 
@@ -5593,6 +5720,7 @@
       </div>
     ` : '';
     const cartSheetHtml = `
+      ${buildShopAddressBlock()}
       <div class="shop-cart-items">${currentCart.length > 0 ? cartSheetItems : '<p class="shop-cart-empty">Корзина пуста</p>'}</div>
       ${currentCart.length > 0 ? `
         <div class="shop-cart-footer">
@@ -6141,6 +6269,33 @@
           render();
           return;
         }
+        case "shop-set-tab": {
+          event.preventDefault();
+          const tab = normalizeText(actionNode.dataset.tab);
+          state.shopTab = tab;
+          if (tab === 'orders') {
+            void loadShopOrders();
+          }
+          render();
+          return;
+        }
+        case "shop-show-order-qr": {
+          event.preventDefault();
+          event.stopPropagation();
+          const qrCode = normalizeText(actionNode.dataset.qr);
+          const orderId = normalizeText(actionNode.dataset.orderId);
+          const orderObj = state.shopOrders.find((o) => o.id === orderId);
+          const qrItems = (orderObj?.items || []).map((item) => `<div class="shop-order-item-row"><span>${normalizeText(item.name)} × ${item.quantity}</span><span>${formatPrice(item.price * item.quantity)}</span></div>`).join('');
+          const qrSheetHtml = `
+            <div class="shop-order-qr-sheet">
+              <div class="shop-order-qr" id="shop-order-qr-stage" data-qr-payload="${qrCode}"></div>
+              <p class="shop-order-id">Заказ #${(orderId || '').slice(0, 8)}</p>
+              <div class="shop-order-items">${qrItems}</div>
+            </div>
+          `;
+          openSheet("QR-код заказа", qrSheetHtml, "", "sheet-wide");
+          return;
+        }
         default:
           break;
       }
@@ -6278,7 +6433,7 @@
         }
       })();
     });
-    const shopOrderQrStage = queryById(appRoot, "shop-order-qr-stage");
+    const shopOrderQrStage = queryById(appRoot, "shop-order-qr-stage") || queryById(sheetRoot, "shop-order-qr-stage");
     if (shopOrderQrStage) {
       const qrPayload = normalizeText(shopOrderQrStage.dataset.qrPayload);
       if (qrPayload) {

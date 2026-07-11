@@ -140,6 +140,24 @@ const registerShopRoutes = ({
     }
   });
 
+  app.get("/api/shop/orders/user/:userId", async (req, res) => {
+    try {
+      const userId = normalizeText(req.params.userId);
+      if (!userId) {
+        return res.status(400).json({ success: false, message: "userId обязателен." });
+      }
+      const orders = await prisma.shopOrders.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        include: { items: { include: { product: true } } },
+      });
+      res.json({ success: true, orders });
+    } catch (error) {
+      logger.error("Shop user orders error:", error.message);
+      res.status(500).json({ success: false, message: "Не удалось загрузить заказы." });
+    }
+  });
+
   // ── CRM panel routes (authenticated) ──
 
   const requireAuth = (req, res, next) => {

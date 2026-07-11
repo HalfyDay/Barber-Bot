@@ -156,15 +156,15 @@ const createShopService = ({
       where,
       orderBy: { createdAt: "desc" },
       take: Math.min(500, Math.max(1, Number(limit))),
-      include: { items: true },
+      include: { items: { include: { product: true } } },
     });
   };
 
   const getOrder = async (id) =>
-    prisma.shopOrders.findUnique({ where: { id }, include: { items: true } });
+    prisma.shopOrders.findUnique({ where: { id }, include: { items: { include: { product: true } } } });
 
   const getOrderByQrCode = async (qrCode) =>
-    prisma.shopOrders.findUnique({ where: { qrCode }, include: { items: true } });
+    prisma.shopOrders.findUnique({ where: { qrCode }, include: { items: { include: { product: true } } } });
 
   const createOrder = async ({
     customerName = null,

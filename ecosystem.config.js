@@ -3,8 +3,8 @@ module.exports = {
     {
       name: "brothershop",
       script: "server.js",
-      instances: 1,
-      exec_mode: "fork",
+      instances: 2,
+      exec_mode: "cluster",
       kill_timeout: 10000,
       listen_timeout: 15000,
       wait_ready: false,

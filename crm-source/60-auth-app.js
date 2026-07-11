@@ -1918,6 +1918,7 @@ const handleBarberFieldChange = (id, field, value) => {
             role={role}
             applyFavoriteBarberRule={applyFavoriteBarberRule}
             currentBarber={currentBarber}
+            addToast={addToast}
           />
         );
       case 'profile':

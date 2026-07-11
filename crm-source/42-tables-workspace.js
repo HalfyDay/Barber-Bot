@@ -50,6 +50,7 @@ const TablesWorkspace = ({
   role = ROLE_OWNER,
   applyFavoriteBarberRule = null,
   currentBarber = null,
+  addToast = null,
 }) => {
   const resolvedDataTables = useMemo(
     () => (Array.isArray(dataTables) && dataTables.length ? dataTables : DEFAULT_DATA_TABLES),
@@ -725,6 +726,7 @@ const TablesWorkspace = ({
               liveUpdatedAt={liveUpdatedAt}
               liveStatus={liveStatus}
               clients={clients}
+              addToast={addToast}
             />
           )}
         </div>

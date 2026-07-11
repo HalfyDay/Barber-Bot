@@ -33,6 +33,7 @@ const ShopView = ({
   liveUpdatedAt = null,
   liveStatus = 'unknown',
   clients = [],
+  addToast = null,
 }) => {
   const isOwner = role === ROLE_OWNER;
 
@@ -403,7 +404,12 @@ const ShopView = ({
       await apiRequest(`/shop/panel/products/${id}`, { method: 'DELETE' });
       loadProducts();
     } catch (e) {
-      console.error('Failed to delete product:', e);
+      const message = e?.message || 'Не удалось удалить товар';
+      if (typeof addToast === 'function') {
+        addToast(message, 'error');
+      } else {
+        console.error('Failed to delete product:', e);
+      }
     }
   };
 

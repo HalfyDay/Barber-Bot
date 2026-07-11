@@ -103,7 +103,7 @@ const createShopService = ({
 
   const deleteProduct = async (id) => {
     const orderCount = await prisma.shopOrderItems.count({
-      where: { productId: id, order: { status: { notIn: ["issued"] } } },
+      where: { productId: id, order: { status: { notIn: ["issued", "cancelled"] } } },
     });
     if (orderCount > 0) {
       throw new Error("Нельзя удалить товар: есть активные заказы.");

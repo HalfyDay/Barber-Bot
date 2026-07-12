@@ -7669,9 +7669,6 @@ button.referral-level-card:active {
 }
 
 /* Shop new styles */
-.shop-page {
-  animation: page-enter 380ms cubic-bezier(.2,.8,.2,1) both;
-}
 .shop-page .shop-cart-toggle {
   animation: none;
 }

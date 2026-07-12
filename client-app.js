@@ -4867,7 +4867,7 @@
     state.routeTransitionActive = false;
     bindEvents({
       appRoot: appChanged ? appHost : null,
-      sheetRoot: sheetChanged ? sheetHost : null,
+      sheetRoot: state.sheet ? sheetHost : null,
     });
     const renderScope = appHost.querySelector(".client-app") || appHost;
     const sheetScope = sheetHost.querySelector(".sheet-backdrop");
@@ -5035,6 +5035,10 @@
 
   const submitBooking = async () => {
     if (!state.booking.barberId || !state.booking.selectedServices.length || !state.booking.selectedDate || !state.booking.selectedTime) return;
+    const user = state.payload?.user || {};
+    if (user.bookingPushNotificationsEnabled !== false || user.balancePushNotificationsEnabled !== false) {
+      ensureHomePushSubscription({ forcePrompt: true }).catch(() => {});
+    }
     state.booking.submitting = true;
     render();
     try {
@@ -6712,31 +6716,11 @@
     bindProfileForm(sheetRoot, "profile-gender-form", async (formData) => ({ gender: normalizeText(formData.get("gender")) }));
     bindProfileForm(sheetRoot, "profile-password-form", async (formData) => ({ password: normalizeText(formData.get("password")) }));
     bindProfileForm(sheetRoot, "profile-notifications-form", async (formData) => {
-      const bookingNotificationsEnabled = formData.get("bookingNotificationsEnabled") === "on";
-      const bookingPushNotificationsEnabled =
-        formData.get("bookingPushNotificationsEnabled") === "on";
-      const balanceNotificationsEnabled = formData.get("balanceNotificationsEnabled") === "on";
-      const balancePushNotificationsEnabled =
-        formData.get("balancePushNotificationsEnabled") === "on";
-      const balanceNotificationsWasEnabled = state.payload?.user?.balanceNotificationsEnabled !== false;
-      if (balanceNotificationsEnabled && !balanceNotificationsWasEnabled) {
-        await requestIncomingBalanceNotificationPermission();
-      }
-      const wantsAnyPush =
-        bookingPushNotificationsEnabled || balancePushNotificationsEnabled;
-      if (wantsAnyPush) {
-        const pushResult = await ensureHomePushSubscription({ forcePrompt: true });
-        if (pushResult.status !== "granted") {
-          throw new Error("Разрешите push-уведомления в браузере.");
-        }
-      } else {
-        await disableHomePushSubscription().catch(() => null);
-      }
       return {
-        bookingNotificationsEnabled,
-        bookingPushNotificationsEnabled,
-        balanceNotificationsEnabled,
-        balancePushNotificationsEnabled,
+        bookingNotificationsEnabled: formData.get("bookingNotificationsEnabled") === "on",
+        bookingPushNotificationsEnabled: formData.get("bookingPushNotificationsEnabled") === "on",
+        balanceNotificationsEnabled: formData.get("balanceNotificationsEnabled") === "on",
+        balancePushNotificationsEnabled: formData.get("balancePushNotificationsEnabled") === "on",
       };
     });
     const profilePasswordForm = queryById(sheetRoot, "profile-password-form");

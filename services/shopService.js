@@ -102,11 +102,14 @@ const createShopService = ({
   };
 
   const deleteProduct = async (id) => {
-    const orderCount = await prisma.shopOrderItems.count({
+    const blockingOrders = await prisma.shopOrderItems.groupBy({
+      by: ['orderId'],
       where: { productId: id, order: { status: { notIn: ["issued", "cancelled"] } } },
+      _count: { id: true },
     });
-    if (orderCount > 0) {
-      throw new Error("Нельзя удалить товар: есть активные заказы.");
+    if (blockingOrders.length > 0) {
+      const orderIds = blockingOrders.map(o => o.orderId.slice(0, 8)).join(', ');
+      throw new Error(`Нельзя удалить товар: есть ${blockingOrders.length} заказ(ов) со статусом, отличным от "Выдан" или "Отменён" (ID: ${orderIds}).`);
     }
     return prisma.shopProducts.delete({ where: { id } });
   };

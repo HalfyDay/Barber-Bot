@@ -1906,6 +1906,7 @@ const handleBarberFieldChange = (id, field, value) => {
             preferredTable={preferredTableTarget}
             onPreferredTableConsumed={handlePreferredTableConsumed}
             onRequestConfirm={requestConfirm}
+            addToast={addToast}
             onBlockClient={handleBlockClient}
             onAdjustClientBs={handleAdjustClientBs}
             onAddClientWarning={handleAddClientWarning}

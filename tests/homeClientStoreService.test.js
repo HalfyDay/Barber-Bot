@@ -55,6 +55,11 @@ const createPrismaHarness = () => {
           return [];
         },
       },
+      shopOrders: {
+        async findMany() {
+          return [];
+        },
+      },
     },
     userMetaRows,
     siteSettingsRows,

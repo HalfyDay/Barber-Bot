@@ -850,7 +850,7 @@ const applyTenantSchemaPatch = async (schema, templateSql, connectionString) => 
       CREATE TABLE IF NOT EXISTS "ShopOrderItems" (
         "id" TEXT NOT NULL,
         "orderId" TEXT NOT NULL,
-        "productId" TEXT NOT NULL,
+        "productId" TEXT,
         "name" TEXT NOT NULL,
         "price" DOUBLE PRECISION NOT NULL,
         "quantity" INTEGER NOT NULL DEFAULT 1,
@@ -874,11 +874,27 @@ const applyTenantSchemaPatch = async (schema, templateSql, connectionString) => 
         CREATE UNIQUE INDEX IF NOT EXISTS "ShopOrders_qrCode_key" ON "ShopOrders"("qrCode");
       `);
     } catch (idxError) { /* non-fatal */ }
+    // Migrate ShopOrderItems.productId to nullable + SET NULL (fixes crash on deleted products)
+    try {
+      await client.query(`
+        ALTER TABLE "ShopOrderItems" ALTER COLUMN "productId" DROP NOT NULL;
+      `);
+      // Drop old CASCADE FK and replace with SET NULL
+      await client.query(`
+        ALTER TABLE "ShopOrderItems" DROP CONSTRAINT IF EXISTS "ShopOrderItems_productId_fkey";
+      `);
+      await client.query(`
+        DO $$ BEGIN
+          ALTER TABLE "ShopOrderItems" ADD CONSTRAINT "ShopOrderItems_productId_fkey"
+            FOREIGN KEY ("productId") REFERENCES "ShopProducts"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+      `);
+    } catch (patchErr) { /* non-fatal, idempotent */ }
     // Add foreign keys for Shop tables (idempotent via DO block)
     const shopForeignKeys = [
       `ALTER TABLE "ShopProducts" ADD CONSTRAINT "ShopProducts_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "ShopCategories"("id") ON DELETE SET NULL ON UPDATE CASCADE`,
       `ALTER TABLE "ShopOrderItems" ADD CONSTRAINT "ShopOrderItems_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "ShopOrders"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
-      `ALTER TABLE "ShopOrderItems" ADD CONSTRAINT "ShopOrderItems_productId_fkey" FOREIGN KEY ("productId") REFERENCES "ShopProducts"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
       `ALTER TABLE "ShopStockEdits" ADD CONSTRAINT "ShopStockEdits_productId_fkey" FOREIGN KEY ("productId") REFERENCES "ShopProducts"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
     ];
     for (const fkSql of shopForeignKeys) {

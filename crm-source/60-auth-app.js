@@ -463,7 +463,9 @@ const apiRequest = useCallback(
         throw new Error('Сессия завершена, войдите снова');
       }
       if (!response.ok) {
-        const message = await response.text();
+        const text = await response.text();
+        let message = text;
+        try { const json = JSON.parse(text); if (json && json.message) message = json.message; } catch (_) {}
         const fallback = response.status === 403 ? 'Недостаточно прав для операции' : 'Ошибка запроса';
         throw new Error(message || fallback);
       }

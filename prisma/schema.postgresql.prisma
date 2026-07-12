@@ -326,13 +326,13 @@ model ShopOrders {
 model ShopOrderItems {
   id        String   @id @default(uuid())
   orderId   String
-  productId String
+  productId String?
   name      String
   price     Float
   quantity  Int      @default(1)
 
-  order   ShopOrders    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product ShopProducts @relation(fields: [productId], references: [id], onDelete: Cascade)
+  order   ShopOrders     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product ShopProducts?  @relation(fields: [productId], references: [id], onDelete: SetNull)
 }
 
 model ShopStockEdits {

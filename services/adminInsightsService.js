@@ -22,24 +22,21 @@ const createAdminInsightsService = ({
   buildUserInsightsMap,
 }) => {
   const buildRevenueSummary = async ({ requestedBarberId, start, end }) => {
+    const hasDateFilter = Boolean(start || end);
     const defaultRange = getDefaultRevenueRange();
-    let startDate = parseDateFilter(start, defaultRange.start);
-    let endDate = parseDateFilter(end, defaultRange.end);
-    if (startDate.getTime() > endDate.getTime()) {
+    let startDate = hasDateFilter ? parseDateFilter(start, defaultRange.start) : null;
+    let endDate = hasDateFilter ? parseDateFilter(end, defaultRange.end) : null;
+    if (startDate && endDate && startDate.getTime() > endDate.getTime()) {
       [startDate, endDate] = [endDate, startDate];
     }
-    const startKey = formatDateOnly(startDate);
-    const endKey = formatDateOnly(endDate);
+    const startKey = startDate ? formatDateOnly(startDate) : null;
+    const endKey = endDate ? formatDateOnly(endDate) : null;
+    const dateWhere = startKey && endKey ? { gte: startKey, lte: endKey } : undefined;
     const [barbersList, servicesCatalog, appointments] = await Promise.all([
       getBarbers({ includeInactive: true }),
       getServiceCatalog(true),
       prisma.appointments.findMany({
-        where: {
-          Date: {
-            gte: startKey,
-            lte: endKey,
-          },
-        },
+        where: dateWhere ? { Date: dateWhere } : {},
       }),
     ]);
     const targetBarber =

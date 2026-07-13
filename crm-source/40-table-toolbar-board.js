@@ -1,4 +1,4 @@
-﻿const TableToolbar = ({
+const TableToolbar = ({
   tableId,
   searchTerm,
   setSearchTerm,
@@ -36,8 +36,12 @@
   appointmentRows = [],
   appointmentScheduleSlot = null,
   onSaveAppointmentScheduleDay,
+  clientCategory = 'all',
+  setClientCategory = null,
 }) => {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [clientFilterOpen, setClientFilterOpen] = useState(false);
+  const clientFilterRef = useRef(null);
   const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
   const appointmentDateInputRef = useRef(null);
   const scheduleDayEditorRef = useRef(null);
@@ -246,6 +250,14 @@
       document.removeEventListener('touchstart', handlePointerDown);
     };
   }, [isMobileViewport, scheduleDayEditorOpen]);
+  useEffect(() => {
+    if (!clientFilterOpen) return;
+    const handleClick = (e) => {
+      if (clientFilterRef.current && !clientFilterRef.current.contains(e.target)) setClientFilterOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [clientFilterOpen]);
   const saveScheduleDayDraft = useCallback(() => {
     if (!canEditSelectedBarberScheduleDay || !appointmentScheduleSlot) return;
     onSaveAppointmentScheduleDay?.(
@@ -606,6 +618,56 @@
             placeholder="Поиск..."
             ariaLabel="Поиск по клиентам"
           />
+          {typeof setClientCategory === 'function' && (() => {
+            const CLIENT_FILTER_ITEMS = [
+              { key: 'all', label: 'Все', dot: '' },
+              { key: 'regular', label: 'Постоянные', dot: 'bg-[color:var(--crm-primary)]' },
+              { key: 'rare', label: 'Редкие', dot: 'bg-[color:var(--crm-highlight)]' },
+              { key: 'inactive', label: 'Не ходят', dot: 'bg-rose-400' },
+              { key: 'never', label: 'Ни разу', dot: 'bg-slate-400' },
+            ];
+            const activeLabel = CLIENT_FILTER_ITEMS.find((i) => i.key === clientCategory)?.label || 'Все';
+            return (
+              <div ref={clientFilterRef} className="relative z-40 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setClientFilterOpen((prev) => !prev)}
+                  className={classNames(
+                    'crm-ghost-btn inline-flex h-11 w-11 min-h-0 shrink-0 items-center justify-center p-0 text-sm transition sm:h-11 sm:w-auto sm:px-3 sm:gap-1.5',
+                    clientCategory !== 'all' && 'text-[color:var(--crm-primary)]',
+                  )}
+                >
+                  <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 5h14M5 10h10M7 15h6" />
+                  </svg>
+                  <span className="hidden sm:inline">{activeLabel}</span>
+                  <svg className={classNames('h-3.5 w-3.5 shrink-0 text-white/60 transition-transform hidden sm:block', clientFilterOpen && 'rotate-180')} viewBox="0 0 20 20" fill="none">
+                    <path d="M6 8l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                {clientFilterOpen && (
+                  <div className="crm-menu-surface crm-float-reveal absolute right-0 z-[70] mt-2 w-52 space-y-1 p-2">
+                    {CLIENT_FILTER_ITEMS.map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => { setClientCategory(item.key); setClientFilterOpen(false); }}
+                        className={classNames(
+                          'flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition',
+                          clientCategory === item.key
+                            ? 'bg-[color:var(--crm-primary-container)] text-[#eafffb]'
+                            : 'text-[var(--crm-text)] hover:bg-[color:var(--crm-surface-4)]',
+                        )}
+                      >
+                        {item.dot ? <span className={classNames('h-2.5 w-2.5 rounded-full shrink-0', item.dot)} /> : <span className="h-2.5 w-2.5 shrink-0" />}
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {canCreate && typeof onOpenCreate === 'function' ? (
             <button
               onClick={onOpenCreate}

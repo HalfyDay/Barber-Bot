@@ -1331,7 +1331,10 @@
     const rawDigits = normalizeText(value).replace(/\D/g, "");
     if (!rawDigits) return "";
     let digits = rawDigits;
-    if (digits.startsWith("7") || digits.startsWith("8")) digits = digits.slice(1);
+    // If original value starts with +, first raw digit is country code — strip it
+    if (String(value || "").trimStart().startsWith("+") && digits.length > 0) {
+      digits = digits.slice(1);
+    }
     return digits.slice(0, 10);
   };
 

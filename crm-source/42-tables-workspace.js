@@ -69,6 +69,7 @@ const TablesWorkspace = ({
   const [tableError, setTableError] = useState('');
   const [isFetching, setIsFetching] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [clientCategory, setClientCategory] = useState('all');
   const [selectedBarber, setSelectedBarber] = useLocalStorage('tables.barberFilter', 'all');
   const [hiddenStatuses, setHiddenStatuses] = useLocalStorage('tables.hiddenStatuses', []);
   const [hiddenColumnsMap, setHiddenColumnsMap] = useLocalStorage('tables.hiddenColumns', {
@@ -782,6 +783,8 @@ const TablesWorkspace = ({
                   appointmentRows={activeTable === 'Appointments' ? processedRows : []}
                   appointmentScheduleSlot={activeTable === 'Appointments' ? appointmentScheduleDaySlot : null}
                   onSaveAppointmentScheduleDay={activeTable === 'Appointments' ? handleSaveAppointmentScheduleDay : null}
+                  clientCategory={activeTable === 'Users' ? clientCategory : 'all'}
+                  setClientCategory={activeTable === 'Users' ? setClientCategory : null}
                 />
                 {showLoadingIndicator ? (
                   <LoadingState label="Обновляю таблицы..." />
@@ -799,6 +802,7 @@ const TablesWorkspace = ({
                         onRequestConfirm={onRequestConfirm}
                         onBlockClient={onBlockClient}
                         onAddWarning={onAddClientWarning}
+                        activeCategory={clientCategory}
                       />
                     ) : (
                       <DataTable

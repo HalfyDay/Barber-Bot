@@ -935,7 +935,7 @@ const RevenueView = ({ apiRequest, barbers = [], role = ROLE_OWNER, staffBarberI
     }
     const endDt = new Date();
     const startDt = new Date();
-    if (presetValue === '1D') startDt.setDate(startDt.getDate() - 1);
+    if (presetValue === '1D') { /* today only — start and end are both today */ }
     if (presetValue === '1W') startDt.setDate(startDt.getDate() - 7);
     if (presetValue === '1M') startDt.setMonth(startDt.getMonth() - 1);
     if (presetValue === '3M') startDt.setMonth(startDt.getMonth() - 3);

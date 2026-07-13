@@ -7,6 +7,8 @@
 
 /report/
 
+/.mimocode/
+
 # Environment & secrets
 .env
 .env.*

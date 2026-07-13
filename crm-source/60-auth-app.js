@@ -68,17 +68,19 @@ const LoginScreen = ({ onLogin, error }) => {
   const formatPhoneDisplay = (value) => {
     const digits = (value || '').replace(/\D/g, '');
     if (!digits) return '';
-    let normalized = digits;
-    if (normalized.startsWith('8')) {
-      normalized = `7${normalized.slice(1)}`;
-    } else if (!normalized.startsWith('7')) {
-      normalized = `7${normalized}`;
+    let local = digits;
+    // Strip country code 7 only when +7 prefix is present
+    if (String(value || '').trimStart().startsWith('+7') && local.startsWith('7')) {
+      local = local.slice(1);
+    } else if (local.length > 10) {
+      local = local.slice(-10);
     }
-    normalized = normalized.slice(0, 11);
-    if (normalized === '7') return digits === '7' ? '' : '+7';
-    const core = normalized.slice(1);
-    const parts = [core.slice(0, 3), core.slice(3, 6), core.slice(6, 8), core.slice(8, 10)];
-    const [p1 = '', p2 = '', p3 = '', p4 = ''] = parts;
+    local = local.slice(0, 10);
+    if (!local) return '+7';
+    const p1 = local.slice(0, 3);
+    const p2 = local.slice(3, 6);
+    const p3 = local.slice(6, 8);
+    const p4 = local.slice(8, 10);
     let result = '+7';
     if (p1) result += ` ${p1}`;
     if (p2) result += ` ${p2}`;

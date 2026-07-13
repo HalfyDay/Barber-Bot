@@ -171,6 +171,7 @@ const ClientsList = ({
   onRequestConfirm,
   onBlockClient,
   onAddWarning,
+  activeCategory = 'all',
 }) => {
   const [showArchivedClients, setShowArchivedClients] = useState(false);
   const [bsPanelOpen, setBsPanelOpen] = useState(false);
@@ -247,6 +248,7 @@ const ClientsList = ({
     (Array.isArray(clients) ? clients : []).forEach((client) => {
       const activity = classifyClientActivity(client);
       const enriched = { ...client, activity };
+      if (activeCategory !== 'all' && activity.key !== activeCategory) return;
       if (activity.key === 'regular' || activity.key === 'rare') {
         visible.push(enriched);
       } else {
@@ -259,7 +261,7 @@ const ClientsList = ({
       return 0;
     });
     return { visible, hidden };
-  }, [clients, classifyClientActivity]);
+  }, [clients, classifyClientActivity, activeCategory]);
   const openClientModal = async (client) => {
     if (!client) return;
     setModalState({
@@ -531,7 +533,7 @@ const ClientsList = ({
     );
   };
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {clients.length === 0 ? (
         <p className="text-[var(--crm-muted)]">Список клиентов пуст.</p>
       ) : (

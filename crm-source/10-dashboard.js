@@ -280,13 +280,13 @@ const DashboardView = ({
   const getDashboardStatusDotClass = useCallback((status) => {
     switch (normalizeStatusValue(status)) {
       case STATUS_ACTIVE:
-        return 'bg-[color:var(--crm-primary)]';
-      case STATUS_DONE:
         return 'bg-[color:var(--crm-muted)]';
+      case STATUS_DONE:
+        return 'bg-[color:var(--crm-primary)]';
       case STATUS_CANCELLED:
-        return 'bg-[color:var(--crm-error-container)]';
-      case STATUS_NO_SHOW:
         return 'bg-[color:var(--crm-highlight)]';
+      case STATUS_NO_SHOW:
+        return 'bg-[color:var(--crm-error-container)]';
       default:
         return 'bg-[var(--crm-muted)]';
     }

@@ -1,4 +1,4 @@
-﻿app.get("/", (req, res) => {
+app.get("/", (req, res) => {
   setNoStoreHeaders(res);
   res.sendFile(PUBLIC_HOME_LANDING);
 });
@@ -137,7 +137,9 @@ app.post("/api/log", async (req, res) => {
   } catch (error) {
     console.error("Failed to persist client log", error);
   }
-  console.error("Client error log:", entry);
+  if (payload?.level !== 'info') {
+    console.error("Client error log:", entry);
+  }
   res.status(204).end();
 });
 const noCacheMiddleware = (req, res, next) => {

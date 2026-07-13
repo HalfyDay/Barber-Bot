@@ -798,7 +798,7 @@ const TablesWorkspace = ({
                         role={role}
                         onUpdate={handleUpdate}
                         onAdjustBs={onAdjustClientBs}
-                        onDelete={handleDelete}
+                        onDelete={role !== ROLE_STAFF ? handleDelete : null}
                         fetchHistory={fetchClientProfile}
                         onRequestConfirm={onRequestConfirm}
                         onBlockClient={onBlockClient}

@@ -90,6 +90,7 @@ const ShopView = ({
 
   const [scanQrValue, setScanQrValue] = useState('');
   const [scanResult, setScanResult] = useState(null);
+  const [scanResults, setScanResults] = useState([]);
   const [scanError, setScanError] = useState('');
   const [scannerActive, setScannerActive] = useState(false);
   const scannerStreamRef = useRef(null);
@@ -319,12 +320,19 @@ const ShopView = ({
   };
 
   const handleQrLookup = async (qrCode) => {
+    const query = (qrCode || '').replace(/^#/, '').trim();
     setScanError('');
     setScanResult(null);
+    setScanResults([]);
+    if (!query) return;
     try {
-      const result = await apiRequest(`/shop/orders/${qrCode}`);
-      if (result?.success && result.order) {
-        setScanResult(result.order);
+      const result = await apiRequest(`/shop/orders/search?q=${encodeURIComponent(query)}`);
+      if (result?.success && result.orders?.length) {
+        if (result.orders.length === 1) {
+          setScanResult(result.orders[0]);
+        } else {
+          setScanResults(result.orders);
+        }
       } else {
         setScanError('Заказ не найден.');
       }
@@ -606,7 +614,7 @@ const ShopView = ({
               <div className="crm-inline-panel space-y-3 p-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-white">Заказ #{(scanResult.id || '').slice(0, 8)}</p>
+                    <p className="text-sm font-semibold text-white">Заказ {(scanResult.id || '').slice(0, 8)}</p>
                     <p className="text-xs text-[var(--crm-muted)]">{scanResult.customerName || 'Без имени'} · {scanResult.customerPhone || ''}</p>
                   </div>
                   <span className={classNames('self-start rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider', SHOP_ORDER_STATUS_TONES[scanResult.status] || '')}>
@@ -639,6 +647,29 @@ const ShopView = ({
                     Выдан: {scanResult.issuedByName || '—'} · {scanResult.issuedAt ? new Date(scanResult.issuedAt).toLocaleString('ru-RU') : ''}
                   </p>
                 )}
+              </div>
+            )}
+            {scanResults.length > 0 && !scanResult && (
+              <div className="space-y-2">
+                <p className="text-xs text-[var(--crm-muted)]">Найдено: {scanResults.length}</p>
+                {scanResults.map((order) => (
+                  <button
+                    key={order.id}
+                    type="button"
+                    onClick={() => { setScanResult(order); setScanResults([]); }}
+                    className="w-full text-left crm-inline-panel p-3 hover:bg-white/5 transition rounded-lg"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{(order.id || '').slice(0, 8)}</p>
+                        <p className="text-xs text-[var(--crm-muted)]">{order.customerName || 'Без имени'} · {order.customerPhone || ''}</p>
+                      </div>
+                      <span className={classNames('rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase', SHOP_ORDER_STATUS_TONES[order.status] || '')}>
+                        {SHOP_ORDER_STATUS_LABELS[order.status] || order.status}
+                      </span>
+                    </div>
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -688,6 +719,7 @@ const ShopView = ({
                           <div className="min-w-0 flex-1">
                             <p className="truncate font-semibold text-white">{order.customerName || 'Без имени'}</p>
                             <p className="truncate text-xs text-[var(--crm-muted)]">{order.customerPhone || '—'}</p>
+                            {order.id && <p className="text-xs font-mono text-[var(--crm-muted)] mt-0.5">{(order.id || '').slice(0, 8)}</p>}
                           </div>
                           <span className={classNames('inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide', SHOP_ORDER_STATUS_TONES[order.status] || '')}>
                             {SHOP_ORDER_STATUS_LABELS[order.status] || order.status}
@@ -755,12 +787,39 @@ const ShopView = ({
                             )}
                             {!isOwner && order.status !== 'issued' && order.status !== 'cancelled' && (
                               <div className="flex flex-wrap gap-2 pt-1">
+                                {order.status === 'new' && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleOrderStatus(order.id, 'processing'); }}
+                                    className="crm-action-btn px-3 py-1.5 text-xs"
+                                  >
+                                    В обработку
+                                  </button>
+                                )}
+                                {(order.status === 'new' || order.status === 'processing') && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleOrderStatus(order.id, 'ready'); }}
+                                    className="crm-action-btn px-3 py-1.5 text-xs"
+                                  >
+                                    Готов к выдаче
+                                  </button>
+                                )}
+                                {(order.status === 'new' || order.status === 'processing' || order.status === 'ready') && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleOrderIssue(order.id); }}
+                                    className="crm-action-btn px-3 py-1.5 text-xs"
+                                  >
+                                    Выдать
+                                  </button>
+                                )}
                                 <button
                                   type="button"
-                                  onClick={(e) => { e.stopPropagation(); handleOrderIssue(order.id); }}
-                                  className="crm-action-btn px-3 py-1.5 text-xs"
+                                  onClick={(e) => { e.stopPropagation(); handleOrderCancel(order.id); }}
+                                  className="crm-danger-btn px-3 py-1.5 text-xs"
                                 >
-                                  Выдать
+                                  Отменить
                                 </button>
                               </div>
                             )}

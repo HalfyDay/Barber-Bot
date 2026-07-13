@@ -128,6 +128,30 @@ const registerShopRoutes = ({
     }
   });
 
+  app.get("/api/shop/orders/search", async (req, res) => {
+    try {
+      const q = (req.query.q || '').trim();
+      if (!q) return res.json({ success: true, orders: [] });
+      const orders = await prisma.shopOrders.findMany({
+        where: {
+          OR: [
+            { id: { startsWith: q, mode: 'insensitive' } },
+            { qrCode: { contains: q, mode: 'insensitive' } },
+            { customerName: { contains: q, mode: 'insensitive' } },
+            { customerPhone: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        include: { items: { include: { product: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      });
+      res.json({ success: true, orders });
+    } catch (error) {
+      logger.error("Shop search error:", error.message);
+      res.status(500).json({ success: false, message: "Ошибка поиска." });
+    }
+  });
+
   app.get("/api/shop/orders/:qrCode", async (req, res) => {
     try {
       const order = await getOrderByQrCode(req.params.qrCode);
@@ -373,7 +397,7 @@ const registerShopRoutes = ({
     }
   });
 
-  app.patch("/api/shop/panel/orders/:id/status", requireAuth, requireOwner, async (req, res) => {
+  app.patch("/api/shop/panel/orders/:id/status", requireAuth, async (req, res) => {
     try {
       const { status } = req.body || {};
       const order = await updateOrderStatus(req.params.id, {
@@ -437,7 +461,7 @@ const registerShopRoutes = ({
     }
   });
 
-  app.post("/api/shop/panel/orders/:id/cancel", requireAuth, requireOwner, async (req, res) => {
+  app.post("/api/shop/panel/orders/:id/cancel", requireAuth, async (req, res) => {
     try {
       const order = await cancelOrder(req.params.id);
       res.json({ success: true, order });

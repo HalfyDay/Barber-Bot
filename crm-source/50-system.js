@@ -1592,7 +1592,7 @@ const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
   const role = props.role || ROLE_OWNER;
   const sections = getSystemSubSections(role, props.session?.isImpersonated);
   const activeSection = sections.some((tab) => tab.id === section) ? section : (sections[0]?.id || 'bot');
-  
+
   useEffect(() => {
     if (activeSection !== section) {
       onSectionChange?.(activeSection);
@@ -1603,8 +1603,13 @@ const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
     return <CreatorBusinessesView {...props} />;
   }
 
-  if (activeSection === 'notifications') {
-    return <NotificationsSettingsView />;
+  if (activeSection === 'settings') {
+    return (
+      <div className="space-y-6">
+        <BotControlView {...props} viewMode="system" />
+        {role !== ROLE_CREATOR && <NotificationsSettingsView />}
+      </div>
+    );
   }
 
   return (
@@ -1612,7 +1617,7 @@ const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
       {activeSection === 'site' ? (
         <SiteSettingsView {...props} />
       ) : (
-        <BotControlView {...props} viewMode={activeSection === 'settings' ? 'system' : activeSection} />
+        <BotControlView {...props} viewMode={activeSection} />
       )}
     </div>
   );

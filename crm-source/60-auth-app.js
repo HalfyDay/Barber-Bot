@@ -1928,7 +1928,7 @@ const handleBarberFieldChange = (id, field, value) => {
         );
       case 'profile':
         return (
-          <div className="mx-auto w-full max-w-[1120px]">
+          <div className="mx-auto w-full max-w-[1120px] space-y-6">
             <BarberProfileView
               barber={currentBarber}
               services={services}
@@ -1939,6 +1939,7 @@ const handleBarberFieldChange = (id, field, value) => {
               onSave={handleSaveBarber}
               allowRatingEdit={role === ROLE_OWNER || role === ROLE_CREATOR}
             />
+            {role === ROLE_STAFF && <NotificationsSettingsView />}
           </div>
         );
       case 'income':
@@ -2133,8 +2134,8 @@ const handleBarberFieldChange = (id, field, value) => {
         isNew={appointmentModal.isNew}
         clients={dashboard?.clients || []}
         serviceCatalog={services}
-        canDelete={appointmentModal.allowDelete}
-        onDelete={appointmentModal.allowDelete ? handleDeleteAppointment : null}
+        canDelete={appointmentModal.allowDelete && role !== ROLE_STAFF}
+        onDelete={appointmentModal.allowDelete && role !== ROLE_STAFF ? handleDeleteAppointment : null}
         onQuickCreateClient={handleQuickCreateClient}
         barbers={barbers}
       />

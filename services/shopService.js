@@ -168,8 +168,21 @@ const createShopService = ({
   const getOrder = async (id) =>
     prisma.shopOrders.findUnique({ where: { id }, include: { items: { include: { product: true } } } });
 
-  const getOrderByQrCode = async (qrCode) =>
-    prisma.shopOrders.findUnique({ where: { qrCode }, include: { items: { include: { product: true } } } });
+  const getOrderByQrCode = async (qrCode) => {
+    const cleanCode = (qrCode || '').trim();
+    if (!cleanCode) return null;
+    return prisma.shopOrders.findFirst({
+      where: {
+        OR: [
+          { qrCode: { equals: cleanCode, mode: 'insensitive' } },
+          { qrCode: { contains: cleanCode, mode: 'insensitive' } },
+          { id: { startsWith: cleanCode, mode: 'insensitive' } },
+        ],
+      },
+      include: { items: { include: { product: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  };
 
   const createOrder = async ({
     customerName = null,

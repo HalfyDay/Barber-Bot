@@ -547,28 +547,32 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
                         Есть изменения
                       </span>
                     )}
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); handleDelete(position); }}
-                      disabled={isSaving || bulkSaving}
-                      className="crm-danger-btn px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Удалить
-                    </button>
+                    {canManagePositions && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleDelete(position); }}
+                        disabled={isSaving || bulkSaving}
+                        className="crm-danger-btn px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Удалить
+                      </button>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 md:hidden">
                     {isSaving && (
                       <span className="text-[10px] text-white/50">...</span>
                     )}
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); handleDelete(position); }}
-                      disabled={isSaving || bulkSaving}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--crm-error-container)]/18 text-[color:var(--crm-error)] transition hover:bg-[color:var(--crm-error-container)]/28 disabled:cursor-not-allowed disabled:opacity-50"
-                      aria-label={`Удалить должность ${position.name}`}
-                    >
-                      <IconTrash className="h-4 w-4" />
-                    </button>
+                    {canManagePositions && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleDelete(position); }}
+                        disabled={isSaving || bulkSaving}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--crm-error-container)]/18 text-[color:var(--crm-error)] transition hover:bg-[color:var(--crm-error-container)]/28 disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label={`Удалить должность ${position.name}`}
+                      >
+                        <IconTrash className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                   <svg className={`h-4 w-4 shrink-0 text-[var(--crm-muted)] transition-transform ${isExpanded ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M6 9l6 6 6-6" />

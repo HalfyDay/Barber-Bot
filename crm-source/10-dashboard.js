@@ -489,6 +489,7 @@ const DashboardView = ({
                               >
                                 {isPending ? 'Сохраняю...' : 'Неявка'}
                               </button>
+                              {!isStaffView && (
                               <button
                                 type="button"
                                 onClick={(event) => {
@@ -503,6 +504,7 @@ const DashboardView = ({
                               >
                                 <IconTrash className="h-4 w-4" />
                               </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -579,7 +581,7 @@ const DashboardView = ({
                                 </div>
                               ) : null}
                             </div>
-                            {inProgress ? (
+                            {inProgress && !isStaffView ? (
                               <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 sm:flex sm:w-auto sm:flex-nowrap sm:items-center sm:justify-end sm:gap-2.5">
                                 <button
                                   type="button"
@@ -613,6 +615,7 @@ const DashboardView = ({
                                 >
                                   {isPending ? 'Сохраняю...' : 'Неявка'}
                                 </button>
+                                {!isStaffView && (
                                 <button
                                   type="button"
                                   onClick={(event) => {
@@ -627,6 +630,7 @@ const DashboardView = ({
                                 >
                                   <IconTrash className="h-4 w-4" />
                                 </button>
+                                )}
                               </div>
                             ) : null}
                           </div>

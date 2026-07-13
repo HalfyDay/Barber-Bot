@@ -2057,7 +2057,7 @@ const handleBarberFieldChange = (id, field, value) => {
   };
 
   return (
-    <div className="crm-app-shell min-h-screen overflow-x-hidden flex flex-col text-white">
+    <div className="crm-app-shell min-h-screen flex flex-col text-white">
       {renderImpersonationBanner()}
       {isMobile && (
         <MobileTabs

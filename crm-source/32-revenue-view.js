@@ -104,6 +104,7 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
   const [error, setError] = useState('');
   const [savingKey, setSavingKey] = useState(null);
   const [expandedCards, setExpandedCards] = useState({});
+  const [expandedSubLevels, setExpandedSubLevels] = useState({});
   // Drag-and-drop state
   const [dragOrderIds, setDragOrderIds] = useState([]);
   const [dragState, setDragState] = useState(null);
@@ -124,12 +125,14 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
   }, [positions]);
   const sortedPositions = useMemo(() => {
     if (!Array.isArray(positions) || !positions.length) return [];
-    return [...positions].sort((a, b) => {
-      const leftOrder = Number(a?.orderIndex) || 0;
-      const rightOrder = Number(b?.orderIndex) || 0;
-      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-      return normalizeText(a?.name).localeCompare(normalizeText(b?.name), 'ru');
-    });
+    return [...positions]
+      .filter((p) => !p.parentId)
+      .sort((a, b) => {
+        const leftOrder = Number(a?.orderIndex) || 0;
+        const rightOrder = Number(b?.orderIndex) || 0;
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+        return normalizeText(a?.name).localeCompare(normalizeText(b?.name), 'ru');
+      });
   }, [positions]);
   // Visible positions: use drag order during drag, otherwise sorted
   const visiblePositions = useMemo(() => {
@@ -280,6 +283,59 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
       setSavingKey(null);
     }
   };
+  const handleCreateSubLevel = async (parentId) => {
+    const parentPos = positions.find((p) => p.id === parentId);
+    if (!parentPos) return;
+    const childCount = (parentPos.children || []).length;
+    const existingNames = new Set(positions.map((p) => (p.name || '').toLowerCase()));
+    let candidateName = `${parentPos.name} ${childCount + 1}`;
+    let counter = childCount + 1;
+    while (existingNames.has(candidateName.toLowerCase())) {
+      counter += 1;
+      candidateName = `${parentPos.name} ${counter}`;
+    }
+    try {
+      setSavingKey(`sub-${parentId}`);
+      setError('');
+      await onCreate?.({
+        name: candidateName,
+        masterSharePercent: 0,
+        orderIndex: childCount,
+        requiredClientVolume: 0,
+        targetReturnPercent: 0,
+        specialConditions: null,
+        privileges: null,
+        parentId,
+      });
+      await refreshPositionsList();
+    } catch (err) {
+      setError(err.message || 'Не удалось создать подуровень.');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+  const handleDeleteSubLevel = async (subLevel) => {
+    if (!subLevel?.id) return;
+    const confirmed = requestConfirm
+      ? await requestConfirm({
+          title: 'Удалить подуровень?',
+          message: `«${subLevel.name}» будет удалён.`,
+          confirmLabel: 'Удалить',
+          tone: 'danger',
+        })
+      : true;
+    if (!confirmed) return;
+    try {
+      setSavingKey(subLevel.id);
+      setError('');
+      await onDelete?.(subLevel.id);
+      await refreshPositionsList();
+    } catch (err) {
+      setError(err.message || 'Не удалось удалить подуровень.');
+    } finally {
+      setSavingKey(null);
+    }
+  };
   const handleDraftChange = (id, field, value) => {
     setDrafts((prev) => ({
       ...prev,
@@ -387,6 +443,9 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
   };
   const toggleExpanded = (id) => {
     setExpandedCards((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+  const toggleSubLevel = (id) => {
+    setExpandedSubLevels((prev) => ({ ...prev, [id]: !prev[id] }));
   };
   const activeServices = useMemo(() => {
     if (!Array.isArray(services)) return [];
@@ -519,85 +578,214 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
                 {/* Expanded body */}
                 {isExpanded && (
                   <div className="border-t border-white/5 p-4 md:p-5 space-y-5">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Доля мастера */}
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Доля мастера, %</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.1"
-                          value={draft.masterSharePercent}
-                          onChange={(event) => handleDraftChange(position.id, 'masterSharePercent', event.target.value)}
-                          placeholder="0"
-                          className="w-full px-3 py-2 text-white text-sm"
-                        />
+                    {position.children && position.children.length > 0 ? (
+                      /* Позиция с подуровнями — показываем только подуровни */
+                      <div className="space-y-3">
+                        <p className="text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Подуровни</p>
+                        {[...position.children]
+                          .sort((a, b) => (Number(a?.orderIndex) || 0) - (Number(b?.orderIndex) || 0))
+                          .map((child, childIndex) => (
+                          <div key={child.id} className="crm-soft-card overflow-hidden">
+                            <div
+                              className="flex items-center gap-2 p-3 cursor-pointer select-none"
+                              onClick={() => toggleSubLevel(child.id)}
+                            >
+                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[color:var(--crm-primary)]/10 text-[10px] font-bold text-[color:var(--crm-primary)]">
+                                {childIndex + 1}
+                              </span>
+                              <span className="min-w-0 flex-1 text-sm font-semibold text-white truncate">{child.name}</span>
+                              <span className="text-[10px] text-[var(--crm-muted)]">{child.masterSharePercent ?? 0}%</span>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleDeleteSubLevel(child); }}
+                                disabled={savingKey === child.id}
+                                className="crm-danger-btn px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Удалить
+                              </button>
+                              <svg className={`h-4 w-4 shrink-0 text-[var(--crm-muted)] transition-transform ${expandedSubLevels[child.id] ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M6 9l6 6 6-6" />
+                              </svg>
+                            </div>
+                            {expandedSubLevels[child.id] && (
+                            <div className="border-t border-white/5 p-3 space-y-2">
+                              <div className="space-y-1">
+                                <label className="block text-[10px] font-medium text-[var(--crm-muted)] uppercase">Доля %</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  value={child.masterSharePercent ?? 0}
+                                  onChange={(event) => handleDraftChange(child.id, 'masterSharePercent', event.target.value)}
+                                  className="w-full px-2 py-1 text-white text-xs"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="block text-[10px] font-medium text-[var(--crm-muted)] uppercase">Возвращ. %</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  value={child.targetReturnPercent ?? 0}
+                                  onChange={(event) => handleDraftChange(child.id, 'targetReturnPercent', event.target.value)}
+                                  className="w-full px-2 py-1 text-white text-xs"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="block text-[10px] font-medium text-[var(--crm-muted)] uppercase">Объём</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={child.requiredClientVolume ?? 0}
+                                  onChange={(event) => handleDraftChange(child.id, 'requiredClientVolume', event.target.value)}
+                                  className="w-full px-2 py-1 text-white text-xs"
+                                />
+                              </div>
+                            {/* Макс. стоимость услуг для подуровня */}
+                            <div className="pt-1">
+                              <ServiceMaxPricesEditor
+                                positionId={child.id}
+                                services={activeServices}
+                                onGetMaxPrices={onGetPositionServiceMaxPrices}
+                                onCreateMaxPrice={onCreatePositionServiceMaxPrice}
+                                onUpdateMaxPrice={onUpdatePositionServiceMaxPrice}
+                                onDeleteMaxPrice={onDeletePositionServiceMaxPrice}
+                              />
+                            </div>
+                            </div>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => handleCreateSubLevel(position.id)}
+                          disabled={savingKey === `sub-${position.id}`}
+                          className="crm-ghost-btn w-full px-4 py-2 text-sm"
+                        >
+                          {savingKey === `sub-${position.id}` ? 'Добавляем...' : '+ Добавить подуровень'}
+                        </button>
+
+                        {/* Особые условия и Привилегии для родительского уровня */}
+                        <div className="border-t border-white/5 pt-4 mt-2 space-y-4">
+                          <div className="space-y-1.5">
+                            <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Особые условия</label>
+                            <textarea
+                              value={draft.specialConditions}
+                              onChange={(event) => handleDraftChange(position.id, 'specialConditions', event.target.value)}
+                              placeholder="Опишите особые условия для этой должности..."
+                              rows={3}
+                              className="w-full px-3 py-2 text-white text-sm resize-none"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Привилегии</label>
+                            <textarea
+                              value={draft.privileges}
+                              onChange={(event) => handleDraftChange(position.id, 'privileges', event.target.value)}
+                              placeholder="Опишите привилегии для этой должности..."
+                              rows={3}
+                              className="w-full px-3 py-2 text-white text-sm resize-none"
+                            />
+                          </div>
+                        </div>
                       </div>
+                    ) : (
+                      /* Позиция без подуровней — показываем все поля как раньше */
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Доля мастера */}
+                          <div className="space-y-1.5">
+                            <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Доля мастера, %</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              value={draft.masterSharePercent}
+                              onChange={(event) => handleDraftChange(position.id, 'masterSharePercent', event.target.value)}
+                              placeholder="0"
+                              className="w-full px-3 py-2 text-white text-sm"
+                            />
+                          </div>
 
-                      {/* Целевой % возвращаемости */}
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Возвращаемость, %</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.1"
-                          value={draft.targetReturnPercent}
-                          onChange={(event) => handleDraftChange(position.id, 'targetReturnPercent', event.target.value)}
-                          placeholder="0"
-                          className="w-full px-3 py-2 text-white text-sm"
+                          {/* Целевой % возвращаемости */}
+                          <div className="space-y-1.5">
+                            <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Возвращаемость, %</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              value={draft.targetReturnPercent}
+                              onChange={(event) => handleDraftChange(position.id, 'targetReturnPercent', event.target.value)}
+                              placeholder="0"
+                              className="w-full px-3 py-2 text-white text-sm"
+                            />
+                          </div>
+
+                          {/* Объем клиентов */}
+                          <div className="space-y-1.5">
+                            <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Объем клиентов для уровня</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={draft.requiredClientVolume}
+                              onChange={(event) => handleDraftChange(position.id, 'requiredClientVolume', event.target.value)}
+                              placeholder="0"
+                              className="w-full px-3 py-2 text-white text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Особые условия */}
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Особые условия</label>
+                          <textarea
+                            value={draft.specialConditions}
+                            onChange={(event) => handleDraftChange(position.id, 'specialConditions', event.target.value)}
+                            placeholder="Опишите особые условия для этой должности..."
+                            rows={3}
+                            className="w-full px-3 py-2 text-white text-sm resize-none"
+                          />
+                        </div>
+
+                        {/* Привилегии */}
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Привилегии</label>
+                          <textarea
+                            value={draft.privileges}
+                            onChange={(event) => handleDraftChange(position.id, 'privileges', event.target.value)}
+                            placeholder="Опишите привилегии для этой должности..."
+                            rows={3}
+                            className="w-full px-3 py-2 text-white text-sm resize-none"
+                          />
+                        </div>
+
+                        {/* Макс. стоимость услуг */}
+                        <ServiceMaxPricesEditor
+                          positionId={position.id}
+                          services={activeServices}
+                          onGetMaxPrices={onGetPositionServiceMaxPrices}
+                          onCreateMaxPrice={onCreatePositionServiceMaxPrice}
+                          onUpdateMaxPrice={onUpdatePositionServiceMaxPrice}
+                          onDeleteMaxPrice={onDeletePositionServiceMaxPrice}
                         />
-                      </div>
 
-                      {/* Объем клиентов */}
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Объем клиентов для уровня</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={draft.requiredClientVolume}
-                          onChange={(event) => handleDraftChange(position.id, 'requiredClientVolume', event.target.value)}
-                          placeholder="0"
-                          className="w-full px-3 py-2 text-white text-sm"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Особые условия */}
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Особые условия</label>
-                      <textarea
-                        value={draft.specialConditions}
-                        onChange={(event) => handleDraftChange(position.id, 'specialConditions', event.target.value)}
-                        placeholder="Опишите особые условия для этой должности..."
-                        rows={3}
-                        className="w-full px-3 py-2 text-white text-sm resize-none"
-                      />
-                    </div>
-
-                    {/* Привилегии */}
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Привилегии</label>
-                      <textarea
-                        value={draft.privileges}
-                        onChange={(event) => handleDraftChange(position.id, 'privileges', event.target.value)}
-                        placeholder="Опишите привилегии для этой должности..."
-                        rows={3}
-                        className="w-full px-3 py-2 text-white text-sm resize-none"
-                      />
-                    </div>
-
-                    {/* Макс. стоимость услуг */}
-                    <ServiceMaxPricesEditor
-                      positionId={position.id}
-                      services={activeServices}
-                      onGetMaxPrices={onGetPositionServiceMaxPrices}
-                      onCreateMaxPrice={onCreatePositionServiceMaxPrice}
-                      onUpdateMaxPrice={onUpdatePositionServiceMaxPrice}
-                      onDeleteMaxPrice={onDeletePositionServiceMaxPrice}
-                    />
+                        {/* Кнопка добавления подуровня */}
+                        <button
+                          type="button"
+                          onClick={() => handleCreateSubLevel(position.id)}
+                          disabled={savingKey === `sub-${position.id}`}
+                          className="crm-ghost-btn w-full px-4 py-2 text-sm"
+                        >
+                          {savingKey === `sub-${position.id}` ? 'Добавляем...' : '+ Добавить подуровень'}
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -711,23 +899,41 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
 const LevelView = ({ positions = [], currentBarber = null, services = [], apiRequest = null }) => {
   const [maxPrices, setMaxPrices] = useState({});
   const [loadingPrices, setLoadingPrices] = useState(false);
+  const [levelProgress, setLevelProgress] = useState(null);
 
   const position = useMemo(() => {
     if (!currentBarber?.positionId || !Array.isArray(positions)) return null;
     return positions.find((p) => p.id === currentBarber.positionId) || null;
   }, [positions, currentBarber]);
 
+  // Find parent position if barber is on a sub-level
+  const parentPosition = useMemo(() => {
+    if (!position?.parentId || !Array.isArray(positions)) return null;
+    return positions.find((p) => p.id === position.parentId) || null;
+  }, [positions, position]);
+
+  // Determine if this is a sub-level assignment
+  const isSubLevel = Boolean(position?.parentId);
+  const displayPosition = isSubLevel ? parentPosition : position;
   const sortedPositions = useMemo(() => {
     if (!Array.isArray(positions) || !positions.length) return [];
-    return [...positions].sort((a, b) => {
-      const leftOrder = Number(a?.orderIndex) || 0;
-      const rightOrder = Number(b?.orderIndex) || 0;
-      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-      return normalizeText(a?.name).localeCompare(normalizeText(b?.name), 'ru');
-    });
+    return [...positions]
+      .filter((p) => !p.parentId)
+      .sort((a, b) => {
+        const leftOrder = Number(a?.orderIndex) || 0;
+        const rightOrder = Number(b?.orderIndex) || 0;
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+        return normalizeText(a?.name).localeCompare(normalizeText(b?.name), 'ru');
+      });
   }, [positions]);
 
-  const levelNumber = position ? (Number(position.orderIndex) || 0) + 1 : null;
+  const levelNumber = displayPosition ? (Number(displayPosition.orderIndex) || 0) + 1 : null;
+
+  // Children of the parent (sub-levels)
+  const subLevels = useMemo(() => {
+    if (!displayPosition?.children || !displayPosition.children.length) return [];
+    return [...displayPosition.children].sort((a, b) => (Number(a?.orderIndex) || 0) - (Number(b?.orderIndex) || 0));
+  }, [displayPosition]);
 
   // Fetch max prices for current position
   useEffect(() => {
@@ -753,6 +959,21 @@ const LevelView = ({ positions = [], currentBarber = null, services = [], apiReq
     return () => { cancelled = true; };
   }, [position?.id, apiRequest]);
 
+  // Fetch level progress data
+  useEffect(() => {
+    if (!currentBarber?.id || !apiRequest) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiRequest(`/level-history?barberId=${encodeURIComponent(currentBarber.id)}`);
+        if (!cancelled) setLevelProgress(data);
+      } catch {
+        if (!cancelled) setLevelProgress(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [currentBarber?.id, apiRequest]);
+
   if (!position) {
     return (
       <div className="space-y-6">
@@ -774,12 +995,15 @@ const LevelView = ({ positions = [], currentBarber = null, services = [], apiReq
             {levelNumber}
           </span>
           <div>
-            <h2 className="text-lg font-bold text-white">{position.name}</h2>
-            <p className="text-sm text-[var(--crm-muted)]">Уровень {levelNumber} из {sortedPositions.length}</p>
+            <h2 className="text-lg font-bold text-white">{displayPosition.name}</h2>
+            <p className="text-sm text-[var(--crm-muted)]">
+              Уровень {levelNumber} из {sortedPositions.length}
+              {isSubLevel && ` · Подуровень: ${position.name}`}
+            </p>
           </div>
         </div>
 
-        {/* Stats grid */}
+        {/* Stats grid - показываем для текущего подуровня */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 md:p-5 pt-0">
           <div className="crm-soft-card p-4">
             <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-1">Доля мастера</p>
@@ -794,6 +1018,104 @@ const LevelView = ({ positions = [], currentBarber = null, services = [], apiReq
             <p className="text-xl font-bold text-white">{position.requiredClientVolume ?? 0}</p>
           </div>
         </div>
+
+        {/* Level progress section */}
+        {levelProgress && levelProgress.nextPosition && (
+          <div className="p-4 md:p-5 pt-0">
+            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-3">Прогресс к следующему уровню</p>
+            <div className="crm-soft-card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-300">Следующий уровень: <span className="text-white font-semibold">{levelProgress.nextPosition.name}</span></span>
+                {levelProgress.promotionProgress.ready && (
+                  <span className="text-[10px] uppercase tracking-wider text-green-400 font-semibold">Готов к повышению</span>
+                )}
+              </div>
+              {/* Progress bar */}
+              <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${Math.min(100, (levelProgress.promotionProgress.monthsMet / levelProgress.promotionProgress.monthsRequired) * 100)}%`,
+                    background: levelProgress.promotionProgress.ready
+                      ? 'var(--crm-primary)'
+                      : 'color-mix(in srgb, var(--crm-primary) 50%, rgba(255,255,255,0.1))',
+                  }}
+                />
+              </div>
+              <p className="text-xs text-[var(--crm-muted)]">
+                {levelProgress.promotionProgress.monthsMet}/{levelProgress.promotionProgress.monthsRequired} месяца выполнено
+                {!levelProgress.promotionProgress.ready && ` — осталось ${levelProgress.promotionProgress.monthsRequired - levelProgress.promotionProgress.monthsMet} мес.`}
+              </p>
+
+              {/* Requirements comparison */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-white/5">
+                <div className="text-xs">
+                  <span className="text-[var(--crm-muted)]">Клиенты: </span>
+                  <span className="text-white font-medium">{levelProgress.history[0]?.actualClientVolume ?? 0}</span>
+                  <span className="text-[var(--crm-muted)]"> / {levelProgress.nextPosition.requiredClientVolume ?? 0}</span>
+                </div>
+                <div className="text-xs">
+                  <span className="text-[var(--crm-muted)]">Постоянные: </span>
+                  <span className="text-white font-medium">{levelProgress.history[0]?.actualRetainedClients ?? 0}</span>
+                  <span className="text-[var(--crm-muted)]"> / {levelProgress.nextPosition.requiredRetainedClients ?? 0}</span>
+                </div>
+                <div className="text-xs">
+                  <span className="text-[var(--crm-muted)]">Возвращаемость: </span>
+                  <span className="text-white font-medium">{(levelProgress.history[0]?.actualReturnPercent ?? 0).toFixed(1)}%</span>
+                  <span className="text-[var(--crm-muted)]"> / {levelProgress.nextPosition.targetReturnPercent ?? 0}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Demotion risk warning */}
+        {levelProgress && levelProgress.demotionRisk.atRisk && !levelProgress.demotionRisk.ready && (
+          <div className="p-4 md:p-5 pt-0">
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+              <p className="text-xs text-amber-400 font-semibold">
+                Внимание: несоответствие уровню {levelProgress.demotionRisk.monthsFailed}/{levelProgress.demotionRisk.monthsThreshold} мес.
+              </p>
+              <p className="text-xs text-amber-400/70 mt-1">
+                Если требования не будут выполнены ещё {levelProgress.demotionRisk.monthsThreshold - levelProgress.demotionRisk.monthsFailed} мес., произойдёт понижение.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {levelProgress && levelProgress.demotionRisk.ready && (
+          <div className="p-4 md:p-5 pt-0">
+            <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+              <p className="text-xs text-red-400 font-semibold">
+                Уровень понижен: несоответствие {levelProgress.demotionRisk.monthsThreshold}+ мес. подряд
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Sub-levels list - показываем если есть подуровни */}
+        {subLevels.length > 0 && (
+          <div className="p-4 md:p-5 pt-0">
+            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-3">Подуровни</p>
+            <div className="space-y-2">
+              {subLevels.map((sub, idx) => {
+                const isCurrent = sub.id === position.id;
+                return (
+                  <div key={sub.id} className={`flex items-center gap-3 p-2.5 rounded-lg ${isCurrent ? 'bg-[color:var(--crm-primary)]/10 border border-[color:var(--crm-primary)]/30' : 'opacity-60'}`}>
+                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${isCurrent ? 'bg-[color:var(--crm-primary)] text-zinc-950' : 'bg-white/10 text-white/50'}`}>
+                      {idx + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className={`text-sm ${isCurrent ? 'text-white font-semibold' : 'text-slate-400'}`}>{sub.name}</span>
+                      <span className="text-xs text-[var(--crm-muted)] ml-2">{sub.masterSharePercent ?? 0}%</span>
+                    </div>
+                    {isCurrent && <span className="text-[10px] uppercase tracking-wider text-[color:var(--crm-primary)] font-semibold">Текущий</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Service max prices */}
         {Array.isArray(services) && services.length > 0 && (
@@ -826,13 +1148,15 @@ const LevelView = ({ positions = [], currentBarber = null, services = [], apiReq
             <div className="space-y-2">
               {sortedPositions.map((pos, idx) => {
                 const num = idx + 1;
-                const isCurrent = pos.id === position.id;
+                const isCurrent = pos.id === displayPosition.id;
+                const hasChildren = pos.children && pos.children.length > 0;
                 return (
                   <div key={pos.id} className={`flex items-center gap-3 p-2.5 rounded-lg ${isCurrent ? 'bg-[color:var(--crm-primary)]/10 border border-[color:var(--crm-primary)]/30' : 'opacity-60'}`}>
                     <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${isCurrent ? 'bg-[color:var(--crm-primary)] text-zinc-950' : 'bg-white/10 text-white/50'}`}>
                       {num}
                     </span>
                     <span className={`text-sm ${isCurrent ? 'text-white font-semibold' : 'text-slate-400'}`}>{pos.name}</span>
+                    {hasChildren && <span className="text-[10px] text-[var(--crm-muted)]">({pos.children.length} подуровн.)</span>}
                     {isCurrent && <span className="ml-auto text-[10px] uppercase tracking-wider text-[color:var(--crm-primary)] font-semibold">Текущий</span>}
                   </div>
                 );

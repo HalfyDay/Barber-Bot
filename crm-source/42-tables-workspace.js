@@ -646,6 +646,7 @@ const TablesWorkspace = ({
               barbers={barbers}
               services={services}
               positions={positions}
+              apiRequest={apiRequest}
               onFieldChange={onBarberFieldChange}
               onSave={onSaveBarber}
               onAdd={onAddBarber}

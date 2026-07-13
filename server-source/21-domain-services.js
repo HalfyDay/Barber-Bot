@@ -271,4 +271,14 @@ const shopService = createShopService({
   randomUUID,
   normalizeText,
 });
+const { createLevelEvaluationService } = require('./services/levelEvaluationService');
+const levelEvaluationService = createLevelEvaluationService({
+  prisma,
+  normalizeText,
+  canonicalizeKey,
+  normalizeAppointmentStatus,
+  isCompletedStatus,
+  statusDone: STATUS_DONE,
+  randomUUID,
+});
 

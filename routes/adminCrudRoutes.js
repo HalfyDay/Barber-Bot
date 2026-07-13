@@ -29,6 +29,11 @@ const registerAdminCrudRoutes = ({
   adjustUserBsBalance,
   addUserWarning,
   homePushService,
+  splitServiceList,
+  buildServiceLookup,
+  getServicePriceForBarber,
+  formatDateOnly,
+  statusNoShow,
 }) => {
   const buildScheduleBoard = async (requestedWindowDays = 14) => {
     const barbersList = await getBarbers({ includeInactive: true });
@@ -106,18 +111,73 @@ const registerAdminCrudRoutes = ({
 
   app.get("/api/barbers/full", authenticateToken, async (req, res) => {
     try {
-      const [barbers, appointmentsRaw] = await Promise.all([
+      const [barbers, appointmentsRaw, servicesRaw] = await Promise.all([
         getBarbers({ includeInactive: true }),
         prisma.appointments.findMany(),
+        prisma.services.findMany(),
       ]);
       const appointments = appointmentsRaw.map(mapAppointment);
+      const serviceLookup = buildServiceLookup(servicesRaw);
       const now = new Date();
+      const todayKey = formatDateOnly(now);
       const yearAgo = new Date(now);
       yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthStartKey = formatDateOnly(monthStart);
+      const isCompleted = (status) => normalizeAppointmentStatus(status) === 'Выполнена';
+      const isNoShow = (status) => {
+        const normalized = normalizeAppointmentStatus(status);
+        return normalized === statusNoShow || normalized === 'no_show';
+      };
       const hydrated = barbers.map((barber) => {
         const related = appointments.filter(
           (appt) => normalizeText(appt.Barber) === normalizeText(barber.name),
         );
+        const monthAppointments = related.filter(
+          (appt) => appt.Date && appt.Date >= monthStartKey,
+        );
+
+        // На сегодня — активные записи на сегодня
+        const todayActive = related.filter(
+          (appt) => appt.isActive && appt.Date === todayKey,
+        ).length;
+
+        // Клиенты за месяц — уникальные выполненные клиенты
+        const monthClientVisits = new Map();
+        monthAppointments.forEach((appt) => {
+          if (!isCompleted(appt.Status)) return;
+          const key = normalizeText(appt.UserID || appt.Phone || appt.CustomerName);
+          if (key) monthClientVisits.set(key, (monthClientVisits.get(key) || 0) + 1);
+        });
+        const monthClients = monthClientVisits.size;
+
+        // Постоянные — клиенты с 2+ визитами за месяц
+        const monthRegular = [...monthClientVisits.values()].filter((count) => count >= 2).length;
+
+        // Неявки за месяц
+        const monthNoShow = monthAppointments.filter((appt) => isNoShow(appt.Status)).length;
+
+        // Заработано за месяц
+        let earningsMonth = 0;
+        const masterSharePercent = Number(barber.position?.masterSharePercent ?? 0);
+        monthAppointments.forEach((appt) => {
+          if (!isCompleted(appt.Status)) return;
+          if (appt.Services && splitServiceList(appt.Services).includes('Прочее')) return;
+          const serviceNames = splitServiceList(appt.Services);
+          if (!serviceNames.length) return;
+          let appointmentGross = 0;
+          serviceNames.forEach((serviceName) => {
+            const service = serviceLookup.get(canonicalizeKey(serviceName));
+            if (!service) return;
+            const price = getServicePriceForBarber(service, barber.id);
+            const numericPrice = Number(price);
+            if (!Number.isFinite(numericPrice) || numericPrice <= 0) return;
+            appointmentGross += numericPrice;
+          });
+          if (!appointmentGross) return;
+          earningsMonth += Math.round(appointmentGross * (masterSharePercent / 100));
+        });
+
         return {
           ...barber,
           stats: {
@@ -129,6 +189,11 @@ const registerAdminCrudRoutes = ({
                 appt.startDateTime &&
                 new Date(appt.startDateTime) >= yearAgo,
             ).length,
+            todayActive,
+            monthClients,
+            monthRegular,
+            monthNoShow,
+            earningsMonth,
           },
         };
       });
@@ -528,6 +593,10 @@ const registerAdminCrudRoutes = ({
       // Support filtering by positionId for PositionServiceMaxPrices
       if (tableName === "PositionServiceMaxPrices" && req.query?.positionId) {
         queryOptions.where = { positionId: req.query.positionId };
+      }
+      // Include children for Positions hierarchy
+      if (tableName === "Positions") {
+        queryOptions.include = { children: true };
       }
       let records = await prisma[modelName].findMany(queryOptions);
       if (tableName === "Users" && typeof buildUserInsightsMap === "function") {

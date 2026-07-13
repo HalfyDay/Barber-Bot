@@ -93,7 +93,8 @@ model Barbers {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  services ServicePrices[]
+  services     ServicePrices[]
+  levelHistory BarberLevelHistory[]
 }
 
 model Positions {
@@ -106,11 +107,16 @@ model Positions {
   targetReturnPercent     Float?   @default(0)
   specialConditions       String?
   privileges              String?
+  parentId                String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
-  barbers           Barbers[]
-  serviceMaxPrices  PositionServiceMaxPrices[]
+  parent                  Positions?  @relation("PositionHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children                Positions[] @relation("PositionHierarchy")
+  barbers                 Barbers[]
+  serviceMaxPrices        PositionServiceMaxPrices[]
+  currentLevelHistory     BarberLevelHistory[] @relation("CurrentLevelHistory")
+  nextLevelHistory        BarberLevelHistory[] @relation("NextLevelHistory")
 }
 
 model Services {
@@ -152,6 +158,27 @@ model PositionServiceMaxPrices {
   service  Services  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
   @@unique([positionId, serviceId])
+}
+
+model BarberLevelHistory {
+  id                      String   @id
+  barberId                String
+  month                   String
+  actualClientVolume      Int      @default(0)
+  actualRetainedClients   Int      @default(0)
+  actualReturnPercent     Float    @default(0)
+  meetsCurrentRequirements Boolean @default(false)
+  meetsNextRequirements   Boolean @default(false)
+  currentPositionId       String
+  nextPositionId          String?
+  evaluatedAt             DateTime @default(now())
+
+  barber          Barbers     @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  currentPosition Positions @relation("CurrentLevelHistory", fields: [currentPositionId], references: [id], onDelete: Cascade)
+  nextPosition    Positions? @relation("NextLevelHistory", fields: [nextPositionId], references: [id], onDelete: SetNull)
+
+  @@unique([barberId, month])
+  @@map("BarberLevelHistory")
 }
 
 model BotSettings {

@@ -401,6 +401,21 @@ const createDashboardSnapshotService = ({
       const staffPositionName = normalizeText(
         staffBarber?.position?.name || staffBarber?.position?.title || "",
       );
+      // Monthly client stats for staff
+      const staffMonthAppointments = staffAppointments.filter(
+        (appt) => appt.Date && appt.Date >= monthStartKey,
+      );
+      const staffMonthClientVisits = new Map();
+      staffMonthAppointments.forEach((appt) => {
+        if (!isCompletedStatus(appt.Status)) return;
+        const key = normalizeText(appt.UserID || appt.Phone || appt.CustomerName);
+        if (key) staffMonthClientVisits.set(key, (staffMonthClientVisits.get(key) || 0) + 1);
+      });
+      const staffMonthClients = staffMonthClientVisits.size;
+      const staffMonthRegular = [...staffMonthClientVisits.values()].filter((count) => count >= 2).length;
+      const staffMonthNoShow = staffMonthAppointments.filter(
+        (appt) => normalizeText(appt.Status) === normalizeText(statusNoShow),
+      ).length;
       return {
         stats: {
           totalUsers: staffUsers.length,
@@ -412,6 +427,9 @@ const createDashboardSnapshotService = ({
           blockedClients: staffBlocked,
           earningsMonth: Math.round(staffMonthlyGross - staffMonthlyCommission),
           positionName: staffPositionName || null,
+          monthClients: staffMonthClients,
+          monthRegular: staffMonthRegular,
+          monthNoShow: staffMonthNoShow,
         },
         appointments: {
           active: staffActive,

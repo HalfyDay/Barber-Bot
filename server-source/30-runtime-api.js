@@ -558,6 +558,11 @@ registerAdminCrudRoutes({
   adjustUserBsBalance,
   addUserWarning,
   homePushService,
+  splitServiceList,
+  buildServiceLookup,
+  getServicePriceForBarber,
+  formatDateOnly,
+  statusNoShow: STATUS_NO_SHOW,
 });
 app.get("/api/options/appointments", authenticateToken, async (req, res) => {
   try {
@@ -727,3 +732,68 @@ if (shopService?.cancelExpiredShopOrders) {
   runAutoCancel();
   setInterval(runAutoCancel, 30 * 60 * 1000);
 }
+
+// ── Level evaluation: monthly cron (1st of each month at 03:30) ──
+const getPreviousMonth = () => {
+  const now = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const runLevelEvaluation = async () => {
+  const month = getPreviousMonth();
+  try {
+    console.log(`[level] Starting evaluation for ${month}...`);
+    await levelEvaluationService.evaluateAllBarbers(month);
+    const changes = await levelEvaluationService.checkAndApplyLevelChanges();
+    if (changes.length) {
+      console.log(`[level] Applied ${changes.length} level change(s):`, changes.map((c) => `${c.barber}: ${c.type}`).join(', '));
+    } else {
+      console.log(`[level] No level changes needed.`);
+    }
+  } catch (e) {
+    console.error(`[level] Evaluation error: ${e.message}`);
+  }
+};
+
+// Run on 1st of each month at 03:30
+cron.schedule('30 3 1 * *', runLevelEvaluation);
+
+// ── API: Level history for a barber ──
+app.get('/api/level-history', authenticateToken, async (req, res) => {
+  try {
+    const { barberId } = req.query;
+    if (barberId) {
+      const progress = await levelEvaluationService.getBarberProgress(barberId);
+      return res.json(progress || { history: [] });
+    }
+    // Return all recent history (admin view)
+    const history = await prisma.barberLevelHistory.findMany({
+      orderBy: { evaluatedAt: 'desc' },
+      take: 100,
+      include: {
+        barber: { select: { id: true, name: true } },
+        currentPosition: { select: { id: true, name: true } },
+        nextPosition: { select: { id: true, name: true } },
+      },
+    });
+    res.json(history);
+  } catch (error) {
+    console.error('[level] History error:', error.message);
+    res.status(500).json({ error: 'Ошибка загрузки истории уровней.' });
+  }
+});
+
+// ── API: Manually trigger level evaluation (admin) ──
+app.post('/api/level-history/evaluate', authenticateToken, async (req, res) => {
+  try {
+    const { month } = req.body || {};
+    const evalMonth = month || getPreviousMonth();
+    await levelEvaluationService.evaluateAllBarbers(evalMonth);
+    const changes = await levelEvaluationService.checkAndApplyLevelChanges();
+    res.json({ ok: true, month: evalMonth, changes });
+  } catch (error) {
+    console.error('[level] Manual evaluation error:', error.message);
+    res.status(500).json({ error: 'Ошибка оценки уровней.' });
+  }
+});

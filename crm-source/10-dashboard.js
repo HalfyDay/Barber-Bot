@@ -297,13 +297,34 @@ const DashboardView = ({
         <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-4">
           {isStaffView ? (
             <>
-              <StatCard compact label="Всего клиентов" value={stats.totalUsers ?? 0} onClick={resolveStatHandler('Users')} />
               <StatCard
                 compact
-                label="Активных записей"
-                value={stats.activeAppointments ?? 0}
-                accent="text-[color:var(--crm-primary)]"
+                label="На сегодня"
+                value={stats.todaysAppointments ?? 0}
+                accent="text-[#ff617f]"
                 onClick={resolveStatHandler('Appointments')}
+              />
+              <StatCard
+                compact
+                label="Клиенты / Постоянные / Неявка"
+                value={
+                  <>
+                    <span>{stats.monthClients ?? 0}</span>
+                    <span className="text-zinc-500 mx-1">/</span>
+                    <span>{stats.monthRegular ?? 0}</span>
+                    <span className="text-zinc-500 mx-1">/</span>
+                    <span className="text-[#ff617f]">{stats.monthNoShow ?? 0}</span>
+                  </>
+                }
+                accent="text-[color:var(--crm-highlight)]"
+                onClick={resolveStatHandler('Level')}
+              />
+              <StatCard
+                compact
+                label="Уровень"
+                value={stats.positionName || '—'}
+                accent="text-[var(--crm-text)]"
+                onClick={resolveStatHandler('Level')}
               />
               <StatCard
                 compact
@@ -315,12 +336,6 @@ const DashboardView = ({
                     ? () => handleStatNavigate({ tableId: 'Revenue', revenuePeriod: '1M' })
                     : undefined
                 }
-              />
-              <StatCard
-                compact
-                label="Мой уровень"
-                value={stats.positionName || '—'}
-                accent="text-[var(--crm-text)]"
               />
             </>
           ) : (

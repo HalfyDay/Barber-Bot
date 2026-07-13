@@ -2,6 +2,7 @@ const BarbersView = ({
   barbers = [],
   services = [],
   positions = [],
+  apiRequest,
   loadAvatarOptions,
   uploadAvatar,
   uploadCard,
@@ -22,8 +23,14 @@ const BarbersView = ({
   const dragMetaRef = useRef(null);
   const layoutRectsRef = useRef(new Map());
   const suppressOpenUntilRef = useRef(0);
+  const [enrichedBarbers, setEnrichedBarbers] = useState(null);
   const canManageBarbers = role !== ROLE_STAFF;
-  const sortedBarbers = useMemo(() => sortServicesByOrder(barbers), [barbers]);
+  const sortedBarbers = useMemo(() => {
+    const base = sortServicesByOrder(barbers);
+    if (!enrichedBarbers) return base;
+    const enrichedMap = new Map(enrichedBarbers.map((b) => [b.id, b]));
+    return base.map((b) => ({ ...b, stats: enrichedMap.get(b.id)?.stats || b.stats }));
+  }, [barbers, enrichedBarbers]);
   const visibleBarbers = useMemo(() => {
     if (!dragOrderIds.length) return sortedBarbers;
     const barberMap = new Map(sortedBarbers.map((barber) => [barber.id, barber]));
@@ -61,12 +68,14 @@ const BarbersView = ({
   const [showPassword, setShowPassword] = useState(false);
   const sortedPositions = useMemo(() => {
     if (!Array.isArray(positions) || !positions.length) return [];
-    return [...positions].sort((a, b) => {
-      const leftOrder = Number(a?.orderIndex) || 0;
-      const rightOrder = Number(b?.orderIndex) || 0;
-      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-      return normalizeText(a?.name).localeCompare(normalizeText(b?.name), 'ru');
-    });
+    return [...positions]
+      .filter((p) => !p.parentId)
+      .sort((a, b) => {
+        const leftOrder = Number(a?.orderIndex) || 0;
+        const rightOrder = Number(b?.orderIndex) || 0;
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+        return normalizeText(a?.name).localeCompare(normalizeText(b?.name), 'ru');
+      });
   }, [positions]);
   const activePosition = useMemo(
     () => sortedPositions.find((item) => item.id === workingBarber?.positionId) || null,
@@ -118,6 +127,16 @@ const BarbersView = ({
   useEffect(() => {
     setShowPassword(false);
   }, [editorState.open, editorState.mode, editorState.targetId]);
+  useEffect(() => {
+    if (!apiRequest) return;
+    let cancelled = false;
+    apiRequest('/barbers/full')
+      .then((data) => {
+        if (!cancelled && Array.isArray(data)) setEnrichedBarbers(data);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [apiRequest]);
   const buildReorderedIds = useCallback((sourceIds, activeId, clientX, clientY) => {
     const idleIds = sourceIds.filter((id) => id !== activeId);
     let targetIndex = -1;
@@ -408,6 +427,7 @@ const BarbersView = ({
               const masterSharePercent =
                 typeof barber.position?.masterSharePercent === 'number' ? barber.position.masterSharePercent : null;
               const commissionLabel = masterSharePercent !== null ? formatPercent(masterSharePercent) : null;
+              const stats = barber.stats || {};
               const isDragging = dragState?.activeId === barber.id;
               return (
                 <div
@@ -509,7 +529,7 @@ const BarbersView = ({
                       )}
                       {phoneLabel && <span className="text-slate-300">{phoneLabel}</span>}
                     </div>
-                    {barber.description && <p className="text-sm text-slate-400">{barber.description}</p>}
+                                        {barber.description && <p className="text-sm text-slate-400">{barber.description}</p>}
                   </div>
                 </div>
               );
@@ -630,10 +650,21 @@ const BarbersView = ({
                       onChange={(nextValue) => handleFieldChange('positionId', nextValue || null)}
                       options={[
                         { value: '', label: 'Без должности' },
-                        ...sortedPositions.map((position) => ({
-                          value: position.id,
-                          label: `${position.name}${typeof position.masterSharePercent === 'number' ? ` · ${formatPercent(position.masterSharePercent)}` : ''}`,
-                        })),
+                        ...sortedPositions.flatMap((position) => {
+                          const parentOpt = {
+                            value: position.id,
+                            label: `${position.name}${typeof position.masterSharePercent === 'number' ? ` · ${formatPercent(position.masterSharePercent)}` : ''}`,
+                          };
+                          const children = Array.isArray(position.children) && position.children.length > 0
+                            ? [...position.children]
+                                .sort((a, b) => (Number(a?.orderIndex) || 0) - (Number(b?.orderIndex) || 0))
+                                .map((child) => ({
+                                  value: child.id,
+                                  label: `  └ ${child.name}${typeof child.masterSharePercent === 'number' ? ` · ${formatPercent(child.masterSharePercent)}` : ''}`,
+                                }))
+                            : [];
+                          return [parentOpt, ...children];
+                        }),
                       ]}
                       buttonClassName="h-12 px-4"
                     />

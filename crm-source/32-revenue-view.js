@@ -896,25 +896,160 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
   );
 };
 
+
+/* ═══ ZZZ-STYLE HELPERS ═══ */
+
+const ZzzGlowBar = ({ value, max, color = 'var(--crm-primary)', height = 6, label, showPercent = false }) => {
+  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  return (
+    <div className="w-full">
+      {label && (
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] uppercase tracking-widest text-[var(--crm-muted)] font-semibold">{label}</span>
+          {showPercent && <span className="text-[10px] font-bold" style={{ color }}>{Math.round(pct)}%</span>}
+        </div>
+      )}
+      <div className="relative w-full overflow-hidden" style={{ height, borderRadius: 2, background: 'rgba(255,255,255,0.04)' }}>
+        <div className="absolute inset-y-0 left-0 transition-all duration-700 ease-out" style={{
+          width: `${pct}%`,
+          background: `linear-gradient(90deg, ${color}88, ${color})`,
+          boxShadow: `0 0 12px ${color}66, 0 0 4px ${color}44`,
+          borderRadius: 2,
+        }} />
+        <div className="absolute inset-y-0 left-0 opacity-40" style={{
+          width: `${pct}%`,
+          background: 'linear-gradient(180deg, rgba(255,255,255,0.3) 0%, transparent 100%)',
+          borderRadius: 2,
+        }} />
+      </div>
+    </div>
+  );
+};
+
+const ZzzStatBlock = ({ label, value, unit = '', color = 'var(--crm-primary)', small = false }) => (
+  <div className={`relative overflow-hidden ${small ? 'p-2.5' : 'p-3.5'}`} style={{
+    background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
+    border: `1px solid ${color}22`,
+    clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+  }}>
+    <div className="absolute top-0 right-0 w-8 h-8 opacity-20" style={{
+      background: `linear-gradient(135deg, transparent 50%, ${color} 50%)`,
+      clipPath: 'polygon(100% 0, 100% 100%, 0 0)',
+    }} />
+    <p className={`${small ? 'text-[9px]' : 'text-[10px]'} uppercase tracking-widest font-semibold mb-1`} style={{ color: `${color}aa` }}>{label}</p>
+    <p className={`${small ? 'text-lg' : 'text-2xl'} font-black text-white`} style={{ textShadow: `0 0 20px ${color}33` }}>
+      {value}<span className={`${small ? 'text-xs' : 'text-sm'} font-semibold ml-0.5 opacity-60`}>{unit}</span>
+    </p>
+  </div>
+);
+
+const ZzzRadarChart = ({ stats = [], size = 180 }) => {
+  if (!stats.length) return null;
+  const cx = size / 2, cy = size / 2, r = size * 0.38;
+  const angleStep = (2 * Math.PI) / stats.length;
+  const getPoint = (i, val) => {
+    const angle = angleStep * i - Math.PI / 2;
+    return { x: cx + r * val * Math.cos(angle), y: cy + r * val * Math.sin(angle) };
+  };
+  const gridLevels = [0.25, 0.5, 0.75, 1];
+  const dataPoints = stats.map((s, i) => getPoint(i, Math.min(1, s.value)));
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      {gridLevels.map((level) => {
+        const pts = stats.map((_, i) => getPoint(i, level));
+        return <polygon key={level} points={pts.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="1" />;
+      })}
+      {stats.map((_, i) => {
+        const p = getPoint(i, 1);
+        return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="rgba(255,255,255,0.04)" strokeWidth="1" />;
+      })}
+      <polygon points={dataPoints.map((p) => `${p.x},${p.y}`).join(' ')} fill="var(--crm-primary)" fillOpacity="0.12" stroke="var(--crm-primary)" strokeWidth="2" />
+      {dataPoints.map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r="3" fill="var(--crm-primary)" stroke="var(--crm-surface)" strokeWidth="1.5" />
+      ))}
+      {stats.map((s, i) => {
+        const p = getPoint(i, 1.18);
+        return <text key={i} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fill="var(--crm-muted)" fontSize="8" fontWeight="600" letterSpacing="0.05em">{s.label}</text>;
+      })}
+    </svg>
+  );
+};
+
+const ZzzHexBadge = ({ number, size = 56, color = 'var(--crm-primary)', label }) => (
+  <div className="flex flex-col items-center gap-1">
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox="0 0 56 56">
+        <polygon points="28,2 52,15 52,41 28,54 4,41 4,15" fill="none" stroke={color} strokeWidth="2" opacity="0.4" />
+        <polygon points="28,6 48,17 48,39 28,50 8,39 8,17" fill={`${color}11`} stroke={color} strokeWidth="1" opacity="0.6" />
+      </svg>
+      <span className="absolute text-lg font-black" style={{ color, textShadow: `0 0 16px ${color}55` }}>{number}</span>
+    </div>
+    {label && <span className="text-[9px] uppercase tracking-widest text-[var(--crm-muted)] font-semibold">{label}</span>}
+  </div>
+);
+
+const ZzzTrendChart = ({ history = [] }) => {
+  if (history.length < 2) return <p className="text-xs text-[var(--crm-muted)] text-center py-4">Недостаточно данных</p>;
+  const w = 320, h = 120, pad = 24;
+  const maxVal = Math.max(...history.map((h) => Math.max(h.actualClientVolume || 0, h.actualRetainedClients || 0)), 1);
+  const getX = (i) => pad + (i / (history.length - 1)) * (w - pad * 2);
+  const getY = (val) => h - pad - (val / maxVal) * (h - pad * 2);
+  const clientPath = history.map((item, i) => `${i === 0 ? 'M' : 'L'}${getX(i)},${getY(item.actualClientVolume || 0)}`).join(' ');
+  const retainedPath = history.map((item, i) => `${i === 0 ? 'M' : 'L'}${getX(i)},${getY(item.actualRetainedClients || 0)}`).join(' ');
+  const returnPath = history.map((item, i) => `${i === 0 ? 'M' : 'L'}${getX(i)},${getY((item.actualReturnPercent || 0) * 0.5)}`).join(' ');
+  return (
+    <div>
+      <svg width="100%" viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
+        {[0, 0.25, 0.5, 0.75, 1].map((pct) => (
+          <line key={pct} x1={pad} y1={h - pad - pct * (h - pad * 2)} x2={w - pad} y2={h - pad - pct * (h - pad * 2)} stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+        ))}
+        <path d={clientPath + ` L${getX(history.length - 1)},${h - pad} L${getX(0)},${h - pad} Z`} fill="url(#zzzCGrad)" opacity="0.3" />
+        <path d={retainedPath + ` L${getX(history.length - 1)},${h - pad} L${getX(0)},${h - pad} Z`} fill="url(#zzzRGrad)" opacity="0.2" />
+        <path d={clientPath} fill="none" stroke="var(--crm-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={retainedPath} fill="none" stroke="#7c6fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={returnPath} fill="none" stroke="#d6b36a" strokeWidth="1.5" strokeDasharray="4 3" strokeLinecap="round" />
+        {history.map((item, i) => (
+          <g key={i}>
+            <circle cx={getX(i)} cy={getY(item.actualClientVolume || 0)} r="3" fill="var(--crm-primary)" stroke="var(--crm-surface)" strokeWidth="1.5" />
+            <circle cx={getX(i)} cy={getY(item.actualRetainedClients || 0)} r="3" fill="#7c6fff" stroke="var(--crm-surface)" strokeWidth="1.5" />
+          </g>
+        ))}
+        {history.map((item, i) => (
+          <text key={i} x={getX(i)} y={h - 4} textAnchor="middle" fill="var(--crm-muted)" fontSize="8" fontWeight="600">{item.month?.slice(5)}</text>
+        ))}
+        <defs>
+          <linearGradient id="zzzCGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--crm-primary)" stopOpacity="0.4" /><stop offset="100%" stopColor="var(--crm-primary)" stopOpacity="0" /></linearGradient>
+          <linearGradient id="zzzRGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#7c6fff" stopOpacity="0.3" /><stop offset="100%" stopColor="#7c6fff" stopOpacity="0" /></linearGradient>
+        </defs>
+      </svg>
+      <div className="flex justify-center gap-4 mt-2">
+        <div className="flex items-center gap-1"><div className="w-2 h-0.5 rounded" style={{ background: 'var(--crm-primary)' }} /><span className="text-[9px] text-[var(--crm-muted)]">Клиенты</span></div>
+        <div className="flex items-center gap-1"><div className="w-2 h-0.5 rounded" style={{ background: '#7c6fff' }} /><span className="text-[9px] text-[var(--crm-muted)]">Постоянные</span></div>
+        <div className="flex items-center gap-1"><div className="w-2 h-0.5 rounded" style={{ background: '#d6b36a' }} /><span className="text-[9px] text-[var(--crm-muted)]">Возврат %</span></div>
+      </div>
+    </div>
+  );
+};
+
 const LevelView = ({ positions = [], currentBarber = null, services = [], apiRequest = null }) => {
   const [maxPrices, setMaxPrices] = useState({});
   const [loadingPrices, setLoadingPrices] = useState(false);
   const [levelProgress, setLevelProgress] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
   const position = useMemo(() => {
     if (!currentBarber?.positionId || !Array.isArray(positions)) return null;
     return positions.find((p) => p.id === currentBarber.positionId) || null;
   }, [positions, currentBarber]);
 
-  // Find parent position if barber is on a sub-level
   const parentPosition = useMemo(() => {
     if (!position?.parentId || !Array.isArray(positions)) return null;
     return positions.find((p) => p.id === position.parentId) || null;
   }, [positions, position]);
 
-  // Determine if this is a sub-level assignment
   const isSubLevel = Boolean(position?.parentId);
   const displayPosition = isSubLevel ? parentPosition : position;
+
   const sortedPositions = useMemo(() => {
     if (!Array.isArray(positions) || !positions.length) return [];
     return [...positions]
@@ -929,13 +1064,39 @@ const LevelView = ({ positions = [], currentBarber = null, services = [], apiReq
 
   const levelNumber = displayPosition ? (Number(displayPosition.orderIndex) || 0) + 1 : null;
 
-  // Children of the parent (sub-levels)
   const subLevels = useMemo(() => {
     if (!displayPosition?.children || !displayPosition.children.length) return [];
     return [...displayPosition.children].sort((a, b) => (Number(a?.orderIndex) || 0) - (Number(b?.orderIndex) || 0));
   }, [displayPosition]);
 
-  // Fetch max prices for current position
+  const flatProgression = useMemo(() => {
+    const flat = [];
+    for (const root of sortedPositions) {
+      flat.push(root);
+      if (root.children && root.children.length > 0) {
+        flat.push(...[...root.children].sort((a, b) => (Number(a?.orderIndex) || 0) - (Number(b?.orderIndex) || 0)));
+      }
+    }
+    return flat;
+  }, [sortedPositions]);
+
+  const currentFlatIdx = flatProgression.findIndex((p) => p.id === displayPosition?.id || p.id === position?.id);
+  const nextLevelPos = currentFlatIdx >= 0 && currentFlatIdx < flatProgression.length - 1 ? flatProgression[currentFlatIdx + 1] : null;
+
+  const radarStats = useMemo(() => {
+    const m = levelProgress?.liveMetrics;
+    if (!m || !position) return [];
+    const reqVol = Number(position.requiredClientVolume) || 1;
+    const reqRet = Number(position.requiredRetainedClients) || 1;
+    const reqRetPct = Number(position.targetReturnPercent) || 1;
+    return [
+      { label: 'КЛИЕНТЫ', value: Math.min(1, (m.actualClientVolume || 0) / reqVol) },
+      { label: 'ПОСТОЯНН.', value: Math.min(1, (m.actualRetainedClients || 0) / reqRet) },
+      { label: 'ВОЗВРАТ', value: Math.min(1, (m.actualReturnPercent || 0) / reqRetPct) },
+      { label: 'ДОЛЯ', value: Math.min(1, (Number(position.masterSharePercent) || 0) / 100) },
+    ];
+  }, [levelProgress?.liveMetrics, position]);
+
   useEffect(() => {
     if (!position?.id || !apiRequest) return;
     let cancelled = false;
@@ -944,22 +1105,14 @@ const LevelView = ({ positions = [], currentBarber = null, services = [], apiReq
       try {
         const data = await apiRequest(`/PositionServiceMaxPrices?positionId=${encodeURIComponent(position.id)}`);
         const map = {};
-        if (Array.isArray(data)) {
-          data.forEach((entry) => {
-            map[entry.serviceId] = entry.maxPrice;
-          });
-        }
+        if (Array.isArray(data)) data.forEach((e) => { map[e.serviceId] = e.maxPrice; });
         if (!cancelled) setMaxPrices(map);
-      } catch {
-        if (!cancelled) setMaxPrices({});
-      } finally {
-        if (!cancelled) setLoadingPrices(false);
-      }
+      } catch { if (!cancelled) setMaxPrices({}); }
+      finally { if (!cancelled) setLoadingPrices(false); }
     })();
     return () => { cancelled = true; };
   }, [position?.id, apiRequest]);
 
-  // Fetch level progress data
   useEffect(() => {
     if (!currentBarber?.id || !apiRequest) return;
     let cancelled = false;
@@ -967,9 +1120,7 @@ const LevelView = ({ positions = [], currentBarber = null, services = [], apiReq
       try {
         const data = await apiRequest(`/level-history?barberId=${encodeURIComponent(currentBarber.id)}`);
         if (!cancelled) setLevelProgress(data);
-      } catch {
-        if (!cancelled) setLevelProgress(null);
-      }
+      } catch { if (!cancelled) setLevelProgress(null); }
     })();
     return () => { cancelled = true; };
   }, [currentBarber?.id, apiRequest]);
@@ -977,194 +1128,321 @@ const LevelView = ({ positions = [], currentBarber = null, services = [], apiReq
   if (!position) {
     return (
       <div className="space-y-6">
-        <SectionCard title="Мой уровень" hideTitleOnMobile>
-          <div className="py-12 text-center">
-            <p className="text-sm text-[var(--crm-muted)]">Должность не назначена. Обратитесь к администратору.</p>
-          </div>
-        </SectionCard>
+        <div className="relative overflow-hidden rounded-2xl border border-white/5 p-8 text-center" style={{ background: 'linear-gradient(135deg, var(--crm-surface-2), var(--crm-surface))' }}>
+          <div className="absolute inset-0 opacity-5" style={{ background: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.03) 10px, rgba(255,255,255,0.03) 20px)' }} />
+          <p className="relative text-sm text-[var(--crm-muted)]">Должность не назначена. Обратитесь к администратору.</p>
+        </div>
       </div>
     );
   }
 
+  const promoPct = levelProgress?.promotionProgress ? Math.min(100, (levelProgress.promotionProgress.monthsMet / levelProgress.promotionProgress.monthsRequired) * 100) : 0;
+
   return (
-    <div className="space-y-6">
-      <SectionCard title="Мой уровень" hideTitleOnMobile>
-        {/* Level badge */}
-        <div className="flex items-center gap-4 p-4 md:p-5">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[color:var(--crm-primary)]/15 text-xl font-bold text-[color:var(--crm-primary)]">
-            {levelNumber}
-          </span>
-          <div>
-            <h2 className="text-lg font-bold text-white">{displayPosition.name}</h2>
-            <p className="text-sm text-[var(--crm-muted)]">
-              Уровень {levelNumber} из {sortedPositions.length}
-              {isSubLevel && ` · Подуровень: ${position.name}`}
-            </p>
-          </div>
+    <div className="space-y-4">
+      {/* ═══ HERO HEADER ═══ */}
+      <div className="relative overflow-hidden rounded-2xl" style={{
+        background: 'linear-gradient(135deg, var(--crm-surface-2) 0%, var(--crm-surface) 50%, var(--crm-surface-2) 100%)',
+        border: '1px solid rgba(0,191,175,0.15)',
+      }}>
+        <div className="absolute inset-0 opacity-[0.03]" style={{ background: 'repeating-linear-gradient(-45deg, transparent, transparent 8px, rgba(0,191,175,0.5) 8px, rgba(0,191,175,0.5) 9px)' }} />
+        <div className="absolute top-0 right-0 w-40 h-40 opacity-10" style={{ background: 'radial-gradient(circle, var(--crm-primary), transparent 70%)' }} />
+        <div className="absolute top-0 left-0 w-16 h-16">
+          <div className="absolute top-0 left-0 w-full h-[2px]" style={{ background: 'linear-gradient(90deg, var(--crm-primary), transparent)' }} />
+          <div className="absolute top-0 left-0 h-full w-[2px]" style={{ background: 'linear-gradient(180deg, var(--crm-primary), transparent)' }} />
         </div>
-
-        {/* Stats grid - показываем для текущего подуровня */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 md:p-5 pt-0">
-          <div className="crm-soft-card p-4">
-            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-1">Доля мастера</p>
-            <p className="text-xl font-bold text-white">{position.masterSharePercent ?? 0}%</p>
-          </div>
-          <div className="crm-soft-card p-4">
-            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-1">Целевая возвращаемость</p>
-            <p className="text-xl font-bold text-white">{position.targetReturnPercent ?? 0}%</p>
-          </div>
-          <div className="crm-soft-card p-4">
-            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-1">Объем клиентов</p>
-            <p className="text-xl font-bold text-white">{position.requiredClientVolume ?? 0}</p>
-          </div>
+        <div className="absolute bottom-0 right-0 w-16 h-16">
+          <div className="absolute bottom-0 right-0 w-full h-[2px]" style={{ background: 'linear-gradient(270deg, var(--crm-primary), transparent)' }} />
+          <div className="absolute bottom-0 right-0 h-full w-[2px]" style={{ background: 'linear-gradient(0deg, var(--crm-primary), transparent)' }} />
         </div>
-
-        {/* Level progress section */}
-        {levelProgress && levelProgress.nextPosition && (
-          <div className="p-4 md:p-5 pt-0">
-            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-3">Прогресс к следующему уровню</p>
-            <div className="crm-soft-card p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-300">Следующий уровень: <span className="text-white font-semibold">{levelProgress.nextPosition.name}</span></span>
-                {levelProgress.promotionProgress.ready && (
-                  <span className="text-[10px] uppercase tracking-wider text-green-400 font-semibold">Готов к повышению</span>
+        <div className="relative p-5 md:p-7">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-5">
+            <ZzzHexBadge number={levelNumber} size={72} color="var(--crm-primary)" label="УРОВЕНЬ" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-1">
+                <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight" style={{ textShadow: '0 0 30px rgba(0,191,175,0.2)' }}>
+                  {displayPosition.name}
+                </h1>
+                {isSubLevel && (
+                  <span className="px-2.5 py-0.5 text-[10px] uppercase tracking-widest font-bold rounded-sm" style={{
+                    background: 'linear-gradient(135deg, var(--crm-primary), var(--crm-primary-strong))',
+                    color: 'var(--crm-primary-on)',
+                  }}>{position.name}</span>
                 )}
               </div>
-              {/* Progress bar */}
-              <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${Math.min(100, (levelProgress.promotionProgress.monthsMet / levelProgress.promotionProgress.monthsRequired) * 100)}%`,
-                    background: levelProgress.promotionProgress.ready
-                      ? 'var(--crm-primary)'
-                      : 'color-mix(in srgb, var(--crm-primary) 50%, rgba(255,255,255,0.1))',
-                  }}
-                />
-              </div>
-              <p className="text-xs text-[var(--crm-muted)]">
-                {levelProgress.promotionProgress.monthsMet}/{levelProgress.promotionProgress.monthsRequired} месяца выполнено
-                {!levelProgress.promotionProgress.ready && ` — осталось ${levelProgress.promotionProgress.monthsRequired - levelProgress.promotionProgress.monthsMet} мес.`}
+              <p className="text-sm text-[var(--crm-muted)]">
+                Уровень {levelNumber} из {sortedPositions.length}
+                {subLevels.length > 0 && ` · ${subLevels.length} подуровней`}
               </p>
-
-              {/* Requirements comparison */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-white/5">
-                <div className="text-xs">
-                  <span className="text-[var(--crm-muted)]">Клиенты: </span>
-                  <span className="text-white font-medium">{levelProgress.history[0]?.actualClientVolume ?? 0}</span>
-                  <span className="text-[var(--crm-muted)]"> / {levelProgress.nextPosition.requiredClientVolume ?? 0}</span>
+              <div className="flex flex-wrap gap-4 mt-3">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full" style={{ background: 'var(--crm-primary)', boxShadow: '0 0 8px var(--crm-primary)' }} />
+                  <span className="text-xs text-[var(--crm-muted)]">Доля:</span>
+                  <span className="text-xs font-bold text-white">{position.masterSharePercent ?? 0}%</span>
                 </div>
-                <div className="text-xs">
-                  <span className="text-[var(--crm-muted)]">Постоянные: </span>
-                  <span className="text-white font-medium">{levelProgress.history[0]?.actualRetainedClients ?? 0}</span>
-                  <span className="text-[var(--crm-muted)]"> / {levelProgress.nextPosition.requiredRetainedClients ?? 0}</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full" style={{ background: '#d6b36a', boxShadow: '0 0 8px #d6b36a' }} />
+                  <span className="text-xs text-[var(--crm-muted)]">Возвращаемость:</span>
+                  <span className="text-xs font-bold text-white">{position.targetReturnPercent ?? 0}%</span>
                 </div>
-                <div className="text-xs">
-                  <span className="text-[var(--crm-muted)]">Возвращаемость: </span>
-                  <span className="text-white font-medium">{(levelProgress.history[0]?.actualReturnPercent ?? 0).toFixed(1)}%</span>
-                  <span className="text-[var(--crm-muted)]"> / {levelProgress.nextPosition.targetReturnPercent ?? 0}%</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full" style={{ background: '#ff617f', boxShadow: '0 0 8px #ff617f' }} />
+                  <span className="text-xs text-[var(--crm-muted)]">Объем:</span>
+                  <span className="text-xs font-bold text-white">{position.requiredClientVolume ?? 0}</span>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Demotion risk warning */}
-        {levelProgress && levelProgress.demotionRisk.atRisk && !levelProgress.demotionRisk.ready && (
-          <div className="p-4 md:p-5 pt-0">
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
-              <p className="text-xs text-amber-400 font-semibold">
-                Внимание: несоответствие уровню {levelProgress.demotionRisk.monthsFailed}/{levelProgress.demotionRisk.monthsThreshold} мес.
-              </p>
-              <p className="text-xs text-amber-400/70 mt-1">
-                Если требования не будут выполнены ещё {levelProgress.demotionRisk.monthsThreshold - levelProgress.demotionRisk.monthsFailed} мес., произойдёт понижение.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {levelProgress && levelProgress.demotionRisk.ready && (
-          <div className="p-4 md:p-5 pt-0">
-            <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3">
-              <p className="text-xs text-red-400 font-semibold">
-                Уровень понижен: несоответствие {levelProgress.demotionRisk.monthsThreshold}+ мес. подряд
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Sub-levels list - показываем если есть подуровни */}
-        {subLevels.length > 0 && (
-          <div className="p-4 md:p-5 pt-0">
-            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-3">Подуровни</p>
-            <div className="space-y-2">
-              {subLevels.map((sub, idx) => {
-                const isCurrent = sub.id === position.id;
-                return (
-                  <div key={sub.id} className={`flex items-center gap-3 p-2.5 rounded-lg ${isCurrent ? 'bg-[color:var(--crm-primary)]/10 border border-[color:var(--crm-primary)]/30' : 'opacity-60'}`}>
-                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${isCurrent ? 'bg-[color:var(--crm-primary)] text-zinc-950' : 'bg-white/10 text-white/50'}`}>
-                      {idx + 1}
+              {levelProgress?.countdown && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {levelProgress.promotionProgress?.ready ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] uppercase tracking-widest font-bold rounded-sm" style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: '#fff', boxShadow: '0 0 16px rgba(34,197,94,0.3)' }}>
+                      Готов к повышению
                     </span>
-                    <div className="flex-1 min-w-0">
-                      <span className={`text-sm ${isCurrent ? 'text-white font-semibold' : 'text-slate-400'}`}>{sub.name}</span>
-                      <span className="text-xs text-[var(--crm-muted)] ml-2">{sub.masterSharePercent ?? 0}%</span>
-                    </div>
-                    {isCurrent && <span className="text-[10px] uppercase tracking-wider text-[color:var(--crm-primary)] font-semibold">Текущий</span>}
-                  </div>
-                );
-              })}
+                  ) : levelProgress.promotionProgress?.monthsMet > 0 && levelProgress.countdown.promotionDaysLeft != null ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] uppercase tracking-widest font-bold rounded-sm" style={{ background: 'rgba(0,191,175,0.12)', color: 'var(--crm-primary)', border: '1px solid rgba(0,191,175,0.25)' }}>
+                      Повышение через {levelProgress.countdown.promotionDaysLeft} дн.
+                    </span>
+                  ) : null}
+                  {levelProgress.demotionRisk?.atRisk && levelProgress.countdown.demotionDaysLeft != null && !levelProgress.demotionRisk?.ready ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] uppercase tracking-widest font-bold rounded-sm" style={{ background: 'rgba(255,97,127,0.12)', color: '#ff617f', border: '1px solid rgba(255,97,127,0.25)' }}>
+                      Понижение через {levelProgress.countdown.demotionDaysLeft} дн.
+                    </span>
+                  ) : null}
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] uppercase tracking-widest font-bold rounded-sm" style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--crm-muted)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    Оценка через {levelProgress.countdown.daysUntilEvaluation} дн.
+                  </span>
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
+      </div>
 
-        {/* Service max prices */}
-        {Array.isArray(services) && services.length > 0 && (
-          <div className="p-4 md:p-5 pt-0">
-            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-3">Макс. стоимость услуг</p>
-            {loadingPrices ? (
-              <p className="text-xs text-[var(--crm-muted)]">Загрузка...</p>
-            ) : (
-              <div className="space-y-2">
-                {services.filter((s) => s.isActive !== false).map((service) => {
-                  const price = maxPrices[service.id];
+      {/* ═══ TAB NAV ═══ */}
+      <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--crm-surface-2)', border: '1px solid rgba(255,255,255,0.04)' }}>
+        {[{ id: 'overview', label: 'ОБЗОР' }, { id: 'progress', label: 'ПРОГРЕСС' }, { id: 'services', label: 'УСЛУГИ' }].map((tab) => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            className="flex-1 py-2 text-[10px] uppercase tracking-widest font-bold rounded-lg transition-all duration-200"
+            style={activeTab === tab.id ? { background: 'linear-gradient(135deg, var(--crm-primary), var(--crm-primary-strong))', color: 'var(--crm-primary-on)', boxShadow: '0 0 20px rgba(0,191,175,0.2)' } : { color: 'var(--crm-muted)' }}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ═══ TAB: OVERVIEW ═══ */}
+      {activeTab === 'overview' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <ZzzStatBlock label="Доля мастера" value={position.masterSharePercent ?? 0} unit="%" color="var(--crm-primary)" />
+            <ZzzStatBlock label="Возвращаемость" value={position.targetReturnPercent ?? 0} unit="%" color="#d6b36a" />
+            <ZzzStatBlock label="Объем клиентов" value={position.requiredClientVolume ?? 0} color="#ff617f" />
+            <ZzzStatBlock label="Постоянные" value={position.requiredRetainedClients ?? 0} color="#7c6fff" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="relative overflow-hidden rounded-xl p-5" style={{ background: 'linear-gradient(135deg, var(--crm-surface-2), var(--crm-surface))', border: '1px solid rgba(255,255,255,0.04)' }}>
+              <p className="text-[10px] uppercase tracking-widest text-[var(--crm-muted)] font-semibold mb-3">ПРОФИЛЬ ПЕРСОНАЖА</p>
+              <div className="flex justify-center"><ZzzRadarChart stats={radarStats} size={200} /></div>
+            </div>
+            <div className="relative overflow-hidden rounded-xl p-5" style={{ background: 'linear-gradient(135deg, var(--crm-surface-2), var(--crm-surface))', border: '1px solid rgba(255,255,255,0.04)' }}>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] uppercase tracking-widest text-[var(--crm-muted)] font-semibold">ТЕКУЩИЙ МЕСЯЦ</p>
+                {levelProgress?.liveMetrics && <span className="flex items-center gap-1.5 text-[9px] text-green-400"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />LIVE</span>}
+              </div>
+              {levelProgress?.liveMetrics ? (
+                <div className="space-y-3">
+                  <div>
+                    <ZzzGlowBar value={levelProgress.liveMetrics.actualClientVolume || 0} max={position.requiredClientVolume || 1} color={levelProgress.liveMetrics.meetsNextNow ? '#22c55e' : 'var(--crm-primary)'} height={8} label="Клиенты" showPercent />
+                    <div className="flex justify-between mt-0.5"><span className="text-[9px] text-[var(--crm-muted)]">Сейчас: {levelProgress.liveMetrics.actualClientVolume || 0}</span><span className="text-[9px] text-[var(--crm-muted)]">Цель: {position.requiredClientVolume || 0}</span></div>
+                  </div>
+                  <div>
+                    <ZzzGlowBar value={levelProgress.liveMetrics.actualRetainedClients || 0} max={position.requiredRetainedClients || 1} color="#7c6fff" height={8} label="Постоянные" showPercent />
+                    <div className="flex justify-between mt-0.5"><span className="text-[9px] text-[var(--crm-muted)]">Сейчас: {levelProgress.liveMetrics.actualRetainedClients || 0}</span><span className="text-[9px] text-[var(--crm-muted)]">Цель: {position.requiredRetainedClients || 0}</span></div>
+                  </div>
+                  <div>
+                    <ZzzGlowBar value={levelProgress.liveMetrics.actualReturnPercent || 0} max={position.targetReturnPercent || 1} color="#d6b36a" height={8} label="Возвращаемость" showPercent />
+                    <div className="flex justify-between mt-0.5"><span className="text-[9px] text-[var(--crm-muted)]">Сейчас: {(levelProgress.liveMetrics.actualReturnPercent || 0).toFixed(1)}%</span><span className="text-[9px] text-[var(--crm-muted)]">Цель: {position.targetReturnPercent || 0}%</span></div>
+                  </div>
+                  <div className="flex gap-2 pt-2 border-t border-white/5">
+                    <span className={`px-2 py-0.5 text-[9px] rounded-sm font-bold ${levelProgress.liveMetrics.meetsCurrentNow ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+                      {levelProgress.liveMetrics.meetsCurrentNow ? 'ТЕКУШИЙ OK' : 'ТЕКУШИЙ X'}
+                    </span>
+                    {nextLevelPos && <span className={`px-2 py-0.5 text-[9px] rounded-sm font-bold ${levelProgress.liveMetrics.meetsNextNow ? 'bg-green-500/15 text-green-400' : 'bg-white/5 text-[var(--crm-muted)]'}`}>
+                      {levelProgress.liveMetrics.meetsNextNow ? 'СЛЕДУЮЩИЙ OK' : 'СЛЕДУЮЩИЙ X'}
+                    </span>}
+                  </div>
+                </div>
+              ) : <div className="flex items-center justify-center h-32 text-xs text-[var(--crm-muted)]">Загрузка...</div>}
+            </div>
+          </div>
+          {subLevels.length > 0 && (
+            <div className="relative overflow-hidden rounded-xl p-5" style={{ background: 'linear-gradient(135deg, var(--crm-surface-2), var(--crm-surface))', border: '1px solid rgba(255,255,255,0.04)' }}>
+              <p className="text-[10px] uppercase tracking-widest text-[var(--crm-muted)] font-semibold mb-4">ПОДУРОВНИ</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {subLevels.map((sub) => {
+                  const isCurrent = sub.id === position.id;
                   return (
-                    <div key={service.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
-                      <span className="text-sm text-slate-300">{service.name}</span>
-                      <span className="text-sm text-white font-medium">
-                        {price != null ? `${formatCurrency(price)}` : '—'}
-                      </span>
+                    <div key={sub.id} className="relative p-3.5 rounded-lg" style={{
+                      background: isCurrent ? 'linear-gradient(135deg, rgba(0,191,175,0.1), rgba(0,191,175,0.03))' : 'rgba(255,255,255,0.02)',
+                      border: isCurrent ? '1px solid rgba(0,191,175,0.3)' : '1px solid rgba(255,255,255,0.04)',
+                    }}>
+                      {isCurrent && <div className="absolute top-0 right-0 px-2 py-0.5 text-[8px] uppercase tracking-widest font-bold" style={{ background: 'var(--crm-primary)', color: 'var(--crm-primary-on)' }}>ТЕКУЩИЙ</div>}
+                      <p className={`text-sm font-bold ${isCurrent ? 'text-white' : 'text-slate-400'}`}>{sub.name}</p>
+                      <div className="flex gap-3 mt-2">
+                        <span className="text-[10px] text-[var(--crm-muted)]">{sub.masterSharePercent ?? 0}%</span>
+                        <span className="text-[10px] text-[var(--crm-muted)]">Объем: {sub.requiredClientVolume ?? 0}</span>
+                      </div>
                     </div>
                   );
                 })}
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
+      )}
 
-        {/* Levels overview */}
-        {sortedPositions.length > 1 && (
-          <div className="p-4 md:p-5 pt-0">
-            <p className="text-[10px] uppercase tracking-wider text-[var(--crm-muted)] font-semibold mb-3">Уровни</p>
+      {/* ═══ TAB: PROGRESS ═══ */}
+      {activeTab === 'progress' && (
+        <div className="space-y-4">
+          {levelProgress?.countdown && (
+            <div className="relative overflow-hidden rounded-xl p-5" style={{ background: 'linear-gradient(135deg, var(--crm-surface-2), var(--crm-surface))', border: '1px solid rgba(0,191,175,0.12)' }}>
+              <div className="absolute top-0 right-0 w-32 h-32 opacity-5" style={{ background: 'radial-gradient(circle, var(--crm-primary), transparent)' }} />
+              <p className="text-[10px] uppercase tracking-widest text-[var(--crm-muted)] font-semibold mb-4">ОБРАТНЫЙ ОТСЧЁТ</p>
+              <div className="flex flex-col sm:flex-row items-center gap-6">
+                <div className="flex flex-col items-center">
+                  <span className="text-5xl font-black" style={{
+                    color: levelProgress.promotionProgress?.ready ? '#22c55e' : levelProgress.demotionRisk?.atRisk ? '#ff617f' : 'var(--crm-primary)',
+                    textShadow: `0 0 40px ${levelProgress.promotionProgress?.ready ? 'rgba(34,197,94,0.3)' : levelProgress.demotionRisk?.atRisk ? 'rgba(255,97,127,0.3)' : 'rgba(0,191,175,0.3)'}`,
+                  }}>{levelProgress.countdown.daysUntilEvaluation}</span>
+                  <span className="text-[10px] uppercase tracking-widest text-[var(--crm-muted)] font-semibold">ДНЕЙ ДО ОЦЕНКИ</span>
+                  <span className="text-[9px] text-[var(--crm-muted)] mt-1">{levelProgress.countdown.nextEvaluationDate}</span>
+                </div>
+                <div className="flex-1 space-y-3">
+                  {levelProgress.promotionProgress?.ready ? (
+                    <div className="p-3 rounded-lg" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                      <p className="text-sm font-bold text-green-400">Повышение готово!</p>
+                      <p className="text-[10px] text-green-400/70 mt-0.5">Вы выполнили требования 2 мес. подряд.</p>
+                    </div>
+                  ) : levelProgress.promotionProgress?.monthsMet > 0 ? (
+                    <div className="p-3 rounded-lg" style={{ background: 'rgba(0,191,175,0.05)', border: '1px solid rgba(0,191,175,0.12)' }}>
+                      <p className="text-sm font-bold text-white">Повышение: {levelProgress.promotionProgress.monthsMet}/2 мес.</p>
+                      <p className="text-[10px] text-[var(--crm-muted)] mt-0.5">Выполняйте требования {levelProgress.countdown.daysUntilEvaluation} дн.</p>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <p className="text-sm font-bold text-white">Повышение: 0/2 мес.</p>
+                      <p className="text-[10px] text-[var(--crm-muted)] mt-0.5">Начните выполнять требования следующего уровня.</p>
+                    </div>
+                  )}
+                  {levelProgress.demotionRisk?.ready ? (
+                    <div className="p-3 rounded-lg" style={{ background: 'rgba(255,97,127,0.08)', border: '1px solid rgba(255,97,127,0.2)' }}>
+                      <p className="text-sm font-bold text-red-400">Уровень понижен!</p>
+                    </div>
+                  ) : levelProgress.demotionRisk?.atRisk ? (
+                    <div className="p-3 rounded-lg" style={{ background: 'rgba(255,97,127,0.05)', border: '1px solid rgba(255,97,127,0.12)' }}>
+                      <p className="text-sm font-bold text-amber-400">Внимание: {levelProgress.demotionRisk.monthsFailed}/3 мес.</p>
+                      <p className="text-[10px] text-[var(--crm-muted)] mt-0.5">Выполните требования {levelProgress.countdown.daysUntilEvaluation} дн.</p>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-lg" style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.12)' }}>
+                      <p className="text-sm font-bold text-green-400">Текущий уровень: OK</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          {nextLevelPos && (
+            <div className="relative overflow-hidden rounded-xl p-5" style={{ background: 'linear-gradient(135deg, var(--crm-surface-2), var(--crm-surface))', border: '1px solid rgba(0,191,175,0.12)' }}>
+              <p className="text-[10px] uppercase tracking-widest text-[var(--crm-muted)] font-semibold mb-3">ТРЕБОВАНИЯ: {nextLevelPos.name}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  { label: 'Клиенты', actual: levelProgress?.liveMetrics?.actualClientVolume ?? 0, req: nextLevelPos.requiredClientVolume ?? 0, color: 'var(--crm-primary)' },
+                  { label: 'Постоянные', actual: levelProgress?.liveMetrics?.actualRetainedClients ?? 0, req: nextLevelPos.requiredRetainedClients ?? 0, color: '#7c6fff' },
+                  { label: 'Возвращаемость', actual: levelProgress?.liveMetrics?.actualReturnPercent ?? 0, req: nextLevelPos.targetReturnPercent ?? 0, color: '#d6b36a', isPercent: true },
+                ].map((item, i) => {
+                  const met = item.actual >= item.req;
+                  return (
+                    <div key={i} className="p-3 rounded-lg" style={{ background: met ? 'rgba(34,197,94,0.05)' : 'rgba(255,255,255,0.02)', border: `1px solid ${met ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.04)'}` }}>
+                      <p className="text-[9px] uppercase tracking-widest text-[var(--crm-muted)] mb-1">{item.label}</p>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-lg font-black" style={{ color: met ? '#4ade80' : item.color }}>{item.isPercent ? (item.actual || 0).toFixed(1) : item.actual}</span>
+                        <span className="text-xs text-[var(--crm-muted)]">/ {item.isPercent ? `${item.req}%` : item.req}</span>
+                      </div>
+                      <ZzzGlowBar value={item.actual} max={item.req || 1} color={met ? '#22c55e' : item.color} height={3} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {levelProgress?.history?.length > 0 && (
+            <div className="relative overflow-hidden rounded-xl p-5" style={{ background: 'linear-gradient(135deg, var(--crm-surface-2), var(--crm-surface))', border: '1px solid rgba(255,255,255,0.04)' }}>
+              <p className="text-[10px] uppercase tracking-widest text-[var(--crm-muted)] font-semibold mb-4">ИСТОРИЯ ОЦЕНОК</p>
+              <div className="space-y-2">
+                {levelProgress.history.map((h, i) => (
+                  <div key={h.month} className="flex items-center gap-3 p-2.5 rounded-lg" style={{ background: i === 0 ? 'rgba(0,191,175,0.05)' : 'transparent', border: i === 0 ? '1px solid rgba(0,191,175,0.12)' : '1px solid transparent' }}>
+                    <span className="text-xs font-mono text-[var(--crm-muted)] w-16">{h.month}</span>
+                    <div className="flex gap-2 flex-1">
+                      <span className={`px-1.5 py-0.5 text-[9px] rounded-sm font-bold ${h.meetsCurrentRequirements ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+                        {h.meetsCurrentRequirements ? 'ТЕКУЩИЙ OK' : 'ТЕКУШИЙ X'}
+                      </span>
+                      {h.nextPositionId && <span className={`px-1.5 py-0.5 text-[9px] rounded-sm font-bold ${h.meetsNextRequirements ? 'bg-green-500/15 text-green-400' : 'bg-white/5 text-[var(--crm-muted)]'}`}>
+                        {h.meetsNextRequirements ? 'СЛЕДУЮЩИЙ OK' : 'СЛЕДУЮЩИЙ X'}
+                      </span>}
+                    </div>
+                    <span className="text-[10px] text-[var(--crm-muted)]">{h.actualClientVolume} кл. / {h.actualRetainedClients} пост. / {(h.actualReturnPercent || 0).toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Level tree in Progress tab */}
+          {flatProgression.length > 1 && (
+            <div className="relative overflow-hidden rounded-xl p-5" style={{ background: 'linear-gradient(135deg, var(--crm-surface-2), var(--crm-surface))', border: '1px solid rgba(255,255,255,0.04)' }}>
+              <p className="text-[10px] uppercase tracking-widest text-[var(--crm-muted)] font-semibold mb-4">ДЕРЕВО УРОВНЕЙ</p>
+              <div className="space-y-1.5">
+                {flatProgression.map((pos, idx) => {
+                  const isCurrent = pos.id === position?.id;
+                  const isParent = pos.id === displayPosition?.id && isSubLevel;
+                  const isPast = idx < currentFlatIdx;
+                  return (
+                    <div key={pos.id} className="flex items-center gap-3 p-2.5 rounded-lg" style={{ background: isCurrent ? 'rgba(0,191,175,0.08)' : isParent ? 'rgba(0,191,175,0.04)' : 'transparent', border: isCurrent ? '1px solid rgba(0,191,175,0.2)' : '1px solid transparent' }}>
+                      <div className="flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold" style={{ background: isCurrent ? 'var(--crm-primary)' : isParent ? 'rgba(0,191,175,0.25)' : isPast ? 'rgba(0,191,175,0.15)' : 'rgba(255,255,255,0.04)', color: isCurrent ? 'var(--crm-primary-on)' : isPast || isParent ? 'var(--crm-primary)' : 'var(--crm-muted)' }}>{idx + 1}</div>
+                      <span className={`text-sm ${isCurrent ? 'text-white font-bold' : isParent ? 'text-white/70 font-semibold' : isPast ? 'text-slate-300' : 'text-slate-500'}`}>{pos.name}</span>
+                      <span className="text-[10px] text-[var(--crm-muted)] ml-auto">{pos.masterSharePercent ?? 0}%</span>
+                      {isCurrent && <span className="text-[9px] uppercase tracking-widest font-bold" style={{ color: 'var(--crm-primary)' }}>ТЕКУЩИЙ</span>}
+                      {isParent && !isCurrent && <span className="text-[9px] uppercase tracking-widest font-bold" style={{ color: 'var(--crm-primary)', opacity: 0.6 }}>УРОВЕНЬ</span>}
+                      {isPast && <span className="text-[9px] text-green-400/60">✓</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══ TAB: SERVICES ═══ */}
+      {activeTab === 'services' && (
+        <div className="relative overflow-hidden rounded-xl p-5" style={{ background: 'linear-gradient(135deg, var(--crm-surface-2), var(--crm-surface))', border: '1px solid rgba(255,255,255,0.04)' }}>
+          <p className="text-[10px] uppercase tracking-widest text-[var(--crm-muted)] font-semibold mb-4">МАКС. СТОИМОСТЬ УСЛУГ</p>
+          {loadingPrices ? (
+            <div className="flex items-center justify-center py-8"><div className="w-6 h-6 border-2 border-[var(--crm-primary)] border-t-transparent rounded-full animate-spin" /></div>
+          ) : (
             <div className="space-y-2">
-              {sortedPositions.map((pos, idx) => {
-                const num = idx + 1;
-                const isCurrent = pos.id === displayPosition.id;
-                const hasChildren = pos.children && pos.children.length > 0;
+              {services.filter((s) => s.isActive !== false).map((service) => {
+                const price = maxPrices[service.id];
                 return (
-                  <div key={pos.id} className={`flex items-center gap-3 p-2.5 rounded-lg ${isCurrent ? 'bg-[color:var(--crm-primary)]/10 border border-[color:var(--crm-primary)]/30' : 'opacity-60'}`}>
-                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${isCurrent ? 'bg-[color:var(--crm-primary)] text-zinc-950' : 'bg-white/10 text-white/50'}`}>
-                      {num}
-                    </span>
-                    <span className={`text-sm ${isCurrent ? 'text-white font-semibold' : 'text-slate-400'}`}>{pos.name}</span>
-                    {hasChildren && <span className="text-[10px] text-[var(--crm-muted)]">({pos.children.length} подуровн.)</span>}
-                    {isCurrent && <span className="ml-auto text-[10px] uppercase tracking-wider text-[color:var(--crm-primary)] font-semibold">Текущий</span>}
+                  <div key={service.id} className="flex items-center justify-between py-2.5 px-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.03)' }}>
+                    <span className="text-sm text-slate-300">{service.name}</span>
+                    <span className="text-sm font-bold text-white">{price != null ? formatCurrency(price) : '—'}</span>
                   </div>
                 );
               })}
             </div>
-          </div>
-        )}
-      </SectionCard>
+          )}
+        </div>
+      )}
     </div>
   );
 };

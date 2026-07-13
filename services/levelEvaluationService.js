@@ -273,6 +273,71 @@ const createLevelEvaluationService = ({
       else break;
     }
 
+    // ── Countdown ──
+    const now = new Date();
+    const nextEval = new Date(now.getFullYear(), now.getMonth() + 1, 1, 3, 30);
+    const msUntilEval = nextEval.getTime() - now.getTime();
+    const daysUntilEval = Math.max(0, Math.ceil(msUntilEval / 86400000));
+
+    let promotionDaysLeft = null;
+    if (consecutiveMetNext > 0 && consecutiveMetNext < 2) {
+      promotionDaysLeft = daysUntilEval;
+    } else if (consecutiveMetNext >= 2) {
+      promotionDaysLeft = 0;
+    }
+
+    let demotionDaysLeft = null;
+    if (consecutiveFailedCurrent > 0 && consecutiveFailedCurrent < 3) {
+      demotionDaysLeft = daysUntilEval;
+    } else if (consecutiveFailedCurrent >= 3) {
+      demotionDaysLeft = 0;
+    }
+
+    // ── Live metrics for current month ──
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    let liveMetrics = null;
+    try {
+      const metrics = await calculateBarberMonthlyMetrics(barber.name, currentMonth);
+      liveMetrics = {
+        ...metrics,
+        meetsCurrentNow: checkRequirements(metrics, currentPosition),
+        meetsNextNow: nextPos ? checkRequirements(metrics, nextPos) : false,
+      };
+    } catch {
+      liveMetrics = { actualClientVolume: 0, actualRetainedClients: 0, actualReturnPercent: 0, meetsCurrentNow: false, meetsNextNow: false };
+    }
+
+    // ── Ranking among same-level barbers ──
+    let ranking = null;
+    try {
+      const sameLevelBarbers = await prisma.barbers.findMany({
+        where: { positionId: barber.positionId, isActive: true },
+        select: { id: true, name: true },
+      });
+      if (sameLevelBarbers.length > 1) {
+        const scores = [];
+        for (const b of sameLevelBarbers) {
+          try {
+            const m = await calculateBarberMonthlyMetrics(b.name, currentMonth);
+            const score = (m.actualClientVolume || 0) + (m.actualRetainedClients || 0) * 2 + (m.actualReturnPercent || 0) * 0.1;
+            scores.push({ id: b.id, name: b.name, score: Math.round(score * 10) / 10 });
+          } catch {
+            scores.push({ id: b.id, name: b.name, score: 0 });
+          }
+        }
+        scores.sort((a, b) => b.score - a.score);
+        ranking = {
+          position: scores.findIndex((s) => s.id === barber.id) + 1,
+          total: sameLevelBarbers.length,
+          scores: scores.slice(0, 5),
+        };
+      } else if (sameLevelBarbers.length === 1) {
+        ranking = { position: 1, total: 1, scores: [{ id: barber.id, name: barber.name, score: 0 }] };
+      }
+    } catch {
+      ranking = null;
+    }
+
     return {
       currentPosition,
       nextPosition: nextPos,
@@ -288,6 +353,14 @@ const createLevelEvaluationService = ({
         atRisk: consecutiveFailedCurrent >= 2,
         ready: consecutiveFailedCurrent >= 3,
       },
+      countdown: {
+        daysUntilEvaluation: daysUntilEval,
+        nextEvaluationDate: `${nextEval.getFullYear()}-${String(nextEval.getMonth() + 1).padStart(2, '0')}-${String(nextEval.getDate()).padStart(2, '0')}`,
+        promotionDaysLeft,
+        demotionDaysLeft,
+      },
+      liveMetrics,
+      ranking,
     };
   };
 

@@ -380,6 +380,26 @@ CREATE TABLE "ShopStockEdits" (
     CONSTRAINT "ShopStockEdits_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "BarberLevelHistory" (
+    "id" TEXT NOT NULL,
+    "barberId" TEXT NOT NULL,
+    "month" TEXT NOT NULL,
+    "actualClientVolume" INTEGER NOT NULL DEFAULT 0,
+    "actualRetainedClients" INTEGER NOT NULL DEFAULT 0,
+    "actualReturnPercent" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "meetsCurrentRequirements" BOOLEAN NOT NULL DEFAULT false,
+    "meetsNextRequirements" BOOLEAN NOT NULL DEFAULT false,
+    "currentPositionId" TEXT NOT NULL,
+    "nextPositionId" TEXT,
+    "evaluatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "BarberLevelHistory_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "BarberLevelHistory_barberId_month_key" ON "BarberLevelHistory"("barberId", "month");
+
 -- CreateIndex
 CREATE UNIQUE INDEX "ShopOrders_qrCode_key" ON "ShopOrders"("qrCode");
 

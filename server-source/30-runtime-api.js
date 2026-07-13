@@ -527,6 +527,44 @@ app.get("/api/events/stream", authenticateStream, (req, res) => {
   res.write("retry: 5000\n\n");
   attachRealtimeClient({ req, res, businessId: req.businessId });
 });
+
+// ── Level history API (must be before generic CRUD catch-all) ──
+app.get('/api/level-history', authenticateToken, async (req, res) => {
+  try {
+    const { barberId } = req.query;
+    if (barberId) {
+      const progress = await levelEvaluationService.getBarberProgress(barberId);
+      return res.json(progress || { history: [] });
+    }
+    const history = await prisma.barberLevelHistory.findMany({
+      orderBy: { evaluatedAt: 'desc' },
+      take: 100,
+      include: {
+        barber: { select: { id: true, name: true } },
+        currentPosition: { select: { id: true, name: true } },
+        nextPosition: { select: { id: true, name: true } },
+      },
+    });
+    res.json(history);
+  } catch (error) {
+    console.error('[level] History error:', error.message);
+    res.status(500).json({ error: 'Ошибка загрузки истории уровней.' });
+  }
+});
+
+app.post('/api/level-history/evaluate', authenticateToken, async (req, res) => {
+  try {
+    const { month } = req.body || {};
+    const evalMonth = month || getPreviousMonth();
+    await levelEvaluationService.evaluateAllBarbers(evalMonth);
+    const changes = await levelEvaluationService.checkAndApplyLevelChanges();
+    res.json({ ok: true, month: evalMonth, changes });
+  } catch (error) {
+    console.error('[level] Manual evaluation error:', error.message);
+    res.status(500).json({ error: 'Ошибка оценки уровней.' });
+  }
+});
+
 registerAdminCrudRoutes({
   app,
   authenticateToken,
@@ -758,42 +796,3 @@ const runLevelEvaluation = async () => {
 
 // Run on 1st of each month at 03:30
 cron.schedule('30 3 1 * *', runLevelEvaluation);
-
-// ── API: Level history for a barber ──
-app.get('/api/level-history', authenticateToken, async (req, res) => {
-  try {
-    const { barberId } = req.query;
-    if (barberId) {
-      const progress = await levelEvaluationService.getBarberProgress(barberId);
-      return res.json(progress || { history: [] });
-    }
-    // Return all recent history (admin view)
-    const history = await prisma.barberLevelHistory.findMany({
-      orderBy: { evaluatedAt: 'desc' },
-      take: 100,
-      include: {
-        barber: { select: { id: true, name: true } },
-        currentPosition: { select: { id: true, name: true } },
-        nextPosition: { select: { id: true, name: true } },
-      },
-    });
-    res.json(history);
-  } catch (error) {
-    console.error('[level] History error:', error.message);
-    res.status(500).json({ error: 'Ошибка загрузки истории уровней.' });
-  }
-});
-
-// ── API: Manually trigger level evaluation (admin) ──
-app.post('/api/level-history/evaluate', authenticateToken, async (req, res) => {
-  try {
-    const { month } = req.body || {};
-    const evalMonth = month || getPreviousMonth();
-    await levelEvaluationService.evaluateAllBarbers(evalMonth);
-    const changes = await levelEvaluationService.checkAndApplyLevelChanges();
-    res.json({ ok: true, month: evalMonth, changes });
-  } catch (error) {
-    console.error('[level] Manual evaluation error:', error.message);
-    res.status(500).json({ error: 'Ошибка оценки уровней.' });
-  }
-});

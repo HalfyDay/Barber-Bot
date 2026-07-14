@@ -401,13 +401,6 @@ const createDashboardSnapshotService = ({
       const staffPositionName = normalizeText(
         staffBarber?.position?.name || staffBarber?.position?.title || "",
       );
-      // Calculate level progress
-      const position = staffBarber?.position;
-      const requiredClients = Number(position?.requiredClientVolume) || 0;
-      const requiredReturn = Number(position?.targetReturnPercent) || 0;
-      const clientProgress = requiredClients > 0 ? Math.min(100, Math.round((staffMonthClients / requiredClients) * 100)) : 0;
-      const returnProgress = requiredReturn > 0 ? Math.min(100, Math.round((staffMonthClients > 0 ? (staffMonthRegular / staffMonthClients) * 100 : 0) / requiredReturn * 100)) : 0;
-      const levelProgress = requiredClients > 0 || requiredReturn > 0 ? Math.round((clientProgress + returnProgress) / 2) : 0;
       // Monthly client stats for staff
       const staffMonthAppointments = staffAppointments.filter(
         (appt) => appt.Date && appt.Date >= monthStartKey,
@@ -423,6 +416,13 @@ const createDashboardSnapshotService = ({
       const staffMonthNoShow = staffMonthAppointments.filter(
         (appt) => normalizeText(appt.Status) === normalizeText(statusNoShow),
       ).length;
+      // Calculate level progress
+      const position = staffBarber?.position;
+      const requiredClients = Number(position?.requiredClientVolume) || 0;
+      const requiredReturn = Number(position?.targetReturnPercent) || 0;
+      const clientProgress = requiredClients > 0 ? Math.min(100, Math.round((staffMonthClients / requiredClients) * 100)) : 0;
+      const returnProgress = requiredReturn > 0 ? Math.min(100, Math.round((staffMonthClients > 0 ? (staffMonthRegular / staffMonthClients) * 100 : 0) / requiredReturn * 100)) : 0;
+      const levelProgress = requiredClients > 0 || requiredReturn > 0 ? Math.round((clientProgress + returnProgress) / 2) : 0;
       return {
         stats: {
           totalUsers: staffUsers.length,

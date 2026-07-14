@@ -419,6 +419,43 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
     }, 450);
     return () => clearTimeout(autosaveTimer);
   }, [commitPositionUpdate, refreshPositionsList, saveablePendingChanges, savingKey]);
+  // Auto-save sub-level changes
+  const subLevelChanges = useMemo(() => {
+    const allPositions = Array.isArray(positions) ? positions : [];
+    return allPositions
+      .filter((p) => p.parentId)
+      .map((subLevel) => {
+        const draft = getDraft(subLevel);
+        const fieldsChanged = [
+          'masterSharePercent', 'requiredClientVolume', 'targetReturnPercent',
+        ].some((field) => {
+          const nextVal = draft[field];
+          const curVal = subLevel[field];
+          return String(nextVal ?? '') !== String(curVal ?? '');
+        });
+        if (!fieldsChanged) return null;
+        return { position: subLevel, draft };
+      })
+      .filter(Boolean);
+  }, [positions, drafts]);
+  useEffect(() => {
+    if (!subLevelChanges.length || savingKey) return undefined;
+    const autosaveTimer = setTimeout(async () => {
+      try {
+        setError('');
+        for (const change of subLevelChanges) {
+          setSavingKey(change.position.id);
+          await commitPositionUpdate(change.position, change.draft);
+        }
+        await refreshPositionsList();
+      } catch (autosaveError) {
+        setError(autosaveError.message || 'Не удалось сохранить изменения.');
+      } finally {
+        setSavingKey(null);
+      }
+    }, 450);
+    return () => clearTimeout(autosaveTimer);
+  }, [commitPositionUpdate, refreshPositionsList, subLevelChanges, savingKey]);
   const handleDelete = async (position) => {
     if (!position?.id) return;
     const confirmed = requestConfirm
@@ -598,7 +635,7 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
                                 {childIndex + 1}
                               </span>
                               <span className="min-w-0 flex-1 text-sm font-semibold text-white truncate">{child.name}</span>
-                              <span className="text-[10px] text-[var(--crm-muted)]">{child.masterSharePercent ?? 0}%</span>
+                              <span className="text-[10px] text-[var(--crm-muted)]">{child.requiredClientVolume ?? 0} кл. · {child.targetReturnPercent ?? 0}% · {child.masterSharePercent ?? 0}%</span>
                               <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); handleDeleteSubLevel(child); }}
@@ -626,44 +663,52 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
                             <div className="border-t border-white/5 p-3 space-y-1.5">
                               <div className="flex items-center gap-2">
                                 <span className="w-44 text-xs text-slate-300">Количество клиентов</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="1"
-                                  value={childDraft.requiredClientVolume}
-                                  onChange={(event) => handleDraftChange(child.id, 'requiredClientVolume', event.target.value)}
-                                  onFocus={(e) => e.target.select()}
-                                  placeholder="0"
-                                  className="w-24 px-2 py-1 text-white text-sm text-right"
-                                />
+                                <div className="flex items-center">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={childDraft.requiredClientVolume}
+                                    onChange={(event) => handleDraftChange(child.id, 'requiredClientVolume', event.target.value)}
+                                    onFocus={(e) => e.target.select()}
+                                    placeholder="0"
+                                    className="w-20 px-2 py-1 text-white text-sm text-right"
+                                  />
+                                </div>
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="w-44 text-xs text-slate-300">Возвратность клиентов</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  step="0.1"
-                                  value={childDraft.targetReturnPercent}
-                                  onChange={(event) => handleDraftChange(child.id, 'targetReturnPercent', event.target.value)}
-                                  onFocus={(e) => e.target.select()}
-                                  placeholder="0"
-                                  className="w-24 px-2 py-1 text-white text-sm text-right"
-                                />
+                                <div className="flex items-center">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.1"
+                                    value={childDraft.targetReturnPercent}
+                                    onChange={(event) => handleDraftChange(child.id, 'targetReturnPercent', event.target.value)}
+                                    onFocus={(e) => e.target.select()}
+                                    placeholder="0"
+                                    className="w-20 px-2 py-1 text-white text-sm text-right"
+                                  />
+                                  <span className="ml-1 text-xs text-[var(--crm-muted)]">%</span>
+                                </div>
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="w-44 text-xs text-slate-300">Процент барбера</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  step="0.1"
-                                  value={childDraft.masterSharePercent}
-                                  onChange={(event) => handleDraftChange(child.id, 'masterSharePercent', event.target.value)}
-                                  onFocus={(e) => e.target.select()}
-                                  placeholder="0"
-                                  className="w-24 px-2 py-1 text-white text-sm text-right"
-                                />
+                                <div className="flex items-center">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.1"
+                                    value={childDraft.masterSharePercent}
+                                    onChange={(event) => handleDraftChange(child.id, 'masterSharePercent', event.target.value)}
+                                    onFocus={(e) => e.target.select()}
+                                    placeholder="0"
+                                    className="w-20 px-2 py-1 text-white text-sm text-right"
+                                  />
+                                  <span className="ml-1 text-xs text-[var(--crm-muted)]">%</span>
+                                </div>
                               </div>
                             {/* Макс. стоимость услуг для подуровня */}
                             <div className="pt-1">

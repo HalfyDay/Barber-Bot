@@ -1009,20 +1009,90 @@ const runPostUpdateDatabaseFixes = async () => {
         );
         CREATE INDEX IF NOT EXISTS "CreatorIncome_businessId_idx" ON "CreatorIncome"("businessId");
         CREATE INDEX IF NOT EXISTS "CreatorIncome_date_idx" ON "CreatorIncome"("date");
+
+        -- Shop tables
+        CREATE TABLE IF NOT EXISTS "ShopCategories" (
+          "id" TEXT NOT NULL,
+          "name" TEXT NOT NULL,
+          "isActive" BOOLEAN NOT NULL DEFAULT true,
+          "orderIndex" INTEGER NOT NULL DEFAULT 0,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "ShopCategories_pkey" PRIMARY KEY ("id")
+        );
+
+        CREATE TABLE IF NOT EXISTS "ShopProducts" (
+          "id" TEXT NOT NULL,
+          "name" TEXT NOT NULL,
+          "description" TEXT,
+          "price" DOUBLE PRECISION NOT NULL,
+          "imageUrl" TEXT,
+          "categoryId" TEXT,
+          "stock" INTEGER NOT NULL DEFAULT 0,
+          "isActive" BOOLEAN NOT NULL DEFAULT true,
+          "orderIndex" INTEGER NOT NULL DEFAULT 0,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "ShopProducts_pkey" PRIMARY KEY ("id")
+        );
+        CREATE INDEX IF NOT EXISTS "ShopProducts_categoryId_idx" ON "ShopProducts"("categoryId");
+
+        CREATE TABLE IF NOT EXISTS "ShopOrders" (
+          "id" TEXT NOT NULL,
+          "customerName" TEXT,
+          "customerPhone" TEXT,
+          "userId" TEXT,
+          "status" TEXT NOT NULL DEFAULT 'new',
+          "totalAmount" DOUBLE PRECISION NOT NULL,
+          "paymentMethod" TEXT NOT NULL DEFAULT 'cash',
+          "bsAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+          "comment" TEXT,
+          "qrCode" TEXT,
+          "issuedById" TEXT,
+          "issuedByName" TEXT,
+          "issuedAt" TIMESTAMP(3),
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "ShopOrders_pkey" PRIMARY KEY ("id")
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS "ShopOrders_qrCode_key" ON "ShopOrders"("qrCode");
+
+        CREATE TABLE IF NOT EXISTS "ShopOrderItems" (
+          "id" TEXT NOT NULL,
+          "orderId" TEXT NOT NULL,
+          "productId" TEXT,
+          "name" TEXT NOT NULL,
+          "price" DOUBLE PRECISION NOT NULL,
+          "quantity" INTEGER NOT NULL DEFAULT 1,
+          CONSTRAINT "ShopOrderItems_pkey" PRIMARY KEY ("id")
+        );
+        CREATE INDEX IF NOT EXISTS "ShopOrderItems_orderId_idx" ON "ShopOrderItems"("orderId");
+        CREATE INDEX IF NOT EXISTS "ShopOrderItems_productId_idx" ON "ShopOrderItems"("productId");
+
+        CREATE TABLE IF NOT EXISTS "ShopStockEdits" (
+          "id" TEXT NOT NULL,
+          "productId" TEXT NOT NULL,
+          "productName" TEXT NOT NULL,
+          "delta" INTEGER NOT NULL,
+          "reason" TEXT,
+          "editorId" TEXT,
+          "editorName" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "ShopStockEdits_pkey" PRIMARY KEY ("id")
+        );
+        CREATE INDEX IF NOT EXISTS "ShopStockEdits_productId_idx" ON "ShopStockEdits"("productId");
       `);
-      // Add foreign key separately (PostgreSQL doesn't support ADD CONSTRAINT IF NOT EXISTS)
-      try {
-        await publicClient.query(`
-          DO $$ BEGIN
-            ALTER TABLE "CreatorIncome" ADD CONSTRAINT "CreatorIncome_businessId_fkey"
-              FOREIGN KEY ("businessId") REFERENCES "Businesses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-          EXCEPTION WHEN duplicate_object THEN null;
-          END $$;
-        `);
-      } catch (fkError) {
-        // Non-fatal: FK may already exist
+      // Add foreign keys separately (PostgreSQL doesn't support ADD CONSTRAINT IF NOT EXISTS)
+      for (const fkSql of [
+        `DO $$ BEGIN ALTER TABLE "CreatorIncome" ADD CONSTRAINT "CreatorIncome_businessId_fkey" FOREIGN KEY ("businessId") REFERENCES "Businesses"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN null; END $$;`,
+        `DO $$ BEGIN ALTER TABLE "ShopProducts" ADD CONSTRAINT "ShopProducts_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "ShopCategories"("id") ON DELETE SET NULL ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN null; END $$;`,
+        `DO $$ BEGIN ALTER TABLE "ShopOrderItems" ADD CONSTRAINT "ShopOrderItems_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "ShopOrders"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN null; END $$;`,
+        `DO $$ BEGIN ALTER TABLE "ShopOrderItems" ADD CONSTRAINT "ShopOrderItems_productId_fkey" FOREIGN KEY ("productId") REFERENCES "ShopProducts"("id") ON DELETE SET NULL ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN null; END $$;`,
+        `DO $$ BEGIN ALTER TABLE "ShopStockEdits" ADD CONSTRAINT "ShopStockEdits_productId_fkey" FOREIGN KEY ("productId") REFERENCES "ShopProducts"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN null; END $$;`,
+      ]) {
+        try { await publicClient.query(fkSql); } catch (e) { /* Non-fatal: FK may already exist */ }
       }
-      console.log('[update] Public schema tables verified/created (Businesses, TelegramAuthRequests, CreatorIncome)');
+      console.log('[update] Public schema tables verified/created (Businesses, TelegramAuthRequests, CreatorIncome, Shop*)');
 
       // If Appointments table exists in public schema, ensure Comment/CoverBs/DiscountRub exist
       const tableCheck = await publicClient.query(`

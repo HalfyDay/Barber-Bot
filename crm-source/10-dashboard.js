@@ -327,14 +327,27 @@ const DashboardView = ({
                   <div className="w-full">
                     <span>{stats.positionName || '—'}</span>
                     {stats.levelProgress > 0 && (
-                      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{
-                            width: `${stats.levelProgress}%`,
-                            background: 'linear-gradient(90deg, var(--crm-primary), #22c55e)',
-                          }}
-                        />
+                      <div className="relative mt-1.5 h-1.5 w-full">
+                        <div className="absolute inset-0 overflow-hidden rounded-full bg-white/10">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${stats.levelProgress}%`,
+                              background: 'linear-gradient(90deg, var(--crm-primary), #22c55e)',
+                            }}
+                          />
+                        </div>
+                        {stats.subLevelMarkers && stats.subLevelMarkers.length > 0 && stats.subLevelMarkers.map((marker, i) => (
+                          <div
+                            key={i}
+                            className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-white/30"
+                            style={{
+                              left: `${marker.position}%`,
+                              background: marker.progress >= 100 ? '#22c55e' : 'var(--crm-surface-4)',
+                            }}
+                            title={`${marker.name}: ${marker.progress}%`}
+                          />
+                        ))}
                       </div>
                     )}
                   </div>

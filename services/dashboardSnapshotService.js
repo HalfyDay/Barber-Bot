@@ -401,6 +401,10 @@ const createDashboardSnapshotService = ({
       const staffPositionName = normalizeText(
         staffBarber?.position?.name || staffBarber?.position?.title || "",
       );
+      // Get parent level name if this is a sub-level
+      const parentPositionName = staffBarber?.position?.parentId
+        ? normalizeText(staffBarber?.position?.parent?.name || staffBarber?.position?.parent?.title || staffPositionName)
+        : staffPositionName;
       // Monthly client stats for staff
       const staffMonthAppointments = staffAppointments.filter(
         (appt) => appt.Date && appt.Date >= monthStartKey,
@@ -423,6 +427,21 @@ const createDashboardSnapshotService = ({
       const clientProgress = requiredClients > 0 ? Math.min(100, Math.round((staffMonthClients / requiredClients) * 100)) : 0;
       const returnProgress = requiredReturn > 0 ? Math.min(100, Math.round((staffMonthClients > 0 ? (staffMonthRegular / staffMonthClients) * 100 : 0) / requiredReturn * 100)) : 0;
       const levelProgress = requiredClients > 0 || requiredReturn > 0 ? Math.round((clientProgress + returnProgress) / 2) : 0;
+      // Get sub-levels info for progress markers
+      const parentPosition = position?.parentId ? positions.find((p) => p.id === position.parentId) : null;
+      const subLevels = parentPosition?.children || [];
+      const subLevelMarkers = subLevels.map((sub, index) => {
+        const subReqClients = Number(sub.requiredClientVolume) || 0;
+        const subReqReturn = Number(sub.targetReturnPercent) || 0;
+        const subClientPct = subReqClients > 0 ? Math.min(100, Math.round((staffMonthClients / subReqClients) * 100)) : 0;
+        const subReturnPct = subReqReturn > 0 ? Math.min(100, Math.round((staffMonthClients > 0 ? (staffMonthRegular / staffMonthClients) * 100 : 0) / subReqReturn * 100)) : 0;
+        const subProgress = subReqClients > 0 || subReqReturn > 0 ? Math.round((subClientPct + subReturnPct) / 2) : 0;
+        return {
+          name: sub.name,
+          progress: subProgress,
+          position: subLevels.length > 1 ? ((index + 1) / (subLevels.length + 1)) * 100 : 50,
+        };
+      });
       return {
         stats: {
           totalUsers: staffUsers.length,
@@ -433,8 +452,9 @@ const createDashboardSnapshotService = ({
           confirmedYear: staffConfirmedYear,
           blockedClients: staffBlocked,
           earningsMonth: Math.round(staffMonthlyGross - staffMonthlyCommission),
-          positionName: staffPositionName || null,
+          positionName: parentPositionName || staffPositionName || null,
           levelProgress: levelProgress,
+          subLevelMarkers: subLevelMarkers,
           monthClients: staffMonthClients,
           monthRegular: staffMonthRegular,
           monthNoShow: staffMonthNoShow,

@@ -386,6 +386,9 @@ const IconSystem = ({ className = 'h-5 w-5' }) => (
 const IconProfile = ({ className = 'h-5 w-5' }) => (
   <MaterialNavIcon name="person" className={className} />
 );
+const IconSettings = ({ className = 'h-5 w-5' }) => (
+  <MaterialNavIcon name="settings" className={className} />
+);
 const IconCalendarDay = ({ className = 'h-4 w-4' }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 011 1v12a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z" />
@@ -462,6 +465,7 @@ const VIEW_TAB_ICONS = {
   tables: IconData,
   system: IconSystem,
   profile: IconProfile,
+  settings: IconSettings,
 };
 const SYSTEM_SUB_SECTIONS = Object.freeze([
   { id: 'bot', label: 'Бот' },
@@ -709,12 +713,16 @@ const Sidebar = ({
   systemSection = 'bot',
   onSelectSystemSection,
   systemSubSections,
+  settingsSection = 'profile',
+  onSelectSettingsSection,
+  settingsSubSections,
 }) => {
   const username = session?.displayName || session?.username || '-';
   const sidebarTabs = Array.isArray(tabs) && tabs.length ? tabs : VIEW_TABS_BY_ROLE[ROLE_OWNER];
   const sidebarShortcuts =
     Array.isArray(tableShortcuts) && tableShortcuts.length ? tableShortcuts : DEFAULT_TABLE_SHORTCUTS;
   const subSections = Array.isArray(systemSubSections) && systemSubSections.length ? systemSubSections : SYSTEM_SUB_SECTIONS;
+  const settingsSubs = Array.isArray(settingsSubSections) && settingsSubSections.length ? settingsSubSections : [];
   const { trackRef, setItemRef, indicatorStyle } = useMovingNavIndicator(activeTab);
   const {
     trackRef: tableTrackRef,
@@ -726,6 +734,11 @@ const Sidebar = ({
     setItemRef: setSystemItemRef,
     indicatorStyle: systemIndicatorStyle,
   } = useMovingNavIndicator(activeTab === 'system' ? systemSection : null);
+  const {
+    trackRef: settingsTrackRef,
+    setItemRef: setSettingsItemRef,
+    indicatorStyle: settingsIndicatorStyle,
+  } = useMovingNavIndicator(activeTab === 'settings' ? settingsSection : null);
   return (
     <aside className="crm-sidebar hidden w-72 flex-shrink-0 flex-col p-5 lg:sticky lg:top-0 lg:flex lg:h-screen lg:overflow-y-auto">
       <div className="border-b border-white/5 pb-5">
@@ -811,6 +824,30 @@ const Sidebar = ({
                   })}
                 </div>
               )}
+              {tab.id === 'settings' && settingsSubs.length > 0 && (
+                <div ref={settingsTrackRef} className="relative space-y-1 pl-4">
+                  <div aria-hidden="true" className="crm-nav-indicator" style={settingsIndicatorStyle} />
+                  {settingsSubs.map((section) => {
+                    const isSectionActive = isActive && settingsSection === section.id;
+                    return (
+                      <button
+                        key={section.id}
+                        ref={setSettingsItemRef(section.id)}
+                        onClick={() => {
+                          onChange?.('settings');
+                          onSelectSettingsSection?.(section.id);
+                        }}
+                        className={classNames(
+                          'crm-subnav-pill crm-nav-item w-full px-3 py-2 text-left text-xs font-semibold',
+                          isSectionActive && 'crm-subnav-pill-active'
+                        )}
+                      >
+                        {section.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
@@ -833,6 +870,9 @@ const MobileTabs = ({
   systemSection,
   onSelectSystemSection,
   systemSubSections,
+  settingsSection,
+  onSelectSettingsSection,
+  settingsSubSections,
 }) => {
   const username = session?.displayName || session?.username || '-';
   const userAvatarSrc = resolveAssetUrl(currentBarber?.avatarUrl);
@@ -871,6 +911,11 @@ const MobileTabs = ({
     setItemRef: setSystemItemRef,
     indicatorStyle: systemIndicatorStyle,
   } = useMovingNavIndicator(activeTab === 'system' ? systemSection : null);
+  const {
+    trackRef: settingsTrackRef,
+    setItemRef: setSettingsItemRef,
+    indicatorStyle: settingsIndicatorStyle,
+  } = useMovingNavIndicator(activeTab === 'settings' ? settingsSection : null);
   const handleToggleLogoutMenu = () => setShowLogoutMenu((prev) => !prev);
   const handleLogoutClick = () => {
     setShowLogoutMenu(false);
@@ -922,9 +967,11 @@ const MobileTabs = ({
     [tableShortcuts]
   );
   const subSections = Array.isArray(systemSubSections) && systemSubSections.length ? systemSubSections : SYSTEM_SUB_SECTIONS;
+  const settingsSubs = Array.isArray(settingsSubSections) && settingsSubSections.length ? settingsSubSections : [];
   const canRenderTableSubmenu = activeTab === 'tables' && resolvedShortcuts.length > 0;
   const canRenderSystemSubmenu = activeTab === 'system' && subSections.length > 0;
-  const hasVisibleSubmenus = showSubmenus && (canRenderTableSubmenu || canRenderSystemSubmenu);
+  const canRenderSettingsSubmenu = activeTab === 'settings' && settingsSubs.length > 0;
+  const hasVisibleSubmenus = showSubmenus && (canRenderTableSubmenu || canRenderSystemSubmenu || canRenderSettingsSubmenu);
   const activeTopTabLabel =
     availableTabs.find((tab) => tab.id === activeTab)?.label ||
     UI_TEXT.accountTitle;
@@ -932,8 +979,10 @@ const MobileTabs = ({
     resolvedShortcuts.find((shortcut) => shortcut.id === activeDataTable)?.label || activeTopTabLabel;
   const activeSystemLabel =
     subSections.find((section) => section.id === systemSection)?.label || activeTopTabLabel;
+  const activeSettingsLabel =
+    settingsSubs.find((section) => section.id === settingsSection)?.label || activeTopTabLabel;
   const mobileHeaderTitle =
-    activeTab === 'tables' ? activeTableLabel : activeTab === 'system' ? activeSystemLabel : activeTopTabLabel;
+    activeTab === 'tables' ? activeTableLabel : activeTab === 'system' ? activeSystemLabel : activeTab === 'settings' ? activeSettingsLabel : activeTopTabLabel;
   const renderLiveIndicator = () =>
     liveStatus === 'unknown' && !liveUpdatedAt ? (
       <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[var(--crm-muted)]">{UI_TEXT.liveFallback}</span>
@@ -1064,6 +1113,40 @@ const MobileTabs = ({
                           onClick={() => {
                             handleSelect('system', { preserveSubmenus: true });
                             onSelectSystemSection?.(section.id);
+                          }}
+                          disabled={!canSelect}
+                          className={classNames(
+                            'crm-subnav-pill crm-nav-item flex-shrink-0 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide',
+                            isSectionActive && 'crm-subnav-pill-active',
+                            !canSelect && 'opacity-50'
+                          )}
+                        >
+                          {section.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {canRenderSettingsSubmenu && (
+                  <div
+                    className={classNames(
+                      'no-scrollbar relative flex gap-2 overflow-x-auto px-1.5 py-1 transition-all duration-300',
+                      showSubmenus ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1'
+                    )}
+                    ref={settingsTrackRef}
+                  >
+                    <div aria-hidden="true" className="crm-nav-indicator" style={settingsIndicatorStyle} />
+                    {settingsSubs.map((section) => {
+                      const isSectionActive = settingsSection === section.id;
+                      const canSelect = typeof onSelectSettingsSection === 'function';
+                      return (
+                        <button
+                          key={section.id}
+                          ref={setSettingsItemRef(section.id)}
+                          type="button"
+                          onClick={() => {
+                            handleSelect('settings', { preserveSubmenus: true });
+                            onSelectSettingsSection?.(section.id);
                           }}
                           disabled={!canSelect}
                           className={classNames(

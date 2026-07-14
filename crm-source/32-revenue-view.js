@@ -67,7 +67,7 @@ const ServiceMaxPricesEditor = ({ positionId, services = [], onGetMaxPrices, onC
             const isSaving = savingServiceId === service.id;
             return (
               <div key={service.id} className="flex items-center gap-2">
-                <span className="flex-1 text-sm text-slate-300 truncate">{service.name}</span>
+                <span className="w-44 text-sm text-slate-300 truncate">{service.name}</span>
                 <input
                   type="number"
                   min="0"
@@ -603,7 +603,16 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); handleDeleteSubLevel(child); }}
                                 disabled={savingKey === child.id}
-                                className="crm-danger-btn px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                                className="md:hidden inline-flex h-7 w-7 items-center justify-center rounded-full bg-[color:var(--crm-error-container)]/18 text-[color:var(--crm-error)] transition hover:bg-[color:var(--crm-error-container)]/28 disabled:cursor-not-allowed disabled:opacity-50"
+                                aria-label={`Удалить подуровень ${child.name}`}
+                              >
+                                <IconTrash className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleDeleteSubLevel(child); }}
+                                disabled={savingKey === child.id}
+                                className="hidden md:inline-flex crm-danger-btn px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 Удалить
                               </button>
@@ -611,41 +620,49 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
                                 <path d="M6 9l6 6 6-6" />
                               </svg>
                             </div>
-                            {expandedSubLevels[child.id] && (
-                            <div className="border-t border-white/5 p-3 space-y-2">
-                              <div className="space-y-1">
-                                <label className="block text-[10px] font-medium text-[var(--crm-muted)] uppercase">Доля %</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  step="0.1"
-                                  value={child.masterSharePercent ?? 0}
-                                  onChange={(event) => handleDraftChange(child.id, 'masterSharePercent', event.target.value)}
-                                  className="w-full px-2 py-1 text-white text-xs"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="block text-[10px] font-medium text-[var(--crm-muted)] uppercase">Возвращ. %</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  step="0.1"
-                                  value={child.targetReturnPercent ?? 0}
-                                  onChange={(event) => handleDraftChange(child.id, 'targetReturnPercent', event.target.value)}
-                                  className="w-full px-2 py-1 text-white text-xs"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="block text-[10px] font-medium text-[var(--crm-muted)] uppercase">Объём</label>
+                            {expandedSubLevels[child.id] && (() => {
+                              const childDraft = getDraft(child);
+                              return (
+                            <div className="border-t border-white/5 p-3 space-y-1.5">
+                              <div className="flex items-center gap-2">
+                                <span className="w-44 text-xs text-slate-300">Количество клиентов</span>
                                 <input
                                   type="number"
                                   min="0"
                                   step="1"
-                                  value={child.requiredClientVolume ?? 0}
+                                  value={childDraft.requiredClientVolume}
                                   onChange={(event) => handleDraftChange(child.id, 'requiredClientVolume', event.target.value)}
-                                  className="w-full px-2 py-1 text-white text-xs"
+                                  onFocus={(e) => e.target.select()}
+                                  placeholder="0"
+                                  className="w-24 px-2 py-1 text-white text-sm text-right"
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="w-44 text-xs text-slate-300">Возвратность клиентов</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  value={childDraft.targetReturnPercent}
+                                  onChange={(event) => handleDraftChange(child.id, 'targetReturnPercent', event.target.value)}
+                                  onFocus={(e) => e.target.select()}
+                                  placeholder="0"
+                                  className="w-24 px-2 py-1 text-white text-sm text-right"
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="w-44 text-xs text-slate-300">Процент барбера</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  value={childDraft.masterSharePercent}
+                                  onChange={(event) => handleDraftChange(child.id, 'masterSharePercent', event.target.value)}
+                                  onFocus={(e) => e.target.select()}
+                                  placeholder="0"
+                                  className="w-24 px-2 py-1 text-white text-sm text-right"
                                 />
                               </div>
                             {/* Макс. стоимость услуг для подуровня */}
@@ -660,7 +677,8 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
                               />
                             </div>
                             </div>
-                            )}
+                            );
+                            })()}
                           </div>
                         ))}
                         <button
@@ -699,25 +717,22 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
                     ) : (
                       /* Позиция без подуровней — показываем все поля как раньше */
                       <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {/* Доля мастера */}
-                          <div className="space-y-1.5">
-                            <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Доля мастера, %</label>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="w-44 text-xs font-medium text-[var(--crm-muted)]">Количество клиентов</span>
                             <input
                               type="number"
                               min="0"
-                              max="100"
-                              step="0.1"
-                              value={draft.masterSharePercent}
-                              onChange={(event) => handleDraftChange(position.id, 'masterSharePercent', event.target.value)}
+                              step="1"
+                              value={draft.requiredClientVolume}
+                              onChange={(event) => handleDraftChange(position.id, 'requiredClientVolume', event.target.value)}
+                              onFocus={(e) => e.target.select()}
                               placeholder="0"
-                              className="w-full px-3 py-2 text-white text-sm"
+                              className="w-24 px-2 py-1 text-white text-sm text-right"
                             />
                           </div>
-
-                          {/* Целевой % возвращаемости */}
-                          <div className="space-y-1.5">
-                            <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Возвращаемость, %</label>
+                          <div className="flex items-center gap-2">
+                            <span className="w-44 text-xs font-medium text-[var(--crm-muted)]">Возвратность клиентов</span>
                             <input
                               type="number"
                               min="0"
@@ -725,22 +740,23 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
                               step="0.1"
                               value={draft.targetReturnPercent}
                               onChange={(event) => handleDraftChange(position.id, 'targetReturnPercent', event.target.value)}
+                              onFocus={(e) => e.target.select()}
                               placeholder="0"
-                              className="w-full px-3 py-2 text-white text-sm"
+                              className="w-24 px-2 py-1 text-white text-sm text-right"
                             />
                           </div>
-
-                          {/* Объем клиентов */}
-                          <div className="space-y-1.5">
-                            <label className="block text-xs font-medium text-[var(--crm-muted)] uppercase tracking-wider">Объем клиентов для уровня</label>
+                          <div className="flex items-center gap-2">
+                            <span className="w-44 text-xs font-medium text-[var(--crm-muted)]">Процент барбера</span>
                             <input
                               type="number"
                               min="0"
-                              step="1"
-                              value={draft.requiredClientVolume}
-                              onChange={(event) => handleDraftChange(position.id, 'requiredClientVolume', event.target.value)}
+                              max="100"
+                              step="0.1"
+                              value={draft.masterSharePercent}
+                              onChange={(event) => handleDraftChange(position.id, 'masterSharePercent', event.target.value)}
+                              onFocus={(e) => e.target.select()}
                               placeholder="0"
-                              className="w-full px-3 py-2 text-white text-sm"
+                              className="w-24 px-2 py-1 text-white text-sm text-right"
                             />
                           </div>
                         </div>
@@ -834,22 +850,22 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
               className="w-full px-4 py-2 text-white"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-slate-300">Доля мастера, %</label>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="w-44 text-sm font-medium text-slate-300">Количество клиентов</span>
               <input
                 type="number"
                 min="0"
-                max="100"
-                step="0.1"
-                value={newPosition.masterSharePercent}
-                onChange={(event) => setNewPosition((prev) => ({ ...prev, masterSharePercent: event.target.value }))}
+                step="1"
+                value={newPosition.requiredClientVolume}
+                onChange={(event) => setNewPosition((prev) => ({ ...prev, requiredClientVolume: event.target.value }))}
+                onFocus={(e) => e.target.select()}
                 placeholder="0"
-                className="w-full px-4 py-2 text-white"
+                className="w-24 px-2 py-1 text-white text-sm text-right"
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-slate-300">Возвращаемость, %</label>
+            <div className="flex items-center gap-2">
+              <span className="w-44 text-sm font-medium text-slate-300">Возвратность клиентов</span>
               <input
                 type="number"
                 min="0"
@@ -857,20 +873,23 @@ const PositionsView = ({ positions = [], services = [], onCreate, onUpdate, onDe
                 step="0.1"
                 value={newPosition.targetReturnPercent}
                 onChange={(event) => setNewPosition((prev) => ({ ...prev, targetReturnPercent: event.target.value }))}
+                onFocus={(e) => e.target.select()}
                 placeholder="0"
-                className="w-full px-4 py-2 text-white"
+                className="w-24 px-2 py-1 text-white text-sm text-right"
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-slate-300">Объем клиентов</label>
+            <div className="flex items-center gap-2">
+              <span className="w-44 text-sm font-medium text-slate-300">Процент барбера</span>
               <input
                 type="number"
                 min="0"
-                step="1"
-                value={newPosition.requiredClientVolume}
-                onChange={(event) => setNewPosition((prev) => ({ ...prev, requiredClientVolume: event.target.value }))}
+                max="100"
+                step="0.1"
+                value={newPosition.masterSharePercent}
+                onChange={(event) => setNewPosition((prev) => ({ ...prev, masterSharePercent: event.target.value }))}
+                onFocus={(e) => e.target.select()}
                 placeholder="0"
-                className="w-full px-4 py-2 text-white"
+                className="w-24 px-2 py-1 text-white text-sm text-right"
               />
             </div>
           </div>
@@ -1096,8 +1115,8 @@ const LevelView = ({ positions = [], currentBarber = null, services = [], apiReq
     return [
       { label: 'КЛИЕНТЫ', value: Math.min(1, (m.actualClientVolume || 0) / reqVol) },
       { label: 'ПОСТОЯНН.', value: Math.min(1, (m.actualRetainedClients || 0) / reqRet) },
-      { label: 'ВОЗВРАТ', value: Math.min(1, (m.actualReturnPercent || 0) / reqRetPct) },
-      { label: 'ДОЛЯ', value: Math.min(1, (Number(position.masterSharePercent) || 0) / 100) },
+      { label: 'ВОЗВРАТН.', value: Math.min(1, (m.actualReturnPercent || 0) / reqRetPct) },
+      { label: 'ПРОЦЕНТ', value: Math.min(1, (Number(position.masterSharePercent) || 0) / 100) },
     ];
   }, [levelProgress?.liveMetrics, position]);
 
@@ -1186,7 +1205,7 @@ const LevelView = ({ positions = [], currentBarber = null, services = [], apiReq
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full" style={{ background: '#d6b36a', boxShadow: '0 0 8px #d6b36a' }} />
-                  <span className="text-xs text-[var(--crm-muted)]">Возвращаемость:</span>
+                  <span className="text-xs text-[var(--crm-muted)]">Возвратность:</span>
                   <span className="text-xs font-bold text-white">{position.targetReturnPercent ?? 0}%</span>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -1236,9 +1255,9 @@ const LevelView = ({ positions = [], currentBarber = null, services = [], apiReq
       {activeTab === 'overview' && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <ZzzStatBlock label="Доля мастера" value={position.masterSharePercent ?? 0} unit="%" color="var(--crm-primary)" />
-            <ZzzStatBlock label="Возвращаемость" value={position.targetReturnPercent ?? 0} unit="%" color="#d6b36a" />
-            <ZzzStatBlock label="Объем клиентов" value={position.requiredClientVolume ?? 0} color="#ff617f" />
+            <ZzzStatBlock label="Процент барбера" value={position.masterSharePercent ?? 0} unit="%" color="var(--crm-primary)" />
+            <ZzzStatBlock label="Возвратность клиентов" value={position.targetReturnPercent ?? 0} unit="%" color="#d6b36a" />
+            <ZzzStatBlock label="Количество клиентов" value={position.requiredClientVolume ?? 0} color="#ff617f" />
             <ZzzStatBlock label="Постоянные" value={position.requiredRetainedClients ?? 0} color="#7c6fff" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1254,7 +1273,7 @@ const LevelView = ({ positions = [], currentBarber = null, services = [], apiReq
               {levelProgress?.liveMetrics ? (
                 <div className="space-y-3">
                   <div>
-                    <ZzzGlowBar value={levelProgress.liveMetrics.actualClientVolume || 0} max={position.requiredClientVolume || 1} color={levelProgress.liveMetrics.meetsNextNow ? '#22c55e' : 'var(--crm-primary)'} height={8} label="Клиенты" showPercent />
+                    <ZzzGlowBar value={levelProgress.liveMetrics.actualClientVolume || 0} max={position.requiredClientVolume || 1} color={levelProgress.liveMetrics.meetsNextNow ? '#22c55e' : 'var(--crm-primary)'} height={8} label="Кол-во клиентов" showPercent />
                     <div className="flex justify-between mt-0.5"><span className="text-[9px] text-[var(--crm-muted)]">Сейчас: {levelProgress.liveMetrics.actualClientVolume || 0}</span><span className="text-[9px] text-[var(--crm-muted)]">Цель: {position.requiredClientVolume || 0}</span></div>
                   </div>
                   <div>
@@ -1262,7 +1281,7 @@ const LevelView = ({ positions = [], currentBarber = null, services = [], apiReq
                     <div className="flex justify-between mt-0.5"><span className="text-[9px] text-[var(--crm-muted)]">Сейчас: {levelProgress.liveMetrics.actualRetainedClients || 0}</span><span className="text-[9px] text-[var(--crm-muted)]">Цель: {position.requiredRetainedClients || 0}</span></div>
                   </div>
                   <div>
-                    <ZzzGlowBar value={levelProgress.liveMetrics.actualReturnPercent || 0} max={position.targetReturnPercent || 1} color="#d6b36a" height={8} label="Возвращаемость" showPercent />
+                    <ZzzGlowBar value={levelProgress.liveMetrics.actualReturnPercent || 0} max={position.targetReturnPercent || 1} color="#d6b36a" height={8} label="Возвратность" showPercent />
                     <div className="flex justify-between mt-0.5"><span className="text-[9px] text-[var(--crm-muted)]">Сейчас: {(levelProgress.liveMetrics.actualReturnPercent || 0).toFixed(1)}%</span><span className="text-[9px] text-[var(--crm-muted)]">Цель: {position.targetReturnPercent || 0}%</span></div>
                   </div>
                   <div className="flex gap-2 pt-2 border-t border-white/5">
@@ -1359,9 +1378,9 @@ const LevelView = ({ positions = [], currentBarber = null, services = [], apiReq
               <p className="text-[10px] uppercase tracking-widest text-[var(--crm-muted)] font-semibold mb-3">ТРЕБОВАНИЯ: {nextLevelPos.name}</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {[
-                  { label: 'Клиенты', actual: levelProgress?.liveMetrics?.actualClientVolume ?? 0, req: nextLevelPos.requiredClientVolume ?? 0, color: 'var(--crm-primary)' },
+                  { label: 'Кол-во клиентов', actual: levelProgress?.liveMetrics?.actualClientVolume ?? 0, req: nextLevelPos.requiredClientVolume ?? 0, color: 'var(--crm-primary)' },
                   { label: 'Постоянные', actual: levelProgress?.liveMetrics?.actualRetainedClients ?? 0, req: nextLevelPos.requiredRetainedClients ?? 0, color: '#7c6fff' },
-                  { label: 'Возвращаемость', actual: levelProgress?.liveMetrics?.actualReturnPercent ?? 0, req: nextLevelPos.targetReturnPercent ?? 0, color: '#d6b36a', isPercent: true },
+                  { label: 'Возвратность', actual: levelProgress?.liveMetrics?.actualReturnPercent ?? 0, req: nextLevelPos.targetReturnPercent ?? 0, color: '#d6b36a', isPercent: true },
                 ].map((item, i) => {
                   const met = item.actual >= item.req;
                   return (

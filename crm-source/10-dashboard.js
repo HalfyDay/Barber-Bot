@@ -9,6 +9,7 @@ const DashboardView = ({
   availableTables = [],
   currentUser = null,
   currentBarber = null,
+  liveShopOrders = null,
   liveUpdatedAt = null,
   liveStatus = 'unknown',
 }) => {
@@ -309,7 +310,7 @@ const DashboardView = ({
                 label="Клиенты / Постоянные / Неявка"
                 value={
                   <>
-                    <span>{stats.monthClients ?? 0}</span>
+                    <span className="text-emerald-400">{stats.monthClients ?? 0}</span>
                     <span className="text-zinc-500 mx-1">/</span>
                     <span>{stats.monthRegular ?? 0}</span>
                     <span className="text-zinc-500 mx-1">/</span>
@@ -322,7 +323,22 @@ const DashboardView = ({
               <StatCard
                 compact
                 label="Уровень"
-                value={stats.positionName || '—'}
+                value={
+                  <div className="w-full">
+                    <span>{stats.positionName || '—'}</span>
+                    {stats.levelProgress > 0 && (
+                      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${stats.levelProgress}%`,
+                            background: 'linear-gradient(90deg, var(--crm-primary), #22c55e)',
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                }
                 accent="text-[var(--crm-text)]"
                 onClick={resolveStatHandler('Level')}
               />
@@ -390,6 +406,43 @@ const DashboardView = ({
           )}
         </div>
       </div>
+      {(() => {
+        const pendingOrders = Array.isArray(liveShopOrders)
+          ? liveShopOrders.filter((o) => o.status === 'new' || o.status === 'processing')
+          : [];
+        const pendingCount = pendingOrders.length;
+        return (
+          <button
+            type="button"
+            onClick={() => typeof onNavigateTable === 'function' && onNavigateTable('Shop')}
+            className="-mt-5 mb-0 w-full flex items-center gap-3 rounded-2xl px-4 py-3 transition-colors cursor-pointer"
+            style={{ background: pendingCount > 0 ? 'color-mix(in srgb, var(--crm-primary) 12%, var(--crm-surface-2))' : 'var(--crm-surface-2)' }}
+          >
+            <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke={pendingCount > 0 ? 'var(--crm-primary)' : 'var(--crm-muted)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
+              <path d="M3 6h18" />
+              <path d="M16 10a4 4 0 0 1-8 0" />
+            </svg>
+            <span className="flex-1 text-left text-sm font-medium" style={{ color: pendingCount > 0 ? 'var(--crm-primary)' : 'var(--crm-muted)' }}>
+              Магазин
+            </span>
+            {pendingCount > 0 ? (
+              <span className="flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75" style={{ background: 'var(--crm-primary)' }} />
+                  <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: 'var(--crm-primary)' }} />
+                </span>
+                <span className="text-xs font-semibold" style={{ color: 'var(--crm-primary)' }}>{pendingCount} заказ{pendingCount === 1 ? '' : pendingCount < 5 ? 'а' : 'ов'} ждут</span>
+              </span>
+            ) : (
+              <span className="text-xs text-[var(--crm-muted)]">Нет новых</span>
+            )}
+            <svg className="h-4 w-4 shrink-0 text-[var(--crm-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
+        );
+      })()}
       <SectionCard title="Записи" actions={upcomingActions}>
         {mergedList.length === 0 ? (
           <p className="text-[var(--crm-muted)]">Нет записей.</p>

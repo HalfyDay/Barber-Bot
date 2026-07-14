@@ -555,24 +555,24 @@ const ShopView = ({
       { value: '', label: 'Все' },
       ...Object.entries(SHOP_ORDER_STATUS_LABELS).map(([id, label]) => ({ value: id, label })),
     ];
-    const displayOrders = (Array.isArray(liveShopOrders) && liveShopOrders.length > 0) ? liveShopOrders : orders;
+    const rawOrders = (Array.isArray(liveShopOrders) && liveShopOrders.length > 0) ? liveShopOrders : orders;
+    const searchQuery = scanQrValue.replace(/^#/, '').trim().toLowerCase();
+    let displayOrders = rawOrders;
+    if (orderStatusFilter) {
+      displayOrders = displayOrders.filter((o) => o.status === orderStatusFilter);
+    }
+    if (searchQuery.length >= 3) {
+      displayOrders = displayOrders.filter((o) => {
+        const id = (o.id || '').toLowerCase();
+        const name = (o.customerName || '').toLowerCase();
+        const phone = (o.customerPhone || '').toLowerCase();
+        return id.includes(searchQuery) || name.includes(searchQuery) || phone.includes(searchQuery);
+      });
+    }
     const grouped = buildOrderGroups(displayOrders);
 
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <label className="text-sm text-[var(--crm-muted)]">Статус:</label>
-          <div className="w-48">
-            <CustomSelect
-              value={orderStatusFilter}
-              onChange={(val) => setOrderStatusFilter(val)}
-              options={orderStatusOptions}
-              placeholder="Статус"
-              portalMenu
-            />
-          </div>
-        </div>
-
         {/* QR Scanner */}
         <SectionCard title="Сканировать QR клиента">
           <div className="space-y-3">
@@ -588,92 +588,54 @@ const ShopView = ({
                 </button>
               </div>
             )}
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex items-center gap-2">
               {!scannerActive ? (
-                <button type="button" onClick={startScanner} className="crm-tonal-btn px-4 py-2 text-sm font-semibold">
-                  Открыть камеру
+                <button type="button" onClick={startScanner} className="shrink-0 flex h-10 w-10 items-center justify-center rounded-xl bg-[color:var(--crm-surface-4)] transition-colors hover:bg-[color:var(--crm-surface-5)]" title="Открыть камеру">
+                  <svg className="h-5 w-5 text-[var(--crm-primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+                    <circle cx="12" cy="13" r="3" />
+                  </svg>
                 </button>
               ) : null}
               <input
                 value={scanQrValue}
-                onChange={(e) => setScanQrValue(e.target.value)}
-                placeholder="Или введите QR-код вручную"
-                className="flex-1 rounded-xl bg-[color:var(--crm-surface-4)] px-4 py-2 text-sm text-white placeholder:text-[var(--crm-muted)]"
+                onChange={(e) => {
+                  setScanQrValue(e.target.value);
+                  setScanResult(null);
+                  setScanResults([]);
+                  setScanError('');
+                }}
+                placeholder="Поиск по коду, имени или телефону"
+                className="flex-1 rounded-xl bg-[color:var(--crm-surface-4)] px-4 py-2.5 text-sm text-white placeholder:text-[var(--crm-muted)]"
               />
-              <button
-                type="button"
-                onClick={() => handleQrLookup(scanQrValue)}
-                disabled={!scanQrValue.trim()}
-                className="crm-action-btn px-4 py-2 text-sm font-semibold disabled:opacity-40"
-              >
-                Найти
-              </button>
             </div>
             {scanError && <ErrorBanner message={scanError} />}
-            {scanResult && (
-              <div className="crm-inline-panel space-y-3 p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-white">Заказ {(scanResult.id || '').slice(0, 8)}</p>
-                    <p className="text-xs text-[var(--crm-muted)]">{scanResult.customerName || 'Без имени'} · {scanResult.customerPhone || ''}</p>
-                  </div>
-                  <span className={classNames('self-start rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider', SHOP_ORDER_STATUS_TONES[scanResult.status] || '')}>
-                    {SHOP_ORDER_STATUS_LABELS[scanResult.status] || scanResult.status}
-                  </span>
-                </div>
-                <div className="text-xs text-[var(--crm-text)]">
-                  {(scanResult.items || []).map((item, i) => (
-                    <div key={i} className="flex justify-between py-1">
-                      <span className="min-w-0 flex-1 truncate">{item.name} × {item.quantity}</span>
-                      <span className="flex-shrink-0 pl-2">{formatCurrencyValue(item.price * item.quantity)}</span>
-                    </div>
-                  ))}
-                  <div className="mt-2 flex justify-between border-t border-white/10 pt-2 font-semibold">
-                    <span>Итого</span>
-                    <span>{formatCurrencyValue(scanResult.totalAmount)}</span>
-                  </div>
-                </div>
-                {scanResult.status !== 'issued' && (
-                  <button
-                    type="button"
-                    onClick={() => handleOrderIssue(scanResult.id)}
-                    className="crm-action-btn w-full py-2.5 text-sm font-semibold"
-                  >
-                    Выдать заказ
-                  </button>
-                )}
-                {scanResult.status === 'issued' && (
-                  <p className="text-xs text-center text-[var(--crm-muted)]">
-                    Выдан: {scanResult.issuedByName || '—'} · {scanResult.issuedAt ? new Date(scanResult.issuedAt).toLocaleString('ru-RU') : ''}
-                  </p>
-                )}
-              </div>
-            )}
-            {scanResults.length > 0 && !scanResult && (
-              <div className="space-y-2">
-                <p className="text-xs text-[var(--crm-muted)]">Найдено: {scanResults.length}</p>
-                {scanResults.map((order) => (
-                  <button
-                    key={order.id}
-                    type="button"
-                    onClick={() => { setScanResult(order); setScanResults([]); }}
-                    className="w-full text-left crm-inline-panel p-3 hover:bg-white/5 transition rounded-lg"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-white">{(order.id || '').slice(0, 8)}</p>
-                        <p className="text-xs text-[var(--crm-muted)]">{order.customerName || 'Без имени'} · {order.customerPhone || ''}</p>
-                      </div>
-                      <span className={classNames('rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase', SHOP_ORDER_STATUS_TONES[order.status] || '')}>
-                        {SHOP_ORDER_STATUS_LABELS[order.status] || order.status}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         </SectionCard>
+
+        {/* Orders filter panel */}
+        <div className="flex items-center justify-between rounded-2xl px-4 py-2.5" style={{ background: 'var(--crm-surface-2)' }}>
+          <div className="flex items-center gap-2.5">
+            <svg className="h-4 w-4 text-[var(--crm-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
+              <path d="M3 6h18" />
+              <path d="M16 10a4 4 0 0 1-8 0" />
+            </svg>
+            <span className="text-sm text-[var(--crm-muted)]">{displayOrders.length} заказ{displayOrders.length === 1 ? '' : displayOrders.length < 5 ? 'а' : 'ов'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[var(--crm-muted)]">Статус:</span>
+            <div className="w-36">
+              <CustomSelect
+                value={orderStatusFilter}
+                onChange={(val) => setOrderStatusFilter(val)}
+                options={orderStatusOptions}
+                placeholder="Все"
+                portalMenu
+              />
+            </div>
+          </div>
+        </div>
 
         {/* Orders list grouped by date */}
         {ordersLoading && !liveShopOrders ? (
@@ -691,15 +653,14 @@ const ShopView = ({
                 <div className="grid gap-3 lg:grid-cols-2">
                   {group.rows.map((order) => {
                     const orderTime = new Date(order.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-                    const isSelected = selectedOrder?.id === order.id;
                     const itemsSummary = (order.items || []).map((item) => item.name).join(', ');
                     return (
                       <div
                         key={order.id}
                         role="button"
                         tabIndex={0}
-                        onClick={() => setSelectedOrder(isSelected ? null : order)}
-                        onKeyDown={(e) => e.key === 'Enter' && setSelectedOrder(isSelected ? null : order)}
+                        onClick={() => setSelectedOrder(order)}
+                        onKeyDown={(e) => e.key === 'Enter' && setSelectedOrder(order)}
                         className="crm-soft-panel relative flex h-full cursor-pointer flex-col overflow-hidden p-3 text-left transition hover:-translate-y-0.5 hover:bg-[color:var(--crm-surface-5)] focus:outline-none sm:p-4"
                       >
                         <div className="flex items-start gap-3">
@@ -733,98 +694,6 @@ const ShopView = ({
                             ) : formatCurrencyValue(order.totalAmount)}
                           </span>
                         </div>
-                        {isSelected && (
-                          <div className="mt-3 space-y-2 border-t border-white/5 pt-3">
-                            <div className="text-xs text-[var(--crm-text)]">
-                              {(order.items || []).map((item, i) => (
-                                <div key={i} className="flex justify-between py-0.5">
-                                  <span>{item.name} × {item.quantity}</span>
-                                  <span>{formatCurrencyValue(item.price * item.quantity)}</span>
-                                </div>
-                              ))}
-                            </div>
-                            {order.comment && <p className="text-xs text-[var(--crm-muted)]">Комментарий: {order.comment}</p>}
-                            {order.issuedByName && (
-                              <p className="text-xs text-[var(--crm-muted)]">
-                                Выдал: {order.issuedByName} · {order.issuedAt ? new Date(order.issuedAt).toLocaleString('ru-RU') : ''}
-                              </p>
-                            )}
-                            {isOwner && order.status !== 'issued' && order.status !== 'cancelled' && (
-                              <div className="flex flex-wrap gap-2 pt-1">
-                                {order.status === 'new' && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleOrderStatus(order.id, 'processing'); }}
-                                    className="crm-ghost-btn px-3 py-1.5 text-xs"
-                                  >
-                                    В обработку
-                                  </button>
-                                )}
-                                {(order.status === 'new' || order.status === 'processing') && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleOrderStatus(order.id, 'ready'); }}
-                                    className="crm-ghost-btn px-3 py-1.5 text-xs"
-                                  >
-                                    Готов к выдаче
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); handleOrderIssue(order.id); }}
-                                  className="crm-action-btn px-3 py-1.5 text-xs"
-                                >
-                                  Выдать
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); handleOrderCancel(order.id); }}
-                                  className="crm-danger-btn px-3 py-1.5 text-xs"
-                                >
-                                  Отменить
-                                </button>
-                              </div>
-                            )}
-                            {!isOwner && order.status !== 'issued' && order.status !== 'cancelled' && (
-                              <div className="flex flex-wrap gap-2 pt-1">
-                                {order.status === 'new' && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleOrderStatus(order.id, 'processing'); }}
-                                    className="crm-action-btn px-3 py-1.5 text-xs"
-                                  >
-                                    В обработку
-                                  </button>
-                                )}
-                                {(order.status === 'new' || order.status === 'processing') && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleOrderStatus(order.id, 'ready'); }}
-                                    className="crm-action-btn px-3 py-1.5 text-xs"
-                                  >
-                                    Готов к выдаче
-                                  </button>
-                                )}
-                                {(order.status === 'new' || order.status === 'processing' || order.status === 'ready') && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleOrderIssue(order.id); }}
-                                    className="crm-action-btn px-3 py-1.5 text-xs"
-                                  >
-                                    Выдать
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); handleOrderCancel(order.id); }}
-                                  className="crm-danger-btn px-3 py-1.5 text-xs"
-                                >
-                                  Отменить
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
                       </div>
                     );
                   })}
@@ -833,6 +702,182 @@ const ShopView = ({
             ))}
           </div>
         )}
+
+        {/* Order Details Sheet */}
+        <Modal
+          isOpen={Boolean(selectedOrder)}
+          onClose={() => setSelectedOrder(null)}
+          title={selectedOrder ? `Заказ ${(selectedOrder.id || '').slice(0, 8)}` : ''}
+        >
+          {selectedOrder && (
+            <div className="space-y-5 p-4">
+              {/* Customer Info */}
+              <div className="flex items-center gap-4">
+                {(() => {
+                  const avatarSrc = getOrderAvatarSrc(selectedOrder);
+                  return avatarSrc ? (
+                    <img src={avatarSrc} alt={selectedOrder.customerName || 'Клиент'} className="h-16 w-16 flex-shrink-0 rounded-full object-cover" />
+                  ) : (
+                    <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-[color:var(--crm-surface-3)] text-[var(--crm-muted)]">
+                      <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                    </div>
+                  );
+                })()}
+                <div className="min-w-0 flex-1">
+                  <p className="text-lg font-semibold text-white">{selectedOrder.customerName || 'Без имени'}</p>
+                  {selectedOrder.customerPhone && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
+                          window.location.href = `tel:${selectedOrder.customerPhone}`;
+                        } else {
+                          navigator.clipboard?.writeText(selectedOrder.customerPhone);
+                          addToast?.('Номер скопирован', 'success');
+                        }
+                      }}
+                      className="text-sm text-[var(--crm-primary)] hover:underline cursor-pointer"
+                    >
+                      {selectedOrder.customerPhone}
+                    </button>
+                  )}
+                </div>
+                <span className={classNames('rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider', SHOP_ORDER_STATUS_TONES[selectedOrder.status] || '')}>
+                  {SHOP_ORDER_STATUS_LABELS[selectedOrder.status] || selectedOrder.status}
+                </span>
+              </div>
+
+              {/* Order ID */}
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-[var(--crm-muted)]">Заказ:</span>
+                <button
+                  type="button"
+                  onClick={() => { navigator.clipboard?.writeText(selectedOrder.id || ''); addToast?.('Скопировано', 'success'); }}
+                  className="font-mono text-[var(--crm-primary)] hover:underline cursor-pointer"
+                >
+                  {(selectedOrder.id || '').slice(0, 8)}
+                </button>
+              </div>
+
+              {/* Order Items */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--crm-muted)]">Товары</p>
+                <div className="space-y-2">
+                  {(selectedOrder.items || []).map((item, i) => (
+                    <div key={i} className="flex items-center gap-3 rounded-xl bg-[color:var(--crm-surface-3)] p-3">
+                      {item.product?.imageUrl ? (
+                        <img src={item.product.imageUrl} alt={item.name} className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
+                      ) : (
+                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-[color:var(--crm-surface-4)] text-[var(--crm-muted)]">
+                          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                          </svg>
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-white truncate">{item.name}</p>
+                        <p className="text-xs text-[var(--crm-muted)]">{item.quantity} × {formatCurrencyValue(item.price)}</p>
+                      </div>
+                      <span className="text-sm font-semibold text-white">{formatCurrencyValue(item.price * item.quantity)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Price Breakdown */}
+              <div className="space-y-2 rounded-xl bg-[color:var(--crm-surface-3)] p-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--crm-muted)]">Сумма</span>
+                  <span className="text-white">{formatCurrencyValue(selectedOrder.totalAmount)}</span>
+                </div>
+                {selectedOrder.bsAmount > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--crm-primary)]">Бонусы</span>
+                    <span className="text-[var(--crm-primary)]">-{formatCurrencyValue(selectedOrder.bsAmount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-white/10 pt-2 text-base font-semibold">
+                  <span className="text-white">Итого</span>
+                  <span className="text-white">{formatCurrencyValue(selectedOrder.totalAmount - (selectedOrder.bsAmount || 0))}</span>
+                </div>
+              </div>
+
+              {/* Comment */}
+              {selectedOrder.comment && (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--crm-muted)]">Комментарий</p>
+                  <p className="text-sm text-[var(--crm-text)]">{selectedOrder.comment}</p>
+                </div>
+              )}
+
+              {/* Issued Info */}
+              {selectedOrder.issuedByName && (
+                <div className="text-xs text-[var(--crm-muted)]">
+                  Выдал: {selectedOrder.issuedByName} · {selectedOrder.issuedAt ? new Date(selectedOrder.issuedAt).toLocaleString('ru-RU') : ''}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              {selectedOrder.status !== 'issued' && selectedOrder.status !== 'cancelled' && (
+                <div className="flex flex-wrap gap-2 pt-2">
+                  {isOwner && selectedOrder.status === 'new' && (
+                    <button
+                      type="button"
+                      onClick={() => { handleOrderStatus(selectedOrder.id, 'processing'); setSelectedOrder(null); }}
+                      className="crm-ghost-btn flex-1 px-4 py-2.5 text-sm font-semibold"
+                    >
+                      В обработку
+                    </button>
+                  )}
+                  {isOwner && (selectedOrder.status === 'new' || selectedOrder.status === 'processing') && (
+                    <button
+                      type="button"
+                      onClick={() => { handleOrderStatus(selectedOrder.id, 'ready'); setSelectedOrder(null); }}
+                      className="crm-ghost-btn flex-1 px-4 py-2.5 text-sm font-semibold"
+                    >
+                      Готов к выдаче
+                    </button>
+                  )}
+                  {!isOwner && selectedOrder.status === 'new' && (
+                    <button
+                      type="button"
+                      onClick={() => { handleOrderStatus(selectedOrder.id, 'processing'); setSelectedOrder(null); }}
+                      className="crm-action-btn flex-1 px-4 py-2.5 text-sm font-semibold"
+                    >
+                      В обработку
+                    </button>
+                  )}
+                  {!isOwner && (selectedOrder.status === 'new' || selectedOrder.status === 'processing') && (
+                    <button
+                      type="button"
+                      onClick={() => { handleOrderStatus(selectedOrder.id, 'ready'); setSelectedOrder(null); }}
+                      className="crm-action-btn flex-1 px-4 py-2.5 text-sm font-semibold"
+                    >
+                      Готов к выдаче
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => { handleOrderIssue(selectedOrder.id); setSelectedOrder(null); }}
+                    className="crm-action-btn flex-1 px-4 py-2.5 text-sm font-semibold"
+                  >
+                    Выдать
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { handleOrderCancel(selectedOrder.id); setSelectedOrder(null); }}
+                    className="crm-danger-btn flex-1 px-4 py-2.5 text-sm font-semibold"
+                  >
+                    Отменить
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </Modal>
       </div>
     );
   };

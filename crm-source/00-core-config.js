@@ -79,7 +79,7 @@ VIEW_TABS_BY_ROLE[ROLE_OWNER] = [
 VIEW_TABS_BY_ROLE[ROLE_STAFF] = [
   { id: 'dashboard', label: 'Главная' },
   { id: 'tables', label: 'Данные' },
-  { id: 'profile', label: 'Профиль' },
+  { id: 'settings', label: 'Настройки' },
 ];
 VIEW_TABS_BY_ROLE[ROLE_CREATOR] = [
   { id: 'income', label: 'Доходы' },
@@ -132,6 +132,16 @@ const getSystemSubSections = (role, isImpersonated) => {
     { id: 'site', label: 'Сайт' },
     { id: 'settings', label: 'Настройки' },
   ];
+};
+
+const getSettingsSubSections = (role) => {
+  if (role === ROLE_STAFF) {
+    return [
+      { id: 'profile', label: 'Профиль' },
+      { id: 'notifications', label: 'Уведомления' },
+    ];
+  }
+  return [];
 };
 
 

@@ -196,6 +196,7 @@ const App = () => {
   const [rememberSession, setRememberSession] = useState(persistedAuth.remember || isAppSiteShell);
   const [activeTab, setActiveTab] = useLocalStorage('barber.activeTab', 'dashboard');
   const [systemSection, setSystemSection] = useLocalStorage('system.section', 'bot');
+  const [settingsSection, setSettingsSection] = useLocalStorage('settings.section', 'profile');
   const [pendingTableView, setPendingTableView] = useState(null);
   const [activeDataTable, setActiveDataTable] = useState(() => {
     try {
@@ -267,6 +268,8 @@ const App = () => {
   const canAccessSystem = hasOwnerAccess;
   const systemSubSections = getSystemSubSections(role, session?.isImpersonated);
   const resolvedSystemSection = systemSubSections.some((tab) => tab.id === systemSection) ? systemSection : (systemSubSections[0]?.id || 'bot');
+  const settingsSubSections = getSettingsSubSections(role);
+  const resolvedSettingsSection = settingsSubSections.some((tab) => tab.id === settingsSection) ? settingsSection : (settingsSubSections[0]?.id || 'profile');
   const requestConfirm = useCallback(
     (options = {}) =>
       new Promise((resolve) => {
@@ -778,7 +781,7 @@ const apiRequest = useCallback(
       const [overview, appointments, shopOrdersResult] = await Promise.all([
         apiRequest('/dashboard/overview'),
         apiRequest('/appointments'),
-        activeDataTable === 'Shop' ? apiRequest('/shop/panel/orders').catch(() => null) : Promise.resolve(null),
+        apiRequest('/shop/panel/orders').catch(() => null),
       ]);
       const newShopOrders = shopOrdersResult?.success ? (shopOrdersResult.orders || []) : [];
       if (newShopOrders.length > prevShopOrderCountRef.current && prevShopOrderCountRef.current > 0) {
@@ -1864,6 +1867,7 @@ const handleBarberFieldChange = (id, field, value) => {
             availableTables={visibleTableOrder}
             currentUser={session || null}
             currentBarber={currentBarber}
+            liveShopOrders={realtimeSnapshot?.shopOrders || null}
             liveUpdatedAt={liveUpdatedAt}
             liveStatus={effectiveLiveStatus}
           />
@@ -1926,7 +1930,14 @@ const handleBarberFieldChange = (id, field, value) => {
             addToast={addToast}
           />
         );
-      case 'profile':
+      case 'settings':
+        if (resolvedSettingsSection === 'notifications') {
+          return (
+            <div className="mx-auto w-full max-w-[1120px] space-y-6">
+              <NotificationsSettingsView />
+            </div>
+          );
+        }
         return (
           <div className="mx-auto w-full max-w-[1120px] space-y-6">
             <BarberProfileView
@@ -1939,7 +1950,6 @@ const handleBarberFieldChange = (id, field, value) => {
               onSave={handleSaveBarber}
               allowRatingEdit={role === ROLE_OWNER || role === ROLE_CREATOR}
             />
-            {role === ROLE_STAFF && <NotificationsSettingsView />}
           </div>
         );
       case 'income':
@@ -2076,6 +2086,9 @@ const handleBarberFieldChange = (id, field, value) => {
           systemSection={resolvedSystemSection}
           onSelectSystemSection={setSystemSection}
           systemSubSections={systemSubSections}
+          settingsSection={resolvedSettingsSection}
+          onSelectSettingsSection={setSettingsSection}
+          settingsSubSections={settingsSubSections}
         />
       )}
       <div className="flex w-full min-w-0 flex-1">
@@ -2093,6 +2106,9 @@ const handleBarberFieldChange = (id, field, value) => {
           systemSection={resolvedSystemSection}
           onSelectSystemSection={setSystemSection}
           systemSubSections={systemSubSections}
+          settingsSection={resolvedSettingsSection}
+          onSelectSettingsSection={setSettingsSection}
+          settingsSubSections={settingsSubSections}
         />
         <main className={mainClassName}>
           <div key={activeTab} className="crm-page-switch">

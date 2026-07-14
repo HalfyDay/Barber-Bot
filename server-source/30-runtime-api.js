@@ -758,6 +758,7 @@ process.on('SIGTERM', () => {
 });
 
 // Auto-cancel expired shop orders every 30 minutes
+// Delay first run by 15s to let schema patches finish creating tables
 if (shopService?.cancelExpiredShopOrders) {
   const runAutoCancel = async () => {
     try {
@@ -767,7 +768,7 @@ if (shopService?.cancelExpiredShopOrders) {
       console.error("[shop] Auto-cancel error:", e.message);
     }
   };
-  runAutoCancel();
+  setTimeout(runAutoCancel, 15000);
   setInterval(runAutoCancel, 30 * 60 * 1000);
 }
 

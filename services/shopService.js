@@ -380,7 +380,9 @@ const createShopService = ({
     return !restricted.includes(normalizeText(barberId));
   };
 
+  let shopOrdersTableMissing = false;
   const cancelExpiredShopOrders = async () => {
+    if (shopOrdersTableMissing) return 0;
     try {
       const settings = await getShopSettings();
       const days = Number(settings.autoExpireDays) || 0;
@@ -401,6 +403,11 @@ const createShopService = ({
       }
       return cancelled;
     } catch (error) {
+      if (String(error.message).includes("does not exist")) {
+        shopOrdersTableMissing = true;
+        logger.warn("ShopOrders table not yet available, auto-cancel disabled until next restart");
+        return 0;
+      }
       logger.error("cancelExpiredShopOrders error:", error.message);
       return 0;
     }

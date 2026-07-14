@@ -651,19 +651,19 @@ const BarbersView = ({
                       options={[
                         { value: '', label: 'Без должности' },
                         ...sortedPositions.flatMap((position) => {
-                          const parentOpt = {
+                          const hasChildren = Array.isArray(position.children) && position.children.length > 0;
+                          if (hasChildren) {
+                            return position.children
+                              .sort((a, b) => (Number(a?.orderIndex) || 0) - (Number(b?.orderIndex) || 0))
+                              .map((child) => ({
+                                value: child.id,
+                                label: `${child.name}${typeof child.masterSharePercent === 'number' ? ` · ${formatPercent(child.masterSharePercent)}` : ''}`,
+                              }));
+                          }
+                          return [{
                             value: position.id,
                             label: `${position.name}${typeof position.masterSharePercent === 'number' ? ` · ${formatPercent(position.masterSharePercent)}` : ''}`,
-                          };
-                          const children = Array.isArray(position.children) && position.children.length > 0
-                            ? [...position.children]
-                                .sort((a, b) => (Number(a?.orderIndex) || 0) - (Number(b?.orderIndex) || 0))
-                                .map((child) => ({
-                                  value: child.id,
-                                  label: `  └ ${child.name}${typeof child.masterSharePercent === 'number' ? ` · ${formatPercent(child.masterSharePercent)}` : ''}`,
-                                }))
-                            : [];
-                          return [parentOpt, ...children];
+                          }];
                         }),
                       ]}
                       buttonClassName="h-12 px-4"

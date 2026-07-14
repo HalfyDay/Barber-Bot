@@ -319,6 +319,11 @@ const TablesWorkspace = ({
     }
   }, [apiRequest]);
   useEffect(() => {
+    if (activeTable === 'Barbers' && (!tables.Positions || tables.Positions.length === 0)) {
+      refreshPositions().catch(() => {});
+    }
+  }, [activeTable, tables.Positions, refreshPositions]);
+  useEffect(() => {
     if (!Array.isArray(liveAppointments)) return;
     setTables((prev) => ({
       ...prev,

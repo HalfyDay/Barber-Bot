@@ -20,6 +20,11 @@ const baseDeps = () => ({
         return 0;
       },
     },
+    positions: {
+      async findMany() {
+        return [];
+      },
+    },
   },
   getBarbers: async () => [],
   getServiceCatalog: async () => [],
@@ -173,6 +178,11 @@ test("dashboard snapshot service builds staff snapshot with filtered stats and e
           return 2;
         },
       },
+      positions: {
+        async findMany() {
+          return [];
+        },
+      },
     },
     getBarbers: async () => [
       {
@@ -299,6 +309,11 @@ test("dashboard snapshot service builds owner snapshot with recurring clients an
         },
         async count() {
           return 2;
+        },
+      },
+      positions: {
+        async findMany() {
+          return [];
         },
       },
     },

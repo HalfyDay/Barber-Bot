@@ -198,6 +198,7 @@ const createDashboardSnapshotService = ({
       settings,
       backups,
       blockedUsers,
+      positions,
     ] = await Promise.all([
       prisma.appointments.findMany(),
       prisma.users.findMany(),
@@ -206,6 +207,7 @@ const createDashboardSnapshotService = ({
       getBotSettings(),
       listBackups(),
       readBlockedUsers(),
+      prisma.positions.findMany({ include: { children: true } }),
     ]);
     const appointments = appointmentsRaw.map(mapAppointment);
     const insightsMap = buildUserInsightsMap

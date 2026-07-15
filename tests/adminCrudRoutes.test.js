@@ -418,12 +418,26 @@ test("admin crud routes return hydrated barbers list", async () => {
           return {};
         },
       },
+      services: {
+        async findMany() {
+          return [];
+        },
+      },
     },
     mapAppointment: (record) => record,
     filterBarbersForIdentity: (rows, identity) => {
       assert.deepEqual(identity, { username: "owner" });
       return rows;
     },
+    buildServiceLookup: (services) =>
+      new Map(services.map((s) => [normalizeText(s.name || "").toLowerCase(), s])),
+    splitServiceList: (value) =>
+      (value || "").split(",").map((s) => s.trim()).filter(Boolean),
+    getServicePriceForBarber: (service, barberId) =>
+      service?.prices?.[barberId] ?? null,
+    canonicalizeKey: (value) => normalizeText(value).toLowerCase(),
+    formatDateOnly: (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
+    statusNoShow: "неявка",
   });
   const handler = app.getRoute("GET", "/api/barbers/full");
   const res = createResponseMock();
@@ -437,6 +451,11 @@ test("admin crud routes return hydrated barbers list", async () => {
     total: 1,
     upcoming: 1,
     confirmedYear: 1,
+    todayActive: 0,
+    monthClients: 0,
+    monthRegular: 0,
+    monthNoShow: 0,
+    earningsMonth: 0,
   });
 });
 
@@ -1116,7 +1135,7 @@ test("admin crud routes return generic table records with ordering", async () =>
 
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.body, records);
-  assert.deepEqual(calls, [{ orderBy: [{ orderIndex: "asc" }, { name: "asc" }] }]);
+  assert.deepEqual(calls, [{ orderBy: [{ orderIndex: "asc" }, { name: "asc" }], include: { children: true } }]);
 });
 
 test("admin crud routes create generic users record and normalize telegram id", async () => {

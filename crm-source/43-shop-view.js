@@ -34,6 +34,8 @@ const ShopView = ({
   liveStatus = 'unknown',
   clients = [],
   addToast = null,
+  pendingOrderId = null,
+  onClearPendingOrderId = null,
 }) => {
   const isOwner = role === ROLE_OWNER;
 
@@ -97,6 +99,22 @@ const ShopView = ({
   const scannerSessionRef = useRef(0);
 
   const [selectedOrder, setSelectedOrder] = useState(null);
+
+  useEffect(() => {
+    if (!pendingOrderId) return;
+    let cancelled = false;
+    const openOrder = async () => {
+      try {
+        const result = await apiRequest(`/shop/panel/orders/${encodeURIComponent(pendingOrderId)}`);
+        if (!cancelled && result?.success && result.order) {
+          setSelectedOrder(result.order);
+        }
+      } catch {}
+      onClearPendingOrderId?.();
+    };
+    openOrder();
+    return () => { cancelled = true; };
+  }, [pendingOrderId, apiRequest, onClearPendingOrderId]);
 
   // ── Data loading ──
 

@@ -375,3 +375,19 @@ model ShopStockEdits {
   product ShopProducts @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
+model CrmNotificationHistory {
+  id           String   @id @default(uuid())
+  type         String
+  title        String
+  message      String
+  barbershopId String?
+  action       String?
+  target       String?
+  targetTable  String?
+  recordId     String?
+  createdAt    DateTime @default(now())
+
+  @@index([barbershopId, createdAt])
+  @@map("CrmNotificationHistory")
+}
+

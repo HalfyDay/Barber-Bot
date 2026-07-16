@@ -460,6 +460,12 @@ const IconDots = ({ className = 'h-5 w-5' }) => (
     <circle cx="19" cy="12" r="1.5" />
   </svg>
 );
+const IconBell = ({ className = 'h-5 w-5' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+  </svg>
+);
 const VIEW_TAB_ICONS = {
   dashboard: IconDashboard,
   tables: IconData,
@@ -508,7 +514,7 @@ const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-
   const modalNode = (
     <div
       className={classNames(
-        'crm-app-shell fixed inset-0 z-50 overflow-hidden bg-black/60 text-[var(--crm-text)]',
+        'crm-app-shell fixed inset-0 z-[100] overflow-hidden bg-black/60 text-[var(--crm-text)]',
         isOpen ? 'crm-modal-overlay-open' : 'crm-modal-overlay-close'
       )}
     >
@@ -630,6 +636,93 @@ const ConfirmDialog = ({ open, title, message, confirmLabel = 'Подтверд�
     </Modal>
   );
 };
+const formatRelativeTime = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffMin < 1) return 'только что';
+  if (diffMin < 60) return `${diffMin} мин назад`;
+  if (diffHour < 24) return `${diffHour} ч назад`;
+  if (diffDay < 7) return `${diffDay} дн назад`;
+  return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+};
+const NotificationHistorySheet = ({ isOpen, onClose, notifications = [], onLogout, onClearHistory, onNavigate }) => {
+  return (
+    <Modal
+      isOpen={isOpen}
+      title="Уведомления"
+      onClose={onClose}
+      maxWidthClass="max-w-md"
+      sheetOnMobile={true}
+      footer={
+        <div className="flex w-full gap-2">
+          {notifications.length > 0 && (
+            <button
+              onClick={onClearHistory}
+              className="crm-ghost-btn crm-sheet-footer-btn flex-1"
+            >
+              Очистить
+            </button>
+          )}
+          <button
+            onClick={onLogout}
+            className="crm-danger-btn crm-sheet-footer-btn flex-1"
+          >
+            {UI_TEXT.logout}
+          </button>
+        </div>
+      }
+    >
+      {notifications.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-[var(--crm-muted)]">
+          <IconBell className="h-12 w-12 mb-3 opacity-40" />
+          <p className="text-sm">Нет уведомлений</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {notifications.map((notif) => {
+            const iconClass = notif.type === 'success' ? 'text-emerald-400' : notif.type === 'error' ? 'text-rose-400' : 'text-blue-400';
+            const bgClass = notif.type === 'success' ? 'bg-emerald-500/10' : notif.type === 'error' ? 'bg-rose-500/10' : 'bg-blue-500/10';
+            const icon = notif.type === 'success' ? '✓' : notif.type === 'error' ? '✕' : 'ℹ';
+            const hasAction = notif.action && notif.target;
+            return (
+              <button
+                key={notif.id}
+                type="button"
+                onClick={() => {
+                  if (hasAction) {
+                    onNavigate?.(notif.target, notif.targetTable, notif.recordId, notif.action);
+                    onClose?.();
+                  }
+                }}
+                className={classNames(
+                  'crm-inline-panel flex w-full items-start gap-3 p-3 text-left',
+                  hasAction && 'cursor-pointer transition hover:bg-[color:var(--crm-surface-5)]'
+                )}
+              >
+                <div className={classNames('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold', bgClass, iconClass)}>
+                  {icon}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-white">{notif.message}</p>
+                  <p className="mt-0.5 text-[11px] text-[var(--crm-muted)]">{formatRelativeTime(notif.createdAt)}</p>
+                </div>
+                {hasAction && (
+                  <IconChevronRight className="h-4 w-4 shrink-0 text-[var(--crm-muted)]" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Modal>
+  );
+};
 const StatCard = ({ label, value, accent = 'text-[color:var(--crm-primary)]', onClick, compact = false }) => {
   const interactive = typeof onClick === 'function';
   const Wrapper = interactive ? 'button' : 'div';
@@ -716,8 +809,17 @@ const Sidebar = ({
   settingsSection = 'profile',
   onSelectSettingsSection,
   settingsSubSections,
+  currentBarber = null,
+  notificationHistory = [],
+  onClearNotificationHistory,
+  onRefreshNotificationHistory,
+  unreadCount = 0,
+  onMarkNotificationsRead,
+  onNavigate,
 }) => {
   const username = session?.displayName || session?.username || '-';
+  const userAvatarSrc = resolveAssetUrl(currentBarber?.avatarUrl);
+  const [showNotificationsSheet, setShowNotificationsSheet] = useState(false);
   const sidebarTabs = Array.isArray(tabs) && tabs.length ? tabs : VIEW_TABS_BY_ROLE[ROLE_OWNER];
   const sidebarShortcuts =
     Array.isArray(tableShortcuts) && tableShortcuts.length ? tableShortcuts : DEFAULT_TABLE_SHORTCUTS;
@@ -739,26 +841,50 @@ const Sidebar = ({
     setItemRef: setSettingsItemRef,
     indicatorStyle: settingsIndicatorStyle,
   } = useMovingNavIndicator(activeTab === 'settings' ? settingsSection : null);
+  const handleOpenNotifications = () => {
+    setShowNotificationsSheet(true);
+    onRefreshNotificationHistory?.();
+    onMarkNotificationsRead?.();
+  };
+  const handleCloseNotifications = () => setShowNotificationsSheet(false);
+  const handleLogoutFromSheet = () => {
+    setShowNotificationsSheet(false);
+    onLogout?.();
+  };
   return (
-    <aside className="crm-sidebar hidden w-72 flex-shrink-0 flex-col p-5 lg:sticky lg:top-0 lg:flex lg:h-screen lg:overflow-y-auto">
+    <aside className="crm-sidebar hidden w-72 flex-shrink-0 flex-col p-5 lg:sticky lg:top-0 lg:z-10 lg:flex lg:h-screen lg:overflow-y-auto">
       <div className="border-b border-white/5 pb-5">
-        <div className="space-y-3 px-1">
-          <div className="space-y-1.5">
-            <p className="text-[10px] uppercase tracking-[0.26em] text-[var(--crm-muted)]/90">{UI_TEXT.accountTitle}</p>
-            <p className="text-[1.7rem] font-semibold tracking-[-0.04em] text-white">{username}</p>
+        <div className="flex items-center gap-3 px-1">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[color:var(--crm-surface-4)]">
+            {userAvatarSrc ? (
+              <img src={userAvatarSrc} alt={username} className="h-11 w-11 rounded-full object-cover" />
+            ) : (
+              <DefaultProfileIcon className="h-11 w-11" iconClassName="h-6 w-6 text-[var(--crm-muted)]" />
+            )}
           </div>
-        <button
-          onClick={onLogout}
-            className="crm-inline-panel flex h-11 w-full items-center justify-center px-4 text-sm font-semibold text-[var(--crm-text)] transition hover:bg-[color:var(--crm-surface-5)] hover:text-white"
-        >
-          {UI_TEXT.logout}
-        </button>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-white">{username}</p>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--crm-muted)]">{UI_TEXT.accountTitle}</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleOpenNotifications}
+            aria-label="Уведомления"
+            className="crm-ghost-btn relative h-9 w-9 min-h-0 shrink-0 p-0 text-[var(--crm-muted)] hover:text-white"
+          >
+            <IconBell className="h-5 w-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[color:var(--crm-primary)] px-1 text-[9px] font-bold text-white">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+        </div>
         {(liveUpdatedAt || liveStatus !== 'unknown') && (
-            <div>
+          <div className="mt-3 flex justify-center">
             <LiveBadge timestamp={liveUpdatedAt} status={liveStatus} />
           </div>
         )}
-        </div>
       </div>
       <nav ref={trackRef} className="relative mt-6 flex-1 space-y-2 overflow-y-auto">
         <div aria-hidden="true" className="crm-nav-indicator" style={indicatorStyle} />
@@ -852,6 +978,14 @@ const Sidebar = ({
           );
         })}
       </nav>
+      <NotificationHistorySheet
+        isOpen={showNotificationsSheet}
+        onClose={handleCloseNotifications}
+        notifications={notificationHistory}
+        onLogout={handleLogoutFromSheet}
+        onClearHistory={onClearNotificationHistory}
+        onNavigate={onNavigate}
+      />
     </aside>
   );
 };
@@ -873,13 +1007,18 @@ const MobileTabs = ({
   settingsSection,
   onSelectSettingsSection,
   settingsSubSections,
+  notificationHistory = [],
+  onClearNotificationHistory,
+  onRefreshNotificationHistory,
+  unreadCount = 0,
+  onMarkNotificationsRead,
+  onNavigate,
 }) => {
   const username = session?.displayName || session?.username || '-';
   const userAvatarSrc = resolveAssetUrl(currentBarber?.avatarUrl);
-  const [showLogoutMenu, setShowLogoutMenu] = useState(false);
+  const [showNotificationsSheet, setShowNotificationsSheet] = useState(false);
   const [showSubmenus, setShowSubmenus] = useState(true);
   const [showHeader, setShowHeader] = useState(true);
-  const logoutMenuRef = useRef(null);
   const submenusVisibleRef = useRef(showSubmenus);
   const lastScrollRef = useRef(typeof window !== 'undefined' ? window.scrollY : 0);
   const handleSelect = (tabId, options = {}) => {
@@ -916,17 +1055,16 @@ const MobileTabs = ({
     setItemRef: setSettingsItemRef,
     indicatorStyle: settingsIndicatorStyle,
   } = useMovingNavIndicator(activeTab === 'settings' ? settingsSection : null);
-  const handleToggleLogoutMenu = () => setShowLogoutMenu((prev) => !prev);
-  const handleLogoutClick = () => {
-    setShowLogoutMenu(false);
+  const handleOpenNotifications = () => {
+    setShowNotificationsSheet(true);
+    onRefreshNotificationHistory?.();
+    onMarkNotificationsRead?.();
+  };
+  const handleCloseNotifications = () => setShowNotificationsSheet(false);
+  const handleLogoutFromSheet = () => {
+    setShowNotificationsSheet(false);
     onLogout?.();
   };
-  useEffect(() => {
-    setShowLogoutMenu(false);
-  }, [activeTab]);
-  useOutsideClick(logoutMenuRef, () => {
-    setShowLogoutMenu(false);
-  });
   useEffect(() => {
     submenusVisibleRef.current = showSubmenus;
   }, [showSubmenus]);
@@ -1006,35 +1144,23 @@ const MobileTabs = ({
               {renderLiveIndicator()}
             </div>
             <div className="flex items-center justify-end">
-              <div ref={logoutMenuRef} className="relative inline-flex">
-                <button
-                  type="button"
-                  onClick={handleToggleLogoutMenu}
-                  aria-expanded={showLogoutMenu}
-                  aria-label={username}
-                  className="crm-ghost-btn h-11 w-11 min-h-0 p-0"
-                >
-                  {userAvatarSrc ? (
-                    <img src={userAvatarSrc} alt={username} className="h-8 w-8 rounded-full object-cover" />
-                  ) : (
-                    <DefaultProfileIcon className="h-8 w-8 rounded-full" iconClassName="h-4.5 w-4.5 text-[var(--crm-muted)]" />
-                  )}
-                </button>
-                <div
-                  className={classNames(
-                    'absolute right-0 top-full z-40 mt-1 w-28 translate-y-0 transition-all duration-150',
-                    showLogoutMenu ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={handleLogoutClick}
-                    className="crm-danger-btn h-9 min-h-0 w-full px-3 py-1.5 text-sm"
-                  >
-                    {UI_TEXT.logout}
-                  </button>
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={handleOpenNotifications}
+                aria-label="Уведомления"
+                className="crm-ghost-btn relative h-11 w-11 min-h-0 p-0"
+              >
+                {userAvatarSrc ? (
+                  <img src={userAvatarSrc} alt={username} className="h-8 w-8 rounded-full object-cover" />
+                ) : (
+                  <DefaultProfileIcon className="h-8 w-8 rounded-full" iconClassName="h-4.5 w-4.5 text-[var(--crm-muted)]" />
+                )}
+                {unreadCount > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[color:var(--crm-primary)] px-1 text-[9px] font-bold text-white">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -1188,6 +1314,14 @@ const MobileTabs = ({
           </div>
         </div>
       </nav>
+      <NotificationHistorySheet
+        isOpen={showNotificationsSheet}
+        onClose={handleCloseNotifications}
+        notifications={notificationHistory}
+        onLogout={handleLogoutFromSheet}
+        onClearHistory={onClearNotificationHistory}
+        onNavigate={onNavigate}
+      />
     </>
   );
 };

@@ -223,11 +223,27 @@ const App = () => {
   const [optionsCache, setOptionsCache] = useState(null);
   const [profileModal, setProfileModal] = useState({ open: false, data: null, loading: false });
   const [appointmentModal, setAppointmentModal] = useState(buildAppointmentModalState);
+  const [pendingShopOrderId, setPendingShopOrderId] = useState(null);
+  const clearPendingShopOrderId = useCallback(() => setPendingShopOrderId(null), []);
   const [loading, setLoading] = useState(false);
   const [globalError, setGlobalError] = useState('');
   const [toasts, setToasts] = useState([]);
+  const [notificationHistory, setNotificationHistory] = useState([]);
+  const [lastSeenAt, setLastSeenAt] = useState(() => {
+    try { return localStorage.getItem('crm.notifications.lastSeen') || null; } catch { return null; }
+  });
   const toastIdRef = useRef(0);
-  const addToast = useCallback((message, type = 'info') => {
+  const unreadCount = useMemo(() => {
+    if (!lastSeenAt) return notificationHistory.length;
+    const lastSeen = new Date(lastSeenAt).getTime();
+    return notificationHistory.filter((n) => new Date(n.createdAt).getTime() > lastSeen).length;
+  }, [notificationHistory, lastSeenAt]);
+  const markNotificationsRead = useCallback(() => {
+    const now = new Date().toISOString();
+    setLastSeenAt(now);
+    try { localStorage.setItem('crm.notifications.lastSeen', now); } catch {}
+  }, []);
+  const addToast = useCallback((message, type = 'info', meta = {}) => {
     const id = ++toastIdRef.current;
     setToasts((prev) => [...prev.slice(-4), { id, message, type }]);
     const prefs = (() => { try { return JSON.parse(localStorage.getItem('crm.notifications') || '{}'); } catch { return {}; } })();
@@ -240,9 +256,36 @@ const App = () => {
       const label = type === 'error' ? 'Ошибка' : type === 'success' ? 'Уведомление' : 'Информация';
       showNativeNotification(label, message);
     }
+    const label = type === 'error' ? 'Ошибка' : type === 'success' ? 'Уведомление' : 'Информация';
+    const notifEntry = {
+      id: String(Date.now()),
+      type,
+      title: label,
+      message,
+      createdAt: new Date().toISOString(),
+      ...meta,
+    };
+    setNotificationHistory((prev) => [notifEntry, ...prev].slice(0, 50));
+    apiRequest('/crm/notification-history', {
+      method: 'POST',
+      body: JSON.stringify({ type, title: label, message, ...meta }),
+    }).catch(() => {});
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
-  }, []);
+  }, [apiRequest]);
   const dismissToast = useCallback((id) => setToasts((prev) => prev.filter((t) => t.id !== id)), []);
+  const fetchNotificationHistory = useCallback(async () => {
+    try {
+      const data = await apiRequest('/crm/notification-history');
+      if (Array.isArray(data)) setNotificationHistory(data);
+    } catch {}
+  }, [apiRequest]);
+  const clearNotificationHistory = useCallback(async () => {
+    try {
+      await apiRequest('/crm/notification-history', { method: 'DELETE' });
+      setNotificationHistory([]);
+      markNotificationsRead();
+    } catch {}
+  }, [apiRequest, markNotificationsRead]);
   const [authError, setAuthError] = useState('');
   const [systemBusy, setSystemBusy] = useState(false);
   const [pendingReloadReason, setPendingReloadReason] = useState(null);
@@ -301,6 +344,9 @@ const App = () => {
     }
     return barbers[0] || null;
   }, [barbers, session?.barberId]);
+  useEffect(() => {
+    if (session?.token) fetchNotificationHistory();
+  }, [session?.token, fetchNotificationHistory]);
   useEffect(() => {
     if (!session?.barberId) return;
     const linkedBarber = barbers.find((item) => item.id === session.barberId);
@@ -699,31 +745,72 @@ const apiRequest = useCallback(
       fetchAllRef.current?.();
     }
   }, [Boolean(session?.token)]);
+  const prevAppointmentIdsRef = useRef(new Set());
+  const prevShopOrderIdsRef = useRef(new Set());
   useEffect(() => {
     if (!session?.token || !canUseRealtime) {
       setRealtimeSnapshot(null);
       return undefined;
     }
     if (typeof EventSource === 'undefined') return undefined;
-    
+
     let reconnectTimeout = null;
     let reconnectDelay = 1000; // Start with 1 second
     const maxReconnectDelay = 30000; // Max 30 seconds
-    
+
     const handleEvent = (event) => {
       try {
         const payload = JSON.parse(event.data);
-        
+
         // Handle system update notification
         if (payload?.type === 'system:updating') {
           setConnectionStatus('updating');
           return;
         }
-        
+
         if (payload?.type !== 'appointments:update') return;
         const details = payload.payload || {};
+        const rows = Array.isArray(details.rows) ? details.rows : [];
+        const shopOrders = Array.isArray(details.shopOrders) ? details.shopOrders : [];
+        const currentIds = new Set(rows.map((r) => r.id));
+        const prevIds = prevAppointmentIdsRef.current;
+        if (prevIds.size > 0) {
+          const newRows = rows.filter((r) => !prevIds.has(r.id));
+          newRows.forEach((row) => {
+            const name = row.CustomerName || 'Клиент';
+            const barber = row.Barber || '';
+            const time = row.Time || '';
+            const date = row.Date || '';
+            const msg = barber ? `${name} → ${barber}` : name;
+            const details = [date, time].filter(Boolean).join(', ');
+            addToast(
+              `Новая запись: ${msg}${details ? ` (${details})` : ''}`,
+              'success',
+              { action: 'openAppointment', recordId: row.id, target: 'tables', targetTable: 'Appointments' }
+            );
+          });
+        }
+        prevAppointmentIdsRef.current = currentIds;
+        const currentOrderIds = new Set(shopOrders.map((o) => o.id));
+        const prevOrderIds = prevShopOrderIdsRef.current;
+        if (prevOrderIds.size > 0) {
+          const newOrders = shopOrders.filter((o) => !prevOrderIds.has(o.id));
+          newOrders.forEach((order) => {
+            const name = order.customerName || 'Клиент';
+            const phone = order.customerPhone || '';
+            const amount = order.totalAmount ? `${order.totalAmount} ₽` : '';
+            const details = [phone, amount].filter(Boolean).join(', ');
+            addToast(
+              `Новый заказ: ${name}${details ? ` (${details})` : ''}`,
+              'success',
+              { action: 'openOrder', recordId: order.id, target: 'shop' }
+            );
+          });
+        }
+        prevShopOrderIdsRef.current = currentOrderIds;
         setRealtimeSnapshot({
-          rows: Array.isArray(details.rows) ? details.rows : [],
+          rows,
+          shopOrders,
           active: Array.isArray(details.active) ? details.active : [],
           stats: details.stats || {},
           upcoming: Array.isArray(details.upcoming) ? details.upcoming : [],
@@ -773,8 +860,7 @@ const apiRequest = useCallback(
         currentSource.close();
       }
     };
-  }, [session?.token, canUseRealtime]);
-  const prevShopOrderCountRef = useRef(0);
+  }, [session?.token, canUseRealtime, addToast]);
   const refreshRealtimeViews = useCallback(async () => {
     if (!session?.token) return;
     try {
@@ -783,11 +869,6 @@ const apiRequest = useCallback(
         apiRequest('/appointments'),
         apiRequest('/shop/panel/orders').catch(() => null),
       ]);
-      const newShopOrders = shopOrdersResult?.success ? (shopOrdersResult.orders || []) : [];
-      if (newShopOrders.length > prevShopOrderCountRef.current && prevShopOrderCountRef.current > 0) {
-        addToast(`Новый заказ! (${newShopOrders.length - prevShopOrderCountRef.current})`, 'success');
-      }
-      prevShopOrderCountRef.current = newShopOrders.length;
       setDashboard((prev) => {
         if (!overview) return prev;
         if (!prev) return overview;
@@ -1928,6 +2009,8 @@ const handleBarberFieldChange = (id, field, value) => {
             applyFavoriteBarberRule={applyFavoriteBarberRule}
             currentBarber={currentBarber}
             addToast={addToast}
+            pendingShopOrderId={pendingShopOrderId}
+            onClearPendingShopOrderId={clearPendingShopOrderId}
           />
         );
       case 'settings':
@@ -2089,6 +2172,29 @@ const handleBarberFieldChange = (id, field, value) => {
           settingsSection={resolvedSettingsSection}
           onSelectSettingsSection={setSettingsSection}
           settingsSubSections={settingsSubSections}
+          notificationHistory={notificationHistory}
+          onClearNotificationHistory={clearNotificationHistory}
+          onRefreshNotificationHistory={fetchNotificationHistory}
+          unreadCount={unreadCount}
+          onMarkNotificationsRead={markNotificationsRead}
+          onNavigate={async (target, targetTable, recordId, action) => {
+            if (action === 'openAppointment' && recordId) {
+              try {
+                const appointments = await apiRequest('/appointments');
+                const apt = (Array.isArray(appointments) ? appointments : []).find((a) => a.id === recordId);
+                if (apt) {
+                  handleOpenAppointment(apt, { allowDelete: true });
+                }
+              } catch {}
+            } else if (action === 'openOrder' && recordId) {
+              setPendingShopOrderId(recordId);
+              handleSidebarTableChange('Shop');
+            } else if (targetTable) {
+              handleSidebarTableChange(targetTable);
+            } else {
+              setActiveTab(target);
+            }
+          }}
         />
       )}
       <div className="flex w-full min-w-0 flex-1">
@@ -2109,6 +2215,30 @@ const handleBarberFieldChange = (id, field, value) => {
           settingsSection={resolvedSettingsSection}
           onSelectSettingsSection={setSettingsSection}
           settingsSubSections={settingsSubSections}
+          currentBarber={currentBarber}
+          notificationHistory={notificationHistory}
+          onClearNotificationHistory={clearNotificationHistory}
+          onRefreshNotificationHistory={fetchNotificationHistory}
+          unreadCount={unreadCount}
+          onMarkNotificationsRead={markNotificationsRead}
+          onNavigate={async (target, targetTable, recordId, action) => {
+            if (action === 'openAppointment' && recordId) {
+              try {
+                const appointments = await apiRequest('/appointments');
+                const apt = (Array.isArray(appointments) ? appointments : []).find((a) => a.id === recordId);
+                if (apt) {
+                  handleOpenAppointment(apt, { allowDelete: true });
+                }
+              } catch {}
+            } else if (action === 'openOrder' && recordId) {
+              setPendingShopOrderId(recordId);
+              handleSidebarTableChange('Shop');
+            } else if (targetTable) {
+              handleSidebarTableChange(targetTable);
+            } else {
+              setActiveTab(target);
+            }
+          }}
         />
         <main className={mainClassName}>
           <div key={activeTab} className="crm-page-switch">

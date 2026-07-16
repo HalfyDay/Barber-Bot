@@ -51,6 +51,8 @@ const TablesWorkspace = ({
   applyFavoriteBarberRule = null,
   currentBarber = null,
   addToast = null,
+  pendingShopOrderId = null,
+  onClearPendingShopOrderId = null,
 }) => {
   const resolvedDataTables = useMemo(
     () => (Array.isArray(dataTables) && dataTables.length ? dataTables : DEFAULT_DATA_TABLES),
@@ -734,6 +736,8 @@ const TablesWorkspace = ({
               liveStatus={liveStatus}
               clients={clients}
               addToast={addToast}
+              pendingOrderId={pendingShopOrderId}
+              onClearPendingOrderId={onClearPendingShopOrderId}
             />
           )}
         </div>

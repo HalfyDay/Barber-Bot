@@ -565,6 +565,64 @@ app.post('/api/level-history/evaluate', authenticateToken, async (req, res) => {
   }
 });
 
+// ── CRM Notification History API ──
+app.get('/api/crm/notification-history', authenticateToken, async (req, res) => {
+  try {
+    const identity = req.identity || {};
+    const barbershopId = identity.businessId || identity.barberId || null;
+    const where = barbershopId ? { barbershopId } : {};
+    const notifications = await prisma.crmNotificationHistory.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    res.json(notifications);
+  } catch (error) {
+    console.error('[crm-notif] History fetch error:', error.message);
+    res.status(500).json({ error: 'Ошибка загрузки истории уведомлений.' });
+  }
+});
+
+app.post('/api/crm/notification-history', authenticateToken, async (req, res) => {
+  try {
+    const identity = req.identity || {};
+    const barbershopId = identity.businessId || identity.barberId || null;
+    const { type, title, message, action, target, targetTable, recordId } = req.body || {};
+    if (!type || !message) {
+      return res.status(400).json({ error: 'type и message обязательны.' });
+    }
+    const notification = await prisma.crmNotificationHistory.create({
+      data: {
+        type,
+        title: title || '',
+        message,
+        barbershopId,
+        action: action || null,
+        target: target || null,
+        targetTable: targetTable || null,
+        recordId: recordId || null,
+      },
+    });
+    res.json(notification);
+  } catch (error) {
+    console.error('[crm-notif] History create error:', error.message);
+    res.status(500).json({ error: 'Не удалось сохранить уведомление.' });
+  }
+});
+
+app.delete('/api/crm/notification-history', authenticateToken, async (req, res) => {
+  try {
+    const identity = req.identity || {};
+    const barbershopId = identity.businessId || identity.barberId || null;
+    const where = barbershopId ? { barbershopId } : {};
+    await prisma.crmNotificationHistory.deleteMany({ where });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[crm-notif] History clear error:', error.message);
+    res.status(500).json({ error: 'Не удалось очистить историю уведомлений.' });
+  }
+});
+
 registerAdminCrudRoutes({
   app,
   authenticateToken,

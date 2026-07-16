@@ -481,11 +481,15 @@ const createDashboardSnapshotService = ({
   };
 
   const buildRealtimeAppointmentsPayload = async () => {
-    const [appointmentsRaw, usersCount, blockedUsers] = await retryOnTransientDisconnect(() =>
+    const [appointmentsRaw, usersCount, blockedUsers, shopOrders] = await retryOnTransientDisconnect(() =>
       Promise.all([
         prisma.appointments.findMany(),
         prisma.users.count(),
         readBlockedUsers(),
+        prisma.shopOrders.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        }).catch((err) => { console.error('[realtime] shopOrders fetch failed:', err?.message); return []; }),
       ]),
     );
     const mapped = appointmentsRaw.map(mapAppointment);
@@ -512,6 +516,7 @@ const createDashboardSnapshotService = ({
     );
     return {
       appointmentsRaw,
+      shopOrders: Array.isArray(shopOrders) ? shopOrders : [],
       active: active.slice(0, 120),
       upcoming,
       overdue,

@@ -65,13 +65,14 @@ const createRealtimeService = ({
     busyMap.set(key, true);
     try {
       const snapshot = await buildPayload(businessId);
-      const nextHash = hashAppointmentsSnapshot(snapshot.appointmentsRaw);
+      const nextHash = hashAppointmentsSnapshot([...(snapshot.appointmentsRaw || []), ...(snapshot.shopOrders || [])]);
       if (!force && nextHash === snapshotHashes.get(key)) return;
       snapshotHashes.set(key, nextHash);
       const envelope = {
         type: "appointments:update",
         payload: {
           rows: snapshot.appointmentsRaw,
+          shopOrders: snapshot.shopOrders || [],
           active: snapshot.active,
           upcoming: snapshot.upcoming,
           overdue: snapshot.overdue,

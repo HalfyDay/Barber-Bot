@@ -415,3 +415,22 @@ ALTER TABLE "ShopOrderItems" ADD CONSTRAINT "ShopOrderItems_productId_fkey" FORE
 -- AddForeignKey
 ALTER TABLE "ShopStockEdits" ADD CONSTRAINT "ShopStockEdits_productId_fkey" FOREIGN KEY ("productId") REFERENCES "ShopProducts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- CreateTable
+CREATE TABLE "CrmNotificationHistory" (
+    "id" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "barbershopId" TEXT,
+    "action" TEXT,
+    "target" TEXT,
+    "targetTable" TEXT,
+    "recordId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "CrmNotificationHistory_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "CrmNotificationHistory_barbershopId_createdAt_idx" ON "CrmNotificationHistory"("barbershopId", "createdAt");
+

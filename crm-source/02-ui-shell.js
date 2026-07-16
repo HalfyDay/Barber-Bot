@@ -202,7 +202,7 @@ const LiveBadge = ({ timestamp, status = 'unknown' }) => {
     const timer = setTimeout(() => setMobileTimeVisible(false), 2200);
     return () => clearTimeout(timer);
   }, [mobileTimeVisible]);
-  if (status === 'unknown' && !timestamp) return null;
+  if (status === 'unknown') return null;
   const isOffline = status === 'offline';
   const isOnline = status === 'online';
   const isUpdating = status === 'updating';
@@ -651,7 +651,7 @@ const formatRelativeTime = (dateString) => {
   if (diffDay < 7) return `${diffDay} дн назад`;
   return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 };
-const NotificationHistorySheet = ({ isOpen, onClose, notifications = [], onLogout, onClearHistory, onNavigate }) => {
+const NotificationHistorySheet = ({ isOpen, onClose, notifications = [], onLogout, onClearHistory, onNavigate, showLogout = true }) => {
   return (
     <Modal
       isOpen={isOpen}
@@ -664,17 +664,19 @@ const NotificationHistorySheet = ({ isOpen, onClose, notifications = [], onLogou
           {notifications.length > 0 && (
             <button
               onClick={onClearHistory}
-              className="crm-ghost-btn crm-sheet-footer-btn flex-1"
+              className={classNames('crm-ghost-btn crm-sheet-footer-btn', showLogout ? 'flex-1' : 'w-full')}
             >
               Очистить
             </button>
           )}
-          <button
-            onClick={onLogout}
-            className="crm-danger-btn crm-sheet-footer-btn flex-1"
-          >
-            {UI_TEXT.logout}
-          </button>
+          {showLogout && (
+            <button
+              onClick={onLogout}
+              className="crm-danger-btn crm-sheet-footer-btn flex-1"
+            >
+              {UI_TEXT.logout}
+            </button>
+          )}
         </div>
       }
     >
@@ -885,6 +887,12 @@ const Sidebar = ({
             <LiveBadge timestamp={liveUpdatedAt} status={liveStatus} />
           </div>
         )}
+        <button
+          onClick={onLogout}
+          className="crm-inline-panel mt-3 flex h-9 w-full items-center justify-center px-4 text-xs font-semibold text-[var(--crm-text)] transition hover:bg-[color:var(--crm-surface-5)] hover:text-white"
+        >
+          {UI_TEXT.logout}
+        </button>
       </div>
       <nav ref={trackRef} className="relative mt-6 flex-1 space-y-2 overflow-y-auto">
         <div aria-hidden="true" className="crm-nav-indicator" style={indicatorStyle} />
@@ -985,6 +993,7 @@ const Sidebar = ({
         onLogout={handleLogoutFromSheet}
         onClearHistory={onClearNotificationHistory}
         onNavigate={onNavigate}
+        showLogout={false}
       />
     </aside>
   );

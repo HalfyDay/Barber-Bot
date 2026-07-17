@@ -43,6 +43,7 @@ const { createBookingUtilityService } = require("./services/bookingUtilityServic
 const { createBarberAliasService } = require("./services/barberAliasService");
 const { createBotMenuService } = require("./services/botMenuService");
 const { createSitePresenceService } = require("./services/sitePresenceService");
+const { createBarberPresenceService } = require("./services/barberPresenceService");
 const { createHomeRealtimeService } = require("./services/homeRealtimeService");
 const { createShopService } = require("./services/shopService");
 const { createPrismaClient, getPrismaRuntimeConfig, validatePrismaRuntimeConfig } = require("./services/prismaRuntime");

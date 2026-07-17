@@ -536,7 +536,7 @@ const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-
             isOpen ? 'crm-modal-surface-open' : 'crm-modal-surface-close',
             maxWidthClass,
             sheetOnMobile
-              ? 'h-full max-h-full rounded-none sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-[32px]'
+              ? 'h-[100dvh] max-h-[100dvh] rounded-none sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-[32px]'
               : 'h-auto max-h-[calc(100dvh-2rem)] rounded-[28px] sm:max-h-[calc(100dvh-3rem)] sm:rounded-[32px]'
           )}
           onMouseDown={(event) => event.stopPropagation()}

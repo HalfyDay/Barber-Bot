@@ -528,6 +528,34 @@ app.get("/api/events/stream", authenticateStream, (req, res) => {
   attachRealtimeClient({ req, res, businessId: req.businessId });
 });
 
+// ── CRM barber presence (online status) ──
+app.post("/api/crm/presence", authenticateToken, (req, res) => {
+  try {
+    const identity = req.identity || req.user || {};
+    const barberId = identity.barberId || null;
+    if (barberId) {
+      touchBarberPresence({ barberId });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[crm-presence] touch error:', error.message);
+    res.json({ ok: true });
+  }
+});
+app.post("/api/crm/presence/offline", authenticateToken, (req, res) => {
+  try {
+    const identity = req.identity || req.user || {};
+    const barberId = identity.barberId || null;
+    if (barberId) {
+      removeBarberPresence(barberId);
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[crm-presence] remove error:', error.message);
+    res.json({ ok: true });
+  }
+});
+
 // ── Level history API (must be before generic CRUD catch-all) ──
 app.get('/api/level-history', authenticateToken, async (req, res) => {
   try {
@@ -659,6 +687,8 @@ registerAdminCrudRoutes({
   getServicePriceForBarber,
   formatDateOnly,
   statusNoShow: STATUS_NO_SHOW,
+  isBarberOnline,
+  getBarberLastSeen,
 });
 app.get("/api/options/appointments", authenticateToken, async (req, res) => {
   try {

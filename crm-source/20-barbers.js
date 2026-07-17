@@ -16,6 +16,7 @@ const BarbersView = ({
   role = ROLE_OWNER,
 }) => {
   const [editorState, setEditorState] = useState({ open: false, mode: 'edit', targetId: null });
+  const [statsBarberId, setStatsBarberId] = useState(null);
   const [draftBarber, setDraftBarber] = useState(buildNewBarberState);
   const [dragOrderIds, setDragOrderIds] = useState([]);
   const [dragState, setDragState] = useState(null);
@@ -29,7 +30,15 @@ const BarbersView = ({
     const base = sortServicesByOrder(barbers);
     if (!enrichedBarbers) return base;
     const enrichedMap = new Map(enrichedBarbers.map((b) => [b.id, b]));
-    return base.map((b) => ({ ...b, stats: enrichedMap.get(b.id)?.stats || b.stats }));
+    return base.map((b) => {
+      const enriched = enrichedMap.get(b.id) || {};
+      return {
+        ...b,
+        stats: enriched.stats || b.stats,
+        isOnline: enriched.isOnline ?? b.isOnline,
+        lastSeenAt: enriched.lastSeenAt || b.lastSeenAt,
+      };
+    });
   }, [barbers, enrichedBarbers]);
   const visibleBarbers = useMemo(() => {
     if (!dragOrderIds.length) return sortedBarbers;
@@ -45,6 +54,7 @@ const BarbersView = ({
   const closeEditor = () => setEditorState({ open: false, mode: 'edit', targetId: null });
   const isCreateMode = editorState.mode === 'create';
   const activeBarber = sortedBarbers.find((barber) => barber.id === editorState.targetId) || null;
+  const statsBarber = sortedBarbers.find((barber) => barber.id === statsBarberId) || null;
   const workingBarber = isCreateMode ? draftBarber : activeBarber;
   const getBarberServices = useCallback(
     (barber = {}) => {
@@ -130,12 +140,16 @@ const BarbersView = ({
   useEffect(() => {
     if (!apiRequest) return;
     let cancelled = false;
-    apiRequest('/barbers/full')
-      .then((data) => {
-        if (!cancelled && Array.isArray(data)) setEnrichedBarbers(data);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
+    const fetchBarbers = () => {
+      apiRequest('/barbers/full')
+        .then((data) => {
+          if (!cancelled && Array.isArray(data)) setEnrichedBarbers(data);
+        })
+        .catch(() => {});
+    };
+    fetchBarbers();
+    const intervalId = window.setInterval(fetchBarbers, 30000);
+    return () => { cancelled = true; window.clearInterval(intervalId); };
   }, [apiRequest]);
   const buildReorderedIds = useCallback((sourceIds, activeId, clientX, clientY) => {
     const idleIds = sourceIds.filter((id) => id !== activeId);
@@ -387,6 +401,46 @@ const BarbersView = ({
       }
     }
   };
+  const closeStats = () => setStatsBarberId(null);
+  const readStatNumber = (stats = {}, keys = []) => {
+    for (const key of keys) {
+      const numeric = Number(stats?.[key]);
+      if (Number.isFinite(numeric)) return numeric;
+    }
+    return 0;
+  };
+  const getBarberStatsSummary = (barber = {}) => {
+    const stats = barber.stats || {};
+    return {
+      clients: readStatNumber(stats, ['monthClients', 'clients', 'clientCount', 'uniqueClients']),
+      regular: readStatNumber(stats, ['monthRegular', 'regularClients', 'regular', 'loyalClients']),
+      noShows: readStatNumber(stats, ['monthNoShow', 'noShows', 'noShow', 'missed']),
+      total: readStatNumber(stats, ['total', 'appointmentsTotal', 'appointments']),
+      upcoming: readStatNumber(stats, ['upcoming', 'active', 'activeAppointments']),
+      confirmedYear: readStatNumber(stats, ['confirmedYear', 'completedYear', 'confirmed']),
+      todayActive: readStatNumber(stats, ['todayActive', 'today', 'todayAppointments']),
+      earningsMonth: readStatNumber(stats, ['earningsMonth', 'monthEarnings', 'earnings']),
+    };
+  };
+  const getBarberPresence = (barber = {}) => {
+    const isOnline = Boolean(barber.isOnline ?? barber.online ?? barber.presence?.online);
+    const rawLastSeen = barber.lastSeenAt || barber.lastOnlineAt || barber.onlineAt || barber.presence?.lastSeenAt || barber.updatedAt || '';
+    const lastSeenLabel = rawLastSeen ? formatLiveTimestamp(rawLastSeen) : '';
+    return {
+      isOnline,
+      lastSeenLabel,
+      label: isOnline ? 'В сети' : lastSeenLabel ? `${lastSeenLabel} назад` : '—',
+    };
+  };
+  const IconStats = ({ className = 'h-5 w-5' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M4 19V5" />
+      <path d="M4 19h16" />
+      <rect x="7" y="11" width="3" height="5" rx="1" />
+      <rect x="12" y="7" width="3" height="9" rx="1" />
+      <rect x="17" y="3" width="3" height="13" rx="1" />
+    </svg>
+  );
   const renderStatusBadge = (barber) =>
     barber ? (
       <span
@@ -421,13 +475,8 @@ const BarbersView = ({
           <div className="grid gap-3 md:grid-cols-2">
             {visibleBarbers.map((barber, index) => {
               const avatarSrc = resolveAssetUrl(barber.avatarUrl);
-              const phoneLabel = barber.phone ? formatPhoneInput(barber.phone) : '';
-              const ratingLabel = clampRatingValue(barber.rating || RATING_MAX);
-              const positionName = normalizeText(barber.position?.name);
-              const masterSharePercent =
-                typeof barber.position?.masterSharePercent === 'number' ? barber.position.masterSharePercent : null;
-              const commissionLabel = masterSharePercent !== null ? formatPercent(masterSharePercent) : null;
-              const stats = barber.stats || {};
+              const summary = getBarberStatsSummary(barber);
+              const presence = getBarberPresence(barber);
               const isDragging = dragState?.activeId === barber.id;
               return (
                 <div
@@ -439,21 +488,8 @@ const BarbersView = ({
                       barberItemRefs.current.delete(barber.id);
                     }
                   }}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => {
-                    if (Date.now() < suppressOpenUntilRef.current) return;
-                    openEditor('edit', barber.id);
-                  }}
-                  onKeyDown={(event) => {
-                    if (Date.now() < suppressOpenUntilRef.current) return;
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      openEditor('edit', barber.id);
-                    }
-                  }}
-                    className={classNames(
-                    'group crm-soft-card crm-reorder-item flex w-full items-center gap-4 p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)]',
+                  className={classNames(
+                    'group crm-soft-card crm-reorder-item flex w-full items-start gap-3 p-3 sm:gap-4 sm:p-4 text-left transition',
                     isDragging && 'crm-reorder-dragging bg-[color:var(--crm-surface-4)] shadow-[0_18px_40px_rgba(4,7,21,0.24)]'
                   )}
                 >
@@ -467,7 +503,7 @@ const BarbersView = ({
                       }}
                       onPointerDown={(event) => handleReorderPointerDown(event, barber.id)}
                       className={classNames(
-                        'crm-soft-panel flex h-11 w-11 flex-shrink-0 touch-none items-center justify-center text-[var(--crm-muted)] transition',
+                        'crm-soft-panel flex h-8 w-8 sm:h-11 sm:w-11 flex-shrink-0 touch-none items-center justify-center text-[var(--crm-muted)] transition',
                         reorderBusy ? 'cursor-wait opacity-60' : 'cursor-grab hover:bg-[color:var(--crm-surface-4)] hover:text-white active:cursor-grabbing'
                       )}
                       disabled={reorderBusy}
@@ -479,57 +515,89 @@ const BarbersView = ({
                       </span>
                     </button>
                   ) : null}
-                  <div className="relative h-16 w-16 flex-shrink-0">
+                  <div className="relative h-12 w-12 flex-shrink-0 sm:h-16 sm:w-16">
                     {avatarSrc ? (
                       <img
                         src={avatarSrc}
                         alt={barber.name || 'avatar'}
                         className={classNames(
-                          'h-16 w-16 rounded-2xl object-cover transition',
+                          'h-12 w-12 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl object-cover transition',
                           barber.isActive !== false ? '' : 'grayscale opacity-80'
                         )}
                       />
                     ) : (
                       <DefaultProfileIcon
                         className={classNames(
-                          'h-16 w-16 rounded-2xl text-[var(--crm-muted)] transition',
+                          'h-12 w-12 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl text-[var(--crm-muted)] transition',
                           barber.isActive !== false ? '' : 'grayscale opacity-80'
                         )}
-                        iconClassName="h-8 w-8"
+                        iconClassName="h-6 w-6 sm:h-8 sm:w-8"
                       />
                     )}
                     <span
                       className={classNames(
-                        'absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[color:var(--crm-surface)]',
-                        barber.isActive !== false ? 'bg-[color:var(--crm-primary)]' : 'bg-[color:var(--crm-muted)]'
+                        'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full border-2 border-[color:var(--crm-surface)]',
+                        presence.isOnline ? 'bg-[color:var(--crm-primary)]' : 'bg-[color:var(--crm-muted)]'
                       )}
                     />
                   </div>
-                  <div className="flex-1 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex h-7 min-w-[1.9rem] items-center justify-center rounded-full bg-[color:var(--crm-primary-container)] px-2 text-[11px] font-semibold text-[color:var(--crm-primary)]">
-                        {index + 1}
-                      </span>
-                      <p className="text-base font-semibold text-white sm:text-lg">{barber.name || 'Без имени'}</p>
-                      {reorderBusy && isDragging ? (
-                        <span className="rounded-full bg-[color:var(--crm-highlight-soft)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--crm-highlight-text)]">
-                          Сохраняем
-                        </span>
-                      ) : null}
+                  <div className="min-w-0 flex-1 space-y-2 sm:space-y-3">
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <p className="min-w-0 truncate text-base font-semibold text-white sm:text-lg">{barber.name || 'Без имени'}</p>
+                          {reorderBusy && isDragging ? (
+                            <span className="rounded-full bg-[color:var(--crm-highlight-soft)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--crm-highlight-text)]">
+                              Сохраняем
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className={classNames('flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold', presence.isOnline ? 'text-[color:var(--crm-primary)]' : 'text-[var(--crm-muted)]')}>
+                          <span className={classNames('h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full shrink-0', presence.isOnline ? 'bg-[color:var(--crm-primary)]' : 'bg-[color:var(--crm-muted)]')} />
+                          <span className="hidden sm:inline">{presence.label}</span>
+                          <span className="sm:hidden">{presence.isOnline ? 'В сети' : presence.lastSeenLabel || '—'}</span>
+                        </p>
+                      </div>
+                      <div className="flex flex-shrink-0 items-center gap-1.5 sm:gap-2">
+                        <button
+                          type="button"
+                          aria-label={`Статистика сотрудника ${barber.name || index + 1}`}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setStatsBarberId(barber.id);
+                          }}
+                          className="crm-soft-panel flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center text-[var(--crm-muted)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)]"
+                        >
+                          <IconStats className="h-4 w-4 sm:h-5 sm:w-5" />
+                        </button>
+                        {canManageBarbers ? (
+                          <button
+                            type="button"
+                            aria-label={`Редактировать сотрудника ${barber.name || index + 1}`}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              if (Date.now() < suppressOpenUntilRef.current) return;
+                              openEditor('edit', barber.id);
+                            }}
+                            className="crm-soft-panel flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center text-[var(--crm-muted)] transition hover:bg-[color:var(--crm-surface-4)] hover:text-white focus:outline-none focus:ring-2 focus:ring-[color:var(--crm-primary)]"
+                          >
+                            <IconEdit className="h-4 w-4 sm:h-5 sm:w-5" />
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--crm-muted)] sm:text-sm">
-                      <span className="px-0 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--crm-primary)]">
-                        <IconStar className="mr-1 inline h-3.5 w-3.5 text-[color:var(--crm-highlight)]" /> {ratingLabel}
-                      </span>
-                      {positionName && (
-                        <span className="px-0 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--crm-highlight-text)]">
-                          {positionName}
-                          {commissionLabel ? ` · ${commissionLabel}` : ''}
-                        </span>
-                      )}
-                      {phoneLabel && <span className="text-slate-300">{phoneLabel}</span>}
+                    <div className="flex items-center gap-2 sm:gap-3 text-xs">
+                      <span className="hidden sm:inline text-[var(--crm-muted)]">Клиенты</span>
+                      <span className="text-[color:var(--crm-primary)]">{summary.clients}</span>
+                      <span className="text-[var(--crm-muted)]">/</span>
+                      <span className="hidden sm:inline text-[var(--crm-muted)]">Постоянные</span>
+                      <span className="text-[color:var(--crm-highlight)]">{summary.regular}</span>
+                      <span className="text-[var(--crm-muted)]">/</span>
+                      <span className="hidden sm:inline text-[var(--crm-muted)]">Неявка</span>
+                      <span className="text-[color:var(--crm-error-container)]">{summary.noShows}</span>
                     </div>
-                                        {barber.description && <p className="text-sm text-slate-400">{barber.description}</p>}
                   </div>
                 </div>
               );
@@ -537,6 +605,60 @@ const BarbersView = ({
           </div>
         )}
       </SectionCard>
+      <Modal
+        title={statsBarber ? `Статистика: ${statsBarber.name || 'Сотрудник'}` : 'Статистика'}
+        isOpen={Boolean(statsBarber)}
+        onClose={closeStats}
+        maxWidthClass="max-w-2xl"
+        footer={
+          <button type="button" onClick={closeStats} className={classNames('crm-ghost-btn', SHEET_FOOTER_BUTTON_CLASS)}>
+            Закрыть
+          </button>
+        }
+      >
+        {statsBarber ? (() => {
+          const summary = getBarberStatsSummary(statsBarber);
+          const presence = getBarberPresence(statsBarber);
+          const detailStats = [
+            ['Клиенты за месяц', summary.clients],
+            ['Постоянные за месяц', summary.regular],
+            ['Неявки за месяц', summary.noShows],
+            ['Записи сегодня', summary.todayActive],
+            ['Активные записи', summary.upcoming],
+            ['Подтверждено за год', summary.confirmedYear],
+            ['Всего записей', summary.total],
+            ['Заработано за месяц', formatCurrency(summary.earningsMonth)],
+          ];
+          return (
+            <div className="space-y-4">
+              <div className="crm-soft-card flex items-center gap-4 p-4">
+                <div className="relative h-16 w-16 flex-shrink-0">
+                  {resolveAssetUrl(statsBarber.avatarUrl) ? (
+                    <img src={resolveAssetUrl(statsBarber.avatarUrl)} alt={statsBarber.name || 'avatar'} className="h-16 w-16 rounded-2xl object-cover" />
+                  ) : (
+                    <DefaultProfileIcon className="h-16 w-16 rounded-2xl text-[var(--crm-muted)]" iconClassName="h-8 w-8" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-lg font-extrabold text-white">{statsBarber.name || 'Без имени'}</p>
+                  <p className={classNames('flex items-center gap-2 text-sm font-semibold', presence.isOnline ? 'text-[color:var(--crm-primary)]' : 'text-[var(--crm-muted)]')}>
+                    <span className={classNames('h-2 w-2 rounded-full', presence.isOnline ? 'bg-[color:var(--crm-primary)]' : 'bg-[color:var(--crm-muted)]')} />
+                    {presence.label}
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {detailStats.map(([label, value]) => (
+                  <div key={label} className="crm-inline-panel px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--crm-muted)]">{label}</p>
+                    <p className="mt-1 text-2xl font-extrabold text-white">{value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })() : null}
+      </Modal>
       <Modal
         title={isCreateMode ? 'Добавить сотрудника' : workingBarber?.name || 'Редактирование сотрудника'}
         isOpen={editorState.open}
@@ -947,4 +1069,3 @@ const BarberProfileView = ({
     </div>
   );
 };
-

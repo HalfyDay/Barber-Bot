@@ -310,7 +310,7 @@ const DashboardView = ({
                 label="Клиенты / Постоянные / Неявка"
                 value={
                   <>
-                    <span className="text-emerald-400">{stats.monthClients ?? 0}</span>
+                    <span className="text-[color:var(--crm-primary)]">{stats.monthClients ?? 0}</span>
                     <span className="text-zinc-500 mx-1">/</span>
                     <span>{stats.monthRegular ?? 0}</span>
                     <span className="text-zinc-500 mx-1">/</span>

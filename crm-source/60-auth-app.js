@@ -745,6 +745,49 @@ const apiRequest = useCallback(
       fetchAllRef.current?.();
     }
   }, [Boolean(session?.token)]);
+  // CRM barber presence ping
+  useEffect(() => {
+    if (!session?.token || !session?.barberId) return undefined;
+    const CRM_PRESENCE_INTERVAL_MS = 30000;
+    const pingPresence = () => {
+      try {
+        fetch(`${API_BASE_URL}/crm/presence`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.token}` },
+        }).catch(() => {});
+      } catch {}
+    };
+    pingPresence();
+    const intervalId = window.setInterval(pingPresence, CRM_PRESENCE_INTERVAL_MS);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        pingPresence();
+      } else {
+        try {
+          fetch(`${API_BASE_URL}/crm/presence/offline`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${session.token}` },
+          }).catch(() => {});
+        } catch {}
+      }
+    };
+    const handleBeforeUnload = () => {
+      try {
+        navigator.sendBeacon?.(
+          `${API_BASE_URL}/crm/presence/offline`,
+          new Blob([], { type: 'application/json' })
+        );
+      } catch {}
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      pingPresence();
+    };
+  }, [session?.token, session?.barberId]);
   const prevAppointmentIdsRef = useRef(new Set());
   const prevShopOrderIdsRef = useRef(new Set());
   useEffect(() => {

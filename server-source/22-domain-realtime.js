@@ -133,6 +133,13 @@ const requestUnifiedRealtimePush = (force = false) => {
   requestHomeRealtimeSync("app-sync");
 };
 const {
+  touchBarber: touchBarberPresence,
+  removeBarber: removeBarberPresence,
+  isBarberOnline: isBarberOnline,
+  getBarberLastSeen: getBarberLastSeen,
+  getOnlineBarberIds: getOnlineBarberIds,
+} = createBarberPresenceService();
+const {
   touchSession: touchSitePresenceSession,
   removeSession: removeSitePresenceSession,
   getOnlineCount: getSiteOnlineCount,

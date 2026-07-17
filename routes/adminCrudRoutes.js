@@ -34,6 +34,8 @@ const registerAdminCrudRoutes = ({
   getServicePriceForBarber,
   formatDateOnly,
   statusNoShow,
+  isBarberOnline,
+  getBarberLastSeen,
 }) => {
   const buildScheduleBoard = async (requestedWindowDays = 14) => {
     const barbersList = await getBarbers({ includeInactive: true });
@@ -178,8 +180,12 @@ const registerAdminCrudRoutes = ({
           earningsMonth += Math.round(appointmentGross * (masterSharePercent / 100));
         });
 
+        const online = typeof isBarberOnline === 'function' ? isBarberOnline(barber.id) : false;
+        const lastSeen = typeof getBarberLastSeen === 'function' ? getBarberLastSeen(barber.id) : null;
         return {
           ...barber,
+          isOnline: online,
+          lastSeenAt: lastSeen ? new Date(lastSeen).toISOString() : null,
           stats: {
             total: related.length,
             upcoming: related.filter((appt) => appt.isActive).length,

@@ -535,6 +535,12 @@ app.post("/api/crm/presence", authenticateToken, (req, res) => {
     const barberId = identity.barberId || null;
     if (barberId) {
       touchBarberPresence({ barberId });
+      broadcastRealtimeEvent('presence', {
+        type: 'presence:update',
+        barberId,
+        isOnline: true,
+        lastSeenAt: new Date().toISOString(),
+      });
     }
     res.json({ ok: true });
   } catch (error) {
@@ -548,6 +554,12 @@ app.post("/api/crm/presence/offline", authenticateToken, (req, res) => {
     const barberId = identity.barberId || null;
     if (barberId) {
       removeBarberPresence(barberId);
+      broadcastRealtimeEvent('presence', {
+        type: 'presence:update',
+        barberId,
+        isOnline: false,
+        lastSeenAt: new Date().toISOString(),
+      });
     }
     res.json({ ok: true });
   } catch (error) {
@@ -599,11 +611,26 @@ app.get('/api/crm/notification-history', authenticateToken, async (req, res) => 
     const identity = req.identity || {};
     const barbershopId = identity.businessId || identity.barberId || null;
     const where = barbershopId ? { barbershopId } : {};
-    const notifications = await prisma.crmNotificationHistory.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
+    let notifications;
+    try {
+      notifications = await prisma.crmNotificationHistory.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      });
+    } catch (colErr) {
+      if (String(colErr?.message || '').includes('does not exist')) {
+        notifications = await prisma.$queryRawUnsafe(
+          `SELECT "id","type","title","message","barbershopId","createdAt"
+           FROM "CrmNotificationHistory"
+           ${barbershopId ? 'WHERE "barbershopId" = $1' : ''}
+           ORDER BY "createdAt" DESC LIMIT 50`,
+          ...(barbershopId ? [barbershopId] : [])
+        );
+      } else {
+        throw colErr;
+      }
+    }
     res.json(notifications);
   } catch (error) {
     console.error('[crm-notif] History fetch error:', error.message);
@@ -619,18 +646,34 @@ app.post('/api/crm/notification-history', authenticateToken, async (req, res) =>
     if (!type || !message) {
       return res.status(400).json({ error: 'type и message обязательны.' });
     }
-    const notification = await prisma.crmNotificationHistory.create({
-      data: {
-        type,
-        title: title || '',
-        message,
-        barbershopId,
-        action: action || null,
-        target: target || null,
-        targetTable: targetTable || null,
-        recordId: recordId || null,
-      },
-    });
+    let notification;
+    try {
+      notification = await prisma.crmNotificationHistory.create({
+        data: {
+          type,
+          title: title || '',
+          message,
+          barbershopId,
+          action: action || null,
+          target: target || null,
+          targetTable: targetTable || null,
+          recordId: recordId || null,
+        },
+      });
+    } catch (colErr) {
+      if (String(colErr?.message || '').includes('does not exist')) {
+        notification = await prisma.$queryRawUnsafe(
+          `INSERT INTO "CrmNotificationHistory"
+             ("id","type","title","message","barbershopId","createdAt")
+           VALUES (gen_random_uuid()::text,$1,$2,$3,$4,NOW())
+           RETURNING *`,
+          type, title || '', message, barbershopId || null
+        );
+        notification = Array.isArray(notification) ? notification[0] : notification;
+      } else {
+        throw colErr;
+      }
+    }
     res.json(notification);
   } catch (error) {
     console.error('[crm-notif] History create error:', error.message);

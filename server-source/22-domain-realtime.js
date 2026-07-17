@@ -103,6 +103,7 @@ const {
   stopLoop: stopRealtimeLoop,
   shutdownClients: shutdownRealtimeClients,
   hasLoop: hasRealtimeLoop,
+  broadcastEvent: broadcastRealtimeEvent,
 } = createRealtimeService({
   createHash,
   buildPayload: buildRealtimeAppointmentsPayloadForBusiness,

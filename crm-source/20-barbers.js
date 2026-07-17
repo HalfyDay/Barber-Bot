@@ -15,6 +15,7 @@ const BarbersView = ({
   reorderBusy = false,
   role = ROLE_OWNER,
 }) => {
+  const tickingNow = useNowTick(1000);
   const [editorState, setEditorState] = useState({ open: false, mode: 'edit', targetId: null });
   const [statsBarberId, setStatsBarberId] = useState(null);
   const [draftBarber, setDraftBarber] = useState(buildNewBarberState);
@@ -151,6 +152,22 @@ const BarbersView = ({
     const intervalId = window.setInterval(fetchBarbers, 30000);
     return () => { cancelled = true; window.clearInterval(intervalId); };
   }, [apiRequest]);
+  useEffect(() => {
+    const handler = (event) => {
+      const { barberId, isOnline, lastSeenAt } = event.detail || {};
+      if (!barberId) return;
+      setEnrichedBarbers((prev) => {
+        const next = (prev || []).map((b) =>
+          b.id === barberId
+            ? { ...b, isOnline, lastSeenAt: lastSeenAt || b.lastSeenAt }
+            : b
+        );
+        return next;
+      });
+    };
+    window.addEventListener('crm:presence-update', handler);
+    return () => window.removeEventListener('crm:presence-update', handler);
+  }, []);
   const buildReorderedIds = useCallback((sourceIds, activeId, clientX, clientY) => {
     const idleIds = sourceIds.filter((id) => id !== activeId);
     let targetIndex = -1;
@@ -425,7 +442,7 @@ const BarbersView = ({
   const getBarberPresence = (barber = {}) => {
     const isOnline = Boolean(barber.isOnline ?? barber.online ?? barber.presence?.online);
     const rawLastSeen = barber.lastSeenAt || barber.lastOnlineAt || barber.onlineAt || barber.presence?.lastSeenAt || barber.updatedAt || '';
-    const lastSeenLabel = rawLastSeen ? formatLiveTimestamp(rawLastSeen) : '';
+    const lastSeenLabel = rawLastSeen ? formatLiveTimestamp(rawLastSeen, tickingNow) : '';
     return {
       isOnline,
       lastSeenLabel,
@@ -534,12 +551,6 @@ const BarbersView = ({
                         iconClassName="h-6 w-6 sm:h-8 sm:w-8"
                       />
                     )}
-                    <span
-                      className={classNames(
-                        'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full border-2 border-[color:var(--crm-surface)]',
-                        presence.isOnline ? 'bg-[color:var(--crm-primary)]' : 'bg-[color:var(--crm-muted)]'
-                      )}
-                    />
                   </div>
                   <div className="min-w-0 flex-1 space-y-2 sm:space-y-3">
                     <div className="flex min-w-0 items-start justify-between gap-3">

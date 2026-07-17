@@ -163,6 +163,19 @@ const createRealtimeService = ({
 
   const hasLoop = () => Boolean(interval);
 
+  const broadcastEvent = (eventName, payload, businessId = null) => {
+    const eventString = formatSseEventString(eventName, payload);
+    clients.forEach((client) => {
+      if (businessId && client.businessId !== businessId) return;
+      try {
+        client.res.write(eventString);
+      } catch (error) {
+        removeClient(client);
+        try { client.res.end(); } catch {}
+      }
+    });
+  };
+
   return {
     attachClient,
     runPush,
@@ -171,6 +184,7 @@ const createRealtimeService = ({
     stopLoop,
     shutdownClients,
     hasLoop,
+    broadcastEvent,
   };
 };
 

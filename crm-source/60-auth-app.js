@@ -874,9 +874,18 @@ const apiRequest = useCallback(
         setConnectionStatus('online');
         reconnectDelay = 1000; // Reset delay on successful connection
       };
-      
+
+      const handlePresenceEvent = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload?.type !== 'presence:update') return;
+          window.dispatchEvent(new CustomEvent('crm:presence-update', { detail: payload }));
+        } catch {}
+      };
+
       eventSource.addEventListener('appointments', handleEvent);
       eventSource.addEventListener('system', handleEvent);
+      eventSource.addEventListener('presence', handlePresenceEvent);
       
       eventSource.onerror = () => {
         setConnectionStatus('offline');

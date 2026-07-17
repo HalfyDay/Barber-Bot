@@ -441,12 +441,12 @@ const BarbersView = ({
   };
   const getBarberPresence = (barber = {}) => {
     const isOnline = Boolean(barber.isOnline ?? barber.online ?? barber.presence?.online);
-    const rawLastSeen = barber.lastSeenAt || barber.lastOnlineAt || barber.onlineAt || barber.presence?.lastSeenAt || barber.updatedAt || '';
+    const rawLastSeen = barber.lastSeenAt || barber.lastOnlineAt || barber.onlineAt || barber.presence?.lastSeenAt || '';
     const lastSeenLabel = rawLastSeen ? formatLiveTimestamp(rawLastSeen, tickingNow) : '';
     return {
       isOnline,
       lastSeenLabel,
-      label: isOnline ? 'В сети' : lastSeenLabel ? `${lastSeenLabel} назад` : '—',
+      label: isOnline ? 'В сети' : lastSeenLabel === 'только что' ? 'Только что' : lastSeenLabel ? `${lastSeenLabel} назад` : '—',
     };
   };
   const IconStats = ({ className = 'h-5 w-5' }) => (

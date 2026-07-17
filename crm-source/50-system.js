@@ -1624,9 +1624,9 @@ const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
 };
 
 const SITE_PAGE_TABS = Object.freeze([
+  { id: 'shop', label: 'Магазин' },
   { id: 'home', label: 'Главная' },
   { id: 'referral', label: 'Рефералы' },
-  { id: 'shop', label: 'Магазин' },
 ]);
 
 const createSitePromoDraft = () => ({
@@ -1717,9 +1717,9 @@ const SiteImageUploadField = ({ label, value = '', onChange, onUploadImage = nul
   );
 };
 
-const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = false, onUploadSiteImage = null, services = [], siteOnlineStats = null }) => {
+const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = false, onUploadSiteImage = null, services = [], siteOnlineStats = null, apiRequest = null, role = ROLE_OWNER, barbers = [], currentBarber = null, liveShopOrders = null, liveUpdatedAt = null, liveStatus = null, clients = [], addToast = null, pendingShopOrderId = null, onClearPendingShopOrderId = null, onRequestConfirm = null, uploadAvatar = null }) => {
   const [draft, setDraft] = useState(() => siteConfig || {});
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState('shop');
   const { trackRef, setItemRef, indicatorStyle } = useMovingNavIndicator(activeTab);
 
   useEffect(() => {
@@ -2238,24 +2238,25 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
     </div>
   );
 
-  const renderShopTab = () => (
-    <SectionCard title="Страница магазина">
-      <div className="grid gap-4">
-        <label className="space-y-2 text-sm text-[var(--crm-text)]">
-          <span>Заголовок тизера</span>
-          <input value={draft?.shop?.teaserTitle || ''} onChange={(event) => updateShopField('teaserTitle', event.target.value)} className="w-full px-4 py-3" />
-        </label>
-        <label className="space-y-2 text-sm text-[var(--crm-text)]">
-          <span>Текст тизера</span>
-          <textarea value={draft?.shop?.teaserText || ''} onChange={(event) => updateShopField('teaserText', event.target.value)} rows={4} className="w-full px-4 py-3" />
-        </label>
-      </div>
-    </SectionCard>
-  );
-
   const renderTabContent = () => {
     if (activeTab === 'referral') return renderReferralTab();
-    if (activeTab === 'shop') return renderShopTab();
+    if (activeTab === 'shop') return (
+      <ShopView
+        apiRequest={apiRequest}
+        role={role}
+        currentBarber={currentBarber}
+        onRequestConfirm={onRequestConfirm}
+        barbers={barbers}
+        uploadAvatar={uploadAvatar}
+        liveShopOrders={liveShopOrders}
+        liveUpdatedAt={liveUpdatedAt}
+        liveStatus={liveStatus}
+        clients={clients}
+        addToast={addToast}
+        pendingOrderId={pendingShopOrderId}
+        onClearPendingOrderId={onClearPendingShopOrderId}
+      />
+    );
     return renderHomeTab();
   };
 

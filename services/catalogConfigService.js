@@ -15,6 +15,10 @@ const createCatalogConfigService = ({
   logger = console,
 }) => {
   const ensureBootstrapData = async () => {
+    // Ensure lastSeenAt column exists on Barbers (added for presence tracking)
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Barbers" ADD COLUMN IF NOT EXISTS "lastSeenAt" TIMESTAMP(3)`);
+    } catch (_) { /* non-fatal: column may already exist or table may not exist yet */ }
     const [settingsCount] = await Promise.all([
       prisma.botSettings.count(),
       prisma.barbers.count(),

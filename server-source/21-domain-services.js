@@ -100,9 +100,11 @@ const {
   },
   logger: console,
 });
-getBarbers({ includeInactive: true }).catch((error) =>
-  console.warn("Initial barbers preload failed:", error.message),
-);
+ensureBootstrapData().catch(() => {}).finally(() => {
+  getBarbers({ includeInactive: true }).catch((error) =>
+    console.warn("Initial barbers preload failed:", error.message),
+  );
+});
 ensureBotSettingsRecord().catch((error) =>
   console.warn("Initial bot settings preload failed:", error.message),
 );

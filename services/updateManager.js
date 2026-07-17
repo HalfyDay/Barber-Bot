@@ -756,6 +756,10 @@ const applyTenantSchemaPatch = async (schema, templateSql, connectionString) => 
       ALTER TABLE "Appointments" ADD COLUMN IF NOT EXISTS "CoverBs" INTEGER;
       ALTER TABLE "Appointments" ADD COLUMN IF NOT EXISTS "DiscountRub" INTEGER;
     `);
+    // Patch Barbers: add lastSeenAt for presence tracking
+    await client.query(`
+      ALTER TABLE "Barbers" ADD COLUMN IF NOT EXISTS "lastSeenAt" TIMESTAMP(3);
+    `);
     // Patch Positions: drop old columns, add new level fields
     await client.query(`
       ALTER TABLE "Positions" DROP COLUMN IF EXISTS "commissionRate";

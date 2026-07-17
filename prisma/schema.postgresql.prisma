@@ -92,6 +92,7 @@ model Barbers {
   position           Positions?    @relation(fields: [positionId], references: [id], onDelete: SetNull)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
+  lastSeenAt         DateTime?
 
   services     ServicePrices[]
   levelHistory BarberLevelHistory[]

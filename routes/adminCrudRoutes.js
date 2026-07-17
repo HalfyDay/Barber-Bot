@@ -181,11 +181,16 @@ const registerAdminCrudRoutes = ({
         });
 
         const online = typeof isBarberOnline === 'function' ? isBarberOnline(barber.id) : false;
-        const lastSeen = typeof getBarberLastSeen === 'function' ? getBarberLastSeen(barber.id) : null;
+        const memLastSeen = typeof getBarberLastSeen === 'function' ? getBarberLastSeen(barber.id) : null;
+        const lastSeenAt = memLastSeen
+          ? new Date(memLastSeen).toISOString()
+          : barber.lastSeenAt
+            ? new Date(barber.lastSeenAt).toISOString()
+            : null;
         return {
           ...barber,
           isOnline: online,
-          lastSeenAt: lastSeen ? new Date(lastSeen).toISOString() : null,
+          lastSeenAt,
           stats: {
             total: related.length,
             upcoming: related.filter((appt) => appt.isActive).length,

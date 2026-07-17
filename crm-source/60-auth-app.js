@@ -2136,6 +2136,17 @@ const handleBarberFieldChange = (id, field, value) => {
             apiRequest={apiRequest}
             onImpersonate={handleImpersonate}
             role={role}
+            barbers={barbers}
+            currentBarber={currentBarber}
+            liveShopOrders={realtimeSnapshot?.shopOrders || null}
+            liveUpdatedAt={realtimeSnapshot?.updatedAt || null}
+            liveStatus={effectiveLiveStatus}
+            clients={dashboard?.clients || []}
+            addToast={addToast}
+            pendingShopOrderId={pendingShopOrderId}
+            onClearPendingShopOrderId={clearPendingShopOrderId}
+            onRequestConfirm={requestConfirm}
+            uploadAvatar={handleUploadAvatar}
           />
         );
       default:

@@ -87,12 +87,12 @@ VIEW_TABS_BY_ROLE[ROLE_CREATOR] = [
 ];
 const TABLE_ORDER = ['Appointments', 'Schedules', 'Users', 'Barbers', 'Services', 'Positions', 'Revenue', 'Shop'];
 const DATA_TABLES_BY_ROLE = {
-  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Users', 'Positions', 'Shop'],
+  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Users', 'Positions'],
   [ROLE_STAFF]: ['Appointments', 'Schedules', 'Services', 'Shop'],
   [ROLE_CREATOR]: ['Appointments', 'Schedules', 'Users', 'Positions'],
 };
 const VISIBLE_TABLE_ORDER_BY_ROLE = {
-  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Revenue', 'Users', 'Barbers', 'Services', 'Positions', 'Shop'],
+  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Revenue', 'Users', 'Barbers', 'Services', 'Positions'],
   [ROLE_STAFF]: ['Appointments', 'Schedules', 'Revenue', 'Services', 'Level', 'Shop'],
 };
 const TABLE_CONFIG = {
@@ -107,7 +107,7 @@ const TABLE_CONFIG = {
   Shop: { label: 'Магазин', mode: 'custom' },
 };
 const DATA_SHORTCUTS_BY_ROLE = {
-  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Revenue', 'Users', 'Barbers', 'Services', 'Positions', 'Shop'].map((tableId) => ({
+  [ROLE_OWNER]: ['Appointments', 'Schedules', 'Revenue', 'Users', 'Barbers', 'Services', 'Positions'].map((tableId) => ({
     id: tableId,
     label: TABLE_CONFIG[tableId]?.label || tableId,
   })),

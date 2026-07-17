@@ -535,11 +535,13 @@ app.post("/api/crm/presence", authenticateToken, (req, res) => {
     const barberId = identity.barberId || null;
     if (barberId) {
       touchBarberPresence({ barberId });
+      const now = new Date();
+      prisma.barbers.update({ where: { id: barberId }, data: { lastSeenAt: now } }).catch(() => {});
       broadcastRealtimeEvent('presence', {
         type: 'presence:update',
         barberId,
         isOnline: true,
-        lastSeenAt: new Date().toISOString(),
+        lastSeenAt: now.toISOString(),
       });
     }
     res.json({ ok: true });
@@ -554,11 +556,13 @@ app.post("/api/crm/presence/offline", authenticateToken, (req, res) => {
     const barberId = identity.barberId || null;
     if (barberId) {
       removeBarberPresence(barberId);
+      const now = new Date();
+      prisma.barbers.update({ where: { id: barberId }, data: { lastSeenAt: now } }).catch(() => {});
       broadcastRealtimeEvent('presence', {
         type: 'presence:update',
         barberId,
         isOnline: false,
-        lastSeenAt: new Date().toISOString(),
+        lastSeenAt: now.toISOString(),
       });
     }
     res.json({ ok: true });

@@ -21,7 +21,7 @@ const createAdminInsightsService = ({
   buildHomeAppPayload,
   buildUserInsightsMap,
 }) => {
-  const buildRevenueSummary = async ({ requestedBarberId, start, end }) => {
+  const buildRevenueSummary = async ({ requestedBarberId, start, end, cityId = null }) => {
     const hasDateFilter = Boolean(start || end);
     const defaultRange = getDefaultRevenueRange();
     let startDate = hasDateFilter ? parseDateFilter(start, defaultRange.start) : null;
@@ -32,18 +32,26 @@ const createAdminInsightsService = ({
     const startKey = startDate ? formatDateOnly(startDate) : null;
     const endKey = endDate ? formatDateOnly(endDate) : null;
     const dateWhere = startKey && endKey ? { gte: startKey, lte: endKey } : undefined;
-    const [barbersList, servicesCatalog, appointments] = await Promise.all([
-      getBarbers({ includeInactive: true }),
+
+    const barbersAll = await getBarbers({ includeInactive: true });
+    const barbersList = cityId ? barbersAll.filter((b) => !b.cityId || b.cityId === cityId) : barbersAll;
+    const cityBarberNames = barbersList.map((b) => b.name).filter(Boolean);
+
+    const where = {
+      ...(dateWhere ? { date: dateWhere } : {}),
+      ...(cityId ? { cityId: cityId } : {}),
+    };
+
+    const [servicesCatalog, appointmentsRaw] = await Promise.all([
       getServiceCatalog(true),
-      prisma.appointments.findMany({
-        where: dateWhere ? { Date: dateWhere } : {},
-      }),
+      prisma.appointments.findMany({ where }),
     ]);
+    const appointments = appointmentsRaw.map(mapAppointment);
     const targetBarber =
       requestedBarberId &&
-      barbersList.find((barber) => normalizeText(barber.id) === requestedBarberId);
+      barbersAll.find((barber) => normalizeText(barber.id) === requestedBarberId);
     const barberFilterId = targetBarber ? targetBarber.id : null;
-    const barberLookup = buildBarberNameLookup(barbersList);
+    const barberLookup = buildBarberNameLookup(barbersAll);
     const serviceLookup = buildServiceLookup(servicesCatalog);
     const summaryMap = new Map();
     const timelineMap = new Map();
@@ -160,7 +168,7 @@ const createAdminInsightsService = ({
     }
     const blockedUsers = await readBlockedUsers();
     const appointmentsRaw = await prisma.appointments.findMany({
-      where: { CustomerName: name },
+      where: { customerName: name },
     });
     const appointments = appointmentsRaw
       .map(mapAppointment)
@@ -192,9 +200,9 @@ const createAdminInsightsService = ({
     const relatedAppointments = await prisma.appointments.findMany({
       where: {
         OR: [
-          { UserID: id },
-          { CustomerName: user.Name || undefined },
-          { Phone: user.Phone || undefined },
+          { userId: id },
+          { customerName: user.Name || undefined },
+          { phone: user.Phone || undefined },
         ],
       },
     });

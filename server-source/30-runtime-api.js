@@ -382,8 +382,10 @@ registerOwnerSystemRoutes({
 app.get("/api/dashboard/overview", authenticateToken, async (req, res) => {
   try {
     const forceRefresh = parseEnvBoolean(req.query?.force, false);
+    const cityId = req.headers?.["x-city-id"] || req.query?.cityId || null;
     const { snapshot, cacheStatus } = await buildDashboardSnapshotCached(req.identity, {
       force: forceRefresh,
+      cityId,
     });
     res.setHeader("X-Dashboard-Cache", cacheStatus);
     res.json(snapshot);
@@ -406,6 +408,17 @@ registerServiceCatalogRoutes({
   getBarbers,
   filterBarbersForIdentity,
   filterServicesForIdentity,
+});
+registerCityRoutes({
+  app,
+  authenticateToken,
+  prisma,
+  randomUUID,
+  normalizeText,
+  isOwnerRequest,
+  getSiteSettings,
+  updateSiteSettings,
+  invalidateCitiesCache,
 });
 const { registerCreatorRoutes } = require("./routes/creatorRoutes");
 registerCreatorRoutes({
@@ -525,7 +538,8 @@ app.get("/api/events/stream", authenticateStream, (req, res) => {
     res.writeHead(200);
   }
   res.write("retry: 5000\n\n");
-  attachRealtimeClient({ req, res, businessId: req.businessId });
+  const cityId = req.headers?.["x-city-id"] || req.query?.cityId || null;
+  attachRealtimeClient({ req, res, businessId: req.businessId, cityId });
 });
 
 // ── CRM barber presence (online status) ──
@@ -729,6 +743,7 @@ registerAdminCrudRoutes({
   adjustUserBsBalance,
   addUserWarning,
   homePushService,
+  notifyBarberAboutNewAppointment,
   splitServiceList,
   buildServiceLookup,
   getServicePriceForBarber,
@@ -736,13 +751,18 @@ registerAdminCrudRoutes({
   statusNoShow: STATUS_NO_SHOW,
   isBarberOnline,
   getBarberLastSeen,
+  isCitiesEnabled,
+  resolveRequestCityId,
+  buildCityFilter,
 });
 app.get("/api/options/appointments", authenticateToken, async (req, res) => {
   try {
-    const [services, barbers] = await Promise.all([
-      getServiceCatalog(false, req.identity),
+    const cityId = req.headers?.["x-city-id"] || req.query?.cityId || null;
+    const [services, barbersAll] = await Promise.all([
+      getServiceCatalog(false, req.identity, cityId ? { OR: [{ cityId: cityId }, { cityId: null }] } : {}),
       getBarbers({ includeInactive: false }),
     ]);
+    const barbers = cityId ? barbersAll.filter((b) => !b.cityId || b.cityId === cityId) : barbersAll;
     res.json({
       services: services.map((svc) => svc.name),
       barbers: filterBarbersForIdentity(barbers, req.identity).map(
@@ -781,10 +801,12 @@ app.get("/api/revenue/summary", authenticateToken, async (req, res) => {
       .json({ error: "Недостаточно прав для просмотра выручки." });
   }
   try {
+    const cityId = req.headers?.["x-city-id"] || req.query?.cityId || null;
     const summary = await buildRevenueSummary({
       requestedBarberId,
       start: req.query.start,
       end: req.query.end,
+      cityId,
     });
     const { targetBarber } = summary;
     if (isStaff && !targetBarber) {

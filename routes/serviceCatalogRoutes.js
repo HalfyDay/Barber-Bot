@@ -23,6 +23,9 @@ const registerServiceCatalogRoutes = ({
         isActive: serviceData.isActive !== false,
         orderIndex: Number(serviceData.orderIndex) || 0,
       };
+      if (serviceData.cityId !== undefined) {
+        baseData.cityId = serviceData.cityId || null;
+      }
       if (serviceId) {
         savedService = await tx.services.update({
           where: { id: serviceId },
@@ -56,11 +59,16 @@ const registerServiceCatalogRoutes = ({
 
   app.get("/api/services/full", authenticateToken, async (req, res) => {
     try {
-      const services = await getServiceCatalog(true, req.identity);
-      const barbers = filterBarbersForIdentity(
+      const cityId = req.headers?.['x-city-id'] || req.query?.cityId || null;
+      let services = await getServiceCatalog(true, req.identity);
+      let barbers = filterBarbersForIdentity(
         await getBarbers({ includeInactive: true }),
         req.identity,
       );
+      if (cityId) {
+        services = services.filter(s => !s.cityId || s.cityId === cityId);
+        barbers = barbers.filter(b => !b.cityId || b.cityId === cityId);
+      }
       res.json({ services, barbers });
     } catch (error) {
       console.error("Services fetch error:", error);
@@ -73,8 +81,13 @@ const registerServiceCatalogRoutes = ({
       return res.status(403).json({ error: "Недостаточно прав для создания услуг." });
     }
     try {
-      await upsertServiceWithPrices(null, req.body || {});
-      const services = await getServiceCatalog(true);
+      const cityId = req.headers?.['x-city-id'] || req.query?.cityId || null;
+      const payload = { ...(req.body || {}), cityId };
+      await upsertServiceWithPrices(null, payload);
+      let services = await getServiceCatalog(true);
+      if (cityId) {
+        services = services.filter(s => !s.cityId || s.cityId === cityId);
+      }
       res.status(201).json({ services });
     } catch (error) {
       console.error("Create service error:", error);
@@ -90,10 +103,17 @@ const registerServiceCatalogRoutes = ({
       return res.status(403).json({ error: "Недостаточно прав для изменения услуг." });
     }
 
+    const cityId = req.headers?.['x-city-id'] || req.query?.cityId || null;
+    const updatePayload = { ...(req.body || {}) };
+    if (cityId) updatePayload.cityId = cityId;
+
     if (isOwner) {
       try {
-        await upsertServiceWithPrices(req.params.id, req.body || {});
-        const services = await getServiceCatalog(true);
+        await upsertServiceWithPrices(req.params.id, updatePayload);
+        let services = await getServiceCatalog(true);
+        if (cityId) {
+          services = services.filter(s => !s.cityId || s.cityId === cityId);
+        }
         return res.json({ services });
       } catch (error) {
         console.error("Update service error:", error);
@@ -214,11 +234,17 @@ const registerServiceCatalogRoutes = ({
       return res.status(403).json({ error: "Недостаточно прав для удаления услуг." });
     }
     try {
-      await prisma.$transaction([
-        prisma.servicePrices.deleteMany({ where: { serviceId: req.params.id } }),
-        prisma.services.delete({ where: { id: req.params.id } }),
-      ]);
-      const services = await getServiceCatalog(true);
+      const cityId = req.headers?.['x-city-id'] || req.query?.cityId || null;
+      await prisma.$transaction(async (tx) => {
+        await tx.servicePrices.deleteMany({
+          where: { serviceId: req.params.id },
+        });
+        await tx.services.delete({ where: { id: req.params.id } });
+      });
+      let services = await getServiceCatalog(true);
+      if (cityId) {
+        services = services.filter(s => !s.cityId || s.cityId === cityId);
+      }
       res.json({ services });
     } catch (error) {
       console.error("Delete service error:", error);

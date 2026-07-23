@@ -4,6 +4,7 @@
   const LOGIN_PAGE_URL = "/login/";
   const SESSION_STORAGE_KEY = "home-user-session";
   const LOGOUT_MARKER_STORAGE_KEY = "home-user-logout-marker";
+  const CITY_STORAGE_KEY = "home-active-city-id";
   const SITE_PRESENCE_SESSION_KEY = "home-site-presence-session-id";
   const SITE_PRESENCE_PING_INTERVAL_MS = 30000;
   const HOME_EVENTS_STREAM_PATH = `${API_ROOT}/events/stream`;
@@ -106,6 +107,9 @@
     shopTab: 'products',
     shopOrders: [],
     shopOrdersLoading: false,
+    cities: [],
+    citiesEnabled: false,
+    activeCityId: (() => { try { return localStorage.getItem(CITY_STORAGE_KEY) || null; } catch { return null; } })(),
     booking: {
       barberId: "",
       services: [],
@@ -2011,10 +2015,12 @@
       redirectToLogin();
       throw new Error("Сессия недоступна.");
     }
+    const cityHeader = state.activeCityId ? { "X-City-Id": state.activeCityId } : {};
     const response = await fetch(`${API_ROOT}${path}`, {
       method: options?.method || "GET",
       headers: {
         Authorization: `Bearer ${token}`,
+        ...cityHeader,
         ...(options?.body ? { "Content-Type": "application/json" } : {}),
       },
       body: options?.body,
@@ -2035,16 +2041,63 @@
     return payload;
   };
 
-  const publicApiRequest = async (path) => {
+  const publicApiRequest = async (path, options = {}) => {
+    const cityHeader = state.activeCityId ? { "X-City-Id": state.activeCityId } : {};
     const response = await fetch(`${API_ROOT}${path}`, {
-      method: "GET",
+      method: options.method || "GET",
       headers: {
         Accept: "application/json",
+        ...cityHeader,
+        ...(options.headers || {}),
       },
+      ...(options.body ? { body: options.body } : {}),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(normalizeText(payload.message || payload.error) || "Ошибка запроса.");
     return payload;
+  };
+
+  const loadCities = async () => {
+    try {
+      const cities = await fetch(`${API_ROOT}/cities`, { headers: { Accept: "application/json" } })
+        .then((r) => r.ok ? r.json() : [])
+        .catch(() => []);
+      state.cities = Array.isArray(cities) ? cities : [];
+      // citiesEnabled: true if there are multiple active cities
+      state.citiesEnabled = state.cities.length > 1;
+      // Validate that saved activeCityId still exists
+      if (state.activeCityId && !state.cities.find((c) => c.id === state.activeCityId)) {
+        state.activeCityId = state.cities[0]?.id || null;
+        try { if (state.activeCityId) localStorage.setItem(CITY_STORAGE_KEY, state.activeCityId); else localStorage.removeItem(CITY_STORAGE_KEY); } catch {}
+      }
+      // Auto-select first city if none selected
+      if (!state.activeCityId && state.cities.length > 0) {
+        state.activeCityId = state.cities[0].id;
+        try { localStorage.setItem(CITY_STORAGE_KEY, state.activeCityId); } catch {}
+      }
+    } catch (err) {
+      console.warn("[cities] Failed to load cities:", err?.message);
+    }
+  };
+
+  const setActiveCity = async (cityId) => {
+    state.activeCityId = cityId || null;
+    try {
+      if (cityId) localStorage.setItem(CITY_STORAGE_KEY, cityId);
+      else localStorage.removeItem(CITY_STORAGE_KEY);
+    } catch {}
+    render();
+    // Reload page data with new city
+    try {
+      if (isAuthenticated()) {
+        commitAppPayload(await apiRequest("/app"));
+      } else {
+        commitAppPayload(await publicApiRequest("/public"));
+      }
+    } catch (err) {
+      console.warn("[cities] Reload after city change failed:", err?.message);
+    }
+    render();
   };
 
   const getCurrentReferralCodeFromLocation = () => {
@@ -2677,12 +2730,66 @@
     const authenticated = isAuthenticated();
     return memoizeRenderedFragment(
       "topbar",
-      [user, siteHome, authenticated, state.topbarAnnouncementActive, state.topbarAnnouncementText],
+      [user, siteHome, authenticated, state.topbarAnnouncementActive, state.topbarAnnouncementText, state.activeCityId, state.cities, state.citiesEnabled],
       () => `
+        <style>
+          .city-selector {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            margin-left: 12px;
+          }
+          .city-select-dropdown {
+            appearance: none;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.82rem;
+            font-weight: 600;
+            padding: 6px 28px 6px 12px;
+            cursor: pointer;
+            outline: none;
+            transition: all 0.2s ease;
+          }
+          .city-select-dropdown:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.15);
+          }
+          .city-selector::after {
+            content: "";
+            position: absolute;
+            right: 12px;
+            top: 52%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 4px solid rgba(255, 255, 255, 0.6);
+            pointer-events: none;
+          }
+        </style>
         <header class="topbar ${state.topbarAnnouncementActive ? "is-announcing" : ""}">
           <div class="topbar-content">
             <div class="brand">
               ${normalizeText(siteHome.logoText) ? `<span class="brand-title">${normalizeText(siteHome.logoText)}</span>` : ""}
+              ${state.citiesEnabled && state.cities.length > 1
+                ? `
+                  <div class="city-selector">
+                    <select id="client-city-select" class="city-select-dropdown">
+                      ${state.cities.map(c => `
+                        <option value="${c.id}" ${state.activeCityId === c.id ? "selected" : ""}>
+                          ${normalizeText(c.name)}
+                        </option>
+                      `).join("")}
+                    </select>
+                  </div>
+                `
+                : ""
+              }
             </div>
             <div class="topbar-side">
               ${authenticated
@@ -5772,6 +5879,13 @@
     if (delegatedHandlersBound) return;
     delegatedHandlersBound = true;
 
+    ROOT.addEventListener("change", (event) => {
+      const select = event.target.closest("#client-city-select");
+      if (select && ROOT.contains(select)) {
+        setActiveCity(select.value);
+      }
+    });
+
     ROOT.addEventListener("click", (event) => {
       const link = event.target.closest("a[href]");
       if (link && ROOT.contains(link)) {
@@ -6888,6 +7002,7 @@
   };
 
   const init = async () => {
+    await loadCities();
     syncPageFromLocation();
     installDelegatedHandlers();
     state.session = loadSession();

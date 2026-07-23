@@ -11,11 +11,40 @@ const createAppointmentPresentationService = ({
   warningBlockThreshold,
 }) => {
   const mapAppointment = (record) => {
-    const startDate = parseDateTime(record.Date, record.Time);
-    const endDate = parseAppointmentEndDateTime(record.Date, record.Time);
-    const canonicalStatus = normalizeAppointmentStatus(record.Status);
+    if (!record) return record;
+    const DateVal = record.date ?? record.Date;
+    const TimeVal = record.time ?? record.Time;
+    const StatusVal = record.status ?? record.Status;
+    const PhoneVal = record.phone ?? record.Phone;
+    const BarberVal = record.barber ?? record.Barber;
+    const CustomerNameVal = record.customerName ?? record.CustomerName;
+    const ServicesVal = record.services ?? record.Services;
+    const UserIDVal = record.userId ?? record.UserID;
+    const CommentVal = record.comment ?? record.Comment;
+    const CoverBsVal = record.coverBs ?? record.CoverBs;
+    const DiscountRubVal = record.discountRub ?? record.DiscountRub;
+    const Reminder2hClientSentVal = record.reminder2hClientSent ?? record.Reminder2hClientSent;
+    const Reminder2hBarberSentVal = record.reminder2hBarberSent ?? record.Reminder2hBarberSent;
+
+    const startDate = parseDateTime(DateVal, TimeVal);
+    const endDate = parseAppointmentEndDateTime(DateVal, TimeVal);
+    const canonicalStatus = normalizeAppointmentStatus(StatusVal);
     return {
       ...record,
+      id: record.id,
+      CustomerName: CustomerNameVal,
+      Phone: PhoneVal,
+      Barber: BarberVal,
+      Date: DateVal,
+      Time: TimeVal,
+      Services: ServicesVal,
+      UserID: UserIDVal,
+      Comment: CommentVal,
+      CoverBs: CoverBsVal,
+      DiscountRub: DiscountRubVal,
+      Reminder2hClientSent: Reminder2hClientSentVal,
+      Reminder2hBarberSent: Reminder2hBarberSentVal,
+      cityId: record.cityId ?? record.cityId,
       Status: canonicalStatus,
       startDateTime: startDate ? startDate.toISOString() : null,
       endDateTime: endDate ? endDate.toISOString() : null,
@@ -23,7 +52,7 @@ const createAppointmentPresentationService = ({
       isConfirmed: isConfirmedStatus(canonicalStatus),
       isActive: isActiveStatus(canonicalStatus),
       isBlocked: isBlockedStatus(canonicalStatus),
-      normalizedPhone: normalizePhone(record.Phone),
+      normalizedPhone: normalizePhone(PhoneVal),
     };
   };
 

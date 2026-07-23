@@ -127,6 +127,7 @@ const dateOffsetKey = (offsetDays = 0) => {
 };
 
 // в”Ђв”Ђв”Ђ Tests: GET /api/schedules does NOT roll records в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ——— Tests: GET /api/schedules does NOT roll records ————————————————————————————
 
 test("schedule GET does not mutate records set for today", async () => {
   const todayKey = dateOffsetKey(0);
@@ -134,20 +135,20 @@ test("schedule GET does not mutate records set for today", async () => {
 
   const existingRecord = {
     id: "sched-uuid-1",
-    Barber: "РРІР°РЅ",
-    Date: todayKey,
-    Week: "10:00-18:00",
-    DayOfWeek: "РџРѕРЅРµРґРµР»СЊРЅРёРє",
+    barber: "Иван",
+    date: todayKey,
+    week: "10:00-18:00",
+    dayOfWeek: "Понедельник",
   };
 
   const { app } = createHarness({
-    getBarbers: async () => [{ id: "b1", name: "РРІР°РЅ" }],
+    getBarbers: async () => [{ id: "b1", name: "Иван" }],
     prisma: {
       schedules: {
         async findMany(args) {
           dbCalls.push(["findMany", args]);
           // Return today's record when queried with gte todayKey filter
-          if (args?.where?.Date?.gte === todayKey) {
+          if (args?.where?.date?.gte === todayKey) {
             return [existingRecord];
           }
           return [];
@@ -184,8 +185,8 @@ test("schedule GET does not mutate records set for today", async () => {
   // The schedule for today should be returned in the board
   const board = res.body;
   assert.ok(Array.isArray(board), "Response should be an array");
-  const ivanToday = board.find((slot) => slot.Barber === "РРІР°РЅ" && slot.Date === todayKey);
-  assert.ok(ivanToday, "Today's slot for РРІР°РЅ should be in the board");
+  const ivanToday = board.find((slot) => slot.Barber === "Иван" && slot.Date === todayKey);
+  assert.ok(ivanToday, "Today's slot for Иван should be in the board");
   assert.equal(ivanToday.Week, "10:00-18:00", "Today's Week should be preserved");
 
   // CRITICAL: The GET must NOT have called update or delete on the existing record
@@ -211,20 +212,20 @@ test("schedule GET does not roll recently-saved records to future dates", async 
 
   const existingRecord = {
     id: "sched-uuid-2",
-    Barber: "РўРёРјСѓСЂ",
-    Date: yesterdayKey,
-    Week: "09:00-17:00",
-    DayOfWeek: "Р’С‚РѕСЂРЅРёРє",
+    barber: "Тимур",
+    date: yesterdayKey,
+    week: "09:00-17:00",
+    dayOfWeek: "Вторник",
   };
 
   const { app } = createHarness({
-    getBarbers: async () => [{ id: "b2", name: "РўРёРјСѓСЂ" }],
+    getBarbers: async () => [{ id: "b2", name: "Тимур" }],
     prisma: {
       schedules: {
         async findMany(args) {
-          dbCalls.push(["findMany", args?.where?.Date]);
+          dbCalls.push(["findMany", args?.where?.date]);
           // Old rolling logic would query without filter; new code queries with gte
-          if (args?.where?.Date?.gte) {
+          if (args?.where?.date?.gte) {
             // Yesterday's record is before today, so won't be returned
             return [];
           }
@@ -315,8 +316,8 @@ test("schedule GET only calls deleteMany for stale records (not for recent ones)
   assert.equal(deleteManyArgs.length, 1, "deleteMany should be called once for stale cleanup");
 
   // The stale cutoff should be 2 * windowDays (28 days) in the past
-  const staleWhere = deleteManyArgs[0]?.where?.Date?.lt;
-  assert.ok(staleWhere, "deleteMany should have a Date.lt condition");
+  const staleWhere = deleteManyArgs[0]?.where?.date?.lt;
+  assert.ok(staleWhere, "deleteMany should have a date.lt condition");
 
   // staleKey should be at least 27 days ago (before today - 28 days)
   const staleDate = new Date(staleWhere);
@@ -369,11 +370,11 @@ test("schedule PUT creates new record when none exists", async () => {
   await handler(
     {
       identity: { username: "owner" },
-      params: { id: `РРІР°РЅ-${todayKey}` },
+      params: { id: `Иван-${todayKey}` },
       body: {
-        Barber: "РРІР°РЅ",
+        Barber: "Иван",
         Date: todayKey,
-        DayOfWeek: "РџРѕРЅРµРґРµР»СЊРЅРёРє",
+        DayOfWeek: "Понедельник",
         Week: "10:00-18:00",
       },
     },
@@ -381,15 +382,15 @@ test("schedule PUT creates new record when none exists", async () => {
   );
 
   assert.equal(res.statusCode, 200, "PUT should return 200");
-  assert.equal(res.body.Week, "10:00-18:00", "Response should contain the saved Week");
-  assert.equal(res.body.Barber, "РРІР°РЅ", "Response should contain the Barber");
-  assert.equal(res.body.Date, todayKey, "Response should contain the Date");
+  assert.equal(res.body.week, "10:00-18:00", "Response should contain the saved week");
+  assert.equal(res.body.barber, "Иван", "Response should contain the barber");
+  assert.equal(res.body.date, todayKey, "Response should contain the date");
 
   const createCall = calls.find(([op]) => op === "create");
   assert.ok(createCall, "Should have called create");
-  assert.equal(createCall[1].Week, "10:00-18:00");
-  assert.equal(createCall[1].Barber, "РРІР°РЅ");
-  assert.equal(createCall[1].Date, todayKey);
+  assert.equal(createCall[1].week, "10:00-18:00");
+  assert.equal(createCall[1].barber, "Иван");
+  assert.equal(createCall[1].date, todayKey);
 });
 
 test("schedule PUT updates existing record when one already exists for barber+date", async () => {
@@ -434,12 +435,12 @@ test("schedule PUT updates existing record when one already exists for barber+da
   await handler(
     {
       identity: { username: "owner" },
-      params: { id: `РРІР°РЅ-${todayKey}` },
+      params: { id: `Иван-${todayKey}` },
       body: {
-        Barber: "РРІР°РЅ",
+        Barber: "Иван",
         Date: todayKey,
-        DayOfWeek: "РџРѕРЅРµРґРµР»СЊРЅРёРє",
-        Week: "10:00-18:00", // changed from 09:00-17:00
+        DayOfWeek: "Понедельник",
+        Week: "10:00-18:00",
       },
     },
     res
@@ -450,7 +451,7 @@ test("schedule PUT updates existing record when one already exists for barber+da
   const updateCall = calls.find(([op]) => op === "update");
   assert.ok(updateCall, "Should have called update (not create)");
   assert.equal(updateCall[1].where.id, "existing-uuid", "Should update by DB id");
-  assert.equal(updateCall[1].data.Week, "10:00-18:00", "Should save new Week value");
+  assert.equal(updateCall[1].data.week, "10:00-18:00", "Should save new week value");
 
   const createCall = calls.find(([op]) => op === "create");
   assert.equal(createCall, undefined, "Should NOT create a duplicate record");
@@ -465,15 +466,15 @@ test("schedule GET preserves saved schedule for a specific date after multiple r
   const mutations = [];
 
   const { app } = createHarness({
-    getBarbers: async () => [{ id: "b1", name: "РђР»РµРєСЃРµР№" }],
+    getBarbers: async () => [{ id: "b1", name: "Алексей" }],
     prisma: {
       schedules: {
         async findMany(args) {
           // Simulate: only return records that are gte todayKey (yesterday not included)
-          if (args?.where?.Date?.gte === todayKey) {
+          if (args?.where?.date?.gte === todayKey) {
             return []; // yesterday's record not in today's window
           }
-          return [{ id: "sched-1", Barber: "РђР»РµРєСЃРµР№", Date: yesterdayKey, Week: "10:00-18:00" }];
+          return [{ id: "sched-1", barber: "Алексей", date: yesterdayKey, week: "10:00-18:00" }];
         },
         async findFirst() {
           return null;
@@ -523,18 +524,18 @@ test("schedule GET board shows saved schedule for a barber on correct date", asy
 
   const savedRecord = {
     id: "sched-future",
-    Barber: "Р”РµРЅРёСЃ",
-    Date: in3Days,
-    Week: "11:00-20:00",
-    DayOfWeek: "РЎСЂРµРґР°",
+    barber: "Денис",
+    date: in3Days,
+    week: "11:00-20:00",
+    dayOfWeek: "Среда",
   };
 
   const { app } = createHarness({
-    getBarbers: async () => [{ id: "b3", name: "Р”РµРЅРёСЃ" }],
+    getBarbers: async () => [{ id: "b3", name: "Денис" }],
     prisma: {
       schedules: {
         async findMany(args) {
-          if (args?.where?.Date?.gte === todayKey) {
+          if (args?.where?.date?.gte === todayKey) {
             return [savedRecord];
           }
           return [];
@@ -565,9 +566,9 @@ test("schedule GET board shows saved schedule for a barber on correct date", asy
   assert.equal(res.statusCode, 200);
   const board = res.body;
   const denisIn3Days = board.find(
-    (slot) => slot.Barber === "Р”РµРЅРёСЃ" && slot.Date === in3Days
+    (slot) => slot.Barber === "Денис" && slot.Date === in3Days
   );
-  assert.ok(denisIn3Days, `Slot for Р”РµРЅРёСЃ on ${in3Days} should be in the board`);
+  assert.ok(denisIn3Days, `Slot for Денис on ${in3Days} should be in the board`);
   assert.equal(denisIn3Days.Week, "11:00-20:00", "Week should match the saved record");
   assert.equal(denisIn3Days.originalId, "sched-future", "originalId should reference the DB record");
 });
@@ -582,9 +583,9 @@ test("schedule GET matches schedule record if barber name has a trailing space i
           return [
             {
               id: "sched-1",
-              Barber: "Вадим🐯", // Trimmed in DB
-              Date: todayKey,
-              Week: "10:00-18:00",
+              barber: "Вадим🐯", // Trimmed in DB
+              date: todayKey,
+              week: "10:00-18:00",
             },
           ];
         },

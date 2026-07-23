@@ -63,16 +63,16 @@ const createHomeClientStoreService = ({
     const activeScheduleRows = dateWindowKeys.length
       ? await prisma.schedules.findMany({
           where: {
-            Barber: { in: safeBarbers.map((barber) => normalizeText(barber?.name)).filter(Boolean) },
-            Date: { in: dateWindowKeys },
+            barber: { in: safeBarbers.map((barber) => normalizeText(barber?.name)).filter(Boolean) },
+            date: { in: dateWindowKeys },
           },
-          select: { Barber: true, Week: true },
+          select: { barber: true, week: true },
         })
       : [];
     const barbersWithWorkingDays = new Set(
       activeScheduleRows
-        .filter((row) => parseWorkingRange(row?.Week))
-        .map((row) => normalizeText(row?.Barber)),
+        .filter((row) => parseWorkingRange(row?.week || row?.Week))
+        .map((row) => normalizeText(row?.barber || row?.Barber)),
     );
     const includeServices = options.includeServices === true;
     return safeBarbers
@@ -425,6 +425,8 @@ const createHomeClientStoreService = ({
         crm: normalizeText(timeZonesInput.crm) || DEFAULT_SITE_CONFIG.timeZones.crm,
         client: normalizeText(timeZonesInput.client) || DEFAULT_SITE_CONFIG.timeZones.client,
       },
+      cities: input.cities && typeof input.cities === "object" ? input.cities : {},
+      citiesContent: input.citiesContent && typeof input.citiesContent === "object" ? input.citiesContent : {},
       home: {
         logoText: normalizeText(homeInput.logoText),
         promos,
@@ -791,44 +793,92 @@ const createHomeClientStoreService = ({
     return nextMeta;
   };
 
-  const getSiteSettings = async () => {
-    return getPersistedSiteSettings();
+  const getSiteSettings = async (cityId = null) => {
+    const raw = await getPersistedSiteSettings();
+    if (!cityId) return raw;
+    const cityContent = raw.citiesContent?.[cityId];
+    if (!cityContent) return raw;
+    return {
+      ...raw,
+      home: cityContent.home ? { ...raw.home, ...cityContent.home } : raw.home,
+      referral: cityContent.referral ? { ...raw.referral, ...cityContent.referral } : raw.referral,
+      booking: cityContent.booking ? { ...raw.booking, ...cityContent.booking } : raw.booking,
+      shop: cityContent.shop ? { ...raw.shop, ...cityContent.shop } : raw.shop,
+      profile: cityContent.profile ? { ...raw.profile, ...cityContent.profile } : raw.profile,
+    };
   };
 
-  const updateSiteSettings = async (patch = {}) => {
+  const updateSiteSettings = async (patch = {}, cityId = null) => {
     const current = await getPersistedSiteSettings();
-    const nextSite = sanitizeSiteSettings({
-      ...current,
-      ...patch,
-      home: {
-        ...current.home,
-        ...(patch.home && typeof patch.home === "object" ? patch.home : {}),
-      },
-      referral: {
-        ...current.referral,
-        ...(patch.referral && typeof patch.referral === "object" ? patch.referral : {}),
-      },
-      booking: {
-        ...current.booking,
-        ...(patch.booking && typeof patch.booking === "object" ? patch.booking : {}),
-      },
-      timeZones: {
-        ...(current.timeZones && typeof current.timeZones === "object" ? current.timeZones : {}),
-        ...(patch.timeZones && typeof patch.timeZones === "object" ? patch.timeZones : {}),
-      },
-      shop: {
-        ...current.shop,
-        ...(patch.shop && typeof patch.shop === "object" ? patch.shop : {}),
-      },
-      profile: {
-        ...current.profile,
-        ...(patch.profile && typeof patch.profile === "object" ? patch.profile : {}),
-      },
-      auth: {
-        ...(current.auth && typeof current.auth === "object" ? current.auth : {}),
-        ...(patch.auth && typeof patch.auth === "object" ? patch.auth : {}),
-      },
-    });
+    let nextSite;
+    if (cityId) {
+      const currentCityContent = current.citiesContent?.[cityId] || {};
+      const nextCityContent = {
+        home: patch.home ? { ...currentCityContent.home, ...patch.home } : currentCityContent.home,
+        referral: patch.referral ? { ...currentCityContent.referral, ...patch.referral } : currentCityContent.referral,
+        booking: patch.booking ? { ...currentCityContent.booking, ...patch.booking } : currentCityContent.booking,
+        shop: patch.shop ? { ...currentCityContent.shop, ...patch.shop } : currentCityContent.shop,
+        profile: patch.profile ? { ...currentCityContent.profile, ...patch.profile } : currentCityContent.profile,
+      };
+      
+      const draftSite = {
+        ...current,
+        citiesContent: {
+          ...(current.citiesContent || {}),
+          [cityId]: nextCityContent,
+        }
+      };
+      
+      if (patch.cities) {
+        draftSite.cities = { ...current.cities, ...patch.cities };
+      }
+      if (patch.timeZones) {
+        draftSite.timeZones = { ...current.timeZones, ...patch.timeZones };
+      }
+      if (patch.auth) {
+        draftSite.auth = { ...current.auth, ...patch.auth };
+      }
+      
+      nextSite = sanitizeSiteSettings(draftSite);
+      nextSite.citiesContent = draftSite.citiesContent;
+      nextSite.cities = draftSite.cities;
+    } else {
+      nextSite = sanitizeSiteSettings({
+        ...current,
+        ...patch,
+        home: {
+          ...current.home,
+          ...(patch.home && typeof patch.home === "object" ? patch.home : {}),
+        },
+        referral: {
+          ...current.referral,
+          ...(patch.referral && typeof patch.referral === "object" ? patch.referral : {}),
+        },
+        booking: {
+          ...current.booking,
+          ...(patch.booking && typeof patch.booking === "object" ? patch.booking : {}),
+        },
+        timeZones: {
+          ...(current.timeZones && typeof current.timeZones === "object" ? current.timeZones : {}),
+          ...(patch.timeZones && typeof patch.timeZones === "object" ? patch.timeZones : {}),
+        },
+        shop: {
+          ...current.shop,
+          ...(patch.shop && typeof patch.shop === "object" ? patch.shop : {}),
+        },
+        profile: {
+          ...current.profile,
+          ...(patch.profile && typeof patch.profile === "object" ? patch.profile : {}),
+        },
+        auth: {
+          ...(current.auth && typeof current.auth === "object" ? current.auth : {}),
+          ...(patch.auth && typeof patch.auth === "object" ? patch.auth : {}),
+        },
+      });
+      nextSite.citiesContent = current.citiesContent;
+      nextSite.cities = patch.cities ? { ...current.cities, ...patch.cities } : (current.cities || patch.cities);
+    }
+    
     await writeSiteSettingsRow(nextSite);
     try {
       const { clearActiveTenantTimezone } = require("./prismaRuntime");
@@ -836,7 +886,7 @@ const createHomeClientStoreService = ({
     } catch (e) {
       // ignore
     }
-    return nextSite;
+    return cityId ? getSiteSettings(cityId) : nextSite;
   };
 
   const resolveUserKey = (user = {}) =>
@@ -885,10 +935,11 @@ const createHomeClientStoreService = ({
     return 2;
   };
 
-  const buildCatalogHelpers = async () => {
+  const buildCatalogHelpers = async (cityId = null) => {
+    const cityFilter = cityId ? { cityId } : {};
     const [services, barbers] = await Promise.all([
-      getServiceCatalog(true),
-      getBarbers({ includeInactive: true }),
+      getServiceCatalog(true, null, cityFilter),
+      getBarbers({ includeInactive: true, where: cityFilter }),
     ]);
     const barberLookup = new Map(
       (Array.isArray(barbers) ? barbers : [])
@@ -1566,7 +1617,7 @@ const createHomeClientStoreService = ({
     };
   };
 
-  const buildHomeAppPayload = async (userId) => {
+  const buildHomeAppPayload = async (userId, cityId = null) => {
     const safeUserId = normalizeText(userId);
     if (!safeUserId) return null;
     const [user, store, blockedUsers, appointmentsRaw, site] = await Promise.all([
@@ -1574,7 +1625,7 @@ const createHomeClientStoreService = ({
       readStore(),
       readBlockedUsers(),
       prisma.appointments.findMany(),
-      getPersistedSiteSettings(),
+      getSiteSettings(cityId),
     ]);
     if (!user) return null;
     const appointments = appointmentsRaw.map(mapAppointment);
@@ -1600,7 +1651,7 @@ const createHomeClientStoreService = ({
       normalizeText(right.createdAt).localeCompare(normalizeText(left.createdAt)),
     );
     const isBlocked = manualBlocked || warningCount >= warningBlockThreshold;
-    const { barberLookup, serviceLookup, barbers, services } = await buildCatalogHelpers();
+    const { barberLookup, serviceLookup, barbers, services } = await buildCatalogHelpers(cityId);
     const bookingBarbers = await buildBookableBarbersPayload(barbers, services);
     const visitHistory = completedAppointments.map((appointment) => {
       const amountRub = resolveAppointmentSpend(appointment, barberLookup, serviceLookup);
@@ -1708,12 +1759,12 @@ const createHomeClientStoreService = ({
     };
   };
 
-  const buildPublicHomePayload = async () => {
+  const buildPublicHomePayload = async (cityId = null) => {
     const [site, botSettings] = await Promise.all([
-      getPersistedSiteSettings(),
+      getSiteSettings(cityId),
       getBotSettings().catch(() => null),
     ]);
-    const { barbers, services } = await buildCatalogHelpers();
+    const { barbers, services } = await buildCatalogHelpers(cityId);
     const bookingBarbers = await buildBookableBarbersPayload(barbers, services, { includeServices: true });
     return {
       booking: {

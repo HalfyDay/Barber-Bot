@@ -1588,6 +1588,174 @@ const NotificationsSettingsView = () => {
   );
 };
 
+
+// ── City Management Panel ─────────────────────────────────────────────────
+const CityManagementPanel = ({ apiRequest, onCitiesChange }) => {
+  const [cities, setCities] = React.useState([]);
+  const [citiesEnabled, setCitiesEnabled] = React.useState(false);
+  const [defaultCityId, setDefaultCityId] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [migrating, setMigrating] = React.useState(false);
+  const [editingCity, setEditingCity] = React.useState(null);
+  const [newCityName, setNewCityName] = React.useState('');
+  const [addingCity, setAddingCity] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [migrationResult, setMigrationResult] = React.useState(null);
+
+  const load = React.useCallback(async () => {
+    if (!apiRequest) return;
+    setLoading(true);
+    setError('');
+    try {
+      const [cityList, settings] = await Promise.all([
+        apiRequest('/cities'),
+        apiRequest('/cities/settings'),
+      ]);
+      setCities(Array.isArray(cityList) ? cityList : []);
+      setCitiesEnabled(settings?.citiesEnabled === true);
+      setDefaultCityId(settings?.defaultCityId || null);
+    } catch (err) {
+      setError(err.message || 'Не удалось загрузить данные городов.');
+    } finally {
+      setLoading(false);
+    }
+  }, [apiRequest]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const handleToggle = async (enabled) => {
+    setSaving(true); setError('');
+    try {
+      await apiRequest('/cities/settings', { method: 'PUT', body: JSON.stringify({ citiesEnabled: enabled, defaultCityId }) });
+      setCitiesEnabled(enabled); onCitiesChange?.();
+    } catch (err) { setError(err.message || 'Не удалось сохранить настройки.'); } finally { setSaving(false); }
+  };
+
+  const handleAddCity = async () => {
+    if (!newCityName.trim()) return;
+    setSaving(true); setError('');
+    try {
+      const created = await apiRequest('/cities', { method: 'POST', body: JSON.stringify({ name: newCityName.trim() }) });
+      setCities((prev) => [...prev, created]); setNewCityName(''); setAddingCity(false); onCitiesChange?.();
+    } catch (err) { setError(err.message || 'Не удалось создать город.'); } finally { setSaving(false); }
+  };
+
+  const handleSaveCity = async (city) => {
+    if (!city?.id || !city.name?.trim()) return;
+    setSaving(true); setError('');
+    try {
+      const updated = await apiRequest(`/cities/${encodeURIComponent(city.id)}`, { method: 'PUT', body: JSON.stringify(city) });
+      setCities((prev) => prev.map((c) => (c.id === updated.id ? updated : c))); setEditingCity(null); onCitiesChange?.();
+    } catch (err) { setError(err.message || 'Не удалось сохранить город.'); } finally { setSaving(false); }
+  };
+
+  const handleDeleteCity = async (city) => {
+    if (!city?.id) return;
+    setSaving(true); setError('');
+    try {
+      await apiRequest(`/cities/${encodeURIComponent(city.id)}`, { method: 'DELETE' });
+      setCities((prev) => prev.filter((c) => c.id !== city.id));
+      if (defaultCityId === city.id) setDefaultCityId(null); onCitiesChange?.();
+    } catch (err) { setError(err.message || 'Не удалось удалить город.'); } finally { setSaving(false); }
+  };
+
+  const handleSetDefault = async (cityId) => {
+    setSaving(true); setError('');
+    try {
+      await apiRequest('/cities/settings', { method: 'PUT', body: JSON.stringify({ citiesEnabled, defaultCityId: cityId }) });
+      setDefaultCityId(cityId);
+    } catch (err) { setError(err.message || 'Не удалось сохранить.'); } finally { setSaving(false); }
+  };
+
+  const handleMigrate = async () => {
+    if (!defaultCityId) { setError('Сначала выберите город по умолчанию.'); return; }
+    setMigrating(true); setError(''); setMigrationResult(null);
+    try {
+      const result = await apiRequest('/cities/migrate-default', { method: 'POST', body: JSON.stringify({ cityId: defaultCityId }) });
+      setMigrationResult(result?.migrated || null); setCitiesEnabled(true); onCitiesChange?.();
+    } catch (err) { setError(err.message || 'Ошибка миграции данных.'); } finally { setMigrating(false); }
+  };
+
+  if (loading) return <LoadingState label="Загружаю настройки городов..." />;
+
+  return (
+    <SectionCard title="Разделение по городам">
+      <div className="space-y-5">
+        <div className="crm-soft-card flex items-center justify-between gap-4 p-4">
+          <div>
+            <p className="text-sm font-semibold text-white">Разделение по городам</p>
+            <p className="mt-0.5 text-xs text-[var(--crm-muted)]">Сотрудники, услуги, магазин и записи будут разделены по городам.</p>
+          </div>
+          <button type="button" disabled={saving} onClick={() => handleToggle(!citiesEnabled)}
+            className={classNames('relative h-7 w-12 flex-shrink-0 rounded-full transition duration-200 focus:outline-none', citiesEnabled ? 'bg-[color:var(--crm-primary)]' : 'bg-[color:var(--crm-surface-3)]')}>
+            <span className={classNames('absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform duration-200', citiesEnabled ? 'left-[calc(100%-1.625rem)]' : 'left-0.5')} />
+          </button>
+        </div>
+        {error && <ErrorBanner message={error} />}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-[0.2em] text-[var(--crm-muted)]">Города</p>
+            <button type="button" onClick={() => setAddingCity(true)} className="crm-ghost-btn px-3 py-1.5 text-xs">+ Добавить</button>
+          </div>
+          {cities.length === 0 && !addingCity && <p className="text-sm text-[var(--crm-muted)]">Нет городов. Добавьте первый.</p>}
+          {cities.map((city) => editingCity?.id === city.id ? (
+            <div key={city.id} className="crm-inline-panel flex gap-2 p-3">
+              <input className="crm-input flex-1 px-3 py-2 text-sm" value={editingCity.name} onChange={(e) => setEditingCity((prev) => ({ ...prev, name: e.target.value }))} autoFocus />
+              <button type="button" disabled={saving} onClick={() => handleSaveCity(editingCity)} className="crm-action-btn px-3 py-2 text-xs">{saving ? '...' : 'Сохранить'}</button>
+              <button type="button" onClick={() => setEditingCity(null)} className="crm-ghost-btn px-3 py-2 text-xs">Отмена</button>
+            </div>
+          ) : (
+            <div key={city.id} className="crm-inline-panel flex items-center gap-3 p-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-white">{city.name}</p>
+                {defaultCityId === city.id && <p className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--crm-primary)]">По умолчанию</p>}
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                {defaultCityId !== city.id && <button type="button" disabled={saving} onClick={() => handleSetDefault(city.id)} className="crm-ghost-btn px-2 py-1 text-[11px]">По умолч.</button>}
+                <button type="button" disabled={saving} onClick={() => setEditingCity({ ...city })} className="crm-ghost-btn px-2 py-1 text-[11px]">Изменить</button>
+                <button type="button" disabled={saving} onClick={() => handleDeleteCity(city)} className="crm-danger-btn px-2 py-1 text-[11px]">Удалить</button>
+              </div>
+            </div>
+          ))}
+          {addingCity && (
+            <div className="crm-inline-panel flex gap-2 p-3">
+              <input className="crm-input flex-1 px-3 py-2 text-sm" value={newCityName} onChange={(e) => setNewCityName(e.target.value)} placeholder="Название города" autoFocus onKeyDown={(e) => { if (e.key === 'Enter') handleAddCity(); if (e.key === 'Escape') setAddingCity(false); }} />
+              <button type="button" disabled={saving || !newCityName.trim()} onClick={handleAddCity} className="crm-action-btn px-3 py-2 text-xs disabled:opacity-50">{saving ? '...' : 'Добавить'}</button>
+              <button type="button" onClick={() => { setAddingCity(false); setNewCityName(''); }} className="crm-ghost-btn px-3 py-2 text-xs">Отмена</button>
+            </div>
+          )}
+        </div>
+        {cities.length > 0 && (
+          <div className="crm-soft-card space-y-2 p-4">
+            <p className="text-sm font-semibold text-white">Миграция существующих данных</p>
+            <p className="text-xs text-[var(--crm-muted)]">При первом включении городов назначьте город по умолчанию для всех существующих записей.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={defaultCityId || ''} onChange={(e) => setDefaultCityId(e.target.value || null)} className="flex-1 min-w-[160px] px-3 py-2 text-sm">
+                <option value="">— Выберите город —</option>
+                {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button type="button" disabled={migrating || !defaultCityId} onClick={handleMigrate} className="crm-tonal-btn px-4 py-2 text-sm disabled:opacity-50">{migrating ? 'Миграция...' : 'Применить к существующим'}</button>
+              <button type="button" disabled={migrating || !defaultCityId} onClick={async () => {
+                if (!window.confirm('Сбросить все привязки к городам и заново назначить все данные выбранному городу?')) return;
+                setMigrating(true); setError(''); setMigrationResult(null);
+                try {
+                  const result = await apiRequest('/cities/migrate-default', { method: 'POST', body: JSON.stringify({ cityId: defaultCityId, reset: true }) });
+                  setMigrationResult(result?.migrated || null); setCitiesEnabled(true); onCitiesChange?.();
+                } catch (err) { setError(err.message || 'Ошибка миграции данных.'); } finally { setMigrating(false); }
+              }} className="crm-danger-btn px-4 py-2 text-sm disabled:opacity-50">{migrating ? 'Миграция...' : 'Сбросить и назначить'}</button>
+            </div>
+            {migrationResult && (
+              <div className="mt-2 rounded-xl bg-[color:var(--crm-primary-container)] p-3 text-xs text-[color:var(--crm-primary)]">
+                ✓ Мигрировано: сотрудников — {migrationResult.barbers}, услуг — {migrationResult.services}, записей — {migrationResult.appointments}, расписание — {migrationResult.schedules}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </SectionCard>
+  );
+};
 const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
   const role = props.role || ROLE_OWNER;
   const sections = getSystemSubSections(role, props.session?.isImpersonated);
@@ -1601,6 +1769,17 @@ const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
 
   if (activeSection === 'businesses') {
     return <CreatorBusinessesView {...props} />;
+  }
+
+  if (activeSection === 'cities') {
+    return (
+      <div className="space-y-6">
+        <CityManagementPanel
+          apiRequest={props.apiRequest}
+          onCitiesChange={props.onCitiesChange}
+        />
+      </div>
+    );
   }
 
   if (activeSection === 'settings') {
@@ -2289,11 +2468,13 @@ const SiteSettingsView = ({ siteConfig = null, onSaveSite = null, siteSaving = f
         </div>
       </div>
       {renderTabContent()}
+      {activeTab !== 'shop' && activeTab !== 'referral' && (
         <div className="flex justify-end">
-        <button onClick={handleSave} disabled={siteSaving || !onSaveSite} className="crm-action-btn px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-50">
-          {siteSaving ? 'Сохранение...' : 'Сохранить изменения'}
-        </button>
-      </div>
+          <button onClick={handleSave} disabled={siteSaving || !onSaveSite} className="crm-action-btn px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-50">
+            {siteSaving ? 'Сохранение...' : 'Сохранить изменения'}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

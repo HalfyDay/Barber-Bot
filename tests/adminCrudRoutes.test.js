@@ -204,11 +204,11 @@ test("admin crud routes create appointment and request realtime push", async () 
       "create",
       {
         id: "uuid-1",
-        Barber: "Timur",
+        barber: "Timur",
         Service: "Fade",
-        Status: "active",
+        status: "active",
         StartAt: "2026-03-18T10:00:00.000Z",
-        UserID: "42",
+        userId: "42",
       },
     ],
     ["requestRealtimePush", true],
@@ -289,11 +289,11 @@ test("admin crud routes let staff create own appointment", async () => {
       "create",
       {
         id: "uuid-1",
-        Barber: "Timur",
+        barber: "Timur",
         Service: "Fade",
-        Status: "active",
+        status: "active",
         StartAt: "2026-03-18T12:00:00.000Z",
-        UserID: "77",
+        userId: "77",
       },
     ],
     ["requestRealtimePush", true],
@@ -367,22 +367,22 @@ test("admin crud routes create or update schedule and request realtime push", as
 
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.body, {
-    id: "uuid-1",
-    Barber: "Timur",
-    Week: "10:00-19:00",
-    DayOfWeek: "Friday",
-    Date: "2026-03-20",
-  });
+        id: "uuid-1",
+        barber: "Timur",
+        week: "10:00-19:00",
+        dayOfWeek: "Friday",
+        date: "2026-03-20",
+      });
   assert.deepEqual(calls, [
-    ["findFirst", { where: { Barber: "Timur", Date: "2026-03-20" } }],
+    ["findFirst", { where: { barber: "Timur", date: "2026-03-20" } }],
     [
       "create",
       {
         id: "uuid-1",
-        Barber: "Timur",
-        Week: "10:00-19:00",
-        DayOfWeek: "Friday",
-        Date: "2026-03-20",
+        barber: "Timur",
+        week: "10:00-19:00",
+        dayOfWeek: "Friday",
+        date: "2026-03-20",
       },
     ],
     ["requestRealtimePush", true],
@@ -554,10 +554,10 @@ test("admin crud routes update appointment and request realtime push", async () 
   const calls = [];
   const existing = {
     id: "appt-1",
-    Barber: "Timur",
+    barber: "Timur",
     Service: "Fade",
-    Status: "active",
-    UserID: "42",
+    status: "active",
+    userId: "42",
   };
   const { app } = createHarness({
     appointmentService: {
@@ -625,7 +625,7 @@ test("admin crud routes update appointment and request realtime push", async () 
         allowBusySlot: true,
       },
     ],
-    ["update", { id: "appt-1" }, { Status: "done", UserID: "77" }],
+    ["update", { id: "appt-1" }, { status: "done", userId: "77" }],
     ["requestRealtimePush", true],
   ]);
 });
@@ -634,11 +634,11 @@ test("admin crud routes let staff update own appointment", async () => {
   const calls = [];
   const existing = {
     id: "appt-1",
-    Barber: "Timur",
+    barber: "Timur",
     Service: "Fade",
-    Status: "active",
+    status: "active",
     StartAt: "2026-03-18T10:00:00.000Z",
-    UserID: "42",
+    userId: "42",
   };
   const { app } = createHarness({
     isStaffIdentity: () => true,
@@ -718,9 +718,9 @@ test("admin crud routes let staff update own appointment", async () => {
       "update",
       { id: "appt-1" },
       {
-        Barber: "Timur",
+        barber: "Timur",
         Service: "Buzz",
-        Status: "confirmed",
+        status: "confirmed",
       },
     ],
     ["requestRealtimePush", true],
@@ -945,22 +945,22 @@ test("admin crud routes let staff update own schedule", async () => {
 
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.body, {
-    id: "uuid-1",
-    Barber: "Timur",
-    Week: "10:00-19:00",
-    DayOfWeek: "Wednesday",
-    Date: "2026-03-19",
-  });
+        id: "uuid-1",
+        barber: "Timur",
+        week: "10:00-19:00",
+        dayOfWeek: "Wednesday",
+        date: "2026-03-19",
+      });
   assert.deepEqual(calls, [
-    ["findFirst", { where: { Barber: "Timur", Date: "2026-03-19" } }],
+    ["findFirst", { where: { barber: "Timur", date: "2026-03-19" } }],
     [
       "create",
       {
         id: "uuid-1",
-        Barber: "Timur",
-        Week: "10:00-19:00",
-        DayOfWeek: "Wednesday",
-        Date: "2026-03-19",
+        barber: "Timur",
+        week: "10:00-19:00",
+        dayOfWeek: "Wednesday",
+        date: "2026-03-19",
       },
     ],
     ["requestRealtimePush", true],

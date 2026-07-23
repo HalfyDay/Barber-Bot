@@ -311,10 +311,13 @@ const registerOwnerSystemRoutes = ({
 
   app.get("/api/system/site", authenticateToken, async (req, res) => {
     if (!isOwnerRequest(req)) {
-      return res.status(403).json({ error: "Недостаточно прав для просмотра сайта." });
+      return res
+        .status(403)
+        .json({ error: "Недостаточно прав для просмотра настроек сайта." });
     }
     try {
-      const site = await getSiteSettings();
+      const cityId = req.headers["x-city-id"] || req.query?.cityId || null;
+      const site = await getSiteSettings(cityId);
       res.json(site);
     } catch (error) {
       console.error("Site settings fetch error:", error);
@@ -327,7 +330,8 @@ const registerOwnerSystemRoutes = ({
       return res.status(403).json({ error: "Недостаточно прав для изменения сайта." });
     }
     try {
-      const site = await updateSiteSettings(req.body || {});
+      const cityId = req.headers["x-city-id"] || req.query?.cityId || null;
+      const site = await updateSiteSettings(req.body || {}, cityId);
       res.json(site);
     } catch (error) {
       console.error("Site settings save error:", error);

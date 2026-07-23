@@ -120,7 +120,7 @@ const createNotificationReminderService = ({
     const thresholdKey = formatDateOnly(threshold);
     if (!thresholdKey) return 0;
     const result = await prisma.appointments.deleteMany({
-      where: { Date: { lt: thresholdKey } },
+      where: { date: { lt: thresholdKey } },
     });
     return Number(result?.count) || 0;
   };
@@ -166,31 +166,40 @@ const createNotificationReminderService = ({
     const todayKey = formatDateOnly(now);
     if (!todayKey) return 0;
     const appointments = await prisma.appointments.findMany({
-      where: { Status: statusActive, Date: todayKey },
+      where: { status: statusActive, date: todayKey },
       select: {
         id: true,
-        UserID: true,
-        CustomerName: true,
-        Phone: true,
-        Barber: true,
-        Date: true,
-        Time: true,
-        Reminder2hClientSent: true,
-        Reminder2hBarberSent: true,
+        userId: true,
+        customerName: true,
+        phone: true,
+        barber: true,
+        date: true,
+        time: true,
+        reminder2hClientSent: true,
+        reminder2hBarberSent: true,
       },
     });
     if (!appointments.length) return 0;
     const { userLookup, barberLookup } = await buildAppointmentReminderContext();
     let sentCount = 0;
     for (const appointment of appointments) {
-      const appointmentStart = parseDateTime(appointment?.Date, appointment?.Time);
+      const apptDate = appointment?.date || appointment?.Date;
+      const apptTime = appointment?.time || appointment?.Time;
+      const apptBarber = appointment?.barber || appointment?.Barber;
+      const apptUserId = appointment?.userId || appointment?.UserID;
+      const apptCustomerName = appointment?.customerName || appointment?.CustomerName;
+      const apptPhone = appointment?.phone || appointment?.Phone;
+      const clientSent = appointment?.reminder2hClientSent ?? appointment?.Reminder2hClientSent;
+      const barberSent = appointment?.reminder2hBarberSent ?? appointment?.Reminder2hBarberSent;
+
+      const appointmentStart = parseDateTime(apptDate, apptTime);
       if (!appointmentStart) continue;
       const deltaMs = appointmentStart.getTime() - now.getTime();
       if (deltaMs < 0 || deltaMs > 2 * 60 * 60 * 1000) continue;
       const timeLabel =
-        parseTimeRangeParts(appointment?.Time).start || normalizeText(appointment?.Time);
-      if (!appointment?.Reminder2hClientSent) {
-        const userRow = userLookup.get(normalizeText(appointment?.UserID));
+        parseTimeRangeParts(apptTime).start || normalizeText(apptTime);
+      if (!clientSent) {
+        const userRow = userLookup.get(normalizeText(apptUserId));
         const clientChatId = normalizeText(userRow?.TelegramID);
         if (clientChatId) {
           try {
@@ -199,13 +208,13 @@ const createNotificationReminderService = ({
               [
                 "⏰ Напоминание:",
                 `У вас сегодня в ${escapeTelegramHtml(timeLabel)} запись к барберу <b>${escapeTelegramHtml(
-                  appointment?.Barber,
+                  apptBarber,
                 )}</b>.`,
               ].join("\n"),
             );
             await prisma.appointments.update({
               where: { id: appointment.id },
-              data: { Reminder2hClientSent: true },
+              data: { reminder2hClientSent: true },
             });
             sentCount += 1;
           } catch (error) {
@@ -219,10 +228,10 @@ const createNotificationReminderService = ({
         if (homePushService?.sendNotificationToUser) {
           try {
             await homePushService.sendNotificationToUser(
-              normalizeText(appointment?.UserID),
+              normalizeText(apptUserId),
               {
                 title: "Напоминание о записи",
-                body: `Сегодня в ${timeLabel} запись к ${appointment?.Barber}`,
+                body: `Сегодня в ${timeLabel} запись к ${apptBarber}`,
                 tag: `reminder-${appointment.id}`,
                 url: "/booking/#booking",
               },
@@ -233,8 +242,8 @@ const createNotificationReminderService = ({
           }
         }
       }
-      if (!appointment?.Reminder2hBarberSent) {
-        const barberRow = barberLookup.get(normalizeText(appointment?.Barber));
+      if (!barberSent) {
+        const barberRow = barberLookup.get(normalizeText(apptBarber));
         const barberChatId = normalizeText(barberRow?.telegramId);
         if (barberChatId) {
           try {
@@ -244,14 +253,14 @@ const createNotificationReminderService = ({
                 "⏰ Напоминание:",
                 `У вас сегодня в ${escapeTelegramHtml(timeLabel)} запись.`,
                 `Клиент: <b>${escapeTelegramHtml(
-                  appointment?.CustomerName || "Клиент",
+                  apptCustomerName || "Клиент",
                 )}</b>`,
-                `Телефон: ${escapeTelegramHtml(appointment?.Phone || "Не указан")}`,
+                `Телефон: ${escapeTelegramHtml(apptPhone || "Не указан")}`,
               ].join("\n"),
             );
             await prisma.appointments.update({
               where: { id: appointment.id },
-              data: { Reminder2hBarberSent: true },
+              data: { reminder2hBarberSent: true },
             });
             sentCount += 1;
           } catch (error) {

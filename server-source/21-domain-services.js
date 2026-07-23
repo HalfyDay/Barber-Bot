@@ -283,4 +283,15 @@ const levelEvaluationService = createLevelEvaluationService({
   statusDone: STATUS_DONE,
   randomUUID,
 });
-
+const {
+  isCitiesEnabled,
+  invalidateCitiesCache,
+  resolveRequestCityId,
+  getCities,
+  getCityById,
+  buildCityFilter,
+} = createCityService({
+  prisma,
+  getSiteSettings,
+  normalizeText,
+});

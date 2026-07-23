@@ -131,8 +131,8 @@ test("catalog config service normalizes only changed appointment statuses", asyn
       appointments: {
         async findMany() {
           return [
-            { id: "a1", Status: "Done" },
-            { id: "a2", Status: "active" },
+            { id: "a1", status: "Done" },
+            { id: "a2", status: "active" },
           ];
         },
         async update(payload) {
@@ -149,7 +149,7 @@ test("catalog config service normalizes only changed appointment statuses", asyn
   assert.equal(calls.appointmentUpdates.length, 1);
   assert.deepEqual(calls.appointmentUpdates[0], {
     where: { id: "a1" },
-    data: { Status: "done" },
+    data: { status: "done" },
   });
 });
 

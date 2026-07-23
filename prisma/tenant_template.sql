@@ -1,4 +1,20 @@
 
+-- CreateTable
+CREATE TABLE "Cities" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "slug" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "orderIndex" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Cities_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "Cities_isActive_orderIndex_idx" ON "Cities"("isActive", "orderIndex");
+
 -- CreateEnum
 CREATE TYPE "BarberRole" AS ENUM ('owner', 'staff');
 
@@ -39,6 +55,7 @@ CREATE TABLE "Appointments" (
     "Comment" TEXT,
     "CoverBs" INTEGER,
     "DiscountRub" INTEGER,
+    "cityId" TEXT,
 
     CONSTRAINT "Appointments_pkey" PRIMARY KEY ("id")
 );
@@ -52,6 +69,7 @@ CREATE TABLE "Schedules" (
     "Date" TEXT,
     "Week" TEXT,
     "Time" TEXT,
+    "cityId" TEXT,
 
     CONSTRAINT "Schedules_pkey" PRIMARY KEY ("id")
 );
@@ -80,6 +98,7 @@ CREATE TABLE "Barbers" (
     "orderIndex" INTEGER NOT NULL DEFAULT 0,
     "role" "BarberRole" NOT NULL DEFAULT 'owner',
     "positionId" TEXT,
+    "cityId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "lastSeenAt" TIMESTAMP(3),
@@ -98,6 +117,8 @@ CREATE TABLE "Positions" (
     "targetReturnPercent" DOUBLE PRECISION DEFAULT 0,
     "specialConditions" TEXT,
     "privileges" TEXT,
+    "parentId" TEXT,
+    "cityId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -113,6 +134,7 @@ CREATE TABLE "Services" (
     "duration" INTEGER NOT NULL DEFAULT 0,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "orderIndex" INTEGER NOT NULL DEFAULT 0,
+    "cityId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -252,13 +274,19 @@ CREATE TABLE "Businesses" (
 );
 
 -- CreateIndex
+CREATE INDEX "Appointments_cityId_idx" ON "Appointments"("cityId");
+
+-- CreateIndex
+CREATE INDEX "Schedules_cityId_idx" ON "Schedules"("cityId");
+
+-- CreateIndex
 CREATE INDEX "Users_Phone_idx" ON "Users"("Phone");
 
 -- CreateIndex
 CREATE INDEX "Users_TelegramID_idx" ON "Users"("TelegramID");
 
--- CreateIndex
-CREATE UNIQUE INDEX "Positions_name_key" ON "Positions"("name");
+-- Note: Positions.name is no longer globally unique (each city can have positions with the same name)
+-- Previous unique index removed to support per-city positions
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ServicePrices_serviceId_barberId_key" ON "ServicePrices"("serviceId", "barberId");
@@ -300,6 +328,24 @@ CREATE UNIQUE INDEX "Businesses_dbSchema_key" ON "Businesses"("dbSchema");
 ALTER TABLE "Barbers" ADD CONSTRAINT "Barbers_positionId_fkey" FOREIGN KEY ("positionId") REFERENCES "Positions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "Barbers" ADD CONSTRAINT "Barbers_cityId_fkey" FOREIGN KEY ("cityId") REFERENCES "Cities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Services" ADD CONSTRAINT "Services_cityId_fkey" FOREIGN KEY ("cityId") REFERENCES "Cities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Positions" ADD CONSTRAINT "Positions_cityId_fkey" FOREIGN KEY ("cityId") REFERENCES "Cities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ShopCategories" ADD CONSTRAINT "ShopCategories_cityId_fkey" FOREIGN KEY ("cityId") REFERENCES "Cities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ShopProducts" ADD CONSTRAINT "ShopProducts_cityId_fkey" FOREIGN KEY ("cityId") REFERENCES "Cities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ShopOrders" ADD CONSTRAINT "ShopOrders_cityId_fkey" FOREIGN KEY ("cityId") REFERENCES "Cities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "ServicePrices" ADD CONSTRAINT "ServicePrices_serviceId_fkey" FOREIGN KEY ("serviceId") REFERENCES "Services"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -311,6 +357,7 @@ CREATE TABLE "ShopCategories" (
     "name" TEXT NOT NULL,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "orderIndex" INTEGER NOT NULL DEFAULT 0,
+    "cityId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -328,6 +375,7 @@ CREATE TABLE "ShopProducts" (
     "stock" INTEGER NOT NULL DEFAULT 0,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "orderIndex" INTEGER NOT NULL DEFAULT 0,
+    "cityId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -349,6 +397,7 @@ CREATE TABLE "ShopOrders" (
     "issuedById" TEXT,
     "issuedByName" TEXT,
     "issuedAt" TIMESTAMP(3),
+    "cityId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

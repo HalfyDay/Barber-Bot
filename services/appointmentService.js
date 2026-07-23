@@ -176,13 +176,13 @@ const createAppointmentService = ({
     const keys = resolveAppointmentOwnerKeys(userLike);
     const ors = [];
     if (keys.userIds.length) {
-      ors.push({ UserID: { in: keys.userIds } });
+      ors.push({ userId: { in: keys.userIds } });
     }
     if (keys.phone) {
-      ors.push({ Phone: keys.phone });
+      ors.push({ phone: keys.phone });
     }
     keys.names.forEach((name) => {
-      ors.push({ CustomerName: name });
+      ors.push({ customerName: name });
     });
     if (!ors.length) return null;
     return ors.length === 1 ? ors[0] : { OR: ors };
@@ -263,10 +263,10 @@ const createAppointmentService = ({
 
   const getWorkingHoursForBarberDate = async (barberName, dateKey, prismaClient = prisma) => {
     const schedule = await prismaClient.schedules.findFirst({
-      where: { Barber: barberName, Date: dateKey },
-      select: { Week: true },
+      where: { barber: barberName, date: dateKey },
+      select: { week: true },
     });
-    return parseWorkingRange(schedule?.Week);
+    return parseWorkingRange(schedule?.week);
   };
 
   const getBusyIntervalsForBarberDate = async (
@@ -275,17 +275,17 @@ const createAppointmentService = ({
     excludeAppointmentId = null,
     prismaClient = prisma,
   ) => {
-    const where = { Barber: barberName, Date: dateKey };
+    const where = { barber: barberName, date: dateKey };
     if (normalizeText(excludeAppointmentId)) {
       where.id = { not: excludeAppointmentId };
     }
     const rows = await prismaClient.appointments.findMany({
       where,
-      select: { Time: true, Status: true },
+      select: { time: true, status: true },
     });
     return rows.reduce((acc, row) => {
-      if (!isSlotBlockingStatus(row?.Status)) return acc;
-      const parsed = parseWorkingRange(row?.Time);
+      if (!isSlotBlockingStatus(row?.status)) return acc;
+      const parsed = parseWorkingRange(row?.time);
       if (parsed) acc.push(parsed);
       return acc;
     }, []);
@@ -323,15 +323,15 @@ const createAppointmentService = ({
     if (!where) return 0;
     const rows = await prismaClient.appointments.findMany({
       where,
-      select: { Status: true },
+      select: { status: true },
     });
-    return rows.reduce((acc, row) => (isActiveStatus(row?.Status) ? acc + 1 : acc), 0);
+    return rows.reduce((acc, row) => (isActiveStatus(row?.status) ? acc + 1 : acc), 0);
   };
 
   const validateActiveAppointment = async (appointment, options = {}) => {
-    const safeBarber = normalizeText(appointment?.Barber);
-    const safeDate = normalizeText(appointment?.Date);
-    const safeTime = normalizeText(appointment?.Time);
+    const safeBarber = normalizeText(appointment?.barber ?? appointment?.Barber);
+    const safeDate = normalizeText(appointment?.date ?? appointment?.Date);
+    const safeTime = normalizeText(appointment?.time ?? appointment?.Time);
     const excludeAppointmentId = normalizeText(options.excludeAppointmentId);
     const prismaClient = options.prismaClient || prisma;
     const allowMissingSchedule = options.allowMissingSchedule === true;
@@ -431,19 +431,19 @@ const createAppointmentService = ({
 
       const appointment = {
         id: randomUUID(),
-        UserID: homeUser.id,
-        CustomerName: homeUser.displayName || homeUser.phone || "Клиент",
-        Phone: homeUser.phone || null,
-        Barber: barber.name,
-        Date: dateKey,
-        Time: `${startLabel} - ${endLabel}`,
-        Status: activeStatus,
-        Services: selectedServices.map((service) => service.name).join(", "),
-        Reminder2hClientSent: false,
-        Reminder2hBarberSent: false,
-        Comment: comment || null,
-        CoverBs: coverBs || null,
-        DiscountRub: discountRub || null,
+        userId: homeUser.id,
+        customerName: homeUser.displayName || homeUser.phone || "Клиент",
+        phone: homeUser.phone || null,
+        barber: barber.name,
+        date: dateKey,
+        time: `${startLabel} - ${endLabel}`,
+        status: activeStatus,
+        services: selectedServices.map((service) => service.name).join(", "),
+        reminder2hClientSent: false,
+        reminder2hBarberSent: false,
+        comment: comment || null,
+        coverBs: coverBs || null,
+        discountRub: discountRub || null,
       };
 
       await validateActiveAppointment(appointment, { prismaClient: tx });
@@ -453,7 +453,7 @@ const createAppointmentService = ({
   };
 
   const validateAppointmentRecord = async (appointment, options = {}) => {
-    if (!isActiveStatus(appointment?.Status)) {
+    if (!isActiveStatus(appointment?.status ?? appointment?.Status)) {
       return { mode: "skip" };
     }
     return validateActiveAppointment(appointment, options);

@@ -534,7 +534,7 @@ const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-
           className={classNames(
             'crm-modal-surface flex min-h-0 w-full flex-col overflow-hidden',
             isOpen ? 'crm-modal-surface-open' : 'crm-modal-surface-close',
-            maxWidthClass,
+            sheetOnMobile ? 'sm:max-w-md' : maxWidthClass,
             sheetOnMobile
               ? 'h-[100dvh] max-h-[100dvh] rounded-none sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-[32px]'
               : 'h-auto max-h-[calc(100dvh-2rem)] rounded-[28px] sm:max-h-[calc(100dvh-3rem)] sm:rounded-[32px]'
@@ -794,7 +794,37 @@ const useMovingNavIndicator = (activeId) => {
   }, [activeId]);
   return { trackRef, setItemRef, indicatorStyle };
 };
+// ── City Switcher ─────────────────────────────────────────────────────────
+const CitySwitcher = ({
+  cities = [],
+  activeCityId = null,
+  onCityChange,
+  role,
+}) => {
+  if (!cities || cities.length < 1) return null;
+  // Staff don't control their city
+  if (role === ROLE_STAFF) return null;
+  const cityOptions = [
+    { value: '', label: 'Все города' },
+    ...cities.map((c) => ({ value: c.id, label: c.name })),
+  ];
+  return (
+    <div className="mt-3 px-1">
+      <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--crm-muted)] mb-1.5">
+        Город
+      </label>
+      <CustomSelect
+        value={activeCityId || ''}
+        onChange={(val) => onCityChange?.(val || null)}
+        options={cityOptions}
+        placeholder="Все города"
+      />
+    </div>
+  );
+};
+
 const Sidebar = ({
+
   session,
   activeTab,
   onChange,
@@ -818,6 +848,10 @@ const Sidebar = ({
   unreadCount = 0,
   onMarkNotificationsRead,
   onNavigate,
+  cities = [],
+  activeCityId = null,
+  onCityChange,
+  role = ROLE_OWNER,
 }) => {
   const username = session?.displayName || session?.username || '-';
   const userAvatarSrc = resolveAssetUrl(currentBarber?.avatarUrl);
@@ -885,6 +919,16 @@ const Sidebar = ({
         {(liveUpdatedAt || liveStatus !== 'unknown') && (
           <div className="mt-3 flex justify-center">
             <LiveBadge timestamp={liveUpdatedAt} status={liveStatus} />
+          </div>
+        )}
+        {cities.length >= 1 && role !== ROLE_STAFF && (
+          <div className="mt-3">
+            <CitySwitcher
+              cities={cities}
+              activeCityId={activeCityId}
+              onCityChange={onCityChange}
+              role={role}
+            />
           </div>
         )}
         <button
@@ -1022,11 +1066,18 @@ const MobileTabs = ({
   unreadCount = 0,
   onMarkNotificationsRead,
   onNavigate,
+  cities = [],
+  activeCityId = null,
+  onCityChange,
+  role = ROLE_OWNER,
+  citiesEnabled = false,
 }) => {
   const username = session?.displayName || session?.username || '-';
   const userAvatarSrc = resolveAssetUrl(currentBarber?.avatarUrl);
   const [showNotificationsSheet, setShowNotificationsSheet] = useState(false);
   const [showSubmenus, setShowSubmenus] = useState(true);
+  const [showCityDropdown, setShowCityDropdown] = useState(false);
+  const cityDropdownRef = useRef(null);
   const [showHeader, setShowHeader] = useState(true);
   const submenusVisibleRef = useRef(showSubmenus);
   const lastScrollRef = useRef(typeof window !== 'undefined' ? window.scrollY : 0);
@@ -1077,6 +1128,16 @@ const MobileTabs = ({
   useEffect(() => {
     submenusVisibleRef.current = showSubmenus;
   }, [showSubmenus]);
+  useEffect(() => {
+    if (!showCityDropdown) return undefined;
+    const handleClickOutside = (e) => {
+      if (cityDropdownRef.current && !cityDropdownRef.current.contains(e.target)) {
+        setShowCityDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside, true);
+    return () => document.removeEventListener('mousedown', handleClickOutside, true);
+  }, [showCityDropdown]);
   useEffect(() => {
     const handleScroll = () => {
       const current = window.scrollY || 0;
@@ -1149,8 +1210,47 @@ const MobileTabs = ({
             <p className="truncate text-center text-base font-semibold tracking-[-0.03em] text-white">{mobileHeaderTitle}</p>
           </div>
           <div className="relative z-10 flex items-center justify-between gap-3">
-            <div className="flex min-w-[92px] justify-start">
-              {renderLiveIndicator()}
+            <div className="flex min-w-[92px] justify-start relative" ref={cityDropdownRef}>
+              {citiesEnabled && cities.length > 0 && role !== ROLE_STAFF ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowCityDropdown((prev) => !prev)}
+                    className="crm-ghost-btn flex h-9 items-center gap-1.5 px-3 text-xs font-semibold"
+                  >
+                    <span className="truncate max-w-[100px]">{cities.find((c) => c.id === activeCityId)?.name || 'Все города'}</span>
+                  </button>
+                  {showCityDropdown && (
+                    <div className="absolute left-0 top-full z-[200] mt-1 min-w-[180px] rounded-2xl bg-[color:var(--crm-surface-2)] p-2 shadow-xl">
+                      <button
+                        type="button"
+                        onClick={() => { onCityChange?.(null); setShowCityDropdown(false); }}
+                        className={classNames(
+                          'flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition',
+                          !activeCityId ? 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]' : 'text-white hover:bg-[color:var(--crm-surface-4)]'
+                        )}
+                      >
+                        Все города
+                      </button>
+                      {cities.map((city) => (
+                        <button
+                          key={city.id}
+                          type="button"
+                          onClick={() => { onCityChange?.(city.id); setShowCityDropdown(false); }}
+                          className={classNames(
+                            'flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition',
+                            activeCityId === city.id ? 'bg-[color:var(--crm-primary-container)] text-[color:var(--crm-primary)]' : 'text-white hover:bg-[color:var(--crm-surface-4)]'
+                          )}
+                        >
+                          {city.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                renderLiveIndicator()
+              )}
             </div>
             <div className="flex items-center justify-end">
               <button

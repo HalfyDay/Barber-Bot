@@ -1,3 +1,41 @@
+
+function mapFrontendAppointmentToPrisma(payload) {
+  const result = { ...payload };
+  if ('CustomerName' in payload) { result.customerName = payload.CustomerName; delete result.CustomerName; }
+  if ('Phone' in payload) { result.phone = payload.Phone; delete result.Phone; }
+  if ('Barber' in payload) { result.barber = payload.Barber; delete result.Barber; }
+  if ('Date' in payload) { result.date = payload.Date; delete result.Date; }
+  if ('Time' in payload) { result.time = payload.Time; delete result.Time; }
+  if ('Status' in payload) { result.status = payload.Status; delete result.Status; }
+  if ('Services' in payload) { result.services = payload.Services; delete result.Services; }
+  if ('UserID' in payload) { result.userId = payload.UserID; delete result.UserID; }
+  if ('Comment' in payload) { result.comment = payload.Comment; delete result.Comment; }
+  if ('CoverBs' in payload) { result.coverBs = payload.CoverBs; delete result.CoverBs; }
+  if ('DiscountRub' in payload) { result.discountRub = payload.DiscountRub; delete result.DiscountRub; }
+  if ('Reminder2hClientSent' in payload) { result.reminder2hClientSent = payload.Reminder2hClientSent; delete result.Reminder2hClientSent; }
+  if ('Reminder2hBarberSent' in payload) { result.reminder2hBarberSent = payload.Reminder2hBarberSent; delete result.Reminder2hBarberSent; }
+  return result;
+}
+
+function mapPrismaAppointmentToFrontend(record) {
+  if (!record) return record;
+  const result = { ...record };
+  if ('customerName' in record) { result.CustomerName = record.customerName; delete result.customerName; }
+  if ('phone' in record) { result.Phone = record.phone; delete result.phone; }
+  if ('barber' in record) { result.Barber = record.barber; delete result.barber; }
+  if ('date' in record) { result.Date = record.date; delete result.date; }
+  if ('time' in record) { result.Time = record.time; delete result.time; }
+  if ('status' in record) { result.Status = record.status; delete result.status; }
+  if ('services' in record) { result.Services = record.services; delete result.services; }
+  if ('userId' in record) { result.UserID = record.userId; delete result.userId; }
+  if ('comment' in record) { result.Comment = record.comment; delete result.comment; }
+  if ('coverBs' in record) { result.CoverBs = record.coverBs; delete result.coverBs; }
+  if ('discountRub' in record) { result.DiscountRub = record.discountRub; delete result.discountRub; }
+  if ('reminder2hClientSent' in record) { result.Reminder2hClientSent = record.reminder2hClientSent; delete result.reminder2hClientSent; }
+  if ('reminder2hBarberSent' in record) { result.Reminder2hBarberSent = record.reminder2hBarberSent; delete record.reminder2hBarberSent; }
+  return result;
+}
+
 const registerAdminCrudRoutes = ({
   app,
   authenticateToken,
@@ -29,6 +67,7 @@ const registerAdminCrudRoutes = ({
   adjustUserBsBalance,
   addUserWarning,
   homePushService,
+  notifyBarberAboutNewAppointment,
   splitServiceList,
   buildServiceLookup,
   getServicePriceForBarber,
@@ -37,8 +76,10 @@ const registerAdminCrudRoutes = ({
   isBarberOnline,
   getBarberLastSeen,
 }) => {
-  const buildScheduleBoard = async (requestedWindowDays = 14) => {
-    const barbersList = await getBarbers({ includeInactive: true });
+  const getCityIdFromReq = (req) => req.headers?.['x-city-id'] || req.query?.cityId || null;
+
+  const buildScheduleBoard = async (requestedWindowDays = 14, cityId = null) => {
+    const barbersList = (await getBarbers({ includeInactive: true })).filter((b) => !cityId || !b.cityId || b.cityId === cityId);
     const daysOfWeek = [
       "Понедельник",
       "Вторник",
@@ -68,26 +109,26 @@ const registerAdminCrudRoutes = ({
     staleThreshold.setDate(staleThreshold.getDate() - windowDays * 2);
     const staleKey = formatDateKey(staleThreshold);
     await prisma.schedules.deleteMany({
-      where: { Date: { lt: staleKey } },
+      where: { date: { lt: staleKey } },
     });
 
     // Read all future/current schedules (from today onwards) for the display grid
+    const cityBarberNames = barbersList.map((b) => normalizeText(b.name)).filter(Boolean);
+    const scheduleWhere = { date: { gte: todayKey } };
+    if (cityId) {
+      scheduleWhere.OR = [{ cityId: cityId }, { cityId: null }];
+    }
     const allSchedules = await prisma.schedules.findMany({
-      where: { Date: { gte: todayKey } },
+      where: scheduleWhere,
     });
     const schedulesMap = allSchedules.reduce((acc, schedule) => {
-      if (schedule.Barber && schedule.Date) {
-        acc.set(`${schedule.Barber}-${schedule.Date}`, schedule);
+      if (schedule.barber && schedule.date) {
+        acc.set(`${schedule.barber}-${schedule.date}`, schedule);
       }
       return acc;
     }, new Map());
-    const fallbackNames = Array.from(
-      new Set(allSchedules.map((item) => item.Barber).filter(Boolean)),
-    );
     const barberNames = (
-      barbersList.map((barber) => normalizeText(barber.name)).filter(Boolean).length
-        ? barbersList.map((barber) => normalizeText(barber.name)).filter(Boolean)
-        : fallbackNames.map((name) => normalizeText(name)).filter(Boolean)
+      barbersList.map((barber) => normalizeText(barber.name)).filter(Boolean)
     ).sort((a, b) => a.localeCompare(b, "ru"));
     const fullSchedule = [];
     barberNames.forEach((name) => {
@@ -103,7 +144,7 @@ const registerAdminCrudRoutes = ({
           Barber: name,
           DayOfWeek: daysOfWeek[dayIndex],
           Date: dateKey,
-          Week: existing?.Week || "",
+          Week: existing?.week || "",
           originalId: existing?.id || null,
         });
       }
@@ -113,11 +154,16 @@ const registerAdminCrudRoutes = ({
 
   app.get("/api/barbers/full", authenticateToken, async (req, res) => {
     try {
-      const [barbers, appointmentsRaw, servicesRaw] = await Promise.all([
+      const cityId = getCityIdFromReq(req);
+      let [barbers, appointmentsRaw, servicesRaw] = await Promise.all([
         getBarbers({ includeInactive: true }),
         prisma.appointments.findMany(),
         prisma.services.findMany(),
       ]);
+      if (cityId) {
+        barbers = barbers.filter(b => !b.cityId || b.cityId === cityId);
+        servicesRaw = servicesRaw.filter(s => !s.cityId || s.cityId === cityId);
+      }
       const appointments = appointmentsRaw.map(mapAppointment);
       const serviceLookup = buildServiceLookup(servicesRaw);
       const now = new Date();
@@ -345,7 +391,20 @@ const registerAdminCrudRoutes = ({
 
   app.get("/api/appointments", authenticateToken, async (req, res) => {
     try {
-      const records = await prisma.appointments.findMany();
+      const cityId = getCityIdFromReq(req);
+      let cityFilter = {};
+      if (cityId) {
+        const cityBarbers = (await getBarbers({ includeInactive: true })).filter(
+          (b) => !b.cityId || b.cityId === cityId,
+        );
+        const cityBarberNames = cityBarbers.map((b) => b.name).filter(Boolean);
+        cityFilter = {
+          where: {
+            OR: [{ cityId: cityId }, { cityId: null }],
+          },
+        };
+      }
+      const records = await prisma.appointments.findMany(cityFilter);
       return res.json(filterAppointmentsForIdentity(records, req.identity).map(mapAppointment));
     } catch (error) {
       console.error("Appointments list error:", error);
@@ -359,7 +418,7 @@ const registerAdminCrudRoutes = ({
         error: "Недостаточно прав для создания записей в этом разделе.",
       });
     }
-    const payload = coercePayload("Appointments", { ...req.body });
+    const rawPayload = coercePayload("Appointments", { ...req.body });
     if (isStaffIdentity(req.identity)) {
       const staffBarber = getIdentityBarberName(req.identity);
       if (!staffBarber) {
@@ -367,18 +426,18 @@ const registerAdminCrudRoutes = ({
           error: "В профиле сотрудника не указано имя барбера.",
         });
       }
-      payload.Barber = staffBarber;
+      rawPayload.Barber = staffBarber;
     }
-    payload.Status = normalizeAppointmentStatus(payload.Status);
-    if (!normalizeText(payload.Barber)) {
+    rawPayload.Status = normalizeAppointmentStatus(rawPayload.Status);
+    if (!normalizeText(rawPayload.Barber)) {
       return res.status(400).json({ error: "Для записи нужно указать барбера." });
     }
-    if (payload.UserID !== undefined) {
-      payload.UserID = payload.UserID === null || payload.UserID === "" ? null : String(payload.UserID);
+    if (rawPayload.UserID !== undefined) {
+      rawPayload.UserID = rawPayload.UserID === null || rawPayload.UserID === "" ? null : String(rawPayload.UserID);
     }
     try {
       try {
-        await appointmentService.validateAppointmentRecord(payload, {
+        await appointmentService.validateAppointmentRecord(rawPayload, {
           allowMissingSchedule: true,
           allowOutsideWorkingHours: true,
           allowBusySlot: true,
@@ -389,19 +448,37 @@ const registerAdminCrudRoutes = ({
         }
         throw error;
       }
+      const payload = mapFrontendAppointmentToPrisma(rawPayload);
+      const cityId = getCityIdFromReq(req);
+      if (cityId && !payload.cityId) payload.cityId = cityId;
       const record = await prisma.appointments.create({
         data: { id: randomUUID(), ...payload },
       });
-      res.status(201).json(record);
+      const recordFrontend = mapPrismaAppointmentToFrontend(record);
+      res.status(201).json(recordFrontend);
       requestRealtimePush(true);
-      const ownerUserId = await homePushService?.resolveUserIdForAppointment?.(record);
-      if (ownerUserId && normalizeText(record.Status) === "Активная") {
+      // Notify the specific barber about the new appointment
+      const barberName = normalizeText(recordFrontend.Barber);
+      if (barberName) {
+        const allBarbers = await getBarbers({ includeInactive: true });
+        const targetBarber = allBarbers.find((b) => normalizeText(b.name) === barberName);
+        if (targetBarber?.telegramId) {
+          await notifyBarberAboutNewAppointment({
+            appointment: recordFrontend,
+            barber: targetBarber,
+            homeUser: { displayName: recordFrontend.CustomerName, phone: recordFrontend.Phone },
+          }).catch(() => {});
+        }
+      }
+      // Notify the client
+      const ownerUserId = await homePushService?.resolveUserIdForAppointment?.(recordFrontend);
+      if (ownerUserId && normalizeText(recordFrontend.Status) === "Активная") {
         await homePushService?.sendNotificationToUser?.(
           ownerUserId,
           {
             title: "Запись создана",
-            body: `${normalizeText(record.Date)} · ${normalizeText(record.Time)}`,
-            tag: `brothershop-admin-booking-create-${normalizeText(record.id)}`,
+            body: `${normalizeText(recordFrontend.Date)} · ${normalizeText(recordFrontend.Time)}`,
+            tag: `brothershop-admin-booking-create-${normalizeText(recordFrontend.id)}`,
             url: "/booking/#booking",
           },
           { channel: "booking" },
@@ -421,18 +498,19 @@ const registerAdminCrudRoutes = ({
         error: "Недостаточно прав для изменения записи.",
       });
     }
-    const data = coercePayload("Appointments", { ...req.body });
-    if (data.UserID !== undefined) {
-      data.UserID = data.UserID === null || data.UserID === "" ? null : String(data.UserID);
+    const rawData = coercePayload("Appointments", { ...req.body });
+    if (rawData.UserID !== undefined) {
+      rawData.UserID = rawData.UserID === null || rawData.UserID === "" ? null : String(rawData.UserID);
     }
-    if (data.Status !== undefined) {
-      data.Status = normalizeAppointmentStatus(data.Status);
+    if (rawData.Status !== undefined) {
+      rawData.Status = normalizeAppointmentStatus(rawData.Status);
     }
     try {
-      const existing = await prisma.appointments.findUnique({ where: { id } });
+      let existing = await prisma.appointments.findUnique({ where: { id } });
       if (!existing) {
         return res.status(404).json({ error: "Запись не найдена." });
       }
+      existing = mapPrismaAppointmentToFrontend(existing);
       if (isStaff) {
         const staffBarberName = getIdentityBarberName(req.identity);
         if (!staffBarberName) {
@@ -445,9 +523,9 @@ const registerAdminCrudRoutes = ({
             error: "Недостаточно прав для изменения этой записи.",
           });
         }
-        data.Barber = staffBarberName;
+        rawData.Barber = staffBarberName;
       }
-      const nextAppointment = { ...existing, ...data, id };
+      const nextAppointment = { ...existing, ...rawData, id };
       try {
         await appointmentService.validateAppointmentRecord(nextAppointment, {
           excludeAppointmentId: id,
@@ -461,9 +539,25 @@ const registerAdminCrudRoutes = ({
         }
         throw error;
       }
-      const updated = await prisma.appointments.update({ where: { id }, data });
+      const prismaData = mapFrontendAppointmentToPrisma(rawData);
+      let updated = await prisma.appointments.update({ where: { id }, data: prismaData });
+      updated = mapPrismaAppointmentToFrontend(updated);
       res.json(updated);
       requestRealtimePush(true);
+      // Notify the specific barber about the updated appointment
+      const barberName = normalizeText(updated.Barber);
+      if (barberName) {
+        const allBarbers = await getBarbers({ includeInactive: true });
+        const targetBarber = allBarbers.find((b) => normalizeText(b.name) === barberName);
+        if (targetBarber?.telegramId) {
+          await notifyBarberAboutNewAppointment({
+            appointment: updated,
+            barber: targetBarber,
+            homeUser: { displayName: updated.CustomerName, phone: updated.Phone },
+          }).catch(() => {});
+        }
+      }
+      // Notify the client
       const ownerUserId = await homePushService?.resolveUserIdForAppointment?.(updated);
       if (ownerUserId) {
         const nextStatus = normalizeText(updated.Status);
@@ -531,7 +625,8 @@ const registerAdminCrudRoutes = ({
       return res.status(403).json({ error: "Недостаточно прав для доступа к этому разделу." });
     }
     try {
-      return res.json(await buildScheduleBoard(req.query?.days));
+      const cityId = getCityIdFromReq(req);
+      return res.json(await buildScheduleBoard(req.query?.days, cityId));
     } catch (error) {
       console.error("Schedules fetch error:", error);
       return res.status(500).json({ error: "Не удалось загрузить расписание." });
@@ -562,20 +657,20 @@ const registerAdminCrudRoutes = ({
     }
     try {
       const existing = await prisma.schedules.findFirst({
-        where: { Barber, Date: date },
+        where: { barber: Barber, date: date },
       });
       const result = existing
         ? await prisma.schedules.update({
             where: { id: existing.id },
-            data: { Week: week },
+            data: { week: week },
           })
         : await prisma.schedules.create({
             data: {
               id: randomUUID(),
-              Barber,
-              Week: week,
-              DayOfWeek: data.DayOfWeek,
-              Date: date,
+              barber: Barber,
+              week: week,
+              dayOfWeek: data.DayOfWeek,
+              date: date,
             },
           });
       res.json(result);
@@ -609,7 +704,33 @@ const registerAdminCrudRoutes = ({
       if (tableName === "Positions") {
         queryOptions.include = { children: true };
       }
+      // City filtering for tables that have a cityId column
+      const CITY_FILTERED_TABLES = new Set(["Barbers", "Services", "Positions", "ShopCategories", "ShopProducts", "Users"]);
+      const cityId = getCityIdFromReq(req);
+      if (cityId && CITY_FILTERED_TABLES.has(tableName) && tableName !== "Users") {
+        queryOptions.where = { ...(queryOptions.where || {}), OR: [{ cityId: cityId }, { cityId: null }] };
+      }
       let records = await prisma[modelName].findMany(queryOptions);
+      // City filtering for Users (Users don't have cityId, filter by appointments)
+      if (tableName === "Users" && cityId) {
+        const cityAppointments = await prisma.appointments.findMany({
+          where: { cityId: cityId },
+          select: { userId: true, phone: true },
+        });
+        const userPhonesWithAppointments = new Set(
+          cityAppointments.map((a) => normalizeText(a.phone)).filter(Boolean),
+        );
+        const userIdsWithAppointments = new Set(
+          cityAppointments.map((a) => a.userId).filter(Boolean),
+        );
+        records = records.filter((user) => {
+          if (user.cityId === cityId) return true;
+          if (userIdsWithAppointments.has(user.id)) return true;
+          const normalizedPhone = normalizeText(user.Phone);
+          if (normalizedPhone && userPhonesWithAppointments.has(normalizedPhone)) return true;
+          return false;
+        });
+      }
       if (tableName === "Users" && typeof buildUserInsightsMap === "function") {
         const [appointmentsRaw, blockedUsers] = await Promise.all([
           prisma.appointments.findMany(),
@@ -754,6 +875,20 @@ const registerAdminCrudRoutes = ({
         .json({ error: "Недостаточно прав для создания записей в этом разделе." });
     }
     const payload = coercePayload(tableName, { ...req.body });
+    const CITY_FILTERED_TABLES = new Set([
+      "Barbers",
+      "Services",
+      "Positions",
+      "ShopCategories",
+      "ShopProducts",
+      "ShopOrders",
+      "Appointments",
+      "Schedules",
+    ]);
+    const cityId = getCityIdFromReq(req);
+    if (cityId && CITY_FILTERED_TABLES.has(tableName) && !payload.cityId) {
+      payload.cityId = cityId;
+    }
     if (tableName === "Users") {
       if (payload.TelegramID) {
         const parsed = Number(payload.TelegramID);

@@ -54,10 +54,10 @@ const createBotUserService = ({
             id: normalizeText(user?.id) || safeTelegramId,
             telegramId: safeTelegramId,
           })
-        : { UserID: { in: lookupKeys } };
+        : { userId: { in: lookupKeys } };
     const appointments = await prisma.appointments.findMany({
       where: appointmentWhere,
-      select: { Status: true, Date: true },
+      select: { status: true, date: true },
     });
     const threshold = new Date();
     threshold.setDate(threshold.getDate() - 90);

@@ -755,6 +755,14 @@ const applyTenantSchemaPatch = async (schema, templateSql, connectionString) => 
       ALTER TABLE "Appointments" ADD COLUMN IF NOT EXISTS "Comment" TEXT;
       ALTER TABLE "Appointments" ADD COLUMN IF NOT EXISTS "CoverBs" INTEGER;
       ALTER TABLE "Appointments" ADD COLUMN IF NOT EXISTS "DiscountRub" INTEGER;
+      ALTER TABLE "Appointments" ADD COLUMN IF NOT EXISTS "cityId" TEXT;
+      ALTER TABLE "Schedules" ADD COLUMN IF NOT EXISTS "cityId" TEXT;
+      ALTER TABLE "Barbers" ADD COLUMN IF NOT EXISTS "cityId" TEXT;
+      ALTER TABLE "Positions" ADD COLUMN IF NOT EXISTS "cityId" TEXT;
+      ALTER TABLE "Services" ADD COLUMN IF NOT EXISTS "cityId" TEXT;
+      ALTER TABLE "ShopCategories" ADD COLUMN IF NOT EXISTS "cityId" TEXT;
+      ALTER TABLE "ShopProducts" ADD COLUMN IF NOT EXISTS "cityId" TEXT;
+      ALTER TABLE "ShopOrders" ADD COLUMN IF NOT EXISTS "cityId" TEXT;
     `);
     // Patch Barbers: add lastSeenAt for presence tracking
     await client.query(`
@@ -1135,6 +1143,21 @@ const runPostUpdateDatabaseFixes = async () => {
           ALTER TABLE "public"."Appointments" ADD COLUMN IF NOT EXISTS "CoverBs" INTEGER;
           ALTER TABLE "public"."Appointments" ADD COLUMN IF NOT EXISTS "DiscountRub" INTEGER;
         `);
+      }
+
+      // Add cityId to all core tables in the public schema if they exist
+      const tablesToPatch = ['Appointments', 'Schedules', 'Barbers', 'Positions', 'Services', 'ShopCategories', 'ShopProducts', 'ShopOrders'];
+      for (const t of tablesToPatch) {
+        const check = await publicClient.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = '${t}'
+          );
+        `);
+        if (check.rows[0]?.exists) {
+          await publicClient.query(`ALTER TABLE "public"."${t}" ADD COLUMN IF NOT EXISTS "cityId" TEXT;`);
+        }
       }
     } finally {
       await publicClient.end();

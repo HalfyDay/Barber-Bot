@@ -53,6 +53,8 @@ const TablesWorkspace = ({
   addToast = null,
   pendingShopOrderId = null,
   onClearPendingShopOrderId = null,
+  cities = [],
+  citiesEnabled = false,
 }) => {
   const resolvedDataTables = useMemo(
     () => (Array.isArray(dataTables) && dataTables.length ? dataTables : DEFAULT_DATA_TABLES),
@@ -651,8 +653,10 @@ const TablesWorkspace = ({
           {activeTable === 'Barbers' && (
             <BarbersView
               barbers={barbers}
-              services={services}
+              services={tables.Services || services}
               positions={positions}
+              cities={cities}
+              citiesEnabled={citiesEnabled}
               apiRequest={apiRequest}
               onFieldChange={onBarberFieldChange}
               onSave={onSaveBarber}
@@ -683,7 +687,7 @@ const TablesWorkspace = ({
           )}
           {activeTable === 'Services' && (
             <ServicesView
-              services={services}
+              services={tables.Services || services}
               barbers={barbers}
               onFieldChange={onServiceFieldChange}
               onPriceChange={onServicePriceChange}
@@ -697,7 +701,7 @@ const TablesWorkspace = ({
           {activeTable === 'Positions' && (
             <PositionsView
               positions={positions}
-              services={services}
+              services={tables.Services || services}
               onCreate={onCreatePosition}
               onUpdate={onUpdatePosition}
               onDelete={onDeletePosition}
@@ -716,7 +720,7 @@ const TablesWorkspace = ({
             <LevelView
               positions={positions}
               currentBarber={currentBarber}
-              services={services}
+              services={tables.Services || services}
               apiRequest={apiRequest}
             />
           )}

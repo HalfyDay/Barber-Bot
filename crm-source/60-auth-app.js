@@ -218,6 +218,11 @@ const App = () => {
   const [siteConfig, setSiteConfig] = useState(null);
   const [siteConfigSaving, setSiteConfigSaving] = useState(false);
   const [siteOnlineStats, setSiteOnlineStats] = useState(null);
+  const [cities, setCities] = useState([]);
+  const [activeCityId, setActiveCityIdState] = useState(() => {
+    try { return localStorage.getItem('crm.activeCityId') || null; } catch { return null; }
+  });
+  const [citiesEnabled, setCitiesEnabled] = useState(false);
   const [licenseStatus, setLicenseStatus] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [optionsCache, setOptionsCache] = useState(null);
@@ -302,6 +307,22 @@ const App = () => {
   const isOwner = role === ROLE_OWNER;
   const hasOwnerAccess = isOwner || isCreator;
   const staffBarberId = session?.barberId || null;
+  // City: staff always uses their own cityId from JWT; owner can switch
+  const effectiveCityId = useMemo(() => {
+    if (!citiesEnabled) return null;
+    if (role === ROLE_STAFF) return session?.cityId || null;
+    return activeCityId;
+  }, [citiesEnabled, role, session?.cityId, activeCityId]);
+  const setActiveCityId = useCallback((idOrFunc) => {
+    setActiveCityIdState((prev) => {
+      const nextId = typeof idOrFunc === 'function' ? idOrFunc(prev) : idOrFunc;
+      try {
+        if (nextId) localStorage.setItem('crm.activeCityId', nextId);
+        else localStorage.removeItem('crm.activeCityId');
+      } catch {}
+      return nextId;
+    });
+  }, []);
   let viewTabs = VIEW_TABS_BY_ROLE[role] || VIEW_TABS_BY_ROLE[ROLE_OWNER];
   const dataTables = DATA_TABLES_BY_ROLE[role] || DEFAULT_DATA_TABLES;
   const visibleTableOrder = VISIBLE_TABLE_ORDER_BY_ROLE[role] || DEFAULT_VISIBLE_TABLE_ORDER;
@@ -498,13 +519,15 @@ const App = () => {
     },
     [setSession, rememberSession]
   );
-const apiRequest = useCallback(
+  const apiRequest = useCallback(
     async (endpoint, options = {}) => {
       if (!session?.token) throw new Error('Нет активной сессии');
+      const cityHeader = effectiveCityId ? { 'X-City-Id': effectiveCityId } : {};
       const headers = {
         Accept: 'application/json',
         Authorization: `Bearer ${session.token}`,
         ...(options.body && !options.headers?.['Content-Type'] ? { 'Content-Type': 'application/json' } : {}),
+        ...cityHeader,
         ...(options.headers || {}),
       };
       const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
@@ -523,7 +546,7 @@ const apiRequest = useCallback(
       if (response.status === 204) return null;
       return response.json();
     },
-    [session?.token, handleLogout, handleSessionTokenRefresh]
+    [session?.token, handleLogout, handleSessionTokenRefresh, effectiveCityId]
   );
 
   const handleImpersonate = useCallback(async (businessId, barberId) => {
@@ -652,6 +675,23 @@ const apiRequest = useCallback(
     },
     [apiRequest, canAccessBot, canAccessSystem, session?.token]
   );
+  const fetchCities = useCallback(async () => {
+    if (!session?.token) return;
+    try {
+      const [cityList, citySettings] = await Promise.all([
+        fetch(`${API_BASE_URL}/cities`, { headers: { Authorization: `Bearer ${session.token}` } }).then((r) => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE_URL}/cities/settings`, { headers: { Authorization: `Bearer ${session.token}` } }).then((r) => r.ok ? r.json() : {}).catch(() => {}),
+      ]);
+      setCities(Array.isArray(cityList) ? cityList : []);
+      setCitiesEnabled(citySettings?.citiesEnabled === true);
+      // For owner: if no active city set yet, default to first active city
+      if (citySettings?.citiesEnabled && (role === ROLE_OWNER || role === ROLE_CREATOR)) {
+        setActiveCityId((prev) => prev || citySettings?.defaultCityId || cityList?.[0]?.id || null);
+      }
+    } catch (error) {
+      console.warn('[cities] Fetch failed:', error?.message);
+    }
+  }, [session?.token, role, setActiveCityId]);
   const fetchAll = useCallback(async ({ silent = false } = {}) => {
 	    if (!session?.token) return;
 	    if (!silent) {
@@ -742,9 +782,27 @@ const apiRequest = useCallback(
   );
   useEffect(() => {
     if (session?.token) {
+      fetchCities();
       fetchAllRef.current?.();
     }
-  }, [Boolean(session?.token)]);
+  }, [Boolean(session?.token), fetchCities]);
+
+  const isFirstCityLoadRef = useRef(true);
+  useEffect(() => {
+    if (isFirstCityLoadRef.current) {
+      isFirstCityLoadRef.current = false;
+      return;
+    }
+    if (session?.token) {
+      // Clear stale data from previous city immediately
+      setRealtimeSnapshot(null);
+      setDashboard(null);
+      setOptionsCache(null);
+      setBarbers([]);
+      setServices([]);
+      fetchAll({ silent: true });
+    }
+  }, [effectiveCityId, fetchAll, session?.token]);
   // CRM barber presence ping
   useEffect(() => {
     if (!session?.token || !session?.barberId) return undefined;
@@ -796,6 +854,10 @@ const apiRequest = useCallback(
       return undefined;
     }
     if (typeof EventSource === 'undefined') return undefined;
+
+    // Clear refs on reconnect (city change) to avoid false "new" notifications
+    prevAppointmentIdsRef.current = new Set();
+    prevShopOrderIdsRef.current = new Set();
 
     let reconnectTimeout = null;
     let reconnectDelay = 1000; // Start with 1 second
@@ -867,7 +929,8 @@ const apiRequest = useCallback(
     
     const connectSSE = () => {
       const tokenParam = encodeURIComponent(session.token);
-      const streamUrl = `${API_BASE_URL}/events/stream?token=${tokenParam}`;
+      const cityParam = effectiveCityId ? `&cityId=${encodeURIComponent(effectiveCityId)}` : '';
+      const streamUrl = `${API_BASE_URL}/events/stream?token=${tokenParam}${cityParam}`;
       const eventSource = new EventSource(streamUrl);
       
       eventSource.onopen = () => {
@@ -912,7 +975,7 @@ const apiRequest = useCallback(
         currentSource.close();
       }
     };
-  }, [session?.token, canUseRealtime, addToast]);
+  }, [session?.token, canUseRealtime, effectiveCityId, addToast]);
   const refreshRealtimeViews = useCallback(async () => {
     if (!session?.token) return;
     try {
@@ -1235,6 +1298,7 @@ const handleBarberFieldChange = (id, field, value) => {
       orderIndex: Number(barberData.orderIndex ?? fallbackOrder) || 0,
       role: normalizeRoleValue(barberData.role),
       positionId: barberData.positionId || null,
+      cityId: barberData.cityId || null,
     };
     if (barberData.id) {
       payload.id = barberData.id;
@@ -1245,8 +1309,10 @@ const handleBarberFieldChange = (id, field, value) => {
     if (!barber?.id) return null;
     try {
       const response = await apiRequest(`/barbers/${encodeURIComponent(barber.id)}`, { method: 'PUT', body: JSON.stringify(buildBarberPayload(barber)) });
-      const updatedBarber = { ...barber, ...(response || {}) }; // сохраняем локально выбранный avatarUrl, если сервер его не вернул
+      const updatedBarber = { ...barber, ...(response || {}) };
       setBarbers((prev) => prev.map((item) => (item.id === updatedBarber.id ? { ...item, ...updatedBarber } : item)));
+      // Refresh data to ensure city-filtered lists are up to date
+      fetchAll({ silent: true });
       return updatedBarber;
     } catch (error) {
       setGlobalError(error.message);
@@ -2063,6 +2129,8 @@ const handleBarberFieldChange = (id, field, value) => {
             addToast={addToast}
             pendingShopOrderId={pendingShopOrderId}
             onClearPendingShopOrderId={clearPendingShopOrderId}
+            cities={citiesEnabled ? cities : []}
+            citiesEnabled={citiesEnabled}
           />
         );
       case 'settings':
@@ -2147,6 +2215,7 @@ const handleBarberFieldChange = (id, field, value) => {
             onClearPendingShopOrderId={clearPendingShopOrderId}
             onRequestConfirm={requestConfirm}
             uploadAvatar={handleUploadAvatar}
+            onCitiesChange={fetchCities}
           />
         );
       default:
@@ -2240,6 +2309,11 @@ const handleBarberFieldChange = (id, field, value) => {
           onRefreshNotificationHistory={fetchNotificationHistory}
           unreadCount={unreadCount}
           onMarkNotificationsRead={markNotificationsRead}
+          cities={citiesEnabled ? cities : []}
+          activeCityId={effectiveCityId}
+          onCityChange={setActiveCityId}
+          role={role}
+          citiesEnabled={citiesEnabled}
           onNavigate={async (target, targetTable, recordId, action) => {
             if (action === 'openAppointment' && recordId) {
               try {
@@ -2284,6 +2358,10 @@ const handleBarberFieldChange = (id, field, value) => {
           onRefreshNotificationHistory={fetchNotificationHistory}
           unreadCount={unreadCount}
           onMarkNotificationsRead={markNotificationsRead}
+          cities={citiesEnabled ? cities : []}
+          activeCityId={effectiveCityId}
+          onCityChange={setActiveCityId}
+          role={role}
           onNavigate={async (target, targetTable, recordId, action) => {
             if (action === 'openAppointment' && recordId) {
               try {

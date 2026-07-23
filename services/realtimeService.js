@@ -38,12 +38,27 @@ const createRealtimeService = ({
   };
 
   const broadcastRealtimePayload = (payload, businessId) => {
-    const eventString = formatSseEventString("appointments", payload);
     const key = businessId || "";
-    lastEventStrings.set(key, eventString);
+    lastEventStrings.set(key, payload);
     clients.forEach((client) => {
       if (client.businessId !== businessId) return;
       try {
+        // Filter rows by client's cityId for city-aware clients
+        const filteredPayload = client.cityId
+          ? {
+              ...payload,
+              payload: {
+                ...payload.payload,
+                rows: (payload.payload.rows || []).filter(
+                  (row) => !row.cityId || row.cityId === client.cityId,
+                ),
+                shopOrders: (payload.payload.shopOrders || []).filter(
+                  (order) => !order.cityId || order.cityId === client.cityId,
+                ),
+              },
+            }
+          : payload;
+        const eventString = formatSseEventString("appointments", filteredPayload);
         client.res.write(eventString);
       } catch (error) {
         removeClient(client);
@@ -138,13 +153,29 @@ const createRealtimeService = ({
     });
   };
 
-  const attachClient = ({ req, res, businessId = null }) => {
-    const client = { id: randomUUID(), res, businessId, keepAlive: null };
+  const attachClient = ({ req, res, businessId = null, cityId = null }) => {
+    const client = { id: randomUUID(), res, businessId, cityId, keepAlive: null };
     clients.add(client);
     const key = businessId || "";
-    const cachedEvent = lastEventStrings.get(key);
-    if (cachedEvent) {
-      res.write(cachedEvent);
+    const cachedPayload = lastEventStrings.get(key);
+    if (cachedPayload) {
+      // Filter by cityId if client has one
+      const filteredPayload = client.cityId
+        ? {
+            ...cachedPayload,
+            payload: {
+              ...cachedPayload.payload,
+              rows: (cachedPayload.payload.rows || []).filter(
+                (row) => !row.cityId || row.cityId === client.cityId,
+              ),
+              shopOrders: (cachedPayload.payload.shopOrders || []).filter(
+                (order) => !order.cityId || order.cityId === client.cityId,
+              ),
+            },
+          }
+        : cachedPayload;
+      const eventString = formatSseEventString("appointments", filteredPayload);
+      res.write(eventString);
     } else {
       requestPush(true, businessId);
     }

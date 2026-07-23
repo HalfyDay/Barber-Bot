@@ -76,6 +76,13 @@
     resize: none;
   }
 
+  .crm-app-shell input[type="time"] {
+    color-scheme: dark;
+  }
+  .crm-app-shell input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+
   .crm-app-shell input:focus,
   .crm-app-shell textarea:focus,
   .crm-app-shell select:focus {

@@ -8,6 +8,26 @@ generator client {
   output   = "../generated/prisma-postgresql-client"
 }
 
+model Cities {
+  id         String   @id @default(uuid())
+  name       String
+  slug       String?
+  isActive   Boolean  @default(true)
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  barbers        Barbers[]
+  services       Services[]
+  positions      Positions[]
+  shopCategories ShopCategories[]
+  shopProducts   ShopProducts[]
+  shopOrders     ShopOrders[]
+
+  @@map("Cities")
+}
+
+
 model Users {
   id                   String  @id
   TelegramID           Float?  @map("TelegramID")
@@ -32,34 +52,40 @@ model Users {
 
 model Appointments {
   id                   String   @id
-  CustomerName         String?  @map("CustomerName")
-  Phone                String?  @map("Phone")
-  Barber               String?  @map("Barber")
-  Date                 String?  @map("Date")
-  Time                 String?  @map("Time")
-  Status               String?  @map("Status")
-  Services             String?  @map("Services")
-  Reminder2hClientSent Boolean? @map("Reminder2hClientSent")
-  Reminder2hBarberSent Boolean? @map("Reminder2hBarberSent")
-  UserID               String?  @map("UserID")
-  Comment              String?  @map("Comment")
-  CoverBs              Int?     @map("CoverBs")
-  DiscountRub          Int?     @map("DiscountRub")
+  customerName         String?  @map("CustomerName")
+  phone                String?  @map("Phone")
+  barber               String?  @map("Barber")
+  date                 String?  @map("Date")
+  time                 String?  @map("Time")
+  status               String?  @map("Status")
+  services             String?  @map("Services")
+  reminder2hClientSent Boolean? @map("Reminder2hClientSent")
+  reminder2hBarberSent Boolean? @map("Reminder2hBarberSent")
+  userId               String?  @map("UserID")
+  comment              String?  @map("Comment")
+  coverBs              Int?     @map("CoverBs")
+  discountRub          Int?     @map("DiscountRub")
+  cityId               String?  @map("cityId")
 
+  @@index([cityId])
   @@map("Appointments")
 }
 
+
 model Schedules {
   id        String   @id
-  Barber    String?  @map("Barber")
-  DayOfWeek String?  @map("DayOfWeek")
-  Today     Boolean? @map("Today")
-  Date      String?  @map("Date")
-  Week      String?  @map("Week")
-  Time      String?  @map("Time")
+  barber    String?  @map("Barber")
+  dayOfWeek String?  @map("DayOfWeek")
+  today     Boolean? @map("Today")
+  date      String?  @map("Date")
+  week      String?  @map("Week")
+  time      String?  @map("Time")
+  cityId    String?  @map("cityId")
 
+  @@index([cityId])
   @@map("Schedules")
 }
+
 
 enum BarberRole {
   owner
@@ -89,7 +115,9 @@ model Barbers {
   orderIndex         Int           @default(0)
   role               BarberRole    @default(owner)
   positionId         String?
+  cityId             String?       @map("cityId")
   position           Positions?    @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  city               Cities?       @relation(fields: [cityId], references: [id], onDelete: SetNull)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
   lastSeenAt         DateTime?
@@ -98,9 +126,10 @@ model Barbers {
   levelHistory BarberLevelHistory[]
 }
 
+
 model Positions {
   id                      String   @id
-  name                    String   @unique
+  name                    String
   masterSharePercent      Float?   @default(0)
   orderIndex              Int      @default(0)
   requiredClientVolume    Int?     @default(0)
@@ -109,16 +138,19 @@ model Positions {
   specialConditions       String?
   privileges              String?
   parentId                String?
+  cityId                  String?  @map("cityId")
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
   parent                  Positions?  @relation("PositionHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
   children                Positions[] @relation("PositionHierarchy")
+  city                    Cities?     @relation(fields: [cityId], references: [id], onDelete: SetNull)
   barbers                 Barbers[]
   serviceMaxPrices        PositionServiceMaxPrices[]
   currentLevelHistory     BarberLevelHistory[] @relation("CurrentLevelHistory")
   nextLevelHistory        BarberLevelHistory[] @relation("NextLevelHistory")
 }
+
 
 model Services {
   id          String   @id
@@ -128,12 +160,15 @@ model Services {
   duration    Int      @default(0)
   isActive    Boolean  @default(true)
   orderIndex  Int      @default(0)
+  cityId      String?  @map("cityId")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  city              Cities?                  @relation(fields: [cityId], references: [id], onDelete: SetNull)
   prices            ServicePrices[]
   positionMaxPrices PositionServiceMaxPrices[]
 }
+
 
 model ServicePrices {
   id        String   @id
@@ -307,11 +342,14 @@ model ShopCategories {
   name       String
   isActive   Boolean  @default(true)
   orderIndex Int      @default(0)
+  cityId     String?  @map("cityId")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  city     Cities?       @relation(fields: [cityId], references: [id], onDelete: SetNull)
   products ShopProducts[]
 }
+
 
 model ShopProducts {
   id          String   @id @default(uuid())
@@ -323,13 +361,16 @@ model ShopProducts {
   stock       Int      @default(0)
   isActive    Boolean  @default(true)
   orderIndex  Int      @default(0)
+  cityId      String?  @map("cityId")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  category   ShopCategories?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  city       Cities?          @relation(fields: [cityId], references: [id], onDelete: SetNull)
+  category   ShopCategories?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   orderItems ShopOrderItems[]
   stockEdits ShopStockEdits[]
 }
+
 
 model ShopOrders {
   id             String    @id @default(uuid())
@@ -345,11 +386,14 @@ model ShopOrders {
   issuedById     String?
   issuedByName   String?
   issuedAt       DateTime?
+  cityId         String?   @map("cityId")
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  city  Cities?          @relation(fields: [cityId], references: [id], onDelete: SetNull)
   items ShopOrderItems[]
 }
+
 
 model ShopOrderItems {
   id        String   @id @default(uuid())

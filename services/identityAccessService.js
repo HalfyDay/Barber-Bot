@@ -21,6 +21,7 @@ const createIdentityAccessService = ({
       payload.barberName || payload.displayName || payload.name || "",
     ),
     businessId: payload.businessId || null,
+    cityId: payload.cityId || null,
   });
 
   const resolveRequestIdentity = (req) =>

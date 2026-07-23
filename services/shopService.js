@@ -14,19 +14,20 @@ const createShopService = ({
 
   // ── Categories ──
 
-  const listCategories = async ({ includeInactive = false } = {}) => {
+  const listCategories = async ({ includeInactive = false, cityId = null } = {}) => {
     const where = includeInactive ? {} : { isActive: true };
+    if (cityId) where.OR = [{ cityId }, { cityId: null }];
     return prisma.shopCategories.findMany({
       where,
       orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
     });
   };
 
-  const createCategory = async ({ name, orderIndex = 0 }) => {
+  const createCategory = async ({ name, orderIndex = 0, cityId = null }) => {
     const trimmed = normalizeText(name);
     if (!trimmed) throw new Error("Название категории обязательно.");
     return prisma.shopCategories.create({
-      data: { id: randomUUID(), name: trimmed, orderIndex },
+      data: { id: randomUUID(), name: trimmed, orderIndex, cityId: cityId || null },
     });
   };
 
@@ -35,6 +36,7 @@ const createShopService = ({
     if (patch.name !== undefined) data.name = normalizeText(patch.name);
     if (patch.isActive !== undefined) data.isActive = Boolean(patch.isActive);
     if (patch.orderIndex !== undefined) data.orderIndex = Number(patch.orderIndex);
+    if (patch.cityId !== undefined) data.cityId = patch.cityId || null;
     return prisma.shopCategories.update({ where: { id }, data });
   };
 
@@ -48,10 +50,11 @@ const createShopService = ({
 
   // ── Products ──
 
-  const listProducts = async ({ includeInactive = false, categoryId = null } = {}) => {
+  const listProducts = async ({ includeInactive = false, categoryId = null, cityId = null } = {}) => {
     const where = {};
     if (!includeInactive) where.isActive = true;
     if (categoryId) where.categoryId = categoryId;
+    if (cityId) where.OR = [{ cityId }, { cityId: null }];
     return prisma.shopProducts.findMany({
       where,
       orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
@@ -70,6 +73,7 @@ const createShopService = ({
     categoryId = null,
     stock = 0,
     orderIndex = 0,
+    cityId = null,
   }) => {
     const trimmed = normalizeText(name);
     if (!trimmed) throw new Error("Название товара обязательно.");
@@ -84,6 +88,7 @@ const createShopService = ({
         categoryId: categoryId || null,
         stock: Math.max(0, Number(stock)),
         orderIndex,
+        cityId: cityId || null,
       },
     });
   };
@@ -141,10 +146,18 @@ const createShopService = ({
     return { product: { id: productId, name: product.name, stock: newStock }, delta: numericDelta };
   };
 
-  const getStockAudit = async ({ productId = null, editorId = null, limit = 200 } = {}) => {
+  const getStockAudit = async ({ productId = null, editorId = null, limit = 200, cityId = null } = {}) => {
     const where = {};
     if (productId) where.productId = productId;
     if (editorId) where.editorId = editorId;
+    // If cityId is specified, filter by products in that city
+    if (cityId) {
+      const cityProductIds = (await prisma.shopProducts.findMany({
+        where: { OR: [{ cityId: cityId }, { cityId: null }] },
+        select: { id: true },
+      })).map((p) => p.id);
+      where.productId = { in: cityProductIds };
+    }
     return prisma.shopStockEdits.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -154,9 +167,10 @@ const createShopService = ({
 
   // ── Orders ──
 
-  const listOrders = async ({ status = null, limit = 100 } = {}) => {
+  const listOrders = async ({ status = null, limit = 100, cityId = null } = {}) => {
     const where = {};
     if (status) where.status = status;
+    if (cityId) where.OR = [{ cityId }, { cityId: null }];
     return prisma.shopOrders.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -192,8 +206,9 @@ const createShopService = ({
     paymentMethod = "cash",
     bsAmount = 0,
     comment = "",
+    cityId = null,
   }) => {
-    if (!items.length) throw new Error("Заказ должен содержать хотя бы один товар.");
+    if (!Array.isArray(items) || !items.length) throw new Error("Заказ должен содержать хотя бы один товар.");
 
     const settings = await getShopSettings();
     const maxPerPerson = Number(settings.maxProductsPerPerson) || 0;
@@ -249,9 +264,9 @@ const createShopService = ({
         productId: item.productId,
         productName: product.name,
         delta: -qty,
-        reason: "Заказ",
-        editorId: null,
-        editorName: null,
+        reason: "Оформление заказа",
+        editorId: userId ? normalizeText(userId) : null,
+        editorName: customerName ? normalizeText(customerName) : null,
       });
     }
 
@@ -271,6 +286,7 @@ const createShopService = ({
           bsAmount: Number(bsAmount) || 0,
           comment: normalizeText(comment),
           qrCode,
+          cityId: cityId || null,
           items: { create: orderItems },
         },
       }),
@@ -345,24 +361,35 @@ const createShopService = ({
 
   // ── Settings ──
 
-  const getShopSettings = async () => {
+  const getShopSettings = async ({ cityId = null } = {}) => {
     try {
       const settings = await prisma.siteSettings.findFirst();
       const payload = settings?.payload || {};
       const shop = payload.shop || {};
+      // Per-city settings take priority over global defaults
+      if (cityId && shop.cities && shop.cities[cityId]) {
+        return { ...DEFAULT_SHOP_SETTINGS, ...shop, ...shop.cities[cityId] };
+      }
       return { ...DEFAULT_SHOP_SETTINGS, ...shop };
     } catch {
       return { ...DEFAULT_SHOP_SETTINGS };
     }
   };
 
-  const updateShopSettings = async (patch = {}) => {
-    const current = await getShopSettings();
+  const updateShopSettings = async (patch = {}, cityId = null) => {
+    const current = await getShopSettings({ cityId });
     const merged = { ...current, ...patch };
     try {
       const settings = await prisma.siteSettings.findFirst();
       const payload = settings?.payload || {};
-      payload.shop = merged;
+      if (cityId) {
+        // Store per-city settings under payload.shop.cities.<cityId>
+        if (!payload.shop) payload.shop = {};
+        if (!payload.shop.cities) payload.shop.cities = {};
+        payload.shop.cities[cityId] = { ...(payload.shop.cities[cityId] || {}), ...patch };
+      } else {
+        payload.shop = merged;
+      }
       if (settings) {
         await prisma.siteSettings.update({ where: { id: settings.id }, data: { payload } });
       } else {

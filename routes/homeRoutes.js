@@ -2054,7 +2054,8 @@ const registerHomeRoutes = ({
     try {
       const userId = normalizeText(req.homeUser?.userId);
       if (!userId) return res.sendStatus(401);
-      const payload = await buildHomeAppPayload(userId);
+      const cityId = req.headers?.["x-city-id"] || req.query?.cityId || null;
+      const payload = await buildHomeAppPayload(userId, cityId);
       if (!payload) return res.sendStatus(401);
       return res.json({
         success: true,
@@ -2077,7 +2078,8 @@ const registerHomeRoutes = ({
 
   app.get("/api/home/public", async (req, res) => {
     try {
-      const payload = await buildPublicHomePayload();
+      const cityId = req.headers?.["x-city-id"] || req.query?.cityId || null;
+      const payload = await buildPublicHomePayload(cityId);
       return res.json({
         success: true,
         ...payload,

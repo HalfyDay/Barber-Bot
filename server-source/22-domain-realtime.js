@@ -1,4 +1,4 @@
-const getDashboardSnapshotIdentityKey = (identity = null) => {
+const getDashboardSnapshotIdentityKey = (identity = null, cityId = null) => {
   const safeIdentity = identity || {};
   return JSON.stringify({
     role: normalizeText(safeIdentity.role || ""),
@@ -6,13 +6,14 @@ const getDashboardSnapshotIdentityKey = (identity = null) => {
     username: normalizeText(
       safeIdentity.username || safeIdentity.login || safeIdentity.displayName || safeIdentity.name || "",
     ),
+    cityId: normalizeText(cityId || ""),
   });
 };
 const clearDashboardSnapshotCache = () => {
   dashboardSnapshotCache.clear();
 };
-const buildDashboardSnapshotCached = async (identity = null, { force = false } = {}) => {
-  const cacheKey = getDashboardSnapshotIdentityKey(identity);
+const buildDashboardSnapshotCached = async (identity = null, { force = false, cityId = null } = {}) => {
+  const cacheKey = getDashboardSnapshotIdentityKey(identity, cityId);
   const now = Date.now();
   const cachedEntry = dashboardSnapshotCache.get(cacheKey);
   if (!force && cachedEntry?.value && now - cachedEntry.timestamp < DASHBOARD_SNAPSHOT_CACHE_TTL_MS) {
@@ -24,7 +25,7 @@ const buildDashboardSnapshotCached = async (identity = null, { force = false } =
   }
   const pending = (async () => {
     const startedAt = Date.now();
-    const snapshot = await buildDashboardSnapshot(identity);
+    const snapshot = await buildDashboardSnapshot(identity, { cityId });
     dashboardSnapshotCache.set(cacheKey, {
       value: snapshot,
       timestamp: Date.now(),

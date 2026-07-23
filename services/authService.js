@@ -282,6 +282,7 @@ const createAuthService = ({
       let foundBusinessId = null;
 
       if (req.businessId) {
+        // Single-business login: query barbers with cityId
         const barbers = await prisma.barbers.findMany({
           where: {},
           select: {
@@ -291,6 +292,7 @@ const createAuthService = ({
             phone: true,
             password: true,
             role: true,
+            cityId: true,
           },
         });
         const barber = barbers.find((candidate) => {
@@ -327,6 +329,7 @@ const createAuthService = ({
                 phone: true,
                 password: true,
                 role: true,
+                cityId: true,
               },
             });
             const barber = barbers.find((candidate) => {
@@ -360,6 +363,7 @@ const createAuthService = ({
         barberName: foundBarber.name || foundBarber.login || normalizedPhone || username,
         role: foundBarber.role,
         businessId: foundBusinessId,
+        cityId: foundBarber.cityId || null,
       });
       const token = signSessionToken(identity);
       return res.json({
@@ -371,6 +375,7 @@ const createAuthService = ({
         role: identity.role,
         barberName: identity.barberName,
         phone: foundBarber.phone || null,
+        cityId: foundBarber.cityId || null,
       });
     } catch (error) {
       console.error("Login error:", error);

@@ -42,29 +42,30 @@ const createCatalogConfigService = ({
 
   const normalizeStoredAppointmentStatuses = async () => {
     const rows = await prisma.appointments.findMany({
-      select: { id: true, Status: true },
+      select: { id: true, status: true },
     });
     const updates = rows
       .map((row) => {
-        const nextStatus = normalizeAppointmentStatus(row.Status);
-        const currentStatus = normalizeText(row.Status);
+        const nextStatus = normalizeAppointmentStatus(row.status);
+        const currentStatus = normalizeText(row.status);
         if (currentStatus === nextStatus) {
           return null;
         }
-        return { id: row.id, Status: nextStatus };
+        return { id: row.id, status: nextStatus };
       })
       .filter(Boolean);
     for (const update of updates) {
       await prisma.appointments.update({
         where: { id: update.id },
-        data: { Status: update.Status },
+        data: { status: update.status },
       });
     }
     return { updated: updates.length, total: rows.length };
   };
 
-  const getBarbers = async ({ includeInactive = false } = {}) => {
-    const where = includeInactive ? {} : { isActive: true };
+  const getBarbers = async ({ includeInactive = false, where: extraWhere = {} } = {}) => {
+    const baseWhere = includeInactive ? {} : { isActive: true };
+    const where = { ...baseWhere, ...extraWhere };
     const barbers = await prisma.barbers.findMany({
       where,
       orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
@@ -135,8 +136,9 @@ const createCatalogConfigService = ({
 
   const getBotSettings = async () => ensureBotSettingsRecord();
 
-  const getServiceCatalog = async (includeInactive = true, identity = null) => {
-    const where = includeInactive ? {} : { isActive: true };
+  const getServiceCatalog = async (includeInactive = true, identity = null, extraWhere = {}) => {
+    const baseWhere = includeInactive ? {} : { isActive: true };
+    const where = { ...baseWhere, ...extraWhere };
     let services = await prisma.services.findMany({
       where,
       orderBy: [{ orderIndex: "asc" }, { name: "asc" }],

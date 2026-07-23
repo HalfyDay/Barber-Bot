@@ -52,11 +52,12 @@ const createLevelEvaluationService = ({
     const lastDay = new Date(new Date(nextMonth).getTime() - 86400000);
     const monthEnd = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
 
-    const appointments = await prisma.appointments.findMany({
+    const appointmentsRaw = await prisma.appointments.findMany({
       where: {
-        Date: { gte: monthStart, lte: monthEnd },
+        date: { gte: monthStart, lte: monthEnd },
       },
     });
+    const appointments = appointmentsRaw.map(mapAppointment);
 
     // Filter to this barber's completed appointments
     const barberAppts = appointments.filter((a) => {

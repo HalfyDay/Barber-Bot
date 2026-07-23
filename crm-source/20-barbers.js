@@ -2,6 +2,8 @@ const BarbersView = ({
   barbers = [],
   services = [],
   positions = [],
+  cities = [],
+  citiesEnabled = false,
   apiRequest,
   loadAvatarOptions,
   uploadAvatar,
@@ -802,6 +804,21 @@ const BarbersView = ({
                       buttonClassName="h-12 px-4"
                     />
                   </div>
+                  {/* City selection — only for owners when cities enabled */}
+                  {citiesEnabled && cities.length > 0 && role !== ROLE_STAFF && (
+                    <div className="space-y-2">
+                      <label className="text-sm text-slate-300">Город</label>
+                      <CustomSelect
+                        value={workingBarber.cityId || ''}
+                        onChange={(nextValue) => handleFieldChange('cityId', nextValue || null)}
+                        options={[
+                          { value: '', label: 'Без города' },
+                          ...cities.map((city) => ({ value: city.id, label: city.name })),
+                        ]}
+                        buttonClassName="h-12 px-4"
+                      />
+                    </div>
+                  )}
                 </div>
                 <textarea
                   value={workingBarber.description || ''}

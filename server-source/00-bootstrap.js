@@ -54,6 +54,8 @@ const { registerBotInternalRoutes } = require("./routes/botInternalRoutes");
 const { registerOwnerSystemRoutes } = require("./routes/ownerSystemRoutes");
 const { registerOwnerAssetsRoutes } = require("./routes/ownerAssetsRoutes");
 const { registerServiceCatalogRoutes } = require("./routes/serviceCatalogRoutes");
+const { registerCityRoutes } = require("./routes/cityRoutes");
+const { createCityService } = require("./services/cityService");
 const parseEnvBoolean = (value, fallback = false) => {
   if (value === undefined || value === null || value === "") return fallback;
   const normalized = value.toString().trim().toLowerCase();
@@ -305,7 +307,7 @@ app.use(
       return callback(new Error("Not allowed by CORS"));
     },
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Bot-Internal-Token"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Bot-Internal-Token", "X-City-Id"],
     optionsSuccessStatus: 204,
   }),
 );

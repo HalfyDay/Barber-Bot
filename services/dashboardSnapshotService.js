@@ -45,11 +45,23 @@ const createDashboardSnapshotService = ({
     }
   };
 
-  const buildClientRows = (users, appointments, manualBlockedSet = new Set()) => {
+  const buildClientRows = (
+    users,
+    appointments,
+    manualBlockedSet = new Set(),
+    cityId = null,
+    barbers = [],
+  ) => {
     const now = new Date();
     const yearAgo = new Date(now);
     yearAgo.setFullYear(yearAgo.getFullYear() - 1);
     const warningCutoff = getWarningCutoffDate();
+    const cityBarberNames = new Set(
+      (Array.isArray(barbers) ? barbers : [])
+        .filter((b) => !cityId || !b.cityId || b.cityId === cityId)
+        .map((b) => normalizeText(b.name))
+        .filter(Boolean),
+    );
     const clients = [];
     const appointmentsByUser = new Map();
     appointments.forEach((appt) => {
@@ -75,6 +87,14 @@ const createDashboardSnapshotService = ({
           return false;
         }),
       );
+      if (cityId) {
+        const hasAppointmentsInCity = relatedAppointments.some(
+          (appt) => appt.cityId === cityId,
+        );
+        if (!hasAppointmentsInCity) {
+          return;
+        }
+      }
       const active = relatedAppointments.filter((appt) => appt.isActive);
       const confirmed = relatedAppointments.filter((appt) => appt.isConfirmed);
       const confirmedYear = confirmed.filter(
@@ -104,7 +124,7 @@ const createDashboardSnapshotService = ({
         historyRecords: confirmed.slice(0, 25),
       });
     });
-    const orphanAppointments = appointments.filter((appt) => !appt.UserID);
+    const orphanAppointments = appointments.filter((appt) => !appt.UserID && (!cityId || appt.cityId === cityId));
     orphanAppointments.forEach((appt) => {
       const clientId = `appt-${appt.id}`;
       const exists = clients.some(
@@ -189,25 +209,29 @@ const createDashboardSnapshotService = ({
     return lookup;
   };
 
-  const buildDashboardSnapshot = async (identity = null) => {
+  const buildDashboardSnapshot = async (identity = null, { cityId = null } = {}) => {
+    const barbersAll = await getBarbers({ includeInactive: true });
+    const barbers = cityId ? barbersAll.filter((b) => !b.cityId || b.cityId === cityId) : barbersAll;
+    const cityBarberNames = barbers.map((b) => b.name).filter(Boolean);
+    const appointmentWhere = cityId
+      ? { cityId: cityId }
+      : {};
     const [
       appointmentsRaw,
       users,
-      barbers,
       services,
       settings,
       backups,
       blockedUsers,
       positions,
     ] = await Promise.all([
-      prisma.appointments.findMany(),
+      prisma.appointments.findMany({ where: appointmentWhere }),
       prisma.users.findMany(),
-      getBarbers({ includeInactive: true }),
-      getServiceCatalog(true, identity),
+      getServiceCatalog(true, identity, cityId ? { OR: [{ cityId: cityId }, { cityId: null }] } : {}),
       getBotSettings(),
       listBackups(),
       readBlockedUsers(),
-      prisma.positions.findMany({ include: { children: true } }),
+      prisma.positions.findMany({ ...(cityId ? { where: { OR: [{ cityId: cityId }, { cityId: null }] } } : {}), include: { children: true } }),
     ]);
     const appointments = appointmentsRaw.map(mapAppointment);
     const insightsMap = buildUserInsightsMap
@@ -236,7 +260,7 @@ const createDashboardSnapshotService = ({
     const todaysAppointments = upcoming.filter(
       (appt) => appt.Date === todayKey,
     ).length;
-    const clients = buildClientRows(users, appointments, blockedUsers).map((client) => {
+    const clients = buildClientRows(users, appointments, blockedUsers, cityId, barbers).map((client) => {
       const extra = insightsMap.get(client.id) || {};
       return { ...client, ...extra };
     });
@@ -268,7 +292,7 @@ const createDashboardSnapshotService = ({
         appt.Date >= monthStartKey,
     ).length;
     const barberLookup = new Map();
-    barbers.forEach((barber) => {
+    barbersAll.forEach((barber) => {
       const variants = [
         barber?.id,
         barber?.name,

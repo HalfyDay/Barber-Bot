@@ -15,8 +15,8 @@ const createMockPrisma = ({
     schedules: {
       async findFirst({ where }) {
         if (!scheduleWeek) return null;
-        if (where?.Barber && where?.Date) {
-          return { Week: scheduleWeek };
+        if (where?.barber && where?.date) {
+          return { week: scheduleWeek };
         }
         return null;
       },
@@ -24,9 +24,9 @@ const createMockPrisma = ({
     appointments: {
       async findMany({ where }) {
         return rows.filter((row) => {
-          if (where?.Barber && row.Barber !== where.Barber) return false;
-          if (where?.Date && row.Date !== where.Date) return false;
-          if (where?.UserID && row.UserID !== where.UserID) return false;
+          if (where?.barber && row.barber !== where.barber) return false;
+          if (where?.date && row.date !== where.date) return false;
+          if (where?.userId && row.userId !== where.userId) return false;
           if (where?.id?.not && row.id === where.id.not) return false;
           return true;
         });
@@ -107,10 +107,10 @@ test("validateAppointmentRecord rejects occupied slots for active appointments",
     appointments: [
       {
         id: "busy-1",
-        Barber: "Alex",
-        Date: "2026-03-20",
-        Time: "10:00 - 11:00",
-        Status: "Активная",
+        barber: "Alex",
+        date: "2026-03-20",
+        time: "10:00 - 11:00",
+        status: "Активная",
       },
     ],
   });
@@ -118,10 +118,10 @@ test("validateAppointmentRecord rejects occupied slots for active appointments",
   await assert.rejects(
     service.validateAppointmentRecord({
       id: "new-1",
-      Barber: "Alex",
-      Date: "2026-03-20",
-      Time: "10:00 - 11:00",
-      Status: "Активная",
+      barber: "Alex",
+      date: "2026-03-20",
+      time: "10:00 - 11:00",
+      status: "Активная",
     }),
     (error) => error?.code === "SLOT_TAKEN",
   );
@@ -132,10 +132,10 @@ test("validateAppointmentRecord allows updating the same appointment when exclud
     appointments: [
       {
         id: "same-id",
-        Barber: "Alex",
-        Date: "2026-03-20",
-        Time: "10:00 - 11:00",
-        Status: "Активная",
+        barber: "Alex",
+        date: "2026-03-20",
+        time: "10:00 - 11:00",
+        status: "Активная",
       },
     ],
   });
@@ -143,10 +143,10 @@ test("validateAppointmentRecord allows updating the same appointment when exclud
   const result = await service.validateAppointmentRecord(
     {
       id: "same-id",
-      Barber: "Alex",
-      Date: "2026-03-20",
-      Time: "10:00 - 11:00",
-      Status: "Активная",
+      barber: "Alex",
+      date: "2026-03-20",
+      time: "10:00 - 11:00",
+      status: "Активная",
     },
     { excludeAppointmentId: "same-id" },
   );
@@ -160,10 +160,10 @@ test("validateAppointmentRecord skips validation for non-active statuses", async
   });
 
   const result = await service.validateAppointmentRecord({
-    Barber: "Alex",
-    Date: "bad-date",
-    Time: "invalid",
-    Status: "Отмена",
+    barber: "Alex",
+    date: "bad-date",
+    time: "invalid",
+    status: "Отмена",
   });
 
   assert.deepEqual(result, { mode: "skip" });
@@ -180,11 +180,11 @@ test("createHomeAppointment writes through prisma transaction", async () => {
     appointments: [
       {
         id: "existing-1",
-        UserID: "user-2",
-        Barber: "Alex",
-        Date: dateKey,
-        Time: "12:00 - 13:00",
-        Status: "Активная",
+        userId: "user-2",
+        barber: "Alex",
+        date: dateKey,
+        time: "12:00 - 13:00",
+        status: "Активная",
       },
     ],
   });
@@ -207,13 +207,13 @@ test("createHomeAppointment writes through prisma transaction", async () => {
       bookingLimit: 2,
       minLeadHours: 1,
     },
-    activeStatus: "Активная",
+    activestatus: "Активная",
   });
 
   assert.equal(created.id, "test-id");
-  assert.equal(created.Barber, "Alex");
-  assert.equal(created.Time, "10:00 - 11:00");
-  assert.equal(created.Services, "Haircut");
-  assert.equal(created.Reminder2hClientSent, false);
-  assert.equal(created.Reminder2hBarberSent, false);
+  assert.equal(created.barber, "Alex");
+  assert.equal(created.time, "10:00 - 11:00");
+  assert.equal(created.services, "Haircut");
+  assert.equal(created.reminder2hClientSent, false);
+  assert.equal(created.reminder2hBarberSent, false);
 });

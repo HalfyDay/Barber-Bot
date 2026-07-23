@@ -153,7 +153,7 @@ test("notification reminder service sends client and barber 2-hour reminders", a
   assert.equal(sentRequests.length, 2);
   assert.deepEqual(
     appointmentUpdates.map((item) => item.data),
-    [{ Reminder2hClientSent: true }, { Reminder2hBarberSent: true }],
+    [{ reminder2hClientSent: true }, { reminder2hBarberSent: true }],
   );
 });
 

@@ -57,8 +57,9 @@ const registerShopRoutes = ({
 
   app.get("/api/shop/products", async (req, res) => {
     try {
-      const products = await listProducts({ includeInactive: false });
-      const categories = await listCategories({ includeInactive: false });
+      const cityId = req.headers["x-city-id"] || req.query?.cityId || null;
+      const products = await listProducts({ includeInactive: false, cityId });
+      const categories = await listCategories({ includeInactive: false, cityId });
       res.json({ success: true, products, categories });
     } catch (error) {
       logger.error("Shop products error:", error.message);
@@ -68,7 +69,8 @@ const registerShopRoutes = ({
 
   app.get("/api/shop/categories", async (req, res) => {
     try {
-      const categories = await listCategories({ includeInactive: false });
+      const cityId = req.headers["x-city-id"] || req.query?.cityId || null;
+      const categories = await listCategories({ includeInactive: false, cityId });
       res.json({ success: true, categories });
     } catch (error) {
       logger.error("Shop categories error:", error.message);
@@ -82,6 +84,7 @@ const registerShopRoutes = ({
       if (!Array.isArray(items) || !items.length) {
         return res.status(400).json({ success: false, message: "Заказ должен содержать товары." });
       }
+      const cityId = req.headers["x-city-id"] || req.query?.cityId || null;
       const order = await createOrder({
         customerName,
         customerPhone,
@@ -90,6 +93,7 @@ const registerShopRoutes = ({
         paymentMethod,
         bsAmount,
         comment,
+        cityId,
       });
       const usedBs = Number(bsAmount) || 0;
       if (usedBs > 0 && userId && typeof adjustUserBsBalance === "function") {
@@ -267,8 +271,9 @@ const registerShopRoutes = ({
 
   app.get("/api/shop/panel/products", requireAuth, async (req, res) => {
     try {
+      const cityId = req.headers["x-city-id"] || req.query?.cityId || null;
       const includeInactive = isOwnerRequest(req);
-      const products = await listProducts({ includeInactive });
+      const products = await listProducts({ includeInactive, cityId });
       res.json({ success: true, products });
     } catch (error) {
       logger.error("Shop panel products error:", error.message);
@@ -278,7 +283,8 @@ const registerShopRoutes = ({
 
   app.post("/api/shop/panel/products", requireAuth, requireOwner, async (req, res) => {
     try {
-      const product = await createProduct(req.body || {});
+      const cityId = req.headers["x-city-id"] || req.query?.cityId || null;
+      const product = await createProduct({ ...(req.body || {}), cityId: req.body?.cityId || cityId });
       res.json({ success: true, product });
     } catch (error) {
       logger.error("Shop panel create product error:", error.message);
@@ -332,8 +338,9 @@ const registerShopRoutes = ({
 
   app.get("/api/shop/panel/categories", requireAuth, async (req, res) => {
     try {
+      const cityId = req.headers["x-city-id"] || req.query?.cityId || null;
       const includeInactive = isOwnerRequest(req);
-      const categories = await listCategories({ includeInactive });
+      const categories = await listCategories({ includeInactive, cityId });
       res.json({ success: true, categories });
     } catch (error) {
       logger.error("Shop panel categories error:", error.message);
@@ -343,7 +350,8 @@ const registerShopRoutes = ({
 
   app.post("/api/shop/panel/categories", requireAuth, requireOwner, async (req, res) => {
     try {
-      const category = await createCategory(req.body || {});
+      const cityId = req.headers["x-city-id"] || req.query?.cityId || null;
+      const category = await createCategory({ ...(req.body || {}), cityId: req.body?.cityId || cityId });
       res.json({ success: true, category });
     } catch (error) {
       logger.error("Shop panel create category error:", error.message);
@@ -375,8 +383,9 @@ const registerShopRoutes = ({
 
   app.get("/api/shop/panel/orders", requireAuth, async (req, res) => {
     try {
+      const cityId = req.headers["x-city-id"] || req.query?.cityId || null;
       const { status, limit } = req.query || {};
-      const orders = await listOrders({ status: status || null, limit: limit || 100 });
+      const orders = await listOrders({ status: status || null, limit: limit || 100, cityId });
       res.json({ success: true, orders });
     } catch (error) {
       logger.error("Shop panel orders error:", error.message);
@@ -478,7 +487,8 @@ const registerShopRoutes = ({
 
   app.get("/api/shop/panel/stock", requireAuth, async (req, res) => {
     try {
-      const products = await listProducts({ includeInactive: isOwnerRequest(req) });
+      const cityId = req.headers["x-city-id"] || req.query?.cityId || null;
+      const products = await listProducts({ includeInactive: isOwnerRequest(req), cityId });
       res.json({ success: true, products });
     } catch (error) {
       logger.error("Shop panel stock error:", error.message);
@@ -506,7 +516,8 @@ const registerShopRoutes = ({
   app.get("/api/shop/panel/stock/audit", requireAuth, async (req, res) => {
     try {
       const { productId, editorId, limit } = req.query || {};
-      const audit = await getStockAudit({ productId, editorId, limit: limit || 200 });
+      const cityId = req.headers["x-city-id"] || req.query?.cityId || null;
+      const audit = await getStockAudit({ productId, editorId, limit: limit || 200, cityId });
       res.json({ success: true, audit });
     } catch (error) {
       logger.error("Shop panel stock audit error:", error.message);
@@ -518,7 +529,8 @@ const registerShopRoutes = ({
 
   app.get("/api/shop/panel/settings", requireAuth, requireOwner, async (req, res) => {
     try {
-      const settings = await getShopSettings();
+      const cityId = req.headers["x-city-id"] || req.query?.cityId || null;
+      const settings = await getShopSettings({ cityId });
       res.json({ success: true, settings });
     } catch (error) {
       logger.error("Shop panel settings error:", error.message);
@@ -528,7 +540,8 @@ const registerShopRoutes = ({
 
   app.patch("/api/shop/panel/settings", requireAuth, requireOwner, async (req, res) => {
     try {
-      const settings = await updateShopSettings(req.body || {});
+      const cityId = req.headers["x-city-id"] || req.query?.cityId || null;
+      const settings = await updateShopSettings(req.body || {}, cityId);
       res.json({ success: true, settings });
     } catch (error) {
       logger.error("Shop panel settings update error:", error.message);

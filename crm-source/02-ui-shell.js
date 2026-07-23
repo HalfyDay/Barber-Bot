@@ -534,7 +534,7 @@ const Modal = ({ title, isOpen, onClose, children, footer, maxWidthClass = 'max-
           className={classNames(
             'crm-modal-surface flex min-h-0 w-full flex-col overflow-hidden',
             isOpen ? 'crm-modal-surface-open' : 'crm-modal-surface-close',
-            sheetOnMobile ? 'sm:max-w-md' : maxWidthClass,
+            sheetOnMobile ? `${maxWidthClass} crm-sheet-fullwidth` : maxWidthClass,
             sheetOnMobile
               ? 'h-[100dvh] max-h-[100dvh] rounded-none sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-[32px]'
               : 'h-auto max-h-[calc(100dvh-2rem)] rounded-[28px] sm:max-h-[calc(100dvh-3rem)] sm:rounded-[32px]'

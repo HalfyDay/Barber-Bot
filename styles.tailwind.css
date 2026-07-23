@@ -83,6 +83,12 @@
     filter: invert(1);
   }
 
+  @media (max-width: 639px) {
+    .crm-sheet-fullwidth {
+      max-width: none !important;
+    }
+  }
+
   .crm-app-shell input:focus,
   .crm-app-shell textarea:focus,
   .crm-app-shell select:focus {

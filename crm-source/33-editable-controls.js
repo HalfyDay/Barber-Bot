@@ -321,7 +321,7 @@ const AppointmentTimeField = ({
             onChange={manualEndEnabled ? handleEndChange : undefined}
             readOnly={!manualEndEnabled}
             tabIndex={manualEndEnabled ? 0 : -1}
-            className="crm-sheet-control crm-sheet-time h-11 min-w-0 w-full px-3 pr-10 text-center text-white"
+            className="crm-sheet-control crm-sheet-time h-11 min-w-0 w-full px-3 pr-10 text-white"
           />
           <button
             type="button"

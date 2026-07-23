@@ -394,7 +394,7 @@ const App = () => {
       setPendingTableView(target);
       setActiveTab('tables');
     },
-    [setActiveTab, setPendingTableView]
+    [setActiveTab, setActiveDataTable, setPendingTableView]
   );
   const handleActiveTableSync = useCallback(
     (tableId) => {

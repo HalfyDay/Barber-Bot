@@ -138,7 +138,7 @@ const TablesWorkspace = ({
     }
   }, [sharedOptions]);
   useEffect(() => {
-    if (!TABLE_CONFIG[activeTable] || !resolvedVisibleTables.includes(activeTable)) {
+    if (!TABLE_CONFIG[activeTable] || (!resolvedVisibleTables.includes(activeTable) && activeTable !== 'Shop')) {
       setActiveTable(resolvedVisibleTables[0] || 'Appointments');
     }
   }, [activeTable, resolvedVisibleTables, setActiveTable]);
@@ -160,7 +160,8 @@ const TablesWorkspace = ({
       onPreferredTableConsumed?.();
       return;
     }
-    if (resolvedVisibleTables.includes(nextTable)) {
+    // Allow Shop to be set even if not in visible tables (accessed from dashboard)
+    if (resolvedVisibleTables.includes(nextTable) || nextTable === 'Shop') {
       setActiveTable(nextTable);
     }
     if (nextTable === 'Appointments' && preferredTable && typeof preferredTable === 'object') {

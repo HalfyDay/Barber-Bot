@@ -1,14 +1,5 @@
 const BotControlView = ({
-  status,
-  settings,
   backups = [],
-  messages = [],
-  onToggleEnabled,
-  onStart,
-  onStop,
-  onRestart,
-  onSaveSettings,
-  onSaveMessage,
   onRestoreBackup,
   onCreateBackup,
   onDeleteBackup,
@@ -19,56 +10,18 @@ const BotControlView = ({
   onRestartSystem,
   pendingReloadReason = null,
   systemBusy,
-  onUpdateToken = null,
-  viewMode = 'bot',
-  token = null,
+  viewMode = 'system',
   siteConfig = null,
   siteSaving = false,
   onSaveSite = null,
   role = ROLE_OWNER,
   session = null,
 }) => {
-  const [description, setDescription] = useState(settings?.botDescription || '');
-  const [about, setAbout] = useState(settings?.aboutText || '');
-  const [tokenDraft, setTokenDraft] = useState(token || '');
-  const [savingToken, setSavingToken] = useState(false);
-  const [showToken, setShowToken] = useState(false);
-  const descriptionRef = useRef(null);
-  const aboutRef = useRef(null);
   const autosizeTextArea = useCallback((element) => {
     if (!element) return;
     element.style.height = 'auto';
     element.style.height = `${element.scrollHeight}px`;
   }, []);
-  useEffect(() => {
-    setDescription(settings?.botDescription || '');
-    setAbout(settings?.aboutText || '');
-  }, [settings]);
-  useEffect(() => {
-    setTokenDraft(token || '');
-    setShowToken(false);
-  }, [token]);
-  useLayoutEffect(() => {
-    if (viewMode !== 'bot') return undefined;
-    const frame = requestAnimationFrame(() => {
-      autosizeTextArea(descriptionRef.current);
-      autosizeTextArea(aboutRef.current);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [viewMode, description, about, autosizeTextArea]);
-  const handleTokenSave = useCallback(async () => {
-    if (!onUpdateToken) return;
-    const value = (tokenDraft || '').trim();
-    if (!value) return;
-    setSavingToken(true);
-    try {
-      await onUpdateToken(value);
-    } catch (error) {
-      console.warn('Bot token update failed', error);
-    } finally {
-      setSavingToken(false);
-    }
-  }, [onUpdateToken, tokenDraft]);
   const updateAvailable = Boolean(updateInfo?.available ?? updateInfo?.updateAvailable);
   const currentVersionLabel =
     updateInfo?.currentVersionLabel || updateInfo?.currentVersion || updateInfo?.version || '-';
@@ -81,10 +34,6 @@ const BotControlView = ({
     (updateAvailable ? 'Доступно обновление' : updateInfo ? 'Установлена актуальная версия' : 'Нет данных');
   const updateSourceLabel = updateInfo?.source || null;
   const updateSourceUrl = updateInfo?.sourceUrl || null;
-  const botRunning = Boolean(status?.running);
-  const normalizedTokenDraft = (tokenDraft || '').trim();
-  const currentTokenValue = token || '';
-  const canSaveToken = Boolean(onUpdateToken && normalizedTokenDraft && normalizedTokenDraft !== currentTokenValue);
   const restartDisabled = systemBusy || typeof onRestartSystem !== 'function';
   const updateButtonLabel = systemBusy && pendingReloadReason !== 'restart' ? 'Обновление…' : 'Обновить';
   const restartButtonLabel = systemBusy && pendingReloadReason === 'restart' ? 'Перезапуск…' : 'Перезапуск';
@@ -137,11 +86,9 @@ const BotControlView = ({
     if (!onSaveSite) return;
     await onSaveSite({ timeZones: { crm: timeZoneDraft, client: timeZoneDraft } });
   }, [onSaveSite, timeZoneDraft]);
-  if (viewMode === 'system') {
-    return (
-      <div className="space-y-6">
-        {showTimeZoneSettings && (
-          <SectionCard title="Время и часовой пояс">
+  return (
+    <div className="space-y-6">
+      <SectionCard title="Время и часовой пояс">
             <div className="crm-soft-card flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
               <label className="min-w-0 flex-1 space-y-2">
                 <span className="block text-sm text-[var(--crm-text)]">Часовой пояс</span>
@@ -171,7 +118,6 @@ const BotControlView = ({
               </button>
             </div>
           </SectionCard>
-        )}
         {showAdminSystemControls && (
           <>
             <BackupsPanel backups={backups} onRestore={onRestoreBackup} onCreate={onCreateBackup} onDelete={onDeleteBackup} />
@@ -249,151 +195,6 @@ const BotControlView = ({
           </>
         )}
       </div>
-    );
-  }
-  return (
-    <div className="space-y-6">
-      <SectionCard
-        title="Статус бота"
-        actions={
-          <div className="flex gap-1.5 text-sm">
-            {!botRunning && (
-              <button
-                type="button"
-                onClick={onStart}
-                aria-label="Запустить"
-                className="crm-action-btn inline-flex h-11 w-11 min-h-0 shrink-0 items-center justify-center rounded-full p-0 sm:h-10 sm:w-auto sm:px-4 sm:py-2"
-              >
-                <span className="sm:hidden" aria-hidden="true">
-                  <svg viewBox="0 0 20 20" className="h-5 w-5 fill-current">
-                    <path d="M6 4.75a.75.75 0 0 1 1.14-.64l7 4.25a.75.75 0 0 1 0 1.28l-7 4.25A.75.75 0 0 1 6 13.25v-8.5Z" />
-                  </svg>
-                </span>
-                <span className="sr-only sm:hidden">Запустить</span>
-                <span className="hidden sm:inline">Запустить</span>
-              </button>
-            )}
-            {botRunning && (
-              <button
-                type="button"
-                onClick={onStop}
-                aria-label="Остановить"
-                className="crm-danger-btn inline-flex h-11 w-11 min-h-0 shrink-0 items-center justify-center rounded-full p-0 sm:h-10 sm:w-auto sm:px-4 sm:py-2"
-              >
-                <span className="sm:hidden" aria-hidden="true">
-                  <svg viewBox="0 0 20 20" className="h-5 w-5 fill-current">
-                    <rect x="4.25" y="4.25" width="11.5" height="11.5" rx="1.5" />
-                  </svg>
-                </span>
-                <span className="sr-only sm:hidden">Остановить</span>
-                <span className="hidden sm:inline">Остановить</span>
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onRestart}
-              aria-label="Перезапустить"
-              className="crm-tonal-btn inline-flex h-11 w-11 min-h-0 shrink-0 items-center justify-center rounded-full p-0 sm:h-10 sm:w-auto sm:px-4 sm:py-2"
-            >
-              <span className="sm:hidden" aria-hidden="true">
-                <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15.5 7.5A6 6 0 0 0 5 5.5" />
-                  <path d="M15.5 7.5v-3h-3" />
-                  <path d="M4.5 12.5A6 6 0 0 0 15 14.5" />
-                  <path d="M4.5 12.5v3h3" />
-                </svg>
-              </span>
-              <span className="sr-only sm:hidden">Перезапустить</span>
-              <span className="hidden sm:inline">Перезапустить</span>
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-1">
-            <p className="text-sm text-[var(--crm-text)]">
-              Состояние: <span className="font-semibold text-white">{status?.running ? 'работает' : 'остановлен'}</span>
-            </p>
-            <label className="inline-flex items-center gap-2 text-sm text-[var(--crm-text)]">
-              <input
-                type="checkbox"
-                name="botEnabled"
-                aria-label="Автостарт вместе с CRM"
-                checked={settings?.isBotEnabled !== false}
-                onChange={(event) => onToggleEnabled(event.target.checked)}
-                className="crm-toggle-check"
-              />
-              Автостарт вместе с CRM
-            </label>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm text-[var(--crm-text)]">Telegram-токен</label>
-            <div className="flex items-center gap-2">
-            <div className="relative min-w-0 flex-1">
-              <input
-                name="botToken"
-                aria-label="Telegram-токен"
-                type={showToken ? 'text' : 'password'}
-                value={tokenDraft}
-                onChange={(event) => setTokenDraft(event.target.value)}
-                className="w-full rounded-[20px] border-0 bg-[color:var(--crm-surface-2)] px-3 py-2 pr-16 font-mono text-sm text-white focus:outline-none"
-                placeholder="1234567890:ABC-DEF"
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <button
-                type="button"
-                aria-label={showToken ? 'Скрыть токен' : 'Показать токен'}
-                onClick={() => setShowToken((prev) => !prev)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full text-[var(--crm-muted)] hover:text-white"
-              >
-                <EyeIcon open={showToken} />
-              </button>
-            </div>
-            <button
-              onClick={handleTokenSave}
-              disabled={!canSaveToken || savingToken}
-              className="crm-action-btn h-11 flex-none px-4 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {savingToken ? 'Сохранение...' : 'Сохранить'}
-            </button>
-          </div>
-          {!token && (
-              <p className="text-xs text-[var(--crm-muted)]">
-              Укажите токен и сохраните изменения — CRM сохранит этот ключ в базе и перезапустит/остановит бота автоматически.
-            </p>
-          )}
-          </div>
-        </div>
-      </SectionCard>
-      <SectionCard title="Тексты бота">
-        <div className="space-y-4">
-          <div>
-            <label className="text-sm text-[var(--crm-text)]">Описание лендинга</label>
-            <textarea
-              ref={descriptionRef}
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={1}
-              className="w-full resize-none rounded-[20px] border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-3 py-2 text-white"
-            />
-          </div>
-          <div>
-            <label className="text-sm text-[var(--crm-text)]">Блок «О нас»</label>
-            <textarea
-              ref={aboutRef}
-              value={about}
-              onChange={(event) => setAbout(event.target.value)}
-              rows={1}
-              className="w-full resize-none rounded-[20px] border border-[color:var(--crm-outline)] bg-[color:var(--crm-surface-2)] px-3 py-2 text-white"
-            />
-          </div>
-          <button onClick={() => onSaveSettings({ botDescription: description, aboutText: about })} className="crm-action-btn px-4 py-2">
-            Сохранить тексты
-          </button>
-        </div>
-      </SectionCard>
-    </div>
   );
 };
 const CreatorBusinessesView = ({ apiRequest, onImpersonate, role }) => {
@@ -1756,10 +1557,10 @@ const CityManagementPanel = ({ apiRequest, onCitiesChange }) => {
     </SectionCard>
   );
 };
-const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
+const SystemSettingsView = ({ section = 'settings', onSectionChange, ...props }) => {
   const role = props.role || ROLE_OWNER;
   const sections = getSystemSubSections(role, props.session?.isImpersonated);
-  const activeSection = sections.some((tab) => tab.id === section) ? section : (sections[0]?.id || 'bot');
+  const activeSection = sections.some((tab) => tab.id === section) ? section : (sections[0]?.id || 'settings');
 
   useEffect(() => {
     if (activeSection !== section) {
@@ -1793,11 +1594,7 @@ const SystemSettingsView = ({ section = 'bot', onSectionChange, ...props }) => {
 
   return (
     <div className="space-y-4">
-      {activeSection === 'site' ? (
-        <SiteSettingsView {...props} />
-      ) : (
-        <BotControlView {...props} viewMode={activeSection} />
-      )}
+      <SiteSettingsView {...props} />
     </div>
   );
 };

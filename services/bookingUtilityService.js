@@ -75,14 +75,6 @@ const createBookingUtilityService = ({
     );
   };
 
-  const toTelegramIdNumber = (value) => {
-    const text = normalizeText(value);
-    if (!text) return null;
-    const parsed = Number(text);
-    if (!Number.isFinite(parsed)) return null;
-    return parsed;
-  };
-
   const coercePayload = (tableName, payload) => {
     const numericList = numericFields[tableName] || [];
     const booleanList = booleanFields[tableName] || [];
@@ -162,7 +154,6 @@ const createBookingUtilityService = ({
   return {
     normalizeAppointmentStatus,
     resolveSupportedStatus,
-    toTelegramIdNumber,
     coercePayload,
     respondWithAppointmentDomainError,
     buildDateWindow,

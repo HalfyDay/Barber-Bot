@@ -32,7 +32,6 @@ const {
   verifyTokenGracefully,
   authenticateToken,
   authenticateStream,
-  authenticateBotInternal,
   signHomeSessionToken,
   authenticateHomeToken,
   handleLoginOptions,
@@ -45,7 +44,6 @@ const {
   homeJwtSecret: HOME_JWT_SECRET,
   homeTokenExpiresIn: HOME_TOKEN_EXPIRES_IN,
   homeTokenRefreshThresholdMs: HOME_TOKEN_REFRESH_THRESHOLD_MS,
-  botInternalApiToken: BOT_INTERNAL_API_TOKEN,
   resolveUserIdentity,
   normalizeText,
   normalizePhone,
@@ -61,8 +59,6 @@ const HOME_PROFILE_SELECT = {
   ...HOME_USER_SELECT,
   LastNameChanged: true,
   homePhoneChangedAt: true,
-  homeTelegramChangedAt: true,
-  TelegramID: true,
 };
 const { listBackups, createBackup, restoreBackup } = createBackupService({
   fs,
@@ -77,8 +73,6 @@ const {
   seedServicesFromCost,
   getBarbers,
   propagateBarberRename,
-  ensureBotSettingsRecord,
-  getBotSettings,
   getServiceCatalog,
   getHomeBookingSettings,
 } = createCatalogConfigService({
@@ -87,8 +81,6 @@ const {
   normalizeText,
   canonicalizeKey,
   normalizeAppointmentStatus,
-  DEFAULT_BOT_DESCRIPTION,
-  DEFAULT_ABOUT_TEXT,
   buildBarberLookup,
   resolveBarberIdFromLookup,
   filterServicesForIdentity,
@@ -104,76 +96,6 @@ ensureBootstrapData().catch(() => {}).finally(() => {
   getBarbers({ includeInactive: true }).catch((error) =>
     console.warn("Initial barbers preload failed:", error.message),
   );
-});
-ensureBotSettingsRecord().catch((error) =>
-  console.warn("Initial bot settings preload failed:", error.message),
-);
-const {
-  buildBotInternalError,
-  getUserBookingSummaryByTelegram,
-  registerOrUpdateBotUser,
-  updateBotUserNameByTelegram,
-  updateBotUserPhoneByTelegram,
-  listBotAvailabilityDates,
-  listBotAvailabilityTimes,
-} = createBotUserService({
-  prisma,
-  randomUUID,
-  normalizeText,
-  normalizePhone,
-  toTelegramIdNumber,
-  findAnyUserByTelegramId,
-  findAnyUserByPhone,
-  getHomeBookingSettings,
-  getBarbers,
-  buildDateWindow,
-  appointmentService,
-  formatDateOnly,
-  isActiveStatus,
-  isCompletedStatus,
-  normalizeAppointmentStatus,
-  statusNoShow: STATUS_NO_SHOW,
-});
-const telegramAuthService = createTelegramAuthService({
-  prisma,
-  normalizeText,
-  normalizePhone,
-  getRequestById: getTelegramAuthRequestById,
-  getRequestByCode: getTelegramAuthRequestByCode,
-  updateRequestById: updateTelegramAuthRequestById,
-  markExpiredRequests: markExpiredTelegramAuthRequests,
-  findUserByTelegramId: findAnyUserByTelegramId,
-  findUserByPhone: findAnyUserByPhone,
-  toTelegramIdNumber,
-  buildError: buildBotInternalError,
-  flowLogin: TELEGRAM_AUTH_FLOW_LOGIN,
-  flowProfileLink: TELEGRAM_AUTH_FLOW_PROFILE_LINK,
-  statusPending: TELEGRAM_AUTH_STATUS_PENDING,
-  statusCompleted: TELEGRAM_AUTH_STATUS_COMPLETED,
-  statusFailed: TELEGRAM_AUTH_STATUS_FAILED,
-  statusExpired: TELEGRAM_AUTH_STATUS_EXPIRED,
-});
-const { processBotInternalTelegramAuthStart, processBotInternalTelegramAuthPhone } =
-  telegramAuthService;
-const {
-  botRuntime,
-  serializeBotRuntime,
-  readBotToken,
-  writeBotToken,
-  startBotProcess,
-  stopBotProcess,
-  ensureBotProcessState,
-} = createBotRuntimeService({
-  spawn,
-  pathExistsSync: fs.existsSync,
-  processEnv: process.env,
-  cwd: __dirname,
-  pythonExecutable,
-  botScriptPath,
-  getBotSettings,
-  ensureBotSettingsRecord,
-  prisma,
-  normalizeText,
 });
 const {
   getUserMeta,
@@ -203,7 +125,6 @@ const {
   readBlockedUsers,
   getServiceCatalog,
   getBarbers,
-  getBotSettings,
   mapAppointment,
   splitServiceList,
   getServicePriceForBarber,
@@ -235,7 +156,6 @@ const {
   prisma,
   getBarbers,
   getServiceCatalog,
-  getBotSettings,
   listBackups,
   readBlockedUsers,
   mapAppointment,
@@ -256,18 +176,10 @@ const {
   canonicalizeKey,
   getWarningCutoffDate,
   warningBlockThreshold: WARNING_BLOCK_THRESHOLD,
-  botRuntime,
   buildUserInsightsMap,
   statusNoShow: STATUS_NO_SHOW,
 });
 const dashboardSnapshotCache = new Map();
-const {
-  loadBotMenu: loadBotMenuFromDb,
-  saveBotMenu: saveBotMenuToDb,
-} = createBotMenuService({
-  prisma,
-  randomUUID,
-});
 const shopService = createShopService({
   prisma,
   randomUUID,

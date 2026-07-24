@@ -103,8 +103,6 @@ const TablesWorkspace = ({
     (Array.isArray(clients) ? clients : []).forEach((client) => {
       const variants = [
         client?.id,
-        client?.telegramId,
-        client?.TelegramID,
         client?.phone,
         client?.Phone,
         client?.name,
@@ -355,7 +353,6 @@ const TablesWorkspace = ({
       rows = rows.map((row) => {
         const match =
           clientInsightsLookup.get(normalizeText(row.id).toLowerCase()) ||
-          clientInsightsLookup.get(normalizeText(row.TelegramID).toLowerCase()) ||
           clientInsightsLookup.get(normalizeText(row.Phone).toLowerCase()) ||
           clientInsightsLookup.get(normalizeText(row.Name).toLowerCase()) ||
           null;
@@ -366,7 +363,6 @@ const TablesWorkspace = ({
       rows = rows.map((row) => {
         const match =
           clientInsightsLookup.get(normalizeText(row.UserID).toLowerCase()) ||
-          clientInsightsLookup.get(normalizeText(row.TelegramID).toLowerCase()) ||
           clientInsightsLookup.get(normalizeText(row.Phone).toLowerCase()) ||
           clientInsightsLookup.get(normalizeText(row.CustomerName).toLowerCase()) ||
           null;
@@ -654,7 +650,7 @@ const TablesWorkspace = ({
           {activeTable === 'Barbers' && (
             <BarbersView
               barbers={barbers}
-              services={tables.Services || services}
+              services={services}
               positions={positions}
               cities={cities}
               citiesEnabled={citiesEnabled}
@@ -688,7 +684,7 @@ const TablesWorkspace = ({
           )}
           {activeTable === 'Services' && (
             <ServicesView
-              services={tables.Services || services}
+              services={services}
               barbers={barbers}
               onFieldChange={onServiceFieldChange}
               onPriceChange={onServicePriceChange}
@@ -702,7 +698,7 @@ const TablesWorkspace = ({
           {activeTable === 'Positions' && (
             <PositionsView
               positions={positions}
-              services={tables.Services || services}
+              services={services}
               onCreate={onCreatePosition}
               onUpdate={onUpdatePosition}
               onDelete={onDeletePosition}
@@ -721,7 +717,7 @@ const TablesWorkspace = ({
             <LevelView
               positions={positions}
               currentBarber={currentBarber}
-              services={tables.Services || services}
+              services={services}
               apiRequest={apiRequest}
             />
           )}
@@ -880,7 +876,7 @@ const TablesWorkspace = ({
               options={dropdownOptions}
               tableId={activeTable}
               clients={clients}
-              hiddenFields={activeTable === 'Appointments' ? ['UserID', 'Reminder2hClientSent', 'Reminder2hBarberSent'] : activeTable === 'Users' ? ['TelegramID', 'Barber'] : []}
+              hiddenFields={activeTable === 'Appointments' ? ['UserID', 'Reminder2hClientSent', 'Reminder2hBarberSent'] : activeTable === 'Users' ? ['Barber'] : []}
             />
           )}
         </>

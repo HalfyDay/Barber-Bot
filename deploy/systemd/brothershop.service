@@ -9,7 +9,6 @@ User=brothershop
 Group=brothershop
 WorkingDirectory=/opt/brothershop
 Environment=NODE_ENV=production
-Environment=BOT_PYTHON_PATH=/opt/brothershop/.venv/bin/python
 EnvironmentFile=/opt/brothershop/.env
 ExecStart=/usr/bin/node /opt/brothershop/server.js
 ExecStartPost=/bin/bash /opt/brothershop/scripts/systemd-healthcheck.sh
@@ -23,4 +22,3 @@ StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-

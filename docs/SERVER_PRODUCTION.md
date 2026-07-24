@@ -19,15 +19,13 @@ TLS note:
 - Systemd service: `brothershop`
 - Systemd user/group: `brothershop:brothershop`
 - Node entrypoint: `/opt/brothershop/server.js`
-- Python bot entrypoint: `/opt/brothershop/BotBrotherShop.py`
-- Python venv: `/opt/brothershop/.venv`
 
 ## Runtime
 
 - App runtime: `PRISMA_RUNTIME=postgres`
 - Prisma schema: `prisma/schema.postgresql.prisma`
 - Live application no longer uses `prisma/dev.db`
-- PostgreSQL is the active runtime for CRM, site, bot, reminders, backup, and CRM-triggered updates
+- PostgreSQL is the active runtime for CRM, site, reminders, backup, and CRM-triggered updates
 
 ## Environment Notes
 
@@ -40,8 +38,6 @@ Important production env keys:
 - `POSTGRES_SHADOW_DATABASE_URL=...`
 - `JWT_SECRET=...`
 - `HOME_JWT_SECRET=...`
-- `BOT_INTERNAL_API_TOKEN=...`
-- `BOT_PYTHON_PATH=/opt/brothershop/.venv/bin/python`
 - `APP_TIMEZONE=Asia/Irkutsk`
 - `POSTGRES_PG_DUMP_PATH=/usr/bin/pg_dump`
 - `POSTGRES_PSQL_PATH=/usr/bin/psql`

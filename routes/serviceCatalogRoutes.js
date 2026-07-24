@@ -82,7 +82,8 @@ const registerServiceCatalogRoutes = ({
     }
     try {
       const cityId = req.headers?.['x-city-id'] || req.query?.cityId || null;
-      const payload = { ...(req.body || {}), cityId };
+      const payload = { ...(req.body || {}) };
+      if (cityId) payload.cityId = cityId;
       await upsertServiceWithPrices(null, payload);
       let services = await getServiceCatalog(true);
       if (cityId) {

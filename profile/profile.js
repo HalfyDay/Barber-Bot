@@ -1,14 +1,10 @@
 ﻿(function () {
   const HOME_API_BASE_URL = `${window.location.origin}/api/home/auth`;
   const HOME_PROFILE_API_URL = `${window.location.origin}/api/home/profile`;
-  const HOME_PROFILE_TELEGRAM_START_API_URL = `${HOME_PROFILE_API_URL}/telegram/start`;
-  const HOME_PROFILE_TELEGRAM_STATUS_API_URL = `${HOME_PROFILE_API_URL}/telegram/status`;
-  const HOME_PROFILE_TELEGRAM_UNLINK_API_URL = `${HOME_PROFILE_API_URL}/telegram/unlink`;
   const SESSION_STORAGE_KEY = "home-user-session";
   const REMEMBER_STORAGE_KEY = "home-user-remember";
   const LOGOUT_MARKER_STORAGE_KEY = "home-user-logout-marker";
   const LOGIN_PAGE_URL = "/login/";
-  const TELEGRAM_POLL_INTERVAL_MS = 2000;
 
   const profileForm = document.getElementById("profile-form");
   const profileDisplayNameInput = document.getElementById("profile-display-name");
@@ -22,12 +18,8 @@
   const profileCancelButton = document.getElementById("profile-cancel");
   const profileNameLimit = document.getElementById("profile-name-limit");
   const profilePhoneLimit = document.getElementById("profile-phone-limit");
-  const profileTelegramLimit = document.getElementById("profile-telegram-limit");
   const profileSaveButton = document.getElementById("profile-save");
   const profileStatus = document.getElementById("profile-status");
-  const telegramStatus = document.getElementById("profile-telegram-status");
-  const telegramLinkButton = document.getElementById("profile-telegram-link");
-  const telegramUnlinkButton = document.getElementById("profile-telegram-unlink");
   const logoutButton = document.getElementById("profile-logout");
 
   const isReady =
@@ -43,12 +35,8 @@
     profileCancelButton &&
     profileNameLimit &&
     profilePhoneLimit &&
-    profileTelegramLimit &&
     profileSaveButton &&
     profileStatus &&
-    telegramStatus &&
-    telegramLinkButton &&
-    telegramUnlinkButton &&
     logoutButton;
 
   if (!isReady) return;
@@ -59,9 +47,6 @@
     profile: null,
     editing: false,
     passwordChangeEnabled: false,
-    telegramRequestId: "",
-    telegramPollTimer: null,
-    telegramPending: false,
   };
 
   const getStorageArea = (type) => {
@@ -179,11 +164,6 @@
     lastChangedAt: normalizeText(limit?.lastChangedAt) || null,
     nextAllowedAt: normalizeText(limit?.nextAllowedAt) || null,
   });
-  const normalizeTelegramLimit = (limit) => ({
-    isLocked: false,
-    lastChangedAt: normalizeText(limit?.lastChangedAt) || null,
-    nextAllowedAt: null,
-  });
 
   const buildSessionPayload = (payload = {}) => ({
     token: normalizeText(payload.token),
@@ -250,13 +230,6 @@
     window.location.replace(LOGIN_PAGE_URL);
   };
 
-  const stopTelegramPolling = () => {
-    if (state.telegramPollTimer) {
-      window.clearTimeout(state.telegramPollTimer);
-      state.telegramPollTimer = null;
-    }
-  };
-
   const setStatus = (message, type = "default") => {
     profileStatus.textContent = normalizeText(message);
     profileStatus.classList.remove("is-error", "is-ok");
@@ -314,19 +287,6 @@
     profileSaveButton.disabled = pending;
     profileCancelButton.disabled = pending;
     profilePasswordToggle.disabled = pending;
-  };
-
-  const updateTelegramButtons = () => {
-    const linked = Boolean(state.profile?.telegramLinked);
-    telegramLinkButton.hidden = linked;
-    telegramUnlinkButton.hidden = !linked;
-    telegramLinkButton.disabled = state.telegramPending;
-    telegramUnlinkButton.disabled = state.telegramPending;
-  };
-
-  const setTelegramPending = (isPending) => {
-    state.telegramPending = Boolean(isPending);
-    updateTelegramButtons();
   };
 
   const setSessionFromToken = (nextToken) => {
@@ -396,11 +356,9 @@
       id: normalizeText(safeUser.id),
       phone: normalizePhone(safeUser.phone),
       displayName: normalizeText(safeUser.displayName),
-      telegramLinked: Boolean(normalizeText(safeUser.telegramId) || safeUser.telegramLinked),
       limits: {
         name: normalizeLimit(safeLimits.name),
         phone: normalizeLimit(safeLimits.phone),
-        telegram: normalizeTelegramLimit(safeLimits.telegram),
       },
     };
 
@@ -409,52 +367,8 @@
 
     setHint(profileNameLimit, state.profile.limits.name, "изменить ФИО");
     setHint(profilePhoneLimit, state.profile.limits.phone, "изменить телефон");
-    setHint(profileTelegramLimit, state.profile.limits.telegram, "изменить Telegram");
-
-    telegramStatus.textContent = state.profile.telegramLinked
-      ? "Telegram привязан"
-      : "Telegram не привязан";
 
     setEditingMode(false);
-    updateTelegramButtons();
-  };
-
-  const scheduleTelegramPolling = () => {
-    stopTelegramPolling();
-    if (!state.telegramRequestId) return;
-    state.telegramPollTimer = window.setTimeout(() => {
-      void pollTelegramLinkStatus();
-    }, TELEGRAM_POLL_INTERVAL_MS);
-  };
-
-  const pollTelegramLinkStatus = async () => {
-    if (!state.telegramRequestId) return;
-    try {
-      const payload = await apiRequest(
-        `${HOME_PROFILE_TELEGRAM_STATUS_API_URL}?requestId=${encodeURIComponent(
-          state.telegramRequestId,
-        )}`,
-      );
-      if (!payload?.done) {
-        scheduleTelegramPolling();
-        return;
-      }
-      state.telegramRequestId = "";
-      stopTelegramPolling();
-      setTelegramPending(false);
-      if (payload?.success && payload?.user) {
-        renderProfile(payload.user);
-        setStatus("Telegram обновлен.", "ok");
-        return;
-      }
-      setStatus(
-        normalizeText(payload?.message) || "Не удалось завершить обновление Telegram.",
-        "error",
-      );
-    } catch {
-      if (!state.telegramRequestId) return;
-      scheduleTelegramPolling();
-    }
   };
 
   const handleEditStart = () => {
@@ -549,57 +463,7 @@
     }
   };
 
-  const handleTelegramLink = async () => {
-    if (state.telegramPending || state.profile?.telegramLinked) return;
-    setStatus("");
-    setTelegramPending(true);
-    stopTelegramPolling();
-    state.telegramRequestId = "";
-    try {
-      const payload = await apiRequest(HOME_PROFILE_TELEGRAM_START_API_URL, {
-        method: "POST",
-      });
-      const requestId = normalizeText(payload?.requestId);
-      const botLink = normalizeText(payload?.botLink);
-      if (!requestId) {
-        setStatus("Не удалось запустить привязку Telegram.", "error");
-        setTelegramPending(false);
-        return;
-      }
-      state.telegramRequestId = requestId;
-      if (!botLink) {
-        setStatus("Не удалось открыть Telegram-бота. Попробуйте позже.", "error");
-        setTelegramPending(false);
-        return;
-      }
-      window.open(botLink, "_blank", "noopener,noreferrer");
-      setStatus("Подтвердите действие в Telegram и вернитесь на сайт.");
-      scheduleTelegramPolling();
-    } catch (error) {
-      setStatus(error?.message || "Не удалось запустить привязку Telegram.", "error");
-      setTelegramPending(false);
-    }
-  };
-
-  const handleTelegramUnlink = async () => {
-    if (state.telegramPending || !state.profile?.telegramLinked) return;
-    setStatus("");
-    setTelegramPending(true);
-    try {
-      const payload = await apiRequest(HOME_PROFILE_TELEGRAM_UNLINK_API_URL, {
-        method: "POST",
-      });
-      renderProfile(payload?.user || {});
-      setStatus("Telegram отвязан.", "ok");
-    } catch (error) {
-      setStatus(error?.message || "Не удалось отвязать Telegram.", "error");
-    } finally {
-      setTelegramPending(false);
-    }
-  };
-
   const handleLogout = () => {
-    stopTelegramPolling();
     persistLogoutMarker();
     clearSessionPayload();
     redirectToLogin();
@@ -616,10 +480,7 @@
       setPasswordChangeEnabled(!state.passwordChangeEnabled);
       setStatus("");
     });
-    telegramLinkButton.addEventListener("click", handleTelegramLink);
-    telegramUnlinkButton.addEventListener("click", handleTelegramUnlink);
     logoutButton.addEventListener("click", handleLogout);
-    window.addEventListener("beforeunload", stopTelegramPolling);
 
     const persisted = loadPersistedSession();
     state.remember = persisted.remember;

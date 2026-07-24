@@ -4,17 +4,8 @@ const registerOwnerSystemRoutes = ({
   isOwnerRequest,
   ensureLicenseValid,
   getLicenseStatus,
-  getBotSettings,
-  readBotToken,
-  serializeBotRuntime,
-  ensureBotSettingsRecord,
   prisma,
-  startBotProcess,
-  stopBotProcess,
-  ensureBotProcessState,
   normalizeText,
-  writeBotToken,
-  botRuntime,
   checkForUpdates,
   getUpdateInProgress,
   performSystemUpdate,
@@ -48,86 +39,6 @@ const registerOwnerSystemRoutes = ({
         details: error.message,
         status: getLicenseStatus(),
       });
-    }
-  });
-
-  app.get("/api/bot/status", authenticateToken, async (req, res) => {
-    if (!isOwnerRequest(req)) {
-      return res
-        .status(403)
-        .json({ error: "Недостаточно прав для управления ботом." });
-    }
-    const settings = await getBotSettings();
-    const token = await readBotToken();
-    res.json({ status: serializeBotRuntime(), settings, token });
-  });
-
-  app.post("/api/bot/status", authenticateToken, async (req, res) => {
-    if (!isOwnerRequest(req)) {
-      return res
-        .status(403)
-        .json({ error: "Недостаточно прав для управления ботом." });
-    }
-    const { action, isBotEnabled } = req.body || {};
-    try {
-      const currentSettings = await ensureBotSettingsRecord();
-      const nextIsBotEnabled =
-        typeof isBotEnabled === "boolean"
-          ? isBotEnabled
-          : action === "start"
-            ? true
-            : action === "stop"
-              ? false
-              : null;
-      if (typeof nextIsBotEnabled === "boolean") {
-        await prisma.botSettings.update({
-          where: { id: currentSettings.id },
-          data: { isBotEnabled: nextIsBotEnabled, lastSyncSource: "site" },
-        });
-      }
-      let actionHandled = false;
-      if (action === "start") {
-        await startBotProcess();
-        actionHandled = true;
-      } else if (action === "stop") {
-        await stopBotProcess();
-        actionHandled = true;
-      } else if (action === "restart") {
-        await stopBotProcess();
-        await startBotProcess();
-        actionHandled = true;
-      }
-      if (!actionHandled) {
-        await ensureBotProcessState();
-      }
-      const settings = await getBotSettings();
-      res.json({ status: serializeBotRuntime(), settings });
-    } catch (error) {
-      console.error("Bot status update failed:", error);
-      res.status(500).json({ error: "Не удалось изменить статус бота." });
-    }
-  });
-
-  app.put("/api/bot/token", authenticateToken, async (req, res) => {
-    if (!isOwnerRequest(req)) {
-      return res
-        .status(403)
-        .json({ error: "Недостаточно прав для изменения токена." });
-    }
-    const candidate = normalizeText(req.body?.token);
-    if (!candidate) {
-      return res.status(400).json({ error: "Укажите токен бота." });
-    }
-    try {
-      const token = await writeBotToken(candidate);
-      if (botRuntime.running) {
-        await stopBotProcess();
-        await startBotProcess();
-      }
-      res.json({ token });
-    } catch (error) {
-      console.error("Bot token update failed:", error);
-      res.status(500).json({ error: "Не удалось обновить токен бота." });
     }
   });
 

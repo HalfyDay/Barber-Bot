@@ -160,8 +160,6 @@ const createAppointmentService = ({
     }
     pushUserId(userLike?.id);
     pushUserId(userLike?.userId);
-    pushUserId(userLike?.telegramId);
-    pushUserId(userLike?.TelegramID);
     pushName(userLike?.Name);
     pushName(userLike?.name);
     pushName(userLike?.displayName);

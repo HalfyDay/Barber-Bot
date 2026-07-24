@@ -9,7 +9,6 @@ const createHomeClientStoreService = ({
   readBlockedUsers,
   getServiceCatalog,
   getBarbers,
-  getBotSettings,
   mapAppointment,
   splitServiceList,
   getServicePriceForBarber,
@@ -58,8 +57,7 @@ const createHomeClientStoreService = ({
   const buildBookableBarbersPayload = async (barbers = [], services = [], options = {}) => {
     const safeBarbers = Array.isArray(barbers) ? barbers : [];
     if (!safeBarbers.length) return [];
-    const settings = await getBotSettings();
-    const dateWindowKeys = buildDateWindowKeys(settings?.maxDaysAhead);
+    const dateWindowKeys = buildDateWindowKeys(options.maxDaysAhead);
     const activeScheduleRows = dateWindowKeys.length
       ? await prisma.schedules.findMany({
           where: {
@@ -1105,11 +1103,10 @@ const createHomeClientStoreService = ({
   const buildReferralPayload = async (user) => {
     const safeUserId = normalizeText(user?.id);
     if (!safeUserId) return null;
-    const [store, users, appointmentsRaw, settings, site] = await Promise.all([
+    const [store, users, appointmentsRaw, site] = await Promise.all([
       readStore(),
       prisma.users.findMany(),
       prisma.appointments.findMany(),
-      getBotSettings().catch(() => null),
       getPersistedSiteSettings(),
     ]);
     const referralProgram = site.referral || DEFAULT_SITE_CONFIG.referral;
@@ -1250,7 +1247,7 @@ const createHomeClientStoreService = ({
         title: referralProgram.pageTitle,
         text: referralProgram.introText,
         participationText: referralProgram.participationText,
-        bookingLimit: settings?.bookingLimit || null,
+        bookingLimit: 2,
       },
       program: {
         friendDiscountRub: Math.max(0, Number(referralProgram.friendDiscountRub) || 0),
@@ -1760,10 +1757,7 @@ const createHomeClientStoreService = ({
   };
 
   const buildPublicHomePayload = async (cityId = null) => {
-    const [site, botSettings] = await Promise.all([
-      getSiteSettings(cityId),
-      getBotSettings().catch(() => null),
-    ]);
+    const site = await getSiteSettings(cityId);
     const { barbers, services } = await buildCatalogHelpers(cityId);
     const bookingBarbers = await buildBookableBarbersPayload(barbers, services, { includeServices: true });
     return {
@@ -1775,7 +1769,6 @@ const createHomeClientStoreService = ({
         ...site,
         auth: {
           ...(site?.auth && typeof site.auth === "object" ? site.auth : {}),
-          telegramEnabled: botSettings?.isBotEnabled !== false,
           vkIdEnabled: site?.auth?.vkIdEnabled === true,
           vkIdAppId: normalizeText(site?.auth?.vkIdAppId) || normalizeText(process.env.VK_ID_APP_ID) || "",
         },

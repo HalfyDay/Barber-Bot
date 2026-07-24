@@ -8,17 +8,13 @@ const createServerLifecycleService = ({
   backupDir,
   fs,
   backupRetentionDays,
-  stopAppointmentReminderLoop,
   stopRealtimeLoop,
   shutdownRealtimeClients,
   shutdownHomeRealtimeClients,
-  stopBotProcess,
   stopHttpServer,
   prisma,
   processObj = process,
   ensureUsersHomeAuthColumns,
-  ensureTelegramAuthRequestsTable,
-  markExpiredTelegramAuthRequests,
   ensureLicenseValid,
   startLicenseWatcher,
   runPostUpdateDatabaseFixes,
@@ -26,8 +22,6 @@ const createServerLifecycleService = ({
   ensureBootstrapData,
   normalizeStoredAppointmentStatuses,
   seedServicesFromCost,
-  ensureBotProcessState,
-  startAppointmentReminderLoop,
   runRealtimePush,
   ensureRealtimeLoop,
   app,
@@ -89,7 +83,6 @@ const createServerLifecycleService = ({
     
     try {
       // 1. Stop accepting new connections
-      stopAppointmentReminderLoop();
       stopRealtimeLoop();
       
       // 2. Notify SSE clients about upcoming restart
@@ -99,17 +92,14 @@ const createServerLifecycleService = ({
       } catch (e) {
         // Non-fatal
       }
-      
-      // 3. Stop bot process
-      await stopBotProcess();
-      
-      // 4. Drain HTTP connections (give in-flight requests time to complete)
+
+      // 3. Drain HTTP connections (give in-flight requests time to complete)
       await stopHttpServer();
-      
-      // 5. Disconnect Prisma
+
+      // 4. Disconnect Prisma
       await prisma.$disconnect();
       
-      // 6. If PM2, signal readiness for graceful reload
+      // 5. If PM2, signal readiness for graceful reload
       if (isPm2 && processObj.send) {
         console.log('[shutdown] Signaling PM2 readiness');
         processObj.send('ready');
@@ -133,8 +123,6 @@ const createServerLifecycleService = ({
   const bootstrap = async () => {
     try {
       await ensureUsersHomeAuthColumns();
-      await ensureTelegramAuthRequestsTable();
-      await markExpiredTelegramAuthRequests();
       try {
         await ensureLicenseValid(true);
       } catch (licenseError) {
@@ -159,8 +147,6 @@ const createServerLifecycleService = ({
         );
       }
       await seedServicesFromCost();
-      await ensureBotProcessState();
-      startAppointmentReminderLoop();
       await runRealtimePush(true);
       ensureRealtimeLoop();
       const server = app.listen(port, () => {

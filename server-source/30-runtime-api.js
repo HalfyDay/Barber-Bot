@@ -22,7 +22,6 @@ const performSystemUpdate = async () => {
     console.log("[update] performSystemUpdate: stopping services...");
     stopRealtimeLoop();
     shutdownRealtimeClients();
-    await stopBotProcess();
     try {
       await prisma.$disconnect();
       prismaDisconnected = true;
@@ -52,14 +51,6 @@ const performSystemUpdate = async () => {
       }
       if (realtimeWasRunning) {
         ensureRealtimeLoop();
-      }
-      try {
-        await ensureBotProcessState();
-      } catch (cleanupError) {
-        console.error(
-          "Failed to restore bot process state after update error:",
-          cleanupError?.message || cleanupError,
-        );
       }
     }
     throw error;
@@ -114,9 +105,7 @@ const scheduleSelfRestart = (delayMs = 500) => {
   if (isPm2 && process.env.pm_id !== undefined) {
     setTimeout(async () => {
       try {
-        stopAppointmentReminderLoop();
         stopRealtimeLoop();
-        await stopBotProcess();
         // DON'T shutdown realtime clients or HTTP server — let PM2 handle the swap
         // DON'T disconnect Prisma — let the process exit naturally
       } catch (error) {
@@ -132,10 +121,8 @@ const scheduleSelfRestart = (delayMs = 500) => {
   setTimeout(async () => {
     let relaunched = false;
     try {
-      stopAppointmentReminderLoop();
       stopRealtimeLoop();
       shutdownRealtimeClients();
-      await stopBotProcess();
       await stopHttpServer();
       await prisma.$disconnect();
     } catch (error) {
@@ -174,7 +161,6 @@ const scheduleSelfRestart = (delayMs = 500) => {
       restartScheduled = false;
       updateInProgress = false;
       ensureRealtimeLoop();
-      await ensureBotProcessState();
       return;
     }
     const healthResult = await waitForPostRestartHealth();
@@ -198,30 +184,6 @@ const scheduleSelfRestart = (delayMs = 500) => {
     process.exit(0);
   }, delayMs);
 };
-const {
-  sendTelegramMessage,
-  notifyBarberAboutNewAppointment,
-  startAppointmentReminderLoop,
-  stopAppointmentReminderLoop,
-} = createNotificationReminderService({
-  normalizeText,
-  readBotToken,
-  runtimeFetch,
-  prisma,
-  formatDateOnly,
-  parseDateTime,
-  parseTimeRangeParts,
-  parseZonedDateTime,
-  listUsersWithHaircutReminderState,
-  markUserHaircutReminderSent,
-  getUserBookingSummaryByTelegram,
-  getBotSettings,
-  homePushService,
-  appointmentRetentionDays: APPOINTMENT_RETENTION_DAYS,
-  appointmentReminderIntervalMs: APPOINTMENT_REMINDER_INTERVAL_MS,
-  statusActive: STATUS_ACTIVE,
-  logger: console,
-});
 app.get("/api/login/options", handleLoginOptions);
 app.post("/api/login", handleLogin);
 app.get("/api/auth/me", authenticateToken, (req, res) => {
@@ -245,7 +207,6 @@ registerHomeRoutes({
   hashHomePassword,
   verifyHomePassword,
   findHomeUserByPhone,
-  findHomeUserByTelegramId,
   findHomeUserById,
   shouldHydrateUserNameFromHome,
   HOME_USER_SELECT,
@@ -255,7 +216,6 @@ registerHomeRoutes({
   buildHomeIdentity,
   signHomeSessionToken,
   buildLimitBlockedMessage,
-  getBotSettings,
   getUserMeta,
   findUserIdByVkId,
   updateUserMeta,
@@ -268,18 +228,6 @@ registerHomeRoutes({
   buildHomeAppPayload,
   buildPublicHomePayload,
   getSiteSettings,
-  TELEGRAM_BOT_USERNAME,
-  markExpiredTelegramAuthRequests,
-  createTelegramAuthRequest,
-  getTelegramAuthRequestById,
-  updateTelegramAuthRequestById,
-  deleteTelegramAuthRequestById,
-  TELEGRAM_AUTH_FLOW_LOGIN,
-  TELEGRAM_AUTH_FLOW_PROFILE_LINK,
-  TELEGRAM_AUTH_STATUS_COMPLETED,
-  TELEGRAM_AUTH_STATUS_FAILED,
-  TELEGRAM_AUTH_STATUS_EXPIRED,
-  toTelegramIdNumber,
   resolveHomeAssetPath,
   getServiceCatalog,
   resolveHomeBookingUser,
@@ -289,39 +237,12 @@ registerHomeRoutes({
   buildDateWindow,
   STATUS_ACTIVE,
   STATUS_CANCELLED,
-  notifyBarberAboutNewAppointment,
   requestRealtimePush: requestUnifiedRealtimePush,
   parseDateTime,
   touchSitePresenceSession,
   removeSitePresenceSession,
   attachHomeRealtimeClient,
   homePushService,
-});
-registerBotInternalRoutes({
-  app,
-  authenticateBotInternal,
-  normalizeText,
-  normalizePhone,
-  prisma,
-  getBotSettings,
-  getBarbers,
-  getServiceCatalog,
-  getUserBookingSummaryByTelegram,
-  registerOrUpdateBotUser,
-  updateBotUserNameByTelegram,
-  updateBotUserPhoneByTelegram,
-  processBotInternalTelegramAuthStart,
-  processBotInternalTelegramAuthPhone,
-  listBotAvailabilityDates,
-  listBotAvailabilityTimes,
-  STATUS_ACTIVE,
-  STATUS_CANCELLED,
-  getHomeBookingSettings,
-  randomUUID,
-  appointmentService,
-  notifyBarberAboutNewAppointment,
-  requestRealtimePush: requestUnifiedRealtimePush,
-  parseDateTime,
 });
 app.use("/api", (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -350,17 +271,8 @@ registerOwnerSystemRoutes({
   isOwnerRequest,
   ensureLicenseValid,
   getLicenseStatus,
-  getBotSettings,
-  readBotToken,
-  serializeBotRuntime,
-  ensureBotSettingsRecord,
   prisma,
-  startBotProcess,
-  stopBotProcess,
-  ensureBotProcessState,
   normalizeText,
-  writeBotToken,
-  botRuntime,
   checkForUpdates,
   getUpdateInProgress: () => updateInProgress,
   performSystemUpdate,
@@ -515,13 +427,10 @@ registerOwnerAssetsRoutes({
   ensureUniqueImageName,
   fs,
   path,
-  CARD_IMAGE_DIR,
   normalizeText,
   getExistingImageFilename,
   listMenuImages,
   MENU_IMAGE_DIR,
-  loadBotMenu: loadBotMenuFromDb,
-  saveBotMenu: saveBotMenuToDb,
   prisma,
 });
 app.get("/api/events/stream", authenticateStream, (req, res) => {
@@ -743,7 +652,6 @@ registerAdminCrudRoutes({
   adjustUserBsBalance,
   addUserWarning,
   homePushService,
-  notifyBarberAboutNewAppointment,
   splitServiceList,
   buildServiceLookup,
   getServicePriceForBarber,
@@ -869,17 +777,13 @@ const {
   backupDir: BACKUP_DIR,
   fs,
   backupRetentionDays: BACKUP_RETENTION_DAYS,
-  stopAppointmentReminderLoop,
   stopRealtimeLoop,
   shutdownRealtimeClients,
   shutdownHomeRealtimeClients,
-  stopBotProcess,
   stopHttpServer,
   prisma,
   processObj: process,
   ensureUsersHomeAuthColumns,
-  ensureTelegramAuthRequestsTable,
-  markExpiredTelegramAuthRequests,
   ensureLicenseValid,
   startLicenseWatcher,
   runPostUpdateDatabaseFixes,
@@ -887,8 +791,6 @@ const {
   ensureBootstrapData,
   normalizeStoredAppointmentStatuses,
   seedServicesFromCost,
-  ensureBotProcessState,
-  startAppointmentReminderLoop,
   runRealtimePush,
   ensureRealtimeLoop,
   app,

@@ -7,9 +7,6 @@
   const HOME_API_ROOT_URL = `${window.location.origin}/api/home`;
   const HOME_PUBLIC_API_URL = `${window.location.origin}/api/home/public`;
   const HOME_VK_AUTH_COMPLETE_API_URL = `${HOME_API_BASE_URL}/vk/complete`;
-  const HOME_TELEGRAM_AUTH_START_API_URL = `${HOME_API_BASE_URL}/telegram/start`;
-  const HOME_TELEGRAM_AUTH_STATUS_API_URL = `${HOME_API_BASE_URL}/telegram/status`;
-  const HOME_TELEGRAM_AUTH_COMPLETE_API_URL = `${HOME_API_BASE_URL}/telegram/complete`;
   const SESSION_STORAGE_KEY = "home-user-session";
   const REMEMBER_STORAGE_KEY = "home-user-remember";
   const BARBER_SESSION_STORAGE_KEY = "barber-session";
@@ -17,10 +14,6 @@
   const LOGOUT_MARKER_STORAGE_KEY = "home-user-logout-marker";
   const REFERRAL_STORAGE_KEY = "home-user-referral-code";
   const HOME_PAGE_URL = "/booking/";
-  const TELEGRAM_AUTH_POLL_FAST_INTERVAL_MS = 700;
-  const TELEGRAM_AUTH_POLL_SLOW_INTERVAL_MS = 1500;
-  const TELEGRAM_AUTH_POLL_FAST_ATTEMPTS = 6;
-  const TELEGRAM_AUTH_INITIAL_POLL_DELAY_MS = 280;
   const IS_ANDROID_APP_SHELL = /BrotherShopAndroidApp/i.test(window.navigator?.userAgent || "");
 
   if (document.documentElement) document.documentElement.classList.toggle("android-app-shell", IS_ANDROID_APP_SHELL);
@@ -44,13 +37,7 @@
   const togglePasswordButton = document.getElementById("toggle-password");
   const statusElement = document.getElementById("status");
   const forgotLink = document.getElementById("forgot-link");
-  const telegramDivider = document.getElementById("telegram-divider");
-  const telegramButton = document.getElementById("telegram-login");
   const vkIdContainer = document.getElementById("vkid-onetap");
-  const telegramSetupBanner = document.getElementById("telegram-setup-banner");
-  const telegramSetupEyebrow = document.getElementById("telegram-setup-eyebrow");
-  const telegramSetupTitle = document.getElementById("telegram-setup-title");
-  const telegramSetupDescription = document.getElementById("telegram-setup-description");
 
   const isReady =
     loginTab &&
@@ -69,36 +56,17 @@
     togglePasswordButton &&
     statusElement &&
     forgotLink &&
-    telegramDivider &&
-    telegramButton &&
-    vkIdContainer &&
-    telegramSetupBanner &&
-    telegramSetupEyebrow &&
-    telegramSetupTitle &&
-    telegramSetupDescription;
+    vkIdContainer;
 
   if (!isReady) {
     document.body.classList.remove("checking");
     return;
   }
 
-  let telegramPollTimer = null;
-  let telegramAuthRequestId = "";
-  let telegramAuthFinished = false;
-  let telegramPollAttempt = 0;
-  let telegramPollInFlight = false;
-  let telegramLoginAvailable = true;
   let vkIdLoginAvailable = false;
   let vkIdAppId = "";
   let vkIdSdkPromise = null;
   let vkIdOneTapRendered = false;
-  let telegramSetupState = {
-    active: false,
-    requestId: "",
-    mode: "",
-    phone: "",
-    displayName: "",
-  };
 
   const getStorageArea = (type) => {
     try {
@@ -165,17 +133,6 @@
     if (digits.length === 11 && digits.startsWith("7")) return `+${digits}`;
     if (raw.startsWith("+")) return `+${digits}`;
     return `+${digits}`;
-  };
-
-  const resolveTelegramSetupName = (displayName, phone) => {
-    const safeName = normalizeText(displayName);
-    if (!safeName) return "";
-    const safeNamePhone = normalizePhone(safeName);
-    const safePhone = normalizePhone(phone);
-    if (safeNamePhone && safePhone && safeNamePhone === safePhone) {
-      return "";
-    }
-    return safeName;
   };
 
   const extractPhoneDigits = (value) => {
@@ -514,42 +471,26 @@
     vkIdContainer.classList.toggle("is-visible", Boolean(visible));
   };
 
-  const applyTelegramLoginAvailability = (isAvailable) => {
-    telegramLoginAvailable = Boolean(isAvailable);
-    const shouldHideTelegramEntry = !telegramLoginAvailable || telegramSetupState.active;
-    setElementHidden(telegramButton, shouldHideTelegramEntry);
-    setVkIdContainerVisible(vkIdLoginAvailable && !telegramSetupState.active);
-    const hasAnySocialAuth =
-      (telegramLoginAvailable || vkIdLoginAvailable) && !telegramSetupState.active;
-    setElementHidden(telegramDivider, !hasAnySocialAuth);
-  };
-
   const applyVkIdLoginAvailability = (isAvailable, appId = "") => {
     vkIdLoginAvailable = Boolean(isAvailable);
     vkIdAppId = normalizeText(appId);
-    setVkIdContainerVisible(vkIdLoginAvailable && !telegramSetupState.active);
-    const hasAnySocialAuth =
-      (telegramLoginAvailable || vkIdLoginAvailable) && !telegramSetupState.active;
-    setElementHidden(telegramDivider, !hasAnySocialAuth);
+    setVkIdContainerVisible(vkIdLoginAvailable);
   };
 
-  const loadTelegramLoginAvailability = async () => {
+  const loadVkIdLoginAvailability = async () => {
     try {
       const response = await fetch(HOME_PUBLIC_API_URL, { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       const canUseVkId = !isLocalDevOrigin();
       if (!response.ok) {
-        applyTelegramLoginAvailability(true);
         applyVkIdLoginAvailability(false, "");
         return;
       }
-      applyTelegramLoginAvailability(payload?.site?.auth?.telegramEnabled !== false);
       applyVkIdLoginAvailability(
         canUseVkId && payload?.site?.auth?.vkIdEnabled === true && normalizeText(payload?.site?.auth?.vkIdAppId),
         payload?.site?.auth?.vkIdAppId,
       );
     } catch {
-      applyTelegramLoginAvailability(true);
       applyVkIdLoginAvailability(false, "");
     }
   };
@@ -671,7 +612,7 @@
   };
 
   const renderVkIdOneTap = async () => {
-    if (!vkIdLoginAvailable || !vkIdAppId || telegramSetupState.active || !vkIdContainer) return;
+    if (!vkIdLoginAvailable || !vkIdAppId || !vkIdContainer) return;
     if (vkIdOneTapRendered) return;
     try {
       const VKID = await loadVkIdSdk();
@@ -719,53 +660,6 @@
       console.warn("VK ID One Tap init failed", error);
       setVkIdContainerVisible(false);
     }
-  };
-
-  const renderTelegramSetupUi = () => {
-    const isActive = telegramSetupState.active;
-    const isSetPasswordMode = telegramSetupState.mode === "set_password";
-    applyTelegramLoginAvailability(telegramLoginAvailable);
-    setElementHidden(telegramSetupBanner, !isActive);
-    setElementHidden(tabsRoot, isActive);
-    authFrame.classList.toggle("is-telegram-setup", isActive);
-    registerSubmitButton.classList.toggle("telegram-setup-submit", isActive);
-
-    registerPhoneInput.readOnly = isActive;
-    registerPhoneInput.setAttribute("aria-readonly", isActive ? "true" : "false");
-    registerFullNameInput.readOnly = false;
-    registerFullNameInput.required = true;
-
-    registerSubmitButton.textContent = isActive
-      ? isSetPasswordMode
-        ? "Войти"
-        : "Завершить регистрацию"
-      : "Создать аккаунт";
-
-    if (!isActive) {
-      telegramSetupEyebrow.textContent = "Telegram подтверждён";
-      telegramSetupTitle.textContent = "Завершите вход на сайте";
-      telegramSetupDescription.textContent =
-        "Остался последний шаг: заполните данные ниже и сохраните пароль для входа на сайте.";
-      registerFullNameInput.placeholder = "Введите ФИО";
-      registerPhoneInput.placeholder = "Введите номер телефона";
-      return;
-    }
-
-    if (isSetPasswordMode) {
-      telegramSetupEyebrow.textContent = "Первый вход через Telegram";
-      telegramSetupTitle.textContent = "Вы почти вошли";
-      telegramSetupDescription.textContent =
-        "Это нужно только один раз: проверьте имя и задайте пароль для входа на сайте.";
-      registerFullNameInput.placeholder = "ФИО";
-    } else {
-      telegramSetupEyebrow.textContent = "Telegram подтверждён";
-      telegramSetupTitle.textContent = "Завершите регистрацию";
-      telegramSetupDescription.textContent =
-        "Осталось указать имя и пароль, чтобы завершить вход на сайте.";
-      registerFullNameInput.placeholder = "Введите ФИО";
-    }
-
-    registerPhoneInput.placeholder = "Телефон подтверждён через Telegram";
   };
 
   const switchTab = (tab) => {
@@ -942,56 +836,6 @@
     }
 
     try {
-      if (telegramSetupState.active) {
-        if (
-          !telegramSetupState.requestId ||
-          !isPhoneComplete(registerPhoneInput.value) ||
-          !phone
-        ) {
-          setStatus("Введите корректный номер телефона для завершения Telegram-входа.", "error");
-          setPending(registerForm, false);
-          return;
-        }
-        if (telegramSetupState.mode === "register" && !fullName) {
-          setStatus("Введите ФИО для создания аккаунта.", "error");
-          setPending(registerForm, false);
-          return;
-        }
-        const response = await fetch(HOME_TELEGRAM_AUTH_COMPLETE_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            requestId: telegramSetupState.requestId,
-            password,
-            phone,
-            displayName: telegramSetupState.mode === "register" ? fullName : fullName || "",
-            referralCode,
-            privacyConsentAccepted,
-          }),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok || !payload?.success || !payload?.token || !payload?.user) {
-          setStatus(
-            payload?.message || "Не удалось завершить вход через Telegram.",
-            "error",
-          );
-          setPending(registerForm, false);
-          return;
-        }
-        const sessionPayload = buildSessionPayload({
-          token: payload.token,
-          user: payload.user,
-        });
-        clearLogoutMarker();
-        clearBarberSessionPayload();
-        persistRememberChoice(true);
-        persistSessionPayload(sessionPayload, true);
-        setPendingReferralCode("");
-        resetTelegramSetupState();
-        redirectToHome();
-        return;
-      }
-
       if (!fullName || !isPhoneComplete(registerPhoneInput.value) || !phone) {
         setStatus("Заполните все поля регистрации.", "error");
         setPending(registerForm, false);
@@ -1035,180 +879,6 @@
     setStatus("Восстановление пароля пока не подключено.", "error");
   };
 
-  const resetTelegramSetupState = () => {
-    telegramSetupState = {
-      active: false,
-      requestId: "",
-      mode: "",
-      phone: "",
-      displayName: "",
-    };
-    registerPhoneInput.readOnly = false;
-    registerFullNameInput.required = true;
-    registerFullNameInput.readOnly = false;
-    vkIdOneTapRendered = false;
-    if (vkIdContainer) vkIdContainer.innerHTML = "";
-    renderTelegramSetupUi();
-  };
-
-  const applyTelegramSetupState = (payload = {}) => {
-    telegramSetupState = {
-      active: true,
-      requestId: normalizeText(payload.requestId),
-      mode: normalizeText(payload.setupMode || "register"),
-      phone: normalizePhone(payload.phone),
-      displayName: normalizeText(payload.displayName),
-    };
-    if (telegramSetupState.phone) {
-      registerPhoneInput.value = formatPhoneMasked(extractPhoneDigits(telegramSetupState.phone));
-    }
-    registerFullNameInput.value = resolveTelegramSetupName(
-      telegramSetupState.displayName,
-      telegramSetupState.phone,
-    );
-    registerPasswordInput.value = "";
-    registerPasswordRepeatInput.value = "";
-    renderTelegramSetupUi();
-    switchTab("register");
-  };
-
-  const setTelegramPending = (isPending) => {
-    const pending = Boolean(isPending);
-    telegramButton.disabled = pending;
-    telegramButton.style.opacity = pending ? "0.72" : "1";
-    telegramButton.style.cursor = pending ? "not-allowed" : "pointer";
-    telegramButton.classList.toggle("is-pending", pending);
-  };
-
-  const stopTelegramPolling = () => {
-    if (telegramPollTimer) {
-      window.clearTimeout(telegramPollTimer);
-      telegramPollTimer = null;
-    }
-  };
-
-  const finishTelegramFlow = () => {
-    stopTelegramPolling();
-    telegramAuthFinished = true;
-    telegramAuthRequestId = "";
-    telegramPollAttempt = 0;
-    telegramPollInFlight = false;
-    setTelegramPending(false);
-  };
-
-  const resolveTelegramPollDelay = () =>
-    telegramPollAttempt < TELEGRAM_AUTH_POLL_FAST_ATTEMPTS
-      ? TELEGRAM_AUTH_POLL_FAST_INTERVAL_MS
-      : TELEGRAM_AUTH_POLL_SLOW_INTERVAL_MS;
-
-  const scheduleTelegramPolling = (delayMs) => {
-    stopTelegramPolling();
-    if (!telegramAuthRequestId || telegramAuthFinished) return;
-    telegramPollTimer = window.setTimeout(() => {
-      void pollTelegramAuthStatus();
-    }, Number.isFinite(delayMs) ? Math.max(0, delayMs) : resolveTelegramPollDelay());
-  };
-
-  const pollTelegramAuthStatus = async () => {
-    if (!telegramAuthRequestId || telegramAuthFinished || telegramPollInFlight) return;
-    telegramPollInFlight = true;
-    try {
-      const response = await fetch(
-        `${HOME_TELEGRAM_AUTH_STATUS_API_URL}?requestId=${encodeURIComponent(telegramAuthRequestId)}`,
-      );
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setStatus(
-          normalizeText(payload?.message) || "Ошибка проверки Telegram-авторизации.",
-          "error",
-        );
-        finishTelegramFlow();
-        return;
-      }
-      if (!payload?.done) {
-        telegramPollAttempt += 1;
-        setStatus("Проверяем подтверждение входа в Telegram...", "waiting");
-        scheduleTelegramPolling();
-        return;
-      }
-      if (payload?.success && payload?.needsSetup && payload?.requestId) {
-        finishTelegramFlow();
-        applyTelegramSetupState(payload);
-        setStatus("");
-        return;
-      }
-      if (payload?.success && payload?.token && payload?.user) {
-        const sessionPayload = buildSessionPayload({
-          token: payload.token,
-          user: payload.user,
-        });
-        clearLogoutMarker();
-        clearBarberSessionPayload();
-        persistRememberChoice(true);
-        persistSessionPayload(sessionPayload, true);
-        finishTelegramFlow();
-        redirectToHome();
-        return;
-      }
-      setStatus(
-        normalizeText(payload?.message) || "Telegram-авторизация не завершена.",
-        "error",
-      );
-      finishTelegramFlow();
-    } catch {
-      telegramPollAttempt += 1;
-      scheduleTelegramPolling();
-    } finally {
-      telegramPollInFlight = false;
-    }
-  };
-
-  const triggerTelegramStatusRefresh = () => {
-    if (!telegramAuthRequestId || telegramAuthFinished) return;
-    stopTelegramPolling();
-    void pollTelegramAuthStatus();
-  };
-
-  const handleTelegramLogin = async () => {
-    if (!telegramLoginAvailable) return;
-    setStatus("");
-    resetTelegramSetupState();
-    setTelegramPending(true);
-    telegramAuthFinished = false;
-    telegramAuthRequestId = "";
-    telegramPollAttempt = 0;
-    telegramPollInFlight = false;
-    stopTelegramPolling();
-    try {
-      const response = await fetch(HOME_TELEGRAM_AUTH_START_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload?.success || !payload?.requestId || !payload?.code) {
-        setStatus(
-          normalizeText(payload?.message) || "Не удалось запустить Telegram-авторизацию.",
-          "error",
-        );
-        setTelegramPending(false);
-        return;
-      }
-      telegramAuthRequestId = normalizeText(payload.requestId);
-      setStatus("Подтвердите вход в Telegram. Ожидаем ответ...", "waiting");
-      if (normalizeText(payload.botLink)) {
-        window.open(payload.botLink, "_blank", "noopener,noreferrer");
-      } else {
-        setStatus("Не удалось открыть Telegram-бота. Попробуйте позже.", "error");
-        setTelegramPending(false);
-        return;
-      }
-      scheduleTelegramPolling(TELEGRAM_AUTH_INITIAL_POLL_DELAY_MS);
-    } catch {
-      setStatus("Сервер недоступен. Попробуйте позже.", "error");
-      setTelegramPending(false);
-    }
-  };
-
   const handleTogglePassword = () => {
     const nextType = loginPasswordInput.type === "password" ? "text" : "password";
     loginPasswordInput.type = nextType;
@@ -1220,10 +890,9 @@
   };
 
   const init = async () => {
-    resetTelegramSetupState();
     togglePasswordButton.innerHTML = EYE_ICON_CLOSED;
     tabsRoot.setAttribute("data-active", "login");
-    await loadTelegramLoginAvailability();
+    await loadVkIdLoginAvailability();
     try {
       const params = new URLSearchParams(window.location.search || "");
       const referralCode = normalizeText(params.get("ref"));
@@ -1241,16 +910,8 @@
     loginForm.addEventListener("submit", handleLogin);
     registerForm.addEventListener("submit", handleRegister);
     forgotLink.addEventListener("click", handleForgotPassword);
-    telegramButton.addEventListener("click", handleTelegramLogin);
     togglePasswordButton.addEventListener("click", handleTogglePassword);
     void renderVkIdOneTap();
-    window.addEventListener("beforeunload", stopTelegramPolling);
-    window.addEventListener("focus", triggerTelegramStatusRefresh);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") {
-        triggerTelegramStatusRefresh();
-      }
-    });
 
     const restoredHomeSession = await tryRestoreSession();
     if (restoredHomeSession) {

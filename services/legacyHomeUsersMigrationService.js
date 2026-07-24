@@ -133,7 +133,6 @@ const createLegacyHomeUsersMigrationService = ({
           id: legacyId,
           Name: legacyDisplayName,
           Phone: legacyPhone,
-          TelegramID: null,
           Barber: null,
           homePasswordHash: legacyHash,
           homePasswordSalt: legacySalt,

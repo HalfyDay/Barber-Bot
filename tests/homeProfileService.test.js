@@ -32,7 +32,7 @@ test("home profile service hashes and verifies password", () => {
   assert.equal(service.verifyHomePassword("wrong", hashHex, saltHex), false);
 });
 
-test("home profile service builds public profile with telegram state and limits", () => {
+test("home profile service builds public profile with limits", () => {
   const service = createHarness();
   const lastChangedAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -40,17 +40,14 @@ test("home profile service builds public profile with telegram state and limits"
     id: "user-1",
     Name: "Ivan",
     Phone: "+7 (999) 000-00-00",
-    TelegramID: "777",
     LastNameChanged: lastChangedAt,
     homePhoneChangedAt: null,
-    homeTelegramChangedAt: "2030-01-01T00:00:00.000Z",
     homeCreatedAt: "2030-01-01T00:00:00.000Z",
     homeLastLoginAt: "2030-01-02T00:00:00.000Z",
   });
 
   assert.equal(profile.id, "user-1");
   assert.equal(profile.phone, "+79990000000");
-  assert.equal(profile.telegramLinked, true);
   assert.equal(profile.limits.name.isLocked, true);
   assert.equal(profile.limits.phone.isLocked, false);
 });

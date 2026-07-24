@@ -6,7 +6,6 @@ const { randomUUID, createHash, randomBytes, scryptSync, timingSafeEqual } = req
 const jwt = require("jsonwebtoken");
 const cron = require("node-cron");
 const fs = require("fs-extra");
-const { spawn } = require("child_process");
 const os = require("os");
 const {
   ensureLicenseValid,
@@ -16,12 +15,10 @@ const {
 } = require("./services/licenseGuard");
 const { checkForUpdates, applyUpdate, runPostUpdateDatabaseFixes } = require("./services/updateManager");
 const { createAppointmentService } = require("./services/appointmentService");
-const { createTelegramAuthService } = require("./services/telegramAuthService");
 const { createLegacyCrudGuard } = require("./services/legacyCrudGuard");
 const { createOwnerAssetHelpers } = require("./services/ownerAssetHelpers");
 const { createBackupService } = require("./services/backupService");
 const { createUpdateMonitorService } = require("./services/updateMonitorService");
-const { createBotRuntimeService } = require("./services/botRuntimeService");
 const { createRealtimeService } = require("./services/realtimeService");
 const { createDashboardSnapshotService } = require("./services/dashboardSnapshotService");
 const { createAdminInsightsService } = require("./services/adminInsightsService");
@@ -30,8 +27,6 @@ const { createServerLifecycleService } = require("./services/serverLifecycleServ
 const { createHomeDataService } = require("./services/homeDataService");
 const { createLegacyHomeUsersMigrationService } = require("./services/legacyHomeUsersMigrationService");
 const { createCatalogConfigService } = require("./services/catalogConfigService");
-const { createNotificationReminderService } = require("./services/notificationReminderService");
-const { createBotUserService } = require("./services/botUserService");
 const { createHomeProfileService } = require("./services/homeProfileService");
 const { createHomeClientStoreService } = require("./services/homeClientStoreService");
 const { createHomePushService } = require("./services/homePushService");
@@ -41,7 +36,6 @@ const { createIdentityAccessService } = require("./services/identityAccessServic
 const { createCatalogLookupService } = require("./services/catalogLookupService");
 const { createBookingUtilityService } = require("./services/bookingUtilityService");
 const { createBarberAliasService } = require("./services/barberAliasService");
-const { createBotMenuService } = require("./services/botMenuService");
 const { createSitePresenceService } = require("./services/sitePresenceService");
 const { createBarberPresenceService } = require("./services/barberPresenceService");
 const { createHomeRealtimeService } = require("./services/homeRealtimeService");
@@ -50,7 +44,6 @@ const { createPrismaClient, getPrismaRuntimeConfig, validatePrismaRuntimeConfig 
 const { tenantMiddleware } = require("./services/tenantMiddleware");
 const { registerAdminCrudRoutes } = require("./routes/adminCrudRoutes");
 const { registerHomeRoutes } = require("./routes/homeRoutes");
-const { registerBotInternalRoutes } = require("./routes/botInternalRoutes");
 const { registerOwnerSystemRoutes } = require("./routes/ownerSystemRoutes");
 const { registerOwnerAssetsRoutes } = require("./routes/ownerAssetsRoutes");
 const { registerServiceCatalogRoutes } = require("./routes/serviceCatalogRoutes");
@@ -95,10 +88,6 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = createRuntimeSecret("JWT_SECRET", "JWT secret");
 const TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "30d";
 const HOME_JWT_SECRET = createRuntimeSecret("HOME_JWT_SECRET", "home JWT secret");
-const BOT_INTERNAL_API_TOKEN = createRuntimeSecret(
-  "BOT_INTERNAL_API_TOKEN",
-  "bot internal API token",
-);
 const HOME_TOKEN_EXPIRES_IN = process.env.HOME_JWT_EXPIRES_IN || "30d";
 const TOKEN_REFRESH_THRESHOLD_MS =
   Number(process.env.JWT_REFRESH_THRESHOLD_MS) || 3 * 24 * 60 * 60 * 1000;
@@ -164,12 +153,9 @@ const POST_RESTART_HEALTHCHECK_INTERVAL_MS = Math.max(
 const POST_RESTART_HEALTHCHECK_URL = (process.env.POST_RESTART_HEALTHCHECK_URL || "")
   .toString()
   .trim();
-const BOT_MENU_PATH = path.join(__dirname, "data", "bot-menu.json");
-const DEFAULT_BOT_DESCRIPTION = "Текст в Главном меню";
-const DEFAULT_ABOUT_TEXT = "Текст в блоке «О нас»";
 const IMAGE_DIR = path.join(__dirname, "Image");
-const CARD_IMAGE_DIR = path.join(IMAGE_DIR, "tgbot");
 const MENU_IMAGE_DIR = path.join(IMAGE_DIR, "menu_bots");
+const BOT_MENU_PATH = path.join(__dirname, "data", "bot-menu.json");
 const MAX_AVATAR_FILE_SIZE = Number(
   process.env.MAX_AVATAR_FILE_SIZE || 5 * 1024 * 1024,
 );
@@ -197,12 +183,10 @@ const tableToModelMap = {
   Barbers: "barbers",
   Services: "services",
   ServicePrices: "servicePrices",
-  BotSettings: "botSettings",
   Positions: "positions",
   PositionServiceMaxPrices: "positionServiceMaxPrices",
   BlockedUsers: "blockedUsers",
   BarberAliases: "barberAliases",
-  BotMenu: "botMenu",
 };
 const TABLE_ORDERING = {
   Positions: [{ orderIndex: "asc" }, { name: "asc" }],
@@ -214,14 +198,12 @@ const numericFields = {
   Barbers: ["orderIndex"],
   Services: ["duration", "orderIndex"],
   ServicePrices: ["price"],
-  BotSettings: ["bookingLimit", "minLeadHours", "maxDaysAhead"],
   Positions: ["masterSharePercent", "orderIndex", "requiredClientVolume", "requiredRetainedClients", "targetReturnPercent"],
   PositionServiceMaxPrices: ["maxPrice"],
 };
 const booleanFields = {
   Barbers: ["isActive", "cardPhotoGrayscale", "cardPhotoOutline"],
   Services: ["isActive"],
-  BotSettings: ["isBotEnabled"],
 };
 const ROLE_OWNER = "owner";
 const ROLE_STAFF = "staff";
@@ -238,21 +220,11 @@ const CREATOR_ACCOUNT = CREATOR_ACCOUNT_ENABLED
   : null;
 const HOME_PASSWORD_HASH_LENGTH = 64;
 const HOME_MIN_PASSWORD_LENGTH = 4;
-const HOME_TELEGRAM_AUTH_TTL_MS =
-  Number(process.env.HOME_TELEGRAM_AUTH_TTL_MS) || 10 * 60 * 1000;
 const HOME_PROFILE_CHANGE_COOLDOWN_MS =
   Number(process.env.HOME_PROFILE_CHANGE_COOLDOWN_MS) || 30 * 24 * 60 * 60 * 1000;
-const TELEGRAM_BOT_USERNAME = (process.env.TELEGRAM_BOT_USERNAME || "")
-  .toString()
-  .trim()
-  .replace(/^@+/, "");
 let httpServer = null;
 let updateInProgress = false;
 let restartScheduled = false;
-const pythonExecutable =
-  process.env.BOT_PYTHON_PATH ||
-  (os.platform() === "win32" ? "python" : "python3");
-const botScriptPath = path.join(__dirname, "BotBrotherShop.py");
 const restartCommand = () => {
   const nodePath = process.execPath;
   const entry = path.join(__dirname, "server.js");
@@ -307,7 +279,7 @@ app.use(
       return callback(new Error("Not allowed by CORS"));
     },
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Bot-Internal-Token", "X-City-Id"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-City-Id"],
     optionsSuccessStatus: 204,
   }),
 );

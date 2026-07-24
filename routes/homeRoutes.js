@@ -231,7 +231,6 @@ const registerHomeRoutes = ({
   hashHomePassword,
   verifyHomePassword,
   findHomeUserByPhone,
-  findHomeUserByTelegramId,
   findHomeUserById,
   shouldHydrateUserNameFromHome,
   HOME_USER_SELECT,
@@ -241,7 +240,6 @@ const registerHomeRoutes = ({
   buildHomeIdentity,
   signHomeSessionToken,
   buildLimitBlockedMessage,
-  getBotSettings,
   getUserMeta,
   findUserIdByVkId,
   updateUserMeta,
@@ -254,18 +252,6 @@ const registerHomeRoutes = ({
   buildHomeAppPayload,
   buildPublicHomePayload,
   getSiteSettings,
-  TELEGRAM_BOT_USERNAME,
-  markExpiredTelegramAuthRequests,
-  createTelegramAuthRequest,
-  getTelegramAuthRequestById,
-  updateTelegramAuthRequestById,
-  deleteTelegramAuthRequestById,
-  TELEGRAM_AUTH_FLOW_LOGIN,
-  TELEGRAM_AUTH_FLOW_PROFILE_LINK,
-  TELEGRAM_AUTH_STATUS_COMPLETED,
-  TELEGRAM_AUTH_STATUS_FAILED,
-  TELEGRAM_AUTH_STATUS_EXPIRED,
-  toTelegramIdNumber,
   resolveHomeAssetPath,
   getServiceCatalog,
   resolveHomeBookingUser,
@@ -275,7 +261,6 @@ const registerHomeRoutes = ({
   buildDateWindow,
   STATUS_ACTIVE,
   STATUS_CANCELLED,
-  notifyBarberAboutNewAppointment,
   requestRealtimePush,
   parseDateTime,
   touchSitePresenceSession,
@@ -825,7 +810,6 @@ const registerHomeRoutes = ({
             id: randomUUID(),
             Name: displayName,
             Phone: safePhone,
-            TelegramID: null,
             Barber: null,
             homePasswordHash: hashHex,
             homePasswordSalt: saltHex,
@@ -1099,7 +1083,6 @@ const registerHomeRoutes = ({
             id: randomUUID(),
             Name: resolvedVkDisplayName,
             Phone: vkProfile.phone || null,
-            TelegramID: null,
             Barber: null,
             homePasswordHash: hashHex,
             homePasswordSalt: saltHex,
@@ -1328,414 +1311,6 @@ const registerHomeRoutes = ({
       });
     }
   });
-
-  app.post("/api/home/auth/telegram/start", async (req, res) => {
-    try {
-      const botSettings = await getBotSettings();
-      if (botSettings?.isBotEnabled === false) {
-        return res.status(503).json({
-          success: false,
-          message: "Вход через Telegram сейчас недоступен.",
-        });
-      }
-      await markExpiredTelegramAuthRequests();
-      const request = await createTelegramAuthRequest({
-        flow: TELEGRAM_AUTH_FLOW_LOGIN,
-      });
-      const botLink = TELEGRAM_BOT_USERNAME
-        ? `https://t.me/${encodeURIComponent(
-            TELEGRAM_BOT_USERNAME,
-          )}?start=${encodeURIComponent(`site_login_${request.code}`)}`
-        : null;
-      return res.status(201).json({
-        success: true,
-        requestId: request.id,
-        code: request.code,
-        command: `/site_login ${request.code}`,
-        expiresAt: request.expiresAt,
-        botLink,
-        botUsername: TELEGRAM_BOT_USERNAME || null,
-      });
-    } catch (error) {
-      console.error("Home telegram auth start error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Не удалось запустить авторизацию через Telegram.",
-      });
-    }
-  });
-
-  app.get("/api/home/auth/telegram/status", async (req, res) => {
-    const requestId = normalizeText(req.query?.requestId);
-    if (!requestId) {
-      return res.status(400).json({
-        success: false,
-        done: true,
-        message: "Укажите requestId.",
-      });
-    }
-    try {
-      await markExpiredTelegramAuthRequests();
-      const row = await getTelegramAuthRequestById(requestId);
-      if (!row) {
-        return res.status(404).json({
-          success: false,
-          done: true,
-          message: "Сессия Telegram авторизации не найдена или уже завершена.",
-        });
-      }
-      if (
-        normalizeText(row.flow || TELEGRAM_AUTH_FLOW_LOGIN) !==
-        TELEGRAM_AUTH_FLOW_LOGIN
-      ) {
-        return res.status(409).json({
-          success: false,
-          done: true,
-          message: "Этот запрос предназначен для другого сценария Telegram.",
-        });
-      }
-      if (row.status === TELEGRAM_AUTH_STATUS_COMPLETED) {
-        const rowUserId = normalizeText(row.userId);
-        let userRow = rowUserId
-          ? await prisma.users.findUnique({
-              where: { id: rowUserId },
-              select: { ...HOME_USER_SELECT, TelegramID: true },
-            })
-          : null;
-        const safeTelegramId = normalizeText(row.telegramId);
-        if (!userRow && safeTelegramId) {
-          userRow = await findHomeUserByTelegramId(safeTelegramId);
-        }
-        const safePhone = normalizePhone(row.phone || userRow?.Phone || "");
-        if (!userRow && safePhone) {
-          userRow = await findHomeUserByPhone(safePhone);
-        }
-        const resolvedUserId = normalizeText(userRow?.id);
-        const resolvedDisplayName =
-          normalizeText(row.displayName || userRow?.Name || "") || null;
-        if (
-          resolvedUserId &&
-          (resolvedUserId !== rowUserId ||
-            safePhone !== normalizePhone(row.phone || "") ||
-            resolvedDisplayName !== normalizeText(row.displayName || ""))
-        ) {
-          await updateTelegramAuthRequestById(requestId, {
-            userId: resolvedUserId,
-            phone: safePhone || null,
-            displayName: resolvedDisplayName,
-            errorMessage: null,
-          });
-        }
-        const hasPassword = Boolean(
-          userRow &&
-            normalizeText(userRow.homePasswordHash) &&
-            normalizeText(userRow.homePasswordSalt),
-        );
-        if (userRow && userRow.homeIsActive !== false && hasPassword && safePhone) {
-          const now = new Date().toISOString();
-          const patch = {
-            Phone: safePhone,
-            homeIsActive: true,
-            homeLastLoginAt: now,
-            homeUpdatedAt: now,
-          };
-          const telegramIdAsNumber = toTelegramIdNumber(row.telegramId);
-          if (telegramIdAsNumber !== null) {
-            patch.TelegramID = telegramIdAsNumber;
-          }
-          if (
-            resolvedDisplayName &&
-            shouldHydrateUserNameFromHome(userRow.Name, userRow.Phone)
-          ) {
-            patch.Name = resolvedDisplayName;
-          }
-          const updated = await prisma.users.update({
-            where: { id: userRow.id },
-            data: patch,
-            select: HOME_USER_SELECT,
-          });
-          const user = toPublicHomeUser(updated);
-          const identity = buildHomeIdentity({
-            userId: user.id,
-            phone: user.phone,
-            displayName: user.displayName,
-          });
-          const token = signHomeSessionToken(identity);
-          try {
-            await deleteTelegramAuthRequestById(requestId);
-          } catch (cleanupError) {
-            console.warn(
-              "Telegram auth request cleanup warning:",
-              cleanupError?.message || cleanupError,
-            );
-          }
-          return res.json({
-            success: true,
-            done: true,
-            token,
-            user,
-          });
-        }
-        if (!safePhone) {
-          return res.status(409).json({
-            success: false,
-            done: true,
-            message:
-              "Для входа нужен подтвержденный номер телефона в Telegram. Нажмите вход через Telegram снова.",
-          });
-        }
-        return res.json({
-          success: true,
-          done: true,
-          needsSetup: true,
-          requestId,
-          setupMode: userRow ? "set_password" : "register",
-          phone: safePhone,
-          displayName: resolvedDisplayName,
-        });
-      }
-      if (
-        row.status === TELEGRAM_AUTH_STATUS_FAILED ||
-        row.status === TELEGRAM_AUTH_STATUS_EXPIRED
-      ) {
-        return res.json({
-          success: false,
-          done: true,
-          status: row.status,
-          message:
-            normalizeText(row.errorMessage) ||
-            (row.status === TELEGRAM_AUTH_STATUS_EXPIRED
-              ? "Код Telegram авторизации истек. Запросите новый."
-              : "Telegram авторизация завершилась с ошибкой."),
-        });
-      }
-      return res.json({
-        success: true,
-        done: false,
-        status: row.status,
-        expiresAt: row.expiresAt || null,
-        updatedAt: row.updatedAt || null,
-      });
-    } catch (error) {
-      console.error("Home telegram auth status error:", error);
-      return res.status(500).json({
-        success: false,
-        done: true,
-        message: "Не удалось проверить Telegram авторизацию.",
-      });
-    }
-  });
-
-  app.post("/api/home/auth/telegram/complete", async (req, res) => {
-    const requestId = normalizeText(req.body?.requestId);
-    const displayNameInput = normalizeText(req.body?.displayName);
-    const phoneInput = normalizeText(req.body?.phone);
-    const password = normalizeText(req.body?.password);
-    const privacyConsentAccepted = parseConsentAccepted(req.body?.privacyConsentAccepted);
-    if (!requestId || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Недостаточно данных для завершения Telegram-входа.",
-      });
-    }
-    try {
-      await markExpiredTelegramAuthRequests();
-      const row = await getTelegramAuthRequestById(requestId);
-      if (!row) {
-        return res.status(404).json({
-          success: false,
-          message: "Сессия Telegram авторизации не найдена.",
-        });
-      }
-      if (
-        normalizeText(row.flow || TELEGRAM_AUTH_FLOW_LOGIN) !==
-        TELEGRAM_AUTH_FLOW_LOGIN
-      ) {
-        return res.status(409).json({
-          success: false,
-          message: "Этот запрос Telegram не предназначен для завершения входа.",
-        });
-      }
-      if (row.status !== TELEGRAM_AUTH_STATUS_COMPLETED) {
-        return res.status(409).json({
-          success: false,
-          message:
-            row.status === TELEGRAM_AUTH_STATUS_EXPIRED
-              ? "Код Telegram авторизации истек. Запросите новый."
-              : "Telegram авторизация еще не завершена.",
-        });
-      }
-      const safeTelegramId = normalizeText(row.telegramId);
-      const telegramIdAsNumber = toTelegramIdNumber(safeTelegramId);
-      let userRow = null;
-      const rowUserId = normalizeText(row.userId);
-      if (rowUserId) {
-        userRow = await prisma.users.findUnique({
-          where: { id: rowUserId },
-          select: { ...HOME_USER_SELECT, TelegramID: true },
-        });
-      }
-      if (!userRow && safeTelegramId) {
-        userRow = await findHomeUserByTelegramId(safeTelegramId);
-      }
-      const safePhone = normalizePhone(phoneInput || row.phone || userRow?.Phone || "");
-      if (!safePhone) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Телефон не подтвержден. Нажмите вход через Telegram снова и отправьте контакт.",
-        });
-      }
-      const phoneMatches = await prisma.users.findMany({
-        where: { Phone: { not: null } },
-        select: {
-          id: true,
-          Phone: true,
-          homePasswordHash: true,
-          homePasswordSalt: true,
-          homeIsActive: true,
-        },
-      });
-      const conflict = phoneMatches.find(
-        (entry) =>
-          entry.id !== userRow?.id &&
-          normalizePhone(entry.Phone || "") === safePhone &&
-          entry.homeIsActive !== false &&
-          normalizeText(entry.homePasswordHash) &&
-          normalizeText(entry.homePasswordSalt),
-      );
-      if (conflict) {
-        return res.status(409).json({
-          success: false,
-          message: "Этот номер уже используется другим аккаунтом.",
-        });
-      }
-      if (!privacyConsentAccepted) {
-        const existingConsentMeta = userRow?.id ? await getUserMeta(userRow.id) : null;
-        if (!normalizeText(existingConsentMeta?.privacyConsentAcceptedAt)) {
-          return res.status(400).json({
-            success: false,
-            message: "Подтвердите согласие на обработку персональных данных.",
-          });
-        }
-      }
-      const { hashHex, saltHex } = hashHomePassword(password);
-      const now = new Date().toISOString();
-      let persisted;
-      if (userRow) {
-        const nextDisplayName =
-          displayNameInput || normalizeText(row.displayName || userRow.Name || "");
-        const patch = {
-          Phone: safePhone,
-          homePasswordHash: hashHex,
-          homePasswordSalt: saltHex,
-          homeIsActive: true,
-          homeCreatedAt: userRow.homeCreatedAt || now,
-          homeUpdatedAt: now,
-          homeLastLoginAt: now,
-        };
-        if (telegramIdAsNumber !== null) {
-          patch.TelegramID = telegramIdAsNumber;
-        }
-        if (
-          nextDisplayName &&
-          shouldHydrateUserNameFromHome(userRow.Name, userRow.Phone)
-        ) {
-          patch.Name = nextDisplayName;
-        }
-        persisted = await prisma.users.update({
-          where: { id: userRow.id },
-          data: patch,
-          select: HOME_USER_SELECT,
-        });
-        await updateTelegramAuthRequestById(requestId, {
-          userId: userRow.id,
-          phone: safePhone,
-          displayName: nextDisplayName || null,
-          errorMessage: null,
-        });
-      } else {
-        const nextDisplayName = displayNameInput;
-        if (!nextDisplayName) {
-          return res.status(400).json({
-            success: false,
-            message: "Введите ФИО для нового аккаунта.",
-          });
-        }
-        persisted = await prisma.users.create({
-          data: {
-            id: randomUUID(),
-            Name: nextDisplayName,
-            Phone: safePhone,
-            TelegramID: telegramIdAsNumber,
-            Barber: null,
-            homePasswordHash: hashHex,
-            homePasswordSalt: saltHex,
-            homeIsActive: true,
-            homeCreatedAt: now,
-            homeUpdatedAt: now,
-            homeLastLoginAt: now,
-          },
-          select: HOME_USER_SELECT,
-        });
-        await updateTelegramAuthRequestById(requestId, {
-          userId: persisted.id,
-          phone: safePhone,
-          displayName: nextDisplayName,
-          errorMessage: null,
-        });
-      }
-      const user = toPublicHomeUser(persisted);
-      await applyReferralCode({
-        userId: user.id,
-        referralCode: req.body?.referralCode,
-      });
-      const existingConsentMeta = await getUserMeta(user.id);
-      await updateUserMeta(user.id, {
-        privacyConsentAcceptedAt:
-          normalizeText(existingConsentMeta?.privacyConsentAcceptedAt) || now,
-        privacyConsentIp:
-          normalizeText(existingConsentMeta?.privacyConsentIp) || normalizeText(req.ip),
-        privacyConsentSource:
-          normalizeText(existingConsentMeta?.privacyConsentSource) || "home-telegram-register",
-        privacyConsentVersion:
-          normalizeText(existingConsentMeta?.privacyConsentVersion) || "2026-04-02",
-      });
-      const identity = buildHomeIdentity({
-        userId: user.id,
-        phone: user.phone,
-        displayName: user.displayName,
-      });
-      const token = signHomeSessionToken(identity);
-      try {
-        await deleteTelegramAuthRequestById(requestId);
-      } catch (cleanupError) {
-        console.warn(
-          "Telegram auth request cleanup warning:",
-          cleanupError?.message || cleanupError,
-        );
-      }
-      return res.json({
-        success: true,
-        token,
-        user,
-      });
-    } catch (error) {
-      if (
-        error?.code === "INVALID_PASSWORD" ||
-        error?.code === "WEAK_PASSWORD" ||
-        error?.code === "INVALID_PHONE"
-      ) {
-        return res.status(400).json({ success: false, message: error.message });
-      }
-      console.error("Home telegram auth complete error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Не удалось завершить вход через Telegram.",
-      });
-    }
-  });
-
   app.get("/api/home/auth/me", authenticateHomeToken, async (req, res) => {
     const identity = req.homeUser || {};
     const stored = await findHomeUserById(identity.userId);
@@ -1848,7 +1423,6 @@ const registerHomeRoutes = ({
             meta?.balancePushNotificationsEnabled !== false,
           referralCode: meta?.referralCode || "",
         },
-        botUsername: TELEGRAM_BOT_USERNAME || null,
       });
     } catch (error) {
       console.error("Home profile read error:", error);
@@ -2060,7 +1634,6 @@ const registerHomeRoutes = ({
       return res.json({
         success: true,
         ...payload,
-        botUsername: TELEGRAM_BOT_USERNAME || null,
       });
     } catch (error) {
       console.error("Home app payload error:", {
@@ -2337,236 +1910,6 @@ const registerHomeRoutes = ({
       return res.status(400).json({
         success: false,
         message: messageMap[code] || "Не удалось выполнить перевод BS.",
-      });
-    }
-  });
-
-  app.post("/api/home/profile/telegram/start", authenticateHomeToken, async (req, res) => {
-    try {
-      const userId = normalizeText(req.homeUser?.userId);
-      if (!userId) return res.sendStatus(401);
-      const current = await prisma.users.findUnique({
-        where: { id: userId },
-        select: HOME_PROFILE_SELECT,
-      });
-      if (
-        !current ||
-        current.homeIsActive === false ||
-        !normalizeText(current.homePasswordHash) ||
-        !normalizeText(current.homePasswordSalt)
-      ) {
-        return res.sendStatus(401);
-      }
-      if (normalizeText(current.TelegramID)) {
-        return res.status(409).json({
-          success: false,
-          message: "Telegram уже привязан к этому аккаунту.",
-        });
-      }
-      await markExpiredTelegramAuthRequests();
-      const request = await createTelegramAuthRequest({
-        flow: TELEGRAM_AUTH_FLOW_PROFILE_LINK,
-        targetUserId: userId,
-      });
-      const botLink = TELEGRAM_BOT_USERNAME
-        ? `https://t.me/${encodeURIComponent(
-            TELEGRAM_BOT_USERNAME,
-          )}?start=${encodeURIComponent(`site_login_${request.code}`)}`
-        : null;
-      return res.status(201).json({
-        success: true,
-        requestId: request.id,
-        code: request.code,
-        command: `/site_login ${request.code}`,
-        expiresAt: request.expiresAt,
-        botLink,
-        botUsername: TELEGRAM_BOT_USERNAME || null,
-      });
-    } catch (error) {
-      console.error("Home profile telegram start error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Не удалось запустить привязку Telegram.",
-      });
-    }
-  });
-
-  app.get("/api/home/profile/telegram/status", authenticateHomeToken, async (req, res) => {
-    const requestId = normalizeText(req.query?.requestId);
-    if (!requestId) {
-      return res.status(400).json({
-        success: false,
-        done: true,
-        message: "Укажите requestId.",
-      });
-    }
-    try {
-      const userId = normalizeText(req.homeUser?.userId);
-      if (!userId) return res.sendStatus(401);
-      await markExpiredTelegramAuthRequests();
-      const row = await getTelegramAuthRequestById(requestId);
-      if (!row) {
-        return res.status(404).json({
-          success: false,
-          done: true,
-          message: "Сессия привязки Telegram не найдена.",
-        });
-      }
-      if (
-        normalizeText(row.flow || TELEGRAM_AUTH_FLOW_LOGIN) !==
-        TELEGRAM_AUTH_FLOW_PROFILE_LINK
-      ) {
-        return res.status(409).json({
-          success: false,
-          done: true,
-          message: "Этот запрос Telegram относится к другому сценарию.",
-        });
-      }
-      if (normalizeText(row.targetUserId) !== userId) {
-        return res.status(403).json({
-          success: false,
-          done: true,
-          message: "Этот запрос привязки создан для другого пользователя.",
-        });
-      }
-      if (row.status === TELEGRAM_AUTH_STATUS_COMPLETED) {
-        const safeTelegramId = normalizeText(row.telegramId);
-        if (!safeTelegramId) {
-          await updateTelegramAuthRequestById(requestId, {
-            status: TELEGRAM_AUTH_STATUS_FAILED,
-            errorMessage: "Telegram ID не получен. Запустите привязку заново.",
-          });
-          return res.status(409).json({
-            success: false,
-            done: true,
-            message: "Telegram ID не получен. Запустите привязку заново.",
-          });
-        }
-        const telegramIdAsNumber = toTelegramIdNumber(safeTelegramId);
-        if (telegramIdAsNumber === null) {
-          await updateTelegramAuthRequestById(requestId, {
-            status: TELEGRAM_AUTH_STATUS_FAILED,
-            errorMessage: "Некорректный Telegram ID.",
-          });
-          return res.status(409).json({
-            success: false,
-            done: true,
-            message: "Некорректный Telegram ID. Запустите привязку заново.",
-          });
-        }
-        const current = await prisma.users.findUnique({
-          where: { id: userId },
-          select: HOME_PROFILE_SELECT,
-        });
-        if (
-          !current ||
-          current.homeIsActive === false ||
-          !normalizeText(current.homePasswordHash) ||
-          !normalizeText(current.homePasswordSalt)
-        ) {
-          return res.sendStatus(401);
-        }
-        const linkedUser = await findHomeUserByTelegramId(safeTelegramId);
-        if (linkedUser && linkedUser.id !== userId) {
-          await updateTelegramAuthRequestById(requestId, {
-            status: TELEGRAM_AUTH_STATUS_FAILED,
-            errorMessage: "Этот Telegram уже привязан к другому аккаунту.",
-          });
-          return res.json({
-            success: false,
-            done: true,
-            message: "Этот Telegram уже привязан к другому аккаунту.",
-          });
-        }
-        const updated = await prisma.users.update({
-          where: { id: userId },
-          data: {
-            TelegramID: telegramIdAsNumber,
-            homeUpdatedAt: new Date().toISOString(),
-            homeTelegramChangedAt: new Date().toISOString(),
-          },
-          select: HOME_PROFILE_SELECT,
-        });
-        try {
-            await deleteTelegramAuthRequestById(requestId);
-        } catch (cleanupError) {
-          console.warn(
-            "Telegram profile link request cleanup warning:",
-            cleanupError?.message || cleanupError,
-          );
-        }
-        return res.json({
-          success: true,
-          done: true,
-          user: toPublicHomeProfile(updated),
-        });
-      }
-      if (
-        row.status === TELEGRAM_AUTH_STATUS_FAILED ||
-        row.status === TELEGRAM_AUTH_STATUS_EXPIRED
-      ) {
-        return res.json({
-          success: false,
-          done: true,
-          status: row.status,
-          message:
-            normalizeText(row.errorMessage) ||
-            (row.status === TELEGRAM_AUTH_STATUS_EXPIRED
-              ? "Код привязки Telegram истек. Запросите новый."
-              : "Привязка Telegram завершилась с ошибкой."),
-        });
-      }
-      return res.json({
-        success: true,
-        done: false,
-        status: row.status,
-        expiresAt: row.expiresAt || null,
-        updatedAt: row.updatedAt || null,
-      });
-    } catch (error) {
-      console.error("Home profile telegram status error:", error);
-      return res.status(500).json({
-        success: false,
-        done: true,
-        message: "Не удалось проверить привязку Telegram.",
-      });
-    }
-  });
-
-  app.post("/api/home/profile/telegram/unlink", authenticateHomeToken, async (req, res) => {
-    try {
-      const userId = normalizeText(req.homeUser?.userId);
-      if (!userId) return res.sendStatus(401);
-      const current = await prisma.users.findUnique({
-        where: { id: userId },
-        select: HOME_PROFILE_SELECT,
-      });
-      if (
-        !current ||
-        current.homeIsActive === false ||
-        !normalizeText(current.homePasswordHash) ||
-        !normalizeText(current.homePasswordSalt)
-      ) {
-        return res.sendStatus(401);
-      }
-      const updated = await prisma.users.update({
-        where: { id: userId },
-        data: {
-          TelegramID: null,
-          homeUpdatedAt: new Date().toISOString(),
-          homeTelegramChangedAt: null,
-        },
-        select: HOME_PROFILE_SELECT,
-      });
-      return res.json({
-        success: true,
-        user: toPublicHomeProfile(updated),
-      });
-    } catch (error) {
-      console.error("Home profile telegram unlink error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Не удалось отвязать Telegram.",
       });
     }
   });
@@ -2983,11 +2326,6 @@ const registerHomeRoutes = ({
         }
         throw error;
       }
-      await notifyBarberAboutNewAppointment({
-        appointment: createdAppointment,
-        barber,
-        homeUser,
-      });
       requestRealtimePush(true);
       await homePushService?.sendNotificationToUser?.(
         homeUser.id,

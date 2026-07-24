@@ -30,7 +30,6 @@ const createHarness = (overrides = {}) =>
     homeJwtSecret: "home-secret",
     homeTokenExpiresIn: "30d",
     homeTokenRefreshThresholdMs: 1000,
-    botInternalApiToken: "bot-token",
     resolveUserIdentity,
     normalizeText,
     normalizePhone,

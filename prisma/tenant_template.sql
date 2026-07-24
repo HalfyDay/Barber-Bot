@@ -21,7 +21,6 @@ CREATE TYPE "BarberRole" AS ENUM ('owner', 'staff');
 -- CreateTable
 CREATE TABLE "Users" (
     "id" TEXT NOT NULL,
-    "TelegramID" DOUBLE PRECISION,
     "Name" TEXT,
     "Phone" TEXT,
     "LastNameChanged" TEXT,
@@ -33,7 +32,6 @@ CREATE TABLE "Users" (
     "HomeUpdatedAt" TEXT,
     "HomeLastLoginAt" TEXT,
     "HomePhoneChangedAt" TEXT,
-    "HomeTelegramChangedAt" TEXT,
     "LastHaircutReminderSent" TEXT,
 
     CONSTRAINT "Users_pkey" PRIMARY KEY ("id")
@@ -84,7 +82,6 @@ CREATE TABLE "Barbers" (
     "avatarUrl" TEXT,
     "color" TEXT,
     "phone" TEXT,
-    "telegramId" TEXT,
     "login" TEXT,
     "password" TEXT,
     "cardTitle" TEXT NOT NULL DEFAULT '',
@@ -164,30 +161,15 @@ CREATE TABLE "PositionServiceMaxPrices" (
 );
 
 -- CreateTable
-CREATE TABLE "BotSettings" (
+CREATE TABLE "BookingSettings" (
     "id" TEXT NOT NULL,
-    "botDescription" TEXT NOT NULL DEFAULT '',
     "aboutText" TEXT NOT NULL DEFAULT '',
-    "isBotEnabled" BOOLEAN NOT NULL DEFAULT true,
     "bookingLimit" INTEGER NOT NULL DEFAULT 2,
     "minLeadHours" INTEGER NOT NULL DEFAULT 2,
     "maxDaysAhead" INTEGER NOT NULL DEFAULT 14,
-    "lastSyncSource" TEXT NOT NULL DEFAULT 'site',
-    "botToken" TEXT NOT NULL DEFAULT '',
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "BotSettings_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "BotMessages" (
-    "id" TEXT NOT NULL,
-    "code" TEXT NOT NULL,
-    "title" TEXT,
-    "text" TEXT NOT NULL,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "BotMessages_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "BookingSettings_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -211,25 +193,6 @@ CREATE TABLE "HomeUserMeta" (
 );
 
 -- CreateTable
-CREATE TABLE "TelegramAuthRequests" (
-    "id" TEXT NOT NULL,
-    "code" TEXT NOT NULL,
-    "status" TEXT NOT NULL,
-    "flow" TEXT NOT NULL DEFAULT 'login',
-    "targetUserId" TEXT,
-    "telegramId" TEXT,
-    "phone" TEXT,
-    "displayName" TEXT,
-    "userId" TEXT,
-    "errorMessage" TEXT,
-    "createdAt" TEXT NOT NULL,
-    "expiresAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL,
-
-    CONSTRAINT "TelegramAuthRequests_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "BlockedUsers" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -248,15 +211,6 @@ CREATE TABLE "BarberAliases" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "BarberAliases_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "BotMenu" (
-    "id" TEXT NOT NULL DEFAULT 'default',
-    "payload" JSONB NOT NULL,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "BotMenu_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -282,9 +236,6 @@ CREATE INDEX "Schedules_cityId_idx" ON "Schedules"("cityId");
 -- CreateIndex
 CREATE INDEX "Users_Phone_idx" ON "Users"("Phone");
 
--- CreateIndex
-CREATE INDEX "Users_TelegramID_idx" ON "Users"("TelegramID");
-
 -- Note: Positions.name is no longer globally unique (each city can have positions with the same name)
 -- Previous unique index removed to support per-city positions
 
@@ -293,21 +244,6 @@ CREATE UNIQUE INDEX "ServicePrices_serviceId_barberId_key" ON "ServicePrices"("s
 
 -- CreateIndex
 CREATE UNIQUE INDEX "PositionServiceMaxPrices_positionId_serviceId_key" ON "PositionServiceMaxPrices"("positionId", "serviceId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "BotMessages_code_key" ON "BotMessages"("code");
-
--- CreateIndex
-CREATE UNIQUE INDEX "TelegramAuthRequests_code_key" ON "TelegramAuthRequests"("code");
-
--- CreateIndex
-CREATE INDEX "TelegramAuthRequests_status_expiresAt_idx" ON "TelegramAuthRequests"("status", "expiresAt");
-
--- CreateIndex
-CREATE INDEX "TelegramAuthRequests_flow_targetUserId_idx" ON "TelegramAuthRequests"("flow", "targetUserId");
-
--- CreateIndex
-CREATE INDEX "TelegramAuthRequests_code_idx" ON "TelegramAuthRequests"("code");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "BlockedUsers_userId_key" ON "BlockedUsers"("userId");

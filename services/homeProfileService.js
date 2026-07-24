@@ -127,19 +127,12 @@ const createHomeProfileService = ({
   const toPublicHomeProfile = (row = {}) => {
     const user = toPublicHomeUser(row);
     const telegramId = normalizeText(row.TelegramID);
-    const telegramLastChangedAt = normalizeText(row.homeTelegramChangedAt) || null;
     return {
       ...user,
       telegramId: telegramId || null,
-      telegramLinked: Boolean(telegramId),
       limits: {
         name: buildMonthlyLimit(row.LastNameChanged),
         phone: buildMonthlyLimit(row.homePhoneChangedAt),
-        telegram: {
-          lastChangedAt: telegramLastChangedAt,
-          nextAllowedAt: null,
-          isLocked: false,
-        },
       },
     };
   };

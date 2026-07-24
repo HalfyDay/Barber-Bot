@@ -14,21 +14,11 @@
 .env.*
 !.env.example
 
-# Python & virtual envs
-.venv/
-venv/
-.ptbtest/
-__pycache__/
-*.py[cod]
-
 # Local data & persistence
 /.local/
-/bot_persistence.pickle
-/bot_persistence/
 /data/*
 !/data/.gitkeep
 !/data/README.md
-*.pickle
 
 # Databases
 /prisma/dev.db

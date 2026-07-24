@@ -28,17 +28,6 @@ fi
 echo "[deploy] npm ci"
 npm ci
 
-if [[ -f requirements.txt ]]; then
-  echo "[deploy] python venv setup"
-  if [[ ! -d .venv ]]; then
-    python3 -m venv .venv
-  fi
-
-  echo "[deploy] python dependencies (.venv)"
-  .venv/bin/python -m pip install --upgrade pip
-  .venv/bin/python -m pip install -r requirements.txt
-fi
-
 RUNTIME_MODE="${PRISMA_RUNTIME:-postgres}"
 echo "[deploy] prisma runtime: ${RUNTIME_MODE}"
 
@@ -58,4 +47,3 @@ echo "[deploy] build web"
 npm run build:web
 
 echo "[deploy] done"
-echo "[deploy] BOT_PYTHON_PATH should point to ${ROOT_DIR}/.venv/bin/python"

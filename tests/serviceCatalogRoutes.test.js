@@ -272,23 +272,28 @@ test("service catalog routes let owner update service", async () => {
 test("service catalog routes let owner delete service", async () => {
   const calls = [];
   const services = [{ id: "service-2", name: "Beard" }];
+  const mockServices = {
+    delete: ({ where }) => {
+      calls.push(["services.delete", where]);
+      return { id: where.id };
+    },
+  };
+  const mockServicePrices = {
+    deleteMany: ({ where }) => {
+      calls.push(["servicePrices.deleteMany", where]);
+      return { count: 1 };
+    },
+  };
   const { app } = createHarness({
     isOwnerRequest: () => true,
     prisma: {
-      services: {
-        delete: ({ where }) => {
-          calls.push(["services.delete", where]);
-          return { id: where.id };
-        },
-      },
-      servicePrices: {
-        deleteMany: ({ where }) => {
-          calls.push(["servicePrices.deleteMany", where]);
-          return { count: 1 };
-        },
-      },
-      async $transaction(input) {
-        return input;
+      services: mockServices,
+      servicePrices: mockServicePrices,
+      async $transaction(fn) {
+        return fn({
+          servicePrices: mockServicePrices,
+          services: mockServices,
+        });
       },
     },
     getServiceCatalog: async () => services,

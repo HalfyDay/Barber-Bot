@@ -200,8 +200,6 @@ const DashboardView = ({
       if (!avatarUrl) return;
       [
         client?.id,
-        client?.telegramId,
-        client?.TelegramID,
         client?.phone,
         client?.Phone,
         client?.name,

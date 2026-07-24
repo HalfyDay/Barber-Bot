@@ -211,10 +211,6 @@ const App = () => {
   const [serviceReorderBusy, setServiceReorderBusy] = useState(false);
   const [barbers, setBarbers] = useState([]);
   const [barberReorderBusy, setBarberReorderBusy] = useState(false);
-  const [botStatus, setBotStatus] = useState(null);
-  const [botSettings, setBotSettings] = useState(null);
-  const [botMessages, setBotMessages] = useState([]);
-  const [botToken, setBotToken] = useState(null);
   const [siteConfig, setSiteConfig] = useState(null);
   const [siteConfigSaving, setSiteConfigSaving] = useState(false);
   const [siteOnlineStats, setSiteOnlineStats] = useState(null);
@@ -328,10 +324,9 @@ const App = () => {
   const visibleTableOrder = VISIBLE_TABLE_ORDER_BY_ROLE[role] || DEFAULT_VISIBLE_TABLE_ORDER;
   const sidebarShortcuts = DATA_SHORTCUTS_BY_ROLE[role] || DEFAULT_TABLE_SHORTCUTS;
   const canUseRealtime = hasOwnerAccess || role === ROLE_STAFF;
-  const canAccessBot = hasOwnerAccess;
   const canAccessSystem = hasOwnerAccess;
   const systemSubSections = getSystemSubSections(role, session?.isImpersonated);
-  const resolvedSystemSection = systemSubSections.some((tab) => tab.id === systemSection) ? systemSection : (systemSubSections[0]?.id || 'bot');
+  const resolvedSystemSection = systemSubSections.some((tab) => tab.id === systemSection) ? systemSection : (systemSubSections[0]?.id || 'settings');
   const settingsSubSections = getSettingsSubSections(role);
   const resolvedSettingsSection = settingsSubSections.some((tab) => tab.id === settingsSection) ? settingsSection : (settingsSubSections[0]?.id || 'profile');
   const requestConfirm = useCallback(
@@ -487,10 +482,6 @@ const App = () => {
     setRealtimeSnapshot(null);
     setServices([]);
     setBarbers([]);
-    setBotStatus(null);
-    setBotSettings(null);
-    setBotMessages([]);
-    setBotToken(null);
     setSiteConfig(null);
     setSiteConfigSaving(false);
     setLicenseStatus(null);
@@ -620,19 +611,13 @@ const App = () => {
   const fetchSystemResources = useCallback(
     async ({ force = false } = {}) => {
       if (!session?.token) return null;
-      if (!canAccessSystem && !canAccessBot) return null;
+      if (!canAccessSystem) return null;
       if (!force && systemDataLoadedRef.current) return null;
       const withFallback = (request, fallback, label) =>
         request.catch((error) => {
           console.warn(`${label} fetch skipped:`, error?.message || error);
           return fallback;
         });
-      const botStatusPromise = canAccessBot
-        ? withFallback(apiRequest('/bot/status'), { status: null, settings: null, token: null }, 'Bot status')
-        : Promise.resolve({ status: null, settings: null, token: null });
-      const botMessagesPromise = canAccessBot
-        ? withFallback(apiRequest('/bot/messages'), [], 'Bot messages')
-        : Promise.resolve([]);
       const siteConfigPromise = canAccessSystem
         ? withFallback(apiRequest('/system/site'), null, 'Site config')
         : Promise.resolve(null);
@@ -645,19 +630,13 @@ const App = () => {
       const updatePromise = canAccessSystem
         ? withFallback(apiRequest('/system/update'), null, 'Updates')
         : Promise.resolve(null);
-      const [botState, botMessagesPayload, sitePayload, siteOnlinePayload, license, update] =
+      const [sitePayload, siteOnlinePayload, license, update] =
         await Promise.all([
-          botStatusPromise,
-          botMessagesPromise,
           siteConfigPromise,
           siteOnlinePromise,
           licensePromise,
           updatePromise,
         ]);
-      setBotSettings(botState.settings || null);
-      setBotStatus(botState.status);
-      setBotToken(botState.token || null);
-      setBotMessages(canAccessBot ? botMessagesPayload || [] : []);
       setSiteConfig(canAccessSystem ? sitePayload : null);
       setSiteConfigSaving(false);
       setSiteOnlineStats(canAccessSystem ? siteOnlinePayload : null);
@@ -665,15 +644,13 @@ const App = () => {
       setUpdateInfo(canAccessSystem ? normalizeUpdateInfo(update) : null);
       systemDataLoadedRef.current = true;
       return {
-        botState,
-        botMessagesPayload,
         sitePayload,
         siteOnlinePayload,
         license,
         update,
       };
     },
-    [apiRequest, canAccessBot, canAccessSystem, session?.token]
+    [apiRequest, canAccessSystem, session?.token]
   );
   const fetchCities = useCallback(async () => {
     if (!session?.token) return;
@@ -703,7 +680,6 @@ const App = () => {
 	      setDashboard(overview);
       setServices(Array.isArray(overview?.services) ? overview.services : []);
       setBarbers(Array.isArray(overview?.barbers) ? overview.barbers : []);
-      setBotSettings(overview?.bot?.settings || null);
       if (activeTab === 'system') {
         await fetchSystemResources();
       }
@@ -1293,7 +1269,6 @@ const handleBarberFieldChange = (id, field, value) => {
       login: deriveBarberLogin(barberData),
       password: barberData.password || '',
       phone: barberData.phone || '',
-      telegramId: barberData.telegramId || '',
       isActive: barberData.isActive !== false,
       orderIndex: Number(barberData.orderIndex ?? fallbackOrder) || 0,
       role: normalizeRoleValue(barberData.role),
@@ -1545,65 +1520,6 @@ const handleBarberFieldChange = (id, field, value) => {
     },
     [apiRequest]
   );
-  const fetchBotRuntime = useCallback(async () => {
-    if (!canAccessBot) return null;
-    const botState = await apiRequest('/bot/status');
-    setBotSettings(botState?.settings || null);
-    setBotStatus(botState?.status || null);
-    setBotToken(botState?.token || null);
-    setDashboard((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        bot: {
-          ...(prev.bot || {}),
-          status: botState?.status || null,
-          settings: botState?.settings || null,
-        },
-      };
-    });
-    return botState;
-  }, [apiRequest, canAccessBot]);
-  const handleBotToggle = async (enabled) => {
-    try {
-      await apiRequest('/bot/status', { method: 'POST', body: JSON.stringify({ isBotEnabled: enabled }) });
-      await fetchBotRuntime();
-    } catch (error) {
-      setGlobalError(error.message || 'Не удалось обновить настройки бота');
-    }
-  };
-  const handleBotAction = async (action) => {
-    try {
-      await apiRequest('/bot/status', { method: 'POST', body: JSON.stringify({ action }) });
-      await fetchBotRuntime();
-    } catch (error) {
-      setGlobalError(error.message || 'Не удалось выполнить действие');
-    }
-  };
-  const handleUpdateBotToken = useCallback(
-    async (nextToken) => {
-      try {
-        const response = await apiRequest('/bot/token', { method: 'PUT', body: JSON.stringify({ token: nextToken }) });
-        const normalized = response?.token || nextToken;
-        setBotToken(normalized);
-        await fetchAll();
-        return normalized;
-      } catch (error) {
-        setGlobalError(error.message || 'Не удалось обновить токен бота');
-        throw error;
-      }
-    },
-    [apiRequest, fetchAll]
-  );
-  const handleSaveSettings = async (payload) => {
-    if (!botSettings?.id) return;
-    try {
-      await apiRequest(`/BotSettings/${encodeURIComponent(botSettings.id)}`, { method: 'PUT', body: JSON.stringify(payload) });
-      fetchAll();
-    } catch (error) {
-      setGlobalError(error.message || 'Не удалось сохранить настройки');
-    }
-  };
   const handleSaveSiteConfig = useCallback(
     async (draft) => {
       if (!canAccessSystem) return null;
@@ -1624,18 +1540,6 @@ const handleBarberFieldChange = (id, field, value) => {
     },
     [apiRequest, canAccessSystem]
   );
-  const handleSaveMessage = async (id, draft, persist) => {
-    if (!persist) {
-      setBotMessages((prev) => prev.map((message) => (message.id === id ? { ...draft } : message)));
-      return;
-    }
-    try {
-      await apiRequest(`/bot/messages/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ code: draft.code, title: draft.title, text: draft.text }) });
-      fetchAll();
-    } catch (error) {
-      setGlobalError(error.message || 'Не удалось сохранить сообщение');
-    }
-  };
   const handleRestoreBackup = async (filename) => {
     if (!filename) return;
     const confirmed = await requestConfirm({
@@ -1707,13 +1611,9 @@ const handleBarberFieldChange = (id, field, value) => {
       const normalizedPhone = normalizePhoneValue(
         typeof target === 'object' ? target?.Phone || target?.phone || '' : ''
       );
-      const normalizedTelegramId = normalizeText(
-        typeof target === 'object' ? target?.TelegramID || target?.telegramId || target?.UserID || target?.id || '' : ''
-      ).toLowerCase();
       const normalizedName = normalizeText(rawName).toLowerCase();
       const matchedClient =
         clients.find((client) => normalizePhoneValue(client?.phone || client?.Phone || '') === normalizedPhone && normalizedPhone) ||
-        clients.find((client) => normalizeText(client?.telegramId || client?.TelegramID || client?.id || '').toLowerCase() === normalizedTelegramId && normalizedTelegramId) ||
         clients.find((client) => normalizeText(client?.name || client?.Name || '').toLowerCase() === normalizedName && normalizedName) ||
         null;
       const profileName = matchedClient?.name || matchedClient?.Name || rawName;
@@ -1875,7 +1775,6 @@ const handleBarberFieldChange = (id, field, value) => {
           Name: payload?.Name || '',
           Phone: payload?.Phone || '',
           Barber: payload?.Barber || '',
-          TelegramID: null,
         }),
       });
       fetchAll({ silent: true });
@@ -2171,16 +2070,7 @@ const handleBarberFieldChange = (id, field, value) => {
         }
         return (
           <SystemSettingsView
-            status={botStatus}
-            settings={botSettings}
             backups={dashboard?.backups || []}
-            messages={botMessages}
-            onToggleEnabled={handleBotToggle}
-            onStart={() => handleBotAction('start')}
-            onStop={() => handleBotAction('stop')}
-            onRestart={() => handleBotAction('restart')}
-            onSaveSettings={handleSaveSettings}
-            onSaveMessage={(id, draft, persist) => handleSaveMessage(id, draft, persist)}
             onRestoreBackup={handleRestoreBackup}
             onCreateBackup={handleCreateBackup}
             onDeleteBackup={handleDeleteBackup}
@@ -2197,8 +2087,6 @@ const handleBarberFieldChange = (id, field, value) => {
             onRestartSystem={handleRestartSystem}
             pendingReloadReason={pendingReloadReason}
             systemBusy={systemBusy}
-            token={botToken}
-            onUpdateToken={handleUpdateBotToken}
             section={resolvedSystemSection}
             onSectionChange={setSystemSection}
             apiRequest={apiRequest}

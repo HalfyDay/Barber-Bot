@@ -20,7 +20,6 @@ const TABLE_COLUMNS = {
   Users: [
     { key: 'Name', label: 'Имя', editable: true, type: 'text', isProfileLink: true, minWidth: 'w-40' },
     { key: 'Phone', label: 'Телефон', editable: true, type: 'text', minWidth: 'w-36' },
-    { key: 'TelegramID', label: 'Telegram', editable: true, type: 'text', minWidth: 'w-32' },
     { key: 'Barber', label: 'Любимый мастер', editable: true, type: 'select', optionsKey: 'barbers', minWidth: 'w-40' },
   ],
 };
@@ -47,7 +46,7 @@ TABLE_COLUMNS.Schedules[2].label = 'Дата';
 TABLE_COLUMNS.Schedules[3].label = 'Слоты';
 TABLE_COLUMNS.Users[0].label = 'Имя';
 TABLE_COLUMNS.Users[1].label = 'Телефон';
-TABLE_COLUMNS.Users[3].label = 'Любимый сотрудник';
+TABLE_COLUMNS.Users[2].label = 'Любимый сотрудник';
 const BOT_SUPPORTED_STATUS_OPTIONS = ['\u0410\u043a\u0442\u0438\u0432\u043d\u0430\u044f', '\u0412\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430', '\u041e\u0442\u043c\u0435\u043d\u0430', '\u041d\u0435\u044f\u0432\u043a\u0430'];
 const [STATUS_ACTIVE, STATUS_DONE, STATUS_CANCELLED, STATUS_NO_SHOW] = BOT_SUPPORTED_STATUS_OPTIONS;
 const CLIENT_BLOCK_THRESHOLD = 3;
@@ -100,7 +99,6 @@ const buildNewBarberState = () => ({
   cardPhotoOutline: true,
   description: '',
   phone: '',
-  telegramId: '',
   isActive: true,
   role: ROLE_OWNER,
   positionId: null,
@@ -727,18 +725,6 @@ const normalizePhoneValue = (value) => {
   if (digits.startsWith('8')) return `+7${digits.slice(1)}`;
   if (digits.startsWith('7')) return `+7${digits.slice(1)}`;
   return `+${digits}`;
-};
-const formatTelegramHandle = (value) => {
-  const handle = normalizeText(value).replace(/^@+/, '').trim();
-  return handle ? `@${handle}` : '';
-};
-const buildTelegramLink = (value) => {
-  const handle = normalizeText(value).replace(/^@+/, '').trim();
-  if (!handle) return '';
-  if (/^\d+$/.test(handle)) {
-    return `tg://openmessage?user_id=${handle}`;
-  }
-  return `https://t.me/${handle}`;
 };
 const formatDateTime = (date, time) => {
   const datePart = formatDate(date);

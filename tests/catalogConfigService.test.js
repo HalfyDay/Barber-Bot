@@ -16,7 +16,7 @@ const createHarness = (overrides = {}) => {
     commissionSanitized: 0,
   };
   const prisma = {
-    botSettings: {
+    bookingSettings: {
       async count() {
         return 1;
       },
@@ -156,7 +156,7 @@ test("catalog config service normalizes only changed appointment statuses", asyn
 test("catalog config service clamps home booking settings", async () => {
   const { service } = createHarness({
     prisma: {
-      botSettings: {
+      bookingSettings: {
         async findFirst() {
           return {
             id: "settings-1",

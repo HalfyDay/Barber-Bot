@@ -28,7 +28,6 @@ const baseDeps = () => ({
   },
   getBarbers: async () => [],
   getServiceCatalog: async () => [],
-  getBotSettings: async () => ({ isBotEnabled: true }),
   listBackups: async () => [],
   readBlockedUsers: async () => new Set(),
   mapAppointment: (row) => row,
@@ -66,7 +65,6 @@ const baseDeps = () => ({
   canonicalizeKey: (value) => (value ?? "").toString().trim().toLowerCase(),
   getWarningCutoffDate: () => new Date("2026-01-01T00:00:00.000Z"),
   warningBlockThreshold: 2,
-  botRuntime: { running: true },
 });
 
 test("dashboard snapshot service builds client rows with user merge and orphan appointments", async () => {

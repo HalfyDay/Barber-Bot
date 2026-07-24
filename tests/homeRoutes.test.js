@@ -1,4 +1,4 @@
-﻿const test = require("node:test");
+const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { registerHomeRoutes } = require("../routes/homeRoutes");
@@ -61,7 +61,6 @@ const createHomeHarness = (overrides = {}) => {
     hashHomePassword: () => ({ hashHex: "hash", saltHex: "salt" }),
     verifyHomePassword: () => true,
     findHomeUserByPhone: async () => null,
-    findHomeUserByTelegramId: async () => null,
     findHomeUserById: async () => null,
     getUserMeta: async () => null,
     updateUserMeta: async (_userId, meta) => meta,
@@ -73,23 +72,6 @@ const createHomeHarness = (overrides = {}) => {
     buildHomeIdentity: (payload) => payload,
     signHomeSessionToken: () => "token",
     buildLimitBlockedMessage: () => "blocked",
-    getBotSettings: async () => ({ isBotEnabled: true }),
-    TELEGRAM_BOT_USERNAME: "botname",
-    markExpiredTelegramAuthRequests: () => {},
-    createTelegramAuthRequest: () => ({
-      id: "req-1",
-      code: "123456",
-      expiresAt: "2030-01-01T00:00:00.000Z",
-    }),
-    getTelegramAuthRequestById: () => null,
-    updateTelegramAuthRequestById: () => {},
-    deleteTelegramAuthRequestById: () => {},
-    TELEGRAM_AUTH_FLOW_LOGIN: "login",
-    TELEGRAM_AUTH_FLOW_PROFILE_LINK: "profile_link",
-    TELEGRAM_AUTH_STATUS_COMPLETED: "completed",
-    TELEGRAM_AUTH_STATUS_FAILED: "failed",
-    TELEGRAM_AUTH_STATUS_EXPIRED: "expired",
-    toTelegramIdNumber: () => 1,
     resolveHomeAssetPath: (value) => value,
     getServiceCatalog: async () => [],
     resolveHomeBookingUser: async () => ({ id: "home-1", Phone: "+79990000000" }),
@@ -115,7 +97,6 @@ const createHomeHarness = (overrides = {}) => {
     getBarbers: async () => [{ id: "barber-1", name: "Barber", cardPhrase: "", description: "" }],
     buildDateWindow: () => [],
     STATUS_ACTIVE: "active",
-    notifyBarberAboutNewAppointment: async () => {},
     requestRealtimePush: () => {},
     ...restOverrides,
     prisma,
@@ -124,107 +105,9 @@ const createHomeHarness = (overrides = {}) => {
   return { app };
 };
 
-test("home telegram auth start returns request payload with bot link", async () => {
-  const { app } = createHomeHarness({
-    createTelegramAuthRequest: () => ({
-      id: "req-42",
-      code: "654321",
-      expiresAt: "2030-01-01T00:00:00.000Z",
-    }),
-    TELEGRAM_BOT_USERNAME: "brother_bot",
-  });
-  const handler = app.getRoute("POST", "/api/home/auth/telegram/start");
-  const res = createResponseMock();
 
-  await handler({ body: {} }, res);
 
-  assert.equal(res.statusCode, 201);
-  assert.equal(res.body.requestId, "req-42");
-  assert.equal(res.body.code, "654321");
-  assert.match(res.body.botLink, /brother_bot/);
-});
 
-test("home telegram auth start rejects when bot is disabled", async () => {
-  const { app } = createHomeHarness({
-    getBotSettings: async () => ({ isBotEnabled: false }),
-  });
-  const handler = app.getRoute("POST", "/api/home/auth/telegram/start");
-  const res = createResponseMock();
-
-  await handler({ body: {} }, res);
-
-  assert.equal(res.statusCode, 503);
-  assert.equal(res.body.success, false);
-  assert.equal(res.body.message, "Вход через Telegram сейчас недоступен.");
-});
-
-test("home public payload exposes telegram auth availability", async () => {
-  const { app } = createHomeHarness({
-    buildPublicHomePayload: async () => ({
-      site: {
-        home: {},
-        auth: { telegramEnabled: false },
-      },
-      booking: {
-        activeAppointments: [],
-        barbers: [],
-      },
-    }),
-  });
-  const handler = app.getRoute("GET", "/api/home/public");
-  const res = createResponseMock();
-
-  await handler({ query: {} }, res);
-
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.body.success, true);
-  assert.equal(res.body.site.auth.telegramEnabled, false);
-});
-
-test("home telegram auth status completes login for existing user with password", async () => {
-  const existingUser = createHomeUserRecord({
-    id: "user-42",
-    TelegramID: 777,
-  });
-  const { app } = createHomeHarness({
-    getTelegramAuthRequestById: () => ({
-      id: "req-1",
-      status: "completed",
-      flow: "login",
-      telegramId: "777",
-      userId: "user-42",
-      phone: "+79990000000",
-      displayName: "Ivan",
-    }),
-    prisma: {
-      users: {
-        async findUnique() {
-          return existingUser;
-        },
-        async update({ data }) {
-          return { ...existingUser, ...data };
-        },
-      },
-    },
-    findHomeUserByTelegramId: async () => existingUser,
-    findHomeUserByPhone: async () => existingUser,
-    toPublicHomeUser: (row) => ({
-      id: row.id,
-      phone: row.Phone,
-      displayName: row.Name,
-    }),
-  });
-  const handler = app.getRoute("GET", "/api/home/auth/telegram/status");
-  const res = createResponseMock();
-
-  await handler({ query: { requestId: "req-1" } }, res);
-
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.body.success, true);
-  assert.equal(res.body.done, true);
-  assert.equal(res.body.token, "token");
-  assert.equal(res.body.user.id, "user-42");
-});
 
 test("home profile update blocks locked name changes", async () => {
   const currentUser = createHomeUserRecord({
@@ -307,40 +190,6 @@ test("home profile update stores a new password when provided", async () => {
   assert.equal(calls[0][2].Phone, "+79990000000");
 });
 
-test("home profile telegram status rejects request created for another user", async () => {
-  const currentUser = createHomeUserRecord({
-    id: "user-77",
-  });
-  const { app } = createHomeHarness({
-    getTelegramAuthRequestById: () => ({
-      id: "req-77",
-      flow: "profile_link",
-      targetUserId: "user-other",
-      status: "pending",
-    }),
-    prisma: {
-      users: {
-        async findUnique() {
-          return currentUser;
-        },
-      },
-    },
-  });
-  const handler = app.getRoute("GET", "/api/home/profile/telegram/status");
-  const res = createResponseMock();
-
-  await handler(
-    {
-      homeUser: { userId: "user-77" },
-      query: { requestId: "req-77" },
-    },
-    res,
-  );
-
-  assert.equal(res.statusCode, 403);
-  assert.equal(res.body.success, false);
-  assert.equal(res.body.done, true);
-});
 
 test("home booking dates returns limit error when user already has max active appointments", async () => {
   const { app } = createHomeHarness({
@@ -401,7 +250,6 @@ test("home booking dates returns available dates and selected services", async (
 });
 
 test("home booking appointment creates appointment and triggers side effects", async () => {
-  let notified = null;
   let realtimeForced = null;
   const { app } = createHomeHarness({
     appointmentService: {
@@ -418,9 +266,6 @@ test("home booking appointment creates appointment and triggers side effects", a
       }),
     },
     getServiceCatalog: async () => [{ id: "svc-1", duration: 30, name: "Cut" }],
-    notifyBarberAboutNewAppointment: async (payload) => {
-      notified = payload;
-    },
     requestRealtimePush: (force) => {
       realtimeForced = force;
     },
@@ -444,8 +289,6 @@ test("home booking appointment creates appointment and triggers side effects", a
   assert.equal(res.body.appointment.id, "appt-1");
   assert.equal(res.body.appointment.barberName, "Barber");
   assert.equal(res.body.appointment.services, "Cut");
-  assert.equal(notified?.appointment?.id, "appt-1");
-  assert.equal(notified?.barber?.name, "Barber");
   assert.equal(realtimeForced, true);
 });
 

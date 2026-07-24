@@ -1138,7 +1138,7 @@ test("admin crud routes return generic table records with ordering", async () =>
   assert.deepEqual(calls, [{ orderBy: [{ orderIndex: "asc" }, { name: "asc" }], include: { children: true } }]);
 });
 
-test("admin crud routes create generic users record and normalize telegram id", async () => {
+test("admin crud routes create generic users record", async () => {
   const calls = [];
   const { app } = createHarness({
     prisma: {
@@ -1163,7 +1163,6 @@ test("admin crud routes create generic users record and normalize telegram id", 
       params: { tableName: "Users" },
       body: {
         FullName: "Client",
-        TelegramID: "12345",
       },
     },
     res,
@@ -1173,15 +1172,14 @@ test("admin crud routes create generic users record and normalize telegram id", 
   assert.deepEqual(res.body, {
     id: "uuid-1",
     FullName: "Client",
-    TelegramID: 12345,
   });
   assert.deepEqual(calls, [
-    ["create", { id: "uuid-1", FullName: "Client", TelegramID: 12345 }],
+    ["create", { id: "uuid-1", FullName: "Client" }],
     ["requestRealtimePush", true],
   ]);
 });
 
-test("admin crud routes update generic users record and normalize telegram id", async () => {
+test("admin crud routes update generic users record", async () => {
   const calls = [];
   const { app } = createHarness({
     prisma: {
@@ -1206,7 +1204,6 @@ test("admin crud routes update generic users record and normalize telegram id", 
       params: { tableName: "Users", id: "user-1" },
       body: {
         FullName: "Client Updated",
-        TelegramID: "",
       },
     },
     res,
@@ -1216,10 +1213,9 @@ test("admin crud routes update generic users record and normalize telegram id", 
   assert.deepEqual(res.body, {
     id: "user-1",
     FullName: "Client Updated",
-    TelegramID: null,
   });
   assert.deepEqual(calls, [
-    ["update", { id: "user-1" }, { FullName: "Client Updated", TelegramID: null }],
+    ["update", { id: "user-1" }, { FullName: "Client Updated" }],
     ["requestRealtimePush", true],
   ]);
 });

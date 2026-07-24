@@ -10,11 +10,6 @@ const normalizeText = (value) => (value ?? "").toString().trim();
 const createHarness = (overrides = {}) => {
   const app = createAppMock();
   const prisma = {
-    botSettings: {
-      async update() {
-        return {};
-      },
-    },
     async $disconnect() {},
     ...(overrides.prisma || {}),
   };
@@ -25,17 +20,8 @@ const createHarness = (overrides = {}) => {
     isOwnerRequest: () => true,
     ensureLicenseValid: async () => ({ valid: true }),
     getLicenseStatus: () => ({ valid: true }),
-    getBotSettings: async () => ({ isBotEnabled: true }),
-    readBotToken: async () => "token",
-    serializeBotRuntime: () => ({ running: false }),
-    ensureBotSettingsRecord: async () => ({ id: "settings-1" }),
     prisma,
-    startBotProcess: async () => {},
-    stopBotProcess: async () => {},
-    ensureBotProcessState: async () => {},
     normalizeText,
-    writeBotToken: async (token) => token,
-    botRuntime: { running: false },
     checkForUpdates: async () => ({ hasUpdate: false }),
     getUpdateInProgress: () => false,
     performSystemUpdate: async () => ({ updated: true }),
@@ -88,16 +74,6 @@ test("owner system routes reject update while update is already in progress", as
   assert.match(res.body.error, /Обновление уже выполняется/i);
 });
 
-test("owner system routes require bot token payload", async () => {
-  const { app } = createHarness();
-  const handler = app.getRoute("PUT", "/api/bot/token");
-  const res = createResponseMock();
-
-  await handler({ body: {} }, res);
-
-  assert.equal(res.statusCode, 400);
-  assert.match(res.body.error, /токен/i);
-});
 
 test("owner system routes require backup filename for restore", async () => {
   const { app } = createHarness();
@@ -124,34 +100,6 @@ test("owner system routes return license status for owner", async () => {
   assert.deepEqual(res.body, expected);
 });
 
-test("owner system routes update bot token and restart running bot", async () => {
-  const calls = [];
-  const { app } = createHarness({
-    botRuntime: { running: true },
-    writeBotToken: async (token) => {
-      calls.push(["writeBotToken", token]);
-      return `saved:${token}`;
-    },
-    stopBotProcess: async () => {
-      calls.push(["stopBotProcess"]);
-    },
-    startBotProcess: async () => {
-      calls.push(["startBotProcess"]);
-    },
-  });
-  const handler = app.getRoute("PUT", "/api/bot/token");
-  const res = createResponseMock();
-
-  await handler({ body: { token: "next-token" } }, res);
-
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, { token: "saved:next-token" });
-  assert.deepEqual(calls, [
-    ["writeBotToken", "next-token"],
-    ["stopBotProcess"],
-    ["startBotProcess"],
-  ]);
-});
 
 test("owner system routes perform system update and schedule restart", async () => {
   const calls = [];
@@ -191,116 +139,8 @@ test("owner system routes perform system update and schedule restart", async () 
   ]);
 });
 
-test("owner system routes return bot runtime snapshot", async () => {
-  const { app } = createHarness({
-    getBotSettings: async () => ({ isBotEnabled: false }),
-    readBotToken: async () => "bot-token",
-    serializeBotRuntime: () => ({ running: true, pid: 321 }),
-  });
-  const handler = app.getRoute("GET", "/api/bot/status");
-  const res = createResponseMock();
 
-  await handler({ identity: { username: "owner" } }, res);
 
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, {
-    status: { running: true, pid: 321 },
-    settings: { isBotEnabled: false },
-    token: "bot-token",
-  });
-});
-
-test("owner system routes update bot status and toggle settings", async () => {
-  const calls = [];
-  const { app } = createHarness({
-    ensureBotSettingsRecord: async () => ({ id: "settings-2" }),
-    prisma: {
-      botSettings: {
-        async update(input) {
-          calls.push(["botSettings.update", input]);
-          return {};
-        },
-      },
-    },
-    startBotProcess: async () => {
-      calls.push(["startBotProcess"]);
-    },
-    getBotSettings: async () => ({ isBotEnabled: true }),
-    serializeBotRuntime: () => ({ running: true }),
-  });
-  const handler = app.getRoute("POST", "/api/bot/status");
-  const res = createResponseMock();
-
-  await handler(
-    {
-      identity: { username: "owner" },
-      body: { action: "start", isBotEnabled: true },
-    },
-    res,
-  );
-
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, {
-    status: { running: true },
-    settings: { isBotEnabled: true },
-  });
-  assert.deepEqual(calls, [
-    [
-      "botSettings.update",
-      {
-        where: { id: "settings-2" },
-        data: { isBotEnabled: true, lastSyncSource: "site" },
-      },
-    ],
-    ["startBotProcess"],
-  ]);
-});
-
-test("owner system routes stop action disables bot in settings by default", async () => {
-  const calls = [];
-  const { app } = createHarness({
-    prisma: {
-      botSettings: {
-        async update(input) {
-          calls.push(["botSettings.update", input]);
-          return { id: "settings-3", isBotEnabled: false };
-        },
-      },
-    },
-    ensureBotSettingsRecord: async () => ({ id: "settings-3" }),
-    stopBotProcess: async () => {
-      calls.push(["stopBotProcess"]);
-    },
-    getBotSettings: async () => ({ isBotEnabled: false }),
-    serializeBotRuntime: () => ({ running: false }),
-  });
-  const handler = app.getRoute("POST", "/api/bot/status");
-  const res = createResponseMock();
-
-  await handler(
-    {
-      identity: { username: "owner" },
-      body: { action: "stop" },
-    },
-    res,
-  );
-
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, {
-    status: { running: false },
-    settings: { isBotEnabled: false },
-  });
-  assert.deepEqual(calls, [
-    [
-      "botSettings.update",
-      {
-        where: { id: "settings-3" },
-        data: { isBotEnabled: false, lastSyncSource: "site" },
-      },
-    ],
-    ["stopBotProcess"],
-  ]);
-});
 
 test("owner system routes schedule restart successfully", async () => {
   const calls = [];

@@ -31,9 +31,7 @@ test("booking utility service normalizes appointment statuses and supported valu
   assert.equal(service.resolveSupportedStatus("unknown"), null);
 });
 
-test("booking utility service parses telegram id and date window", () => {
-  assert.equal(service.toTelegramIdNumber("12345"), 12345);
-  assert.equal(service.toTelegramIdNumber("abc"), null);
+test("booking utility service builds date window", () => {
   assert.equal(service.buildDateWindow(2).length, 2);
 });
 

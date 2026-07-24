@@ -35,13 +35,9 @@ const createBaseService = (overrides = {}) => {
       },
     },
     backupRetentionDays: 30,
-    stopAppointmentReminderLoop: () => events.push("stopAppointmentReminderLoop"),
     stopRealtimeLoop: () => events.push("stopRealtimeLoop"),
     shutdownRealtimeClients: () => events.push("shutdownRealtimeClients"),
     shutdownHomeRealtimeClients: () => events.push("shutdownHomeRealtimeClients"),
-    stopBotProcess: async () => {
-      events.push("stopBotProcess");
-    },
     stopHttpServer: async () => {
       events.push("stopHttpServer");
     },
@@ -60,16 +56,12 @@ const createBaseService = (overrides = {}) => {
       },
     },
     ensureUsersHomeAuthColumns: () => events.push("ensureUsersHomeAuthColumns"),
-    ensureTelegramAuthRequestsTable: () => events.push("ensureTelegramAuthRequestsTable"),
-    markExpiredTelegramAuthRequests: () => events.push("markExpiredTelegramAuthRequests"),
     ensureLicenseValid: async () => events.push("ensureLicenseValid"),
     startLicenseWatcher: () => events.push("startLicenseWatcher"),
     migrateLegacyHomeUsersToUsers: async () => ({ created: 1, updated: 0, total: 1 }),
     ensureBootstrapData: async () => events.push("ensureBootstrapData"),
     normalizeStoredAppointmentStatuses: async () => ({ updated: 1, total: 1 }),
     seedServicesFromCost: async () => events.push("seedServicesFromCost"),
-    ensureBotProcessState: async () => events.push("ensureBotProcessState"),
-    startAppointmentReminderLoop: () => events.push("startAppointmentReminderLoop"),
     runRealtimePush: async () => events.push("runRealtimePush"),
     ensureRealtimeLoop: () => events.push("ensureRealtimeLoop"),
     app: {
@@ -118,8 +110,6 @@ test("server lifecycle service bootstraps app and starts listeners", async () =>
   await service.bootstrap();
 
   assert.ok(events.includes("ensureUsersHomeAuthColumns"));
-  assert.ok(events.includes("ensureBotProcessState"));
-  assert.ok(events.includes("startAppointmentReminderLoop"));
   assert.ok(events.includes("runRealtimePush"));
   assert.ok(events.includes("ensureRealtimeLoop"));
   assert.ok(events.some((entry) => entry?.type === "listen" && entry.port === 3000));
@@ -131,16 +121,14 @@ test("server lifecycle service shuts down dependencies and exits", async () => {
 
   await service.gracefulShutdown();
 
-  assert.deepEqual(events.slice(0, 6), [
-    "stopAppointmentReminderLoop",
+  assert.deepEqual(events.slice(0, 4), [
     "stopRealtimeLoop",
     "shutdownRealtimeClients",
     "shutdownHomeRealtimeClients",
-    "stopBotProcess",
     "stopHttpServer",
   ]);
-  assert.equal(events[6], "prismaDisconnect");
-  assert.deepEqual(events[7], { type: "exit", code: 0 });
+  assert.equal(events[4], "prismaDisconnect");
+  assert.deepEqual(events[5], { type: "exit", code: 0 });
 });
 
 test("server lifecycle service gracefulShutdown sends ready signal in PM2", async () => {
@@ -167,7 +155,8 @@ test("server lifecycle service gracefulShutdown sends ready signal in PM2", asyn
     await service.gracefulShutdown();
 
     assert.ok(sentSignals.includes("ready"), "Should send 'ready' signal to PM2");
-    assert.deepEqual(events[7], { type: "exit", code: 0 });
+    const exitEvent = events.find((e) => e?.type === "exit");
+    assert.deepEqual(exitEvent, { type: "exit", code: 0 });
   } finally {
     if (originalPm2Home === undefined) {
       delete process.env.PM2_HOME;
@@ -203,7 +192,8 @@ test("server lifecycle service gracefulShutdown does not send ready without PM2"
     await service.gracefulShutdown();
 
     assert.equal(sentSignals.length, 0, "Should not send any signal without PM2");
-    assert.deepEqual(events[7], { type: "exit", code: 0 });
+    const exitEvent = events.find((e) => e?.type === "exit");
+    assert.deepEqual(exitEvent, { type: "exit", code: 0 });
   } finally {
     if (originalPm2Home !== undefined) {
       process.env.PM2_HOME = originalPm2Home;

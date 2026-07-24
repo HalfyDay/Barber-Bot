@@ -844,14 +844,6 @@ const BarbersView = ({
                   placeholder="Телефон"
                   className="w-full px-4 py-3 text-white placeholder:text-slate-500"
                 />
-                <input
-                  name="barberTelegram"
-                  aria-label="Telegram"
-                  value={workingBarber.telegramId || ''}
-                  onChange={(event) => handleFieldChange('telegramId', event.target.value)}
-                  placeholder="Telegram"
-                  className="w-full px-4 py-3 text-white placeholder:text-slate-500"
-                />
               </div>
             </div>
           </div>
@@ -1059,14 +1051,6 @@ const BarberProfileView = ({
                 value={formatPhoneDisplay(barber.phone || '')}
                 onChange={(event) => handlePhoneChange(event.target.value)}
                 placeholder="Телефон"
-                className="w-full px-4 py-3 text-white placeholder:text-slate-500"
-              />
-              <input
-                name="barberTelegram"
-                aria-label="Telegram"
-                value={barber.telegramId || ''}
-                onChange={(event) => handleFieldChange('telegramId', event.target.value)}
-                placeholder="Telegram"
                 className="w-full px-4 py-3 text-white placeholder:text-slate-500"
               />
             </div>

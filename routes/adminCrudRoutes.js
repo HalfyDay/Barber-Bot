@@ -67,7 +67,6 @@ const registerAdminCrudRoutes = ({
   adjustUserBsBalance,
   addUserWarning,
   homePushService,
-  notifyBarberAboutNewAppointment,
   splitServiceList,
   buildServiceLookup,
   getServicePriceForBarber,
@@ -457,19 +456,6 @@ const registerAdminCrudRoutes = ({
       const recordFrontend = mapPrismaAppointmentToFrontend(record);
       res.status(201).json(recordFrontend);
       requestRealtimePush(true);
-      // Notify the specific barber about the new appointment
-      const barberName = normalizeText(recordFrontend.Barber);
-      if (barberName) {
-        const allBarbers = await getBarbers({ includeInactive: true });
-        const targetBarber = allBarbers.find((b) => normalizeText(b.name) === barberName);
-        if (targetBarber?.telegramId) {
-          await notifyBarberAboutNewAppointment({
-            appointment: recordFrontend,
-            barber: targetBarber,
-            homeUser: { displayName: recordFrontend.CustomerName, phone: recordFrontend.Phone },
-          }).catch(() => {});
-        }
-      }
       // Notify the client
       const ownerUserId = await homePushService?.resolveUserIdForAppointment?.(recordFrontend);
       if (ownerUserId && normalizeText(recordFrontend.Status) === "Активная") {
@@ -544,19 +530,6 @@ const registerAdminCrudRoutes = ({
       updated = mapPrismaAppointmentToFrontend(updated);
       res.json(updated);
       requestRealtimePush(true);
-      // Notify the specific barber about the updated appointment
-      const barberName = normalizeText(updated.Barber);
-      if (barberName) {
-        const allBarbers = await getBarbers({ includeInactive: true });
-        const targetBarber = allBarbers.find((b) => normalizeText(b.name) === barberName);
-        if (targetBarber?.telegramId) {
-          await notifyBarberAboutNewAppointment({
-            appointment: updated,
-            barber: targetBarber,
-            homeUser: { displayName: updated.CustomerName, phone: updated.Phone },
-          }).catch(() => {});
-        }
-      }
       // Notify the client
       const ownerUserId = await homePushService?.resolveUserIdForAppointment?.(updated);
       if (ownerUserId) {
@@ -844,14 +817,6 @@ const registerAdminCrudRoutes = ({
       return res.status(403).json({ error: "Недостаточно прав для доступа к этому разделу." });
     }
     const data = coercePayload(tableName, { ...req.body });
-    if (tableName === "Users" && data.TelegramID !== undefined) {
-      if (data.TelegramID === null || data.TelegramID === "") {
-        data.TelegramID = null;
-      } else {
-        const parsed = Number(data.TelegramID);
-        data.TelegramID = Number.isNaN(parsed) ? null : parsed;
-      }
-    }
     try {
       const updated = await prisma[modelName].update({ where: { id }, data });
       res.json(updated);
@@ -888,14 +853,6 @@ const registerAdminCrudRoutes = ({
     const cityId = getCityIdFromReq(req);
     if (cityId && CITY_FILTERED_TABLES.has(tableName) && !payload.cityId) {
       payload.cityId = cityId;
-    }
-    if (tableName === "Users") {
-      if (payload.TelegramID) {
-        const parsed = Number(payload.TelegramID);
-        payload.TelegramID = Number.isNaN(parsed) ? null : parsed;
-      } else {
-        payload.TelegramID = null;
-      }
     }
     try {
       const record = await prisma[modelName].create({

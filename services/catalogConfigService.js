@@ -4,7 +4,6 @@ const createCatalogConfigService = ({
   normalizeText,
   canonicalizeKey,
   normalizeAppointmentStatus,
-  DEFAULT_BOT_DESCRIPTION,
   DEFAULT_ABOUT_TEXT,
   buildBarberLookup,
   resolveBarberIdFromLookup,
@@ -19,24 +18,24 @@ const createCatalogConfigService = ({
     try {
       await prisma.$executeRawUnsafe(`ALTER TABLE "Barbers" ADD COLUMN IF NOT EXISTS "lastSeenAt" TIMESTAMP(3)`);
     } catch (_) { /* non-fatal: column may already exist or table may not exist yet */ }
-    const [settingsCount] = await Promise.all([
-      prisma.botSettings.count(),
-      prisma.barbers.count(),
-    ]);
-    if (!settingsCount) {
-      await prisma.botSettings.create({
-        data: {
-          id: randomUUID(),
-          botDescription: DEFAULT_BOT_DESCRIPTION,
-          aboutText: DEFAULT_ABOUT_TEXT,
-          isBotEnabled: true,
-          bookingLimit: 2,
-          minLeadHours: 2,
-          maxDaysAhead: 14,
-          lastSyncSource: "bootstrap",
-          botToken: "",
-        },
-      });
+    try {
+      const [settingsCount] = await Promise.all([
+        prisma.bookingSettings.count(),
+        prisma.barbers.count(),
+      ]);
+      if (!settingsCount) {
+        await prisma.bookingSettings.create({
+          data: {
+            id: randomUUID(),
+            aboutText: DEFAULT_ABOUT_TEXT,
+            bookingLimit: 2,
+            minLeadHours: 2,
+            maxDaysAhead: 14,
+          },
+        });
+      }
+    } catch (_) {
+      // BookingSettings table may not exist yet; will be created on first migration
     }
   };
 
@@ -112,26 +111,33 @@ const createCatalogConfigService = ({
   };
 
   const ensureBotSettingsRecord = async () => {
-    let record = await prisma.botSettings.findFirst();
-    if (record) return record;
-    await ensureBootstrapData();
-    await sanitizeCommissionRates();
-    record = await prisma.botSettings.findFirst();
-    if (record) return record;
-    record = await prisma.botSettings.create({
-      data: {
-        id: randomUUID(),
-        botDescription: DEFAULT_BOT_DESCRIPTION,
+    try {
+      let record = await prisma.bookingSettings.findFirst();
+      if (record) return record;
+      await ensureBootstrapData();
+      await sanitizeCommissionRates();
+      record = await prisma.bookingSettings.findFirst();
+      if (record) return record;
+      record = await prisma.bookingSettings.create({
+        data: {
+          id: randomUUID(),
+          aboutText: DEFAULT_ABOUT_TEXT,
+          bookingLimit: 2,
+          minLeadHours: 2,
+          maxDaysAhead: 14,
+        },
+      });
+      return record;
+    } catch (_) {
+      // Return defaults if BookingSettings table doesn't exist yet
+      return {
+        id: null,
         aboutText: DEFAULT_ABOUT_TEXT,
-        isBotEnabled: true,
         bookingLimit: 2,
         minLeadHours: 2,
         maxDaysAhead: 14,
-        lastSyncSource: "site",
-        botToken: "",
-      },
-    });
-    return record;
+      };
+    }
   };
 
   const getBotSettings = async () => ensureBotSettingsRecord();

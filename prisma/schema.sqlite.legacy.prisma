@@ -9,7 +9,6 @@ generator client {
 
 model Users {
   id                  String    @id
-  TelegramID           Float?    @map("TelegramID")
   Name                 String?    @map("Name")
   Phone                String?    @map("Phone")
   LastNameChanged      String?    @map("LastNameChanged")
@@ -21,10 +20,8 @@ model Users {
   homeUpdatedAt        String?    @map("HomeUpdatedAt")
   homeLastLoginAt      String?    @map("HomeLastLoginAt")
   homePhoneChangedAt   String?    @map("HomePhoneChangedAt")
-  homeTelegramChangedAt String?   @map("HomeTelegramChangedAt")
 
   @@index([Phone])
-  @@index([TelegramID])
   @@map("Users")
 }
 model Appointments {
@@ -81,7 +78,6 @@ model Barbers {
   avatarUrl   String?
   color       String?
   phone       String?
-  telegramId  String?
   login       String?
   password    String?
   cardTitle       String   @default("")
@@ -158,19 +154,6 @@ model PositionServiceMaxPrices {
   service  Services  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
   @@unique([positionId, serviceId])
-}
-
-model BotSettings {
-  id             String   @id
-  botDescription String   @default("")
-  aboutText      String   @default("")
-  isBotEnabled   Boolean  @default(true)
-  bookingLimit   Int      @default(2)
-  minLeadHours   Int      @default(2)
-  maxDaysAhead   Int      @default(14)
-  lastSyncSource String   @default("site")
-  botToken       String   @default("")
-  updatedAt      DateTime @updatedAt
 }
 
 model BotMessages {

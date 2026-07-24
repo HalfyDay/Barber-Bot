@@ -36,8 +36,6 @@ const isDatabaseCorruptionError = (error) =>
 const buildDatabaseCorruptionMessage = () =>
   "РҐСЂР°РЅРёР»РёС‰Рµ РґР°РЅРЅС‹С… РЅРµРґРѕСЃС‚СѓРїРЅРѕ РёР»Рё РїРѕРІСЂРµР¶РґРµРЅРѕ. РџСЂРѕРІРµСЂСЊС‚Рµ РїРѕРґРєР»СЋС‡РµРЅРёРµ Рє PostgreSQL Рё РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё РІРѕСЃСЃС‚Р°РЅРѕРІРёС‚Рµ Р±Р°Р·Сѓ РёР· СЂРµР·РµСЂРІРЅРѕР№ РєРѕРїРёРё.";
 const {
-  loadBotMenu,
-  saveBotMenu,
   buildSafeImageFilename,
   getExistingImageFilename,
   decodeBase64Image,
@@ -159,7 +157,6 @@ const {
 const {
   normalizeAppointmentStatus,
   resolveSupportedStatus,
-  toTelegramIdNumber,
   coercePayload,
   respondWithAppointmentDomainError,
   buildDateWindow,
@@ -210,15 +207,7 @@ const HOME_AUTH_COLUMNS = [
   { name: "HomeUpdatedAt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomeUpdatedAt" TEXT' },
   { name: "HomeLastLoginAt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomeLastLoginAt" TEXT' },
   { name: "HomePhoneChangedAt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomePhoneChangedAt" TEXT' },
-  { name: "HomeTelegramChangedAt", ddl: 'ALTER TABLE "Users" ADD COLUMN "HomeTelegramChangedAt" TEXT' },
 ];
-const TELEGRAM_AUTH_REQUESTS_TABLE = "TelegramAuthRequests";
-const TELEGRAM_AUTH_STATUS_PENDING = "pending";
-const TELEGRAM_AUTH_STATUS_COMPLETED = "completed";
-const TELEGRAM_AUTH_STATUS_FAILED = "failed";
-const TELEGRAM_AUTH_STATUS_EXPIRED = "expired";
-const TELEGRAM_AUTH_FLOW_LOGIN = "login";
-const TELEGRAM_AUTH_FLOW_PROFILE_LINK = "profile_link";
 const HOME_USER_SELECT = {
   id: true,
   Name: true,
@@ -231,21 +220,10 @@ const HOME_USER_SELECT = {
   homeLastLoginAt: true,
 };
 const {
-  ensureTelegramAuthRequestsTable,
-  markExpiredTelegramAuthRequests,
-  createTelegramAuthRequest,
-  getTelegramAuthRequestById,
-  getTelegramAuthRequestByCode,
-  updateTelegramAuthRequestById,
-  deleteTelegramAuthRequestById,
   ensureUsersHomeAuthColumns,
   readBlockedUsers,
   writeBlockedUsers,
-  listUsersWithHaircutReminderState,
-  markUserHaircutReminderSent,
   shouldHydrateUserNameFromHome,
-  findHomeUserByTelegramId,
-  findAnyUserByTelegramId,
   findAnyUserByPhone,
   findHomeUserByPhone,
   findHomeUserById,
@@ -261,13 +239,6 @@ const {
   canonicalizeKey,
   randomUUID,
   randomBytes,
-  HOME_TELEGRAM_AUTH_TTL_MS,
-  TELEGRAM_AUTH_REQUESTS_TABLE,
-  TELEGRAM_AUTH_FLOW_LOGIN,
-  TELEGRAM_AUTH_STATUS_PENDING,
-  TELEGRAM_AUTH_STATUS_COMPLETED,
-  TELEGRAM_AUTH_STATUS_FAILED,
-  TELEGRAM_AUTH_STATUS_EXPIRED,
 });
 const { migrateLegacyHomeUsersToUsers } = createLegacyHomeUsersMigrationService({
   LEGACY_HOME_USERS_DB_PATH,

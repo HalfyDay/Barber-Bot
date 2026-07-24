@@ -1008,27 +1008,6 @@ const runPostUpdateDatabaseFixes = async () => {
         CREATE UNIQUE INDEX IF NOT EXISTS "Businesses_customCrmDomain_key" ON "Businesses"("customCrmDomain");
         CREATE UNIQUE INDEX IF NOT EXISTS "Businesses_dbSchema_key" ON "Businesses"("dbSchema");
 
-        CREATE TABLE IF NOT EXISTS "TelegramAuthRequests" (
-          "id" TEXT NOT NULL,
-          "code" TEXT NOT NULL,
-          "status" TEXT NOT NULL,
-          "flow" TEXT NOT NULL DEFAULT 'login',
-          "targetUserId" TEXT,
-          "telegramId" TEXT,
-          "phone" TEXT,
-          "displayName" TEXT,
-          "userId" TEXT,
-          "errorMessage" TEXT,
-          "createdAt" TEXT NOT NULL,
-          "expiresAt" TEXT NOT NULL,
-          "updatedAt" TEXT NOT NULL,
-          CONSTRAINT "TelegramAuthRequests_pkey" PRIMARY KEY ("id")
-        );
-        CREATE UNIQUE INDEX IF NOT EXISTS "TelegramAuthRequests_code_key" ON "TelegramAuthRequests"("code");
-        CREATE INDEX IF NOT EXISTS "TelegramAuthRequests_status_expiresAt_idx" ON "TelegramAuthRequests"("status", "expiresAt");
-        CREATE INDEX IF NOT EXISTS "TelegramAuthRequests_flow_targetUserId_idx" ON "TelegramAuthRequests"("flow", "targetUserId");
-        CREATE INDEX IF NOT EXISTS "TelegramAuthRequests_code_idx" ON "TelegramAuthRequests"("code");
-
         CREATE TABLE IF NOT EXISTS "CreatorIncome" (
           "id" TEXT NOT NULL,
           "businessId" TEXT NOT NULL,
@@ -1126,7 +1105,7 @@ const runPostUpdateDatabaseFixes = async () => {
       ]) {
         try { await publicClient.query(fkSql); } catch (e) { /* Non-fatal: FK may already exist */ }
       }
-      console.log('[update] Public schema tables verified/created (Businesses, TelegramAuthRequests, CreatorIncome, Shop*)');
+      console.log('[update] Public schema tables verified/created (Businesses, CreatorIncome, Shop*)');
 
       // If Appointments table exists in public schema, ensure Comment/CoverBs/DiscountRub exist
       const tableCheck = await publicClient.query(`
@@ -1240,8 +1219,6 @@ const applyUpdate = async () => {
       !changedFiles.length ||
       hasChangedFile(changedFiles, (file) => file === PRISMA_SCHEMA_RELATIVE_PATH) ||
       hasChangedFile(changedFiles, (file) => file.startsWith('prisma/migrations/'));
-    const shouldRunPythonInstall =
-      !changedFiles.length || hasChangedFile(changedFiles, 'requirements.txt');
     const shouldRunWebBuild =
       !changedFiles.length ||
       shouldRunNodeInstall ||
@@ -1280,13 +1257,6 @@ const applyUpdate = async () => {
       await runCommand('npm run build:web');
     } else {
       console.log('[update] web assets unchanged, skipping build:web');
-    }
-    const python = process.env.BOT_PYTHON_PATH || (os.platform() === 'win32' ? 'python' : 'python3');
-    const requirementsPath = path.join(PROJECT_ROOT, 'requirements.txt');
-    if (fs.existsSync(requirementsPath) && shouldRunPythonInstall) {
-      await runCommand(`${python} -m pip install -r "${requirementsPath}"`);
-    } else if (fs.existsSync(requirementsPath)) {
-      console.log('[update] requirements unchanged, skipping pip install');
     }
     console.log("[update] apply complete");
     cachedUpdate = null;

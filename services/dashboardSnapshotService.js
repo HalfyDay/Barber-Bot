@@ -2,7 +2,6 @@ const createDashboardSnapshotService = ({
   prisma,
   getBarbers,
   getServiceCatalog,
-  getBotSettings,
   listBackups,
   readBlockedUsers,
   mapAppointment,
@@ -23,7 +22,6 @@ const createDashboardSnapshotService = ({
   canonicalizeKey,
   getWarningCutoffDate,
   warningBlockThreshold,
-  botRuntime,
   buildUserInsightsMap,
   statusNoShow,
 }) => {
@@ -220,7 +218,6 @@ const createDashboardSnapshotService = ({
       appointmentsRaw,
       users,
       services,
-      settings,
       backups,
       blockedUsers,
       positions,
@@ -228,7 +225,6 @@ const createDashboardSnapshotService = ({
       prisma.appointments.findMany({ where: appointmentWhere }),
       prisma.users.findMany(),
       getServiceCatalog(true, identity, cityId ? { OR: [{ cityId: cityId }, { cityId: null }] } : {}),
-      getBotSettings(),
       listBackups(),
       readBlockedUsers(),
       prisma.positions.findMany({ ...(cityId ? { where: { OR: [{ cityId: cityId }, { cityId: null }] } } : {}), include: { children: true } }),
@@ -351,10 +347,6 @@ const createDashboardSnapshotService = ({
       clients,
       barbers,
       services,
-      bot: {
-        settings,
-        status: botRuntime,
-      },
       backups: backups.slice(0, 20),
     };
     if (isStaffIdentity(identity)) {
@@ -494,10 +486,6 @@ const createDashboardSnapshotService = ({
         clients,
         barbers: filterBarbersForIdentity(barbers, identity),
         services,
-        bot: {
-          settings,
-          status: botRuntime,
-        },
         backups: [],
       };
     }

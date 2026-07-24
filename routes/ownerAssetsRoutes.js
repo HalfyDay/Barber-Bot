@@ -15,8 +15,6 @@ const registerOwnerAssetsRoutes = ({
   getExistingImageFilename,
   listMenuImages,
   MENU_IMAGE_DIR,
-  loadBotMenu,
-  saveBotMenu,
   prisma,
 }) => {
   app.get("/api/assets/avatars", authenticateToken, async (req, res) => {
@@ -112,82 +110,6 @@ const registerOwnerAssetsRoutes = ({
         error: "Не удалось удалить изображение.",
         details: error.message,
       });
-    }
-  });
-
-  app.get("/api/bot/menu/images", authenticateToken, async (req, res) => {
-    if (!isOwnerRequest(req)) {
-      return res.status(403).json({ error: "Недостаточно прав для изменения меню бота." });
-    }
-    try {
-      const images = await listMenuImages();
-      res.json({ images });
-    } catch (error) {
-      console.error("Bot menu images fetch error:", error);
-      res.status(500).json({ error: "Не удалось загрузить галерею меню." });
-    }
-  });
-
-  app.post("/api/bot/menu/images", authenticateToken, async (req, res) => {
-    if (!isOwnerRequest(req)) {
-      return res.status(403).json({ error: "Недостаточно прав для изменения меню бота." });
-    }
-    try {
-      const { name, data } = req.body || {};
-      if (!data) {
-        return res.status(400).json({ error: "Не переданы данные изображения." });
-      }
-      const sanitizedName = buildSafeImageFilename(name || `menu-${Date.now()}.png`);
-      if (!sanitizedName) {
-        return res.status(400).json({ error: "Некорректное имя файла." });
-      }
-      await fs.ensureDir(MENU_IMAGE_DIR);
-      const buffer = decodeBase64Image(data);
-      if (!buffer.length) {
-        return res.status(400).json({ error: "Файл пуст." });
-      }
-      if (buffer.length > MAX_AVATAR_FILE_SIZE) {
-        return res.status(400).json({
-          error: `Файл слишком большой (до ${Math.floor(MAX_AVATAR_FILE_SIZE / (1024 * 1024))} МБ).`,
-        });
-      }
-      const filename = await ensureUniqueImageName(sanitizedName, MENU_IMAGE_DIR);
-      await fs.writeFile(path.join(MENU_IMAGE_DIR, filename), buffer);
-      const images = await listMenuImages();
-      res.json({ success: true, path: `/Image/menu_bots/${filename}`, images });
-    } catch (error) {
-      console.error("Bot menu image upload error:", error);
-      res.status(500).json({
-        error: "Не удалось сохранить изображение меню.",
-        details: error.message,
-      });
-    }
-  });
-
-  app.get("/api/bot/menu", authenticateToken, async (req, res) => {
-    if (!isOwnerRequest(req)) {
-      return res.status(403).json({ error: "Недостаточно прав для изменения меню бота." });
-    }
-    try {
-      const menu = await loadBotMenu();
-      res.json(menu);
-    } catch (error) {
-      console.error("Bot menu fetch error:", error);
-      res.status(500).json({ error: "Не удалось загрузить меню бота." });
-    }
-  });
-
-  app.put("/api/bot/menu", authenticateToken, async (req, res) => {
-    if (!isOwnerRequest(req)) {
-      return res.status(403).json({ error: "Недостаточно прав для изменения меню бота." });
-    }
-    const payload = req.body || {};
-    try {
-      const normalized = await saveBotMenu(payload);
-      res.json(normalized);
-    } catch (error) {
-      console.error("Bot menu save error:", error);
-      res.status(500).json({ error: "Не удалось сохранить меню бота." });
     }
   });
 

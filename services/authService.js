@@ -8,7 +8,6 @@ const createAuthService = ({
   homeJwtSecret,
   homeTokenExpiresIn,
   homeTokenRefreshThresholdMs,
-  botInternalApiToken,
   resolveUserIdentity,
   normalizeText,
   normalizePhone,
@@ -96,15 +95,6 @@ const createAuthService = ({
     } catch {
       return res.sendStatus(403);
     }
-  };
-
-  const authenticateBotInternal = (req, res, next) => {
-    const headerToken = normalizeText(req.headers["x-bot-internal-token"]);
-    const queryToken = normalizeText(req.query?.token);
-    const token = headerToken || queryToken;
-    if (!token) return res.sendStatus(401);
-    if (token !== botInternalApiToken) return res.sendStatus(403);
-    return next();
   };
 
   const signHomeSessionToken = (identity) =>
@@ -390,7 +380,6 @@ const createAuthService = ({
     verifyTokenGracefully,
     authenticateToken,
     authenticateStream,
-    authenticateBotInternal,
     signHomeSessionToken,
     authenticateHomeToken,
     handleLoginOptions,
